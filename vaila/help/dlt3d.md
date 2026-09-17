@@ -7,7 +7,7 @@
 | **Category** | Processing |
 | **File** | `vaila/dlt3d.py` |
 | **Version** | 0.4.3 |
-| **Updated** | 15 September 2026 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo Roberto Pereira Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -26,8 +26,8 @@ The script can also generate a **REF3D template** (`_x`, `_y`, `_z` columns) fro
 
 | Format | Layout | Example |
 |--------|--------|---------|
-| **1** (default) | Header `frame,p1_x,p1_y,p1_z,…`; one or more rows | `tests/DLT3D_and_Rec3d/ref3d_realworld/ref3d_realworld_format1.ref3d` |
-| **2** | No header; one `x,y,z` row per point (row order → p1…pN) | `…/ref3d_realworld_format2.ref3d` |
+| **1** (default) | Header `frame,p0_x,p0_y,p0_z,…`; one or more rows | `tests/DLT3D_and_Rec3d/ref3d_realworld/ref3d_realworld_format1.ref3d` |
+| **2** | No header; one `x,y,z` row per point (row order → p0…p(N-1)) | `…/ref3d_realworld_format2.ref3d` |
 | **3** | No header; one `index,x,y,z` row per point (`index` → pN) | `…/ref3d_realworld_format3.ref3d` |
 
 Formats 2 and 3 are converted to format 1 before DLT3D; downstream `.dlt3d` output is identical for the same physical points.

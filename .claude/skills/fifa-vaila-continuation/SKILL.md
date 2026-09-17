@@ -37,8 +37,8 @@ Continue from a known-good baseline and execute the improvement path:
 
 ## Known-good baseline (validated 2026-04-25)
 
-- `pyproject.toml` ← `pyproject_linux_cuda12.toml` (PyTorch 2.9.1+cu128).
-- `uv sync --extra gpu --extra sam` succeeded.
+- `pyproject.toml` (portable, one file for every OS) synced with the `cuda` dependency group (PyTorch cu128).
+- `uv sync --no-group cpu --group cuda --extra sam` succeeded.
 - `vaila/models/sam3/sam3.pt` and `sam3.1_multiplex.pt` present.
 - `cv2.VideoCapture` is back after `uv pip install --reinstall opencv-python==4.10.0.84`.
 - SAM 3 smoke test: 32 frames of `ARG_CRO_000737.mp4` written to
@@ -103,11 +103,11 @@ cd ~/data/vaila
 source .venv/bin/activate     # optional — `uv run` works without it
 ```
 
-### 1. Re-confirm CUDA template + extras (idempotent)
+### 1. Re-confirm the CUDA group + extras (idempotent)
 
 ```bash
-bash bin/use_pyproject_linux_cuda.sh
-uv sync --extra gpu --extra sam
+bash bin/setup_pyproject.sh --target=cuda --yes
+uv sync --no-group cpu --group cuda --extra sam
 ```
 
 ### 2. Make sure SAM 3 weights are still there
@@ -221,7 +221,7 @@ For genuinely fixed cameras, use `rec2d_one_dlt2d.py` /
 # Once and only once (clones sam_3d_body + downloads gated weights)
 uv run hf auth login                        # see workaround below if hf is broken
 bash bin/setup_fifa_sam3d.sh
-uv sync --extra gpu --extra sam --extra fifa
+uv sync --no-group cpu --group cuda --extra sam --extra fifa
 
 uv run vaila/vaila_sam.py fifa bootstrap \
   --videos-dir ~/data/FIFA/FIFA-Skeletal-Tracking-Starter-Kit-2026/data/videos \

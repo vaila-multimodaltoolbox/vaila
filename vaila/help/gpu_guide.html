@@ -176,10 +176,10 @@
     <div class="card">
         <h3>1. Switch Hardware Template (Linux / Windows CUDA)</h3>
         <pre><code># Linux CUDA Workstation (RTX 4090 / 3090 / Ada / Blackwell)
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa,sapiens --yes
+bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes
 
 # Windows CUDA Workstation
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam,fifa,sapiens -Yes</code></pre>
+pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam,fifa,sapiens -Yes</code></pre>
 
         <h3>2. Sapiens2 Setup</h3>
         <pre><code># Clone Sapiens2 repo and download 1B weights:

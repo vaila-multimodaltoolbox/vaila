@@ -125,7 +125,7 @@ uv run pytest tests/test_vaila_sapiens.py tests/test_vaila_sam.py::test_build_sa
 
 ## Cursor CLI resume checklist
 
-1. `cd ~/data/vaila && uv sync` (add `--extra sam` / `--extra sapiens` / `--extra gpu` as needed)
+1. `cd ~/data/vaila && uv sync` (add `--extra sam` / `--extra sapiens`, or `--no-group cpu --group cuda` for NVIDIA, as needed)
 2. Read `AGENTS.md` History § v0.3.76 (Sapiens2 output dir) and this skill
 3. Global version: **0.3.91** (`vaila.py` header)
 4. Never rename chooser back to “Video AI tools” in docs — use **YOLO + FB**

@@ -63,12 +63,12 @@ only a convenience. CLI: `-t "goalkeeper"`.
 ## Setup
 
 ```bash
-# Standard (CPU pyproject template — inference still needs CUDA)
+# Standard install (CPU PyTorch group — SAM 3 inference still needs CUDA)
 uv sync --extra sam
 
-# Workstation (CUDA pyproject template)
-bash bin/use_pyproject_linux_cuda.sh   # or Windows equivalent
-uv sync --extra gpu --extra sam
+# Workstation (CUDA PyTorch group)
+bash bin/setup_pyproject.sh --target=cuda --yes   # or Windows equivalent
+uv sync --no-group cpu --group cuda --extra sam
 ```
 
 ### Weights (Hugging Face, gated)

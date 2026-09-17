@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.3.106
-- **Updated:** 2026-08-16
+- **Version:** 0.4.3
+- **Updated:** 2026-09-17
 - **GUI:** Frame B → **Markerless 3D** → **Sapiens2 3D Pose**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (same SAM 3D Body estimator as `sam3dinov3.py`); the optional DLT3D auto-chain step itself is CPU-only
@@ -81,7 +81,7 @@ Same as [sam3dinov3](sam3dinov3.md) **plus** the Sapiens2 stack:
 
 ```bash
 # SAM 3 (CUDA) stack
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes
 uv run hf auth login
 uv run vaila/vaila_sam.py --download-weights
 

@@ -1017,7 +1017,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
         <h3>vailá Standard Format</h3>
         <p>Standard coordinate format used by vailá toolbox.</p>
         <div class="format-example">
-          <strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y,
+          <strong>Format:</strong> frame, p0_x, p0_y, p1_x, p1_y, p2_x, p2_y,
           ... <br /><strong>Example:</strong>
           <div class="code">
             frame,p1_x,p1_y,p2_x,p2_y 0,100.5,200.3,150.2,250.1
@@ -1486,7 +1486,7 @@ uv run yolo pose train \<br/>
         <h3>Standard Save (S key)</h3>
         <p>Saves current markers in the standard vailá format.</p>
         <ul>
-          <li><strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+          <li><strong>Format:</strong> frame, p0_x, p0_y, p1_x, p1_y, ...</li>
           <li><strong>File:</strong> {video_name}_markers.csv</li>
           <li><strong>Location:</strong> Same directory as video file</li>
         </ul>
@@ -1513,7 +1513,7 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
         <h3>1 Line Save</h3>
         <p>Saves sequential markers from 1 Line mode.</p>
         <ul>
-          <li><strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+          <li><strong>Format:</strong> frame, p0_x, p0_y, p1_x, p1_y, ...</li>
           <li><strong>File:</strong> {video_name}_markers_sequential.csv</li>
           <li><strong>Use:</strong> For path tracing and contour data</li>
         </ul>
@@ -1521,7 +1521,7 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
         <h3>Sequential Save</h3>
         <p>Saves markers with incrementing IDs.</p>
         <ul>
-          <li><strong>Format:</strong> frame, p1_x, p1_y, p2_x, p2_y, ...</li>
+          <li><strong>Format:</strong> frame, p0_x, p0_y, p1_x, p1_y, ...</li>
           <li><strong>File:</strong> {video_name}_markers_sequential.csv</li>
           <li><strong>Use:</strong> For multiple point annotations</li>
         </ul>

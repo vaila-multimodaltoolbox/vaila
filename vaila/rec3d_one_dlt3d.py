@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.120
+Version: 0.4.3
 Created: 02 August 2025
-Last Updated: 03 September 2026
+Last Updated: 16 September 2026
 
 ================================================================================
 Description
@@ -21,13 +21,13 @@ Description
 Batch 3D reconstruction using the Direct Linear Transformation (DLT) method with
 multiple cameras. For each camera you provide:
   - One DLT3D parameter file (11 coefficients per camera, e.g. from dlt3d.py).
-  - One pixel-coordinate CSV with columns: frame, p1_x, p1_y, p2_x, p2_y, ..., pN_x, pN_y.
+  - One pixel-coordinate CSV with columns: frame, p0_x, p0_y, p1_x, p1_y, ..., pN_x, pN_y.
 
 Frames common to all pixel files are reconstructed; output is written to a
 timestamped subfolder in the chosen output directory.
 
 Output files (same base name, in the output subfolder):
-  - rec3d_YYYYMMDD_HHMMSS.csv   — 3D points (frame, p1_x, p1_y, p1_z, ...)
+  - rec3d_YYYYMMDD_HHMMSS.csv   — 3D points (frame, p0_x, p0_y, p0_z, ...)
   - rec3d_YYYYMMDD_HHMMSS.3d    — same data, duplicate copy
   - rec3d_YYYYMMDD_HHMMSS_m.c3d — C3D in meters (POINT:UNITS=m, POINT:FRAMES set)
   - rec3d_YYYYMMDD_HHMMSS_mm.c3d — C3D in millimeters (POINT:UNITS=mm)
@@ -46,7 +46,7 @@ DLT3D file:
 Pixel CSV:
   - Column LABELS are not inspected — only column ORDER matters: column 0 is
     the frame identifier and every pair of columns after that is one marker's
-    (x, y), regardless of header text (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe
+    (x, y), regardless of header text (vailá p0_x/p0_y, SAM3, YOLO, MediaPipe
     named joints, etc.).
   - One file per camera; same number of markers and matching frame sets recommended.
   - Files may be in different directories (GUI: one dialog per camera).
@@ -83,7 +83,7 @@ Related modules:
 Optional: mesh-for-Blender export (--mesh-source-dir / --export-mesh)
 ================================================================================
 
-If your pixel files are the MHR70-ordered (p1_x,p1_y,...,p70_x,p70_y) markers
+If your pixel files are the MHR70-ordered (p0_x,p0_y,...,p69_x,p69_y) markers
 CSVs written by sam3dinov3_visualize.py's "Visualize ID" output, you can also
 export a per-frame body MESH aligned into this same DLT world space, for
 Blender. For each camera pass a `--mesh-source-dir` (one per camera, same
@@ -211,7 +211,7 @@ except ImportError:
 
 def _load_wide_xyz_csv(file_path):
     """
-    Load a wide 3D CSV (frame, p1_x, p1_y, p1_z, p2_x, p2_y, p2_z, ...) using
+    Load a wide 3D CSV (frame, p0_x, p0_y, p0_z, p1_x, p1_y, p1_z, ...) using
     COLUMN ORDER, not labels — mirrors rec3d.load_pixel_csv_positional but for
     triples instead of pairs (used for a camera's own monocular MHR70 3D
     estimate, e.g. `<stem>_mhr70_rec3d.csv`).
@@ -385,14 +385,14 @@ def reconstruct_mesh_sequence(
 
     Args:
         rec3d_df: the already-triangulated skeleton DataFrame (frame,
-            p1_x, p1_y, p1_z, ..., MHR70-ordered columns) produced earlier in
+            p0_x, p0_y, p0_z, ..., MHR70-ordered columns) produced earlier in
             this same run_reconstruction() call.
         mesh_source_dirs: list of per-camera sam3dinov3_visualize.py
             "Visualize ID" output directories, same order as --dlt3d/--pixels.
         output_dir: this run's timestamped output directory.
         file_base: this run's file base name (for the manifest filename).
         export_fmt: "obj" or "ply".
-        marker_indices: 1-based marker indices used for the Umeyama fit
+        marker_indices: 0-based marker indices used for the Umeyama fit
             (default: torso/hip/knee subset, see mesh_alignment.py).
         swap_yz: kept for signature symmetry with save_rec3d_as_bvh() and
             recorded in the written README, but no longer changes what gets
@@ -494,7 +494,7 @@ def reconstruct_mesh_sequence(
             continue
         mhr70_rec3d_csv, _mesh_dir, mesh_faces_path = bundle
         frames_arr, xyz_arr = _load_wide_xyz_csv(mhr70_rec3d_csv)
-        max_needed = max(marker_indices)
+        max_needed = max(marker_indices) + 1  # 0-based index -> marker count
         if xyz_arr.shape[1] < max_needed:
             print(
                 f"[yellow]{mhr70_rec3d_csv} has only {xyz_arr.shape[1]} markers, "
@@ -559,7 +559,7 @@ def reconstruct_mesh_sequence(
             if row_idx is None:
                 source_points_per_camera.append(None)
                 continue
-            source_points_per_camera.append(xyz_arr[row_idx, [i - 1 for i in marker_indices], :])
+            source_points_per_camera.append(xyz_arr[row_idx, list(marker_indices), :])
 
         best_idx, best_result = best_camera_alignment(source_points_per_camera, target_pts)
         if best_idx is None or best_result is None:
@@ -798,7 +798,7 @@ def run_reconstruction(
     # Load pixel coordinate data for each camera.
     # Column labels are NOT inspected here: column 0 is the frame identifier
     # and every pair of columns after that is one marker's (x, y), regardless
-    # of what the header text says (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe...).
+    # of what the header text says (vailá p0_x/p0_y, SAM3, YOLO, MediaPipe...).
     print("Loading pixel coordinate data...")
     pixel_frames_list = []
     pixel_xy_list = []
@@ -863,8 +863,11 @@ def run_reconstruction(
 
     print("3D reconstruction completed!")
 
+    # Marker m occupies array slot m (col_start = 1 + m * 3) and is labelled
+    # p{m}: 0-based, matching the p0-based pixel input, the p0-based REF3D
+    # export and ALIGNMENT_MARKER_INDICES.
     header = ["frame"]
-    for marker in range(1, num_markers + 1):
+    for marker in range(num_markers):
         header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
     rec3d_df = pd.DataFrame(reconstruction_array, columns=header)  # type: ignore
@@ -889,15 +892,15 @@ def run_reconstruction(
 
     # Resolve pN -> semantic label (nose, left_knee, ...) for the C3D and the
     # labels sidecar. marker_labels is None (or the wrong length) in the
-    # unlabeled case, which falls back to today's p1, p2, ... behavior.
+    # unlabeled case, which falls back to today's p0, p1, ... behavior.
     labels_map = {}
     if marker_labels:
         if len(marker_labels) == num_markers:
-            labels_map = {f"p{i}": marker_labels[i - 1] for i in range(1, num_markers + 1)}
+            labels_map = {f"p{i}": marker_labels[i] for i in range(num_markers)}
         else:
             print(
                 f"[yellow]Warning: marker_labels has {len(marker_labels)} name(s), "
-                f"expected {num_markers}; using p1..p{num_markers}[/yellow]"
+                f"expected {num_markers}; using p0..p{num_markers - 1}[/yellow]"
             )
 
     rec3d_df_for_c3d = rec3d_df.copy()
@@ -917,8 +920,8 @@ def run_reconstruction(
     labels_csv_path = os.path.join(new_dir, f"{file_base}_labels.csv")
     pd.DataFrame(
         {
-            "column": [f"p{i}" for i in range(1, num_markers + 1)],
-            "label": [labels_map.get(f"p{i}", f"p{i}") for i in range(1, num_markers + 1)],
+            "column": [f"p{i}" for i in range(num_markers)],
+            "label": [labels_map.get(f"p{i}", f"p{i}") for i in range(num_markers)],
         }
     ).to_csv(labels_csv_path, index=False)
 
@@ -1362,7 +1365,7 @@ def _cli_run():
         epilog="""
 Input:
   DLT3D files: one per camera (CSV with 11 DLT coefficients; e.g. from dlt3d module).
-  Pixel files:  one per camera (CSV with header frame,p1_x,p1_y,p2_x,p2_y,...).
+  Pixel files:  one per camera (CSV with header frame,p0_x,p0_y,p1_x,p1_y,...).
   Order must match: first DLT3D with first pixel file, etc.
 
 Output:

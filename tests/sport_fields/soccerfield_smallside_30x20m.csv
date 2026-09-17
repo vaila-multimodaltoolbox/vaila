@@ -21,7 +21,7 @@ left_goal_area_top_right,19,1.5714285714285714,11.509333333333332,0.0
 left_goal_area_bottom_left,20,0.0,6.624,0.0
 left_goal_area_bottom_right,21,0.0,11.509333333333332,0.0
 left_penalty_spot,22,3.142857142857143,9.066666666666666,0.0
-left_penalty_arc_top,23,4.714285714285714,9.066666666666666,0.0
+left_penalty_arc_top,23,5.646712,9.066667,0.0
 left_penalty_arc_left_intersection,24,4.714285714285714,7.117333333333334,0.0
 left_penalty_arc_right_intersection,25,4.714285714285714,11.016,0.0
 right_penalty_area_top_left,26,25.285714285714285,3.6933333333333334,0.0
@@ -33,6 +33,6 @@ right_goal_area_top_right,31,28.428571428571427,11.509333333333332,0.0
 right_goal_area_bottom_left,32,30.0,6.624,0.0
 right_goal_area_bottom_right,33,30.0,11.509333333333332,0.0
 right_penalty_spot,34,26.857142857142854,9.066666666666666,0.0
-right_penalty_arc_top,35,25.285714285714285,9.066666666666666,0.0
+right_penalty_arc_top,35,24.353288,9.066667,0.0
 right_penalty_arc_left_intersection,36,25.285714285714285,7.117333333333334,0.0
 right_penalty_arc_right_intersection,37,25.285714285714285,11.016,0.0

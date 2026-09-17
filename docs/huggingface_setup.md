@@ -10,9 +10,9 @@ From the repo root, use the bootstrap so `uv.lock` matches this machine:
 
 ```bash
 # Linux / macOS / WSL
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa,sapiens --yes
+bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes
 # CPU laptop: --target=cpu --extras=sam,fifa,sapiens
-# Windows: pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam,fifa,sapiens -Yes
+# Windows: pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam,fifa,sapiens -Yes
 ```
 
 `pyproject.toml` overrides require **`huggingface-hub>=1.22`** and **`click>=8.4.2`**.

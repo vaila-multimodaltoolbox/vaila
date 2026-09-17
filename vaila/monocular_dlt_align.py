@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.99
+Version: 0.4.3
 Created: 05 August 2026
-Last Updated: 06 August 2026
+Last Updated: 16 September 2026
 
 ================================================================================
 Description
@@ -223,10 +223,12 @@ DEFAULT_EXPORT_MESH = "obj"
 #: Minimum keypoints with finite 2D+3D needed before a frame can be placed
 #: (3 unknowns for the linear translation solve; 6 keeps it well conditioned).
 MIN_POINTS_FOR_PLACEMENT = 6
-#: 1-based markers whose midpoint is the origin the placement rotates about.
-#: Defaults to the MHR70 hips (p10/p11). This is NOT cosmetic -- see
-#: ``_placement_origin`` for the measured reason it matters.
-DEFAULT_PLACEMENT_ORIGIN_MARKERS: tuple[int, ...] = (10, 11)
+#: 0-based markers whose midpoint is the origin the placement rotates about.
+#: Defaults to the MHR70 hips (p9/p10). This is NOT cosmetic -- see
+#: ``_placement_origin`` for the measured reason it matters. These were 1-based
+#: until 0.4.3, when every DLT/REC marker index in vaila was rebased to 0 to
+#: match getpixelvideo.py's p0_x/p0_y columns.
+DEFAULT_PLACEMENT_ORIGIN_MARKERS: tuple[int, ...] = (9, 10)
 
 
 # --------------------------------------------------------------------------- #
@@ -446,7 +448,7 @@ def _placement_origin(
     none of them are available or the indices are out of range.
     """
     if origin_markers:
-        idx = [m - 1 for m in origin_markers if 0 <= m - 1 < len(points_cam)]
+        idx = [m for m in origin_markers if 0 <= m < len(points_cam)]
         if idx:
             # An all-NaN slice here is the expected "fall back" path, not an
             # error, so its RuntimeWarning is suppressed deliberately.
@@ -987,8 +989,11 @@ def _write_outputs(
     file_base = f"mono_dlt_{timestamp}"
 
     n_markers = world.shape[1]
+    # Marker m occupies world[:, m, :] and is labelled p{m}: 0-based, the same
+    # convention rec3d.py / rec3d_one_dlt3d.py write and getpixelvideo.py reads,
+    # so a column name and an array index are the same integer everywhere.
     header = ["frame"]
-    for m in range(1, n_markers + 1):
+    for m in range(n_markers):
         header.extend([f"p{m}_x", f"p{m}_y", f"p{m}_z"])
     rec3d_df = pd.DataFrame(
         np.column_stack([np.asarray(frames, dtype=np.float64), world.reshape(len(world), -1)]),
@@ -1319,7 +1324,7 @@ def build_parser() -> argparse.ArgumentParser:
         nargs="+",
         default=list(DEFAULT_PLACEMENT_ORIGIN_MARKERS),
         help=(
-            "1-based markers whose midpoint the placement rotates about (default "
+            "0-based markers whose midpoint the placement rotates about (default "
             f"{' '.join(map(str, DEFAULT_PLACEMENT_ORIGIN_MARKERS))} = MHR70 hips). Affects "
             "smoothing quality only: it must be a SLOW-moving body landmark, never the "
             "marker centroid when most markers are fingers."

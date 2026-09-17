@@ -54,8 +54,6 @@ Source: "tests\*"; DestDir: "{app}\tests"; Flags: ignoreversion recursesubdirs c
 Source: "bin\*"; DestDir: "{app}\bin"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "pyproject.toml"; DestDir: "{app}"; Flags: ignoreversion
 ; Template pyproject files — the install script selects the right one at runtime based on GPU detection
-Source: "pyproject_win_cuda12.toml"; DestDir: "{app}"; Flags: ignoreversion
-Source: "pyproject_universal_cpu.toml"; DestDir: "{app}"; Flags: ignoreversion
 Source: "LICENSE"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: ".python-version"; DestDir: "{app}"; Flags: ignoreversion

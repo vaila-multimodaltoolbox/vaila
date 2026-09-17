@@ -6,7 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec3d_one_dlt3d.py` |
-| **Version** | 0.3.99 |
+| **Version** | 0.4.3 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -33,7 +34,7 @@ Frames common to all pixel files are reconstructed; results are written to a **t
 
 ### Pixel CSV
 
-- **Column labels are not inspected — only column order matters.** Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of what the header text says. This makes the file compatible with *vailá*'s own `frame,p1_x,p1_y,...` convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file.
+- **Column labels are not inspected — only column order matters.** Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of what the header text says. This makes the file compatible with *vailá*'s own `frame,p0_x,p0_y,...` convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file.
 - **One file per camera**; same number of markers and overlapping frame sets recommended.
 - In GUI mode, each file can be chosen from a **different directory** (one dialog per camera).
 
@@ -45,7 +46,7 @@ All outputs share the same base name and are written inside a new subfolder: `re
 
 | File | Description |
 |------|-------------|
-| `rec3d_*.csv` | 3D points: `frame`, `p1_x`, `p1_y`, `p1_z`, `p2_x`, ... |
+| `rec3d_*.csv` | 3D points: `frame`, `p0_x`, `p0_y`, `p0_z`, `p1_x`, ... (**0-based since 0.4.3**, matching `getpixelvideo.py`) |
 | `rec3d_*.3d` | Same data as CSV (duplicate format). |
 | `rec3d_*_m.c3d` | C3D in **meters** (`POINT:UNITS=m`, `POINT:FRAMES` set). |
 | `rec3d_*_mm.c3d` | C3D in **millimeters** (`POINT:UNITS=mm`). |
@@ -56,7 +57,7 @@ C3D files are compatible with **viewc3d**, **viewc3d_pyvista**, **readc3d_export
 
 ## Optional: mesh-for-Blender export
 
-If your pixel files are the MHR70-ordered `p1_x,p1_y,...,p70_x,p70_y` markers CSVs written by **sam3dinov3_visualize.py**'s "Visualize ID" output, you can also export a per-frame **body mesh** aligned into this same DLT world space.
+If your pixel files are the MHR70-ordered `p0_x,p0_y,...,p69_x,p69_y` markers CSVs written by **sam3dinov3_visualize.py**'s "Visualize ID" output, you can also export a per-frame **body mesh** aligned into this same DLT world space.
 
 For each camera, pass a `--mesh-source-dir` (same order as `--dlt3d`) pointing at that camera's Visualize-ID output directory. Each must contain:
 

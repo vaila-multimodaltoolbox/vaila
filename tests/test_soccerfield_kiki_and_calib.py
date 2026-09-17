@@ -19,7 +19,7 @@ MODELS_DIR = REPO_ROOT / "vaila" / "models"
 
 
 def test_soccerfield_kiki_file_exists_and_matches_49_points() -> None:
-    """Verify soccerfield_kiki.csv exists, has 49 keypoints, and matches canonical schema."""
+    """Verify Kiki has 49 points and uses visible regulation arc intersections."""
     kiki_path = MODELS_DIR / "soccerfield_kiki.csv"
     assert kiki_path.exists(), f"File missing: {kiki_path}"
 
@@ -30,12 +30,32 @@ def test_soccerfield_kiki_file_exists_and_matches_49_points() -> None:
     for col in expected_cols:
         assert col in df_kiki.columns, f"Missing column {col} in soccerfield_kiki.csv"
 
-    # Compare first 48 against soccerfield_ref3d_fifa_dataset.csv
+    # Kiki keeps the dataset index/flip schema, but replaces four virtual
+    # goal-area-Y training anchors with visible arc/penalty-line intersections.
     dataset_path = MODELS_DIR / "soccerfield_ref3d_fifa_dataset.csv"
     assert dataset_path.exists()
     df_dataset = pd.read_csv(dataset_path)
+    remapped = {10, 11, 18, 19}
+    unchanged = [idx for idx in range(48) if idx not in remapped]
+    pd.testing.assert_frame_equal(
+        df_kiki.iloc[unchanged].reset_index(drop=True),
+        df_dataset.iloc[unchanged].reset_index(drop=True),
+    )
+    assert df_kiki.iloc[:48]["point_number"].tolist() == list(range(48))
+    assert df_kiki.iloc[:48]["flip_idx"].tolist() == df_dataset["flip_idx"].tolist()
 
-    pd.testing.assert_frame_equal(df_kiki.iloc[:48], df_dataset)
+    expected_intersections = {
+        10: ("left_penalty_arc_right_intersection", -35.95, 7.312489),
+        11: ("left_penalty_arc_left_intersection", -35.95, -7.312489),
+        18: ("right_penalty_arc_right_intersection", 35.95, 7.312489),
+        19: ("right_penalty_arc_left_intersection", 35.95, -7.312489),
+    }
+    for idx, (name, x, y) in expected_intersections.items():
+        row = df_kiki.loc[df_kiki["point_number"] == idx].iloc[0]
+        assert row["point_name"] == name
+        assert float(row["x"]) == pytest.approx(x)
+        assert float(row["y"]) == pytest.approx(y)
+        assert float(row["z"]) == 0.0
 
     # Verify point 48: center_field at (0, 0, 0)
     row_48 = df_kiki.iloc[48]
@@ -72,6 +92,29 @@ def test_plot_field_fifa_dataset_kiki_rendering_and_deoverlapped_keypoints() -> 
     fig, ax = dsf.plot_field_fifa_dataset(df_kiki)
     assert fig is not None
     assert ax is not None
+
+    points = {
+        str(row["point_name"]): (float(row["x"]), float(row["y"]), int(row["point_number"]))
+        for _, row in df_kiki.iterrows()
+    }
+    overlay_xy = dsf._fifa32_dataset_xy_from_field_points(points)
+    assert overlay_xy is not None
+    assert overlay_xy[10] == pytest.approx((-35.95, 7.312489))
+    assert overlay_xy[11] == pytest.approx((-35.95, -7.312489))
+    assert overlay_xy[18] == pytest.approx((35.95, 7.312489))
+    assert overlay_xy[19] == pytest.approx((35.95, -7.312489))
+
+    # The four yellow reference markers must be at the visible arc endpoints,
+    # not at the obsolete +/-9.16 m training-anchor positions.
+    yellow_markers = {
+        (float(line.get_xdata()[0]), float(line.get_ydata()[0]))
+        for line in ax.lines
+        if line.get_marker() == "o" and line.get_markerfacecolor() == "#FFD100"
+    }
+    for point in (overlay_xy[10], overlay_xy[11], overlay_xy[18], overlay_xy[19]):
+        assert point in yellow_markers
+    assert (-35.95, 9.16) not in yellow_markers
+    assert (35.95, -9.16) not in yellow_markers
 
     # Collect all text annotations from the axes
     texts = ax.texts
@@ -291,3 +334,123 @@ def test_calibration_keypoints_custom_coords_and_labels(tmp_path: Path) -> None:
     assert pytest.approx(df_out.loc[0, "z"]) == 8.5
     assert df_out.loc[1, "point_name"] == "coach_box_center"
     assert pytest.approx(df_out.loc[1, "x"]) == -15.0
+
+
+def test_draw_soccer_field_3d_center_and_corner_origins() -> None:
+    """Test draw_soccer_field_3d renders complete pitch lines, 3D goals, and corner flags for both origins."""
+    # 1. Center origin (FIFA / Kiki standard)
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection="3d")
+    dsf.draw_soccer_field_3d(
+        ax,
+        length=105.0,
+        width=68.0,
+        origin="center",
+        show_goals=True,
+        show_corner_flags=True,
+        show_pitch_surface=True,
+    )
+
+    # Verify lines were drawn
+    lines = ax.lines
+    assert len(lines) >= 25, f"Expected >= 25 lines for full 3D soccer field, got {len(lines)}"
+
+    # Check that vertical posts exist reaching Z = 2.44m
+    max_z_line = max(np.max(line.get_data_3d()[2]) for line in lines)
+    assert pytest.approx(max_z_line, rel=1e-2) == 2.44, f"Goal post Z max should be 2.44m, got {max_z_line}"
+
+    # Check that corner flag poles exist reaching Z = 1.5m
+    has_flag_pole = any(
+        pytest.approx(np.max(line.get_data_3d()[2]), rel=1e-2) == 1.5 for line in lines
+    )
+    assert has_flag_pole, "Expected corner flag pole reaching Z = 1.5m"
+
+    # Check X bounds span [-52.5, 52.5]
+    min_x_line = min(np.min(line.get_data_3d()[0]) for line in lines)
+    max_x_line = max(np.max(line.get_data_3d()[0]) for line in lines)
+    # Goal net extends 2m behind lines, so min_x <= -54.5 and max_x >= 54.5
+    assert min_x_line <= -52.5
+    assert max_x_line >= 52.5
+    plt.close(fig)
+
+    # 2. Corner origin (legacy standard)
+    fig2 = plt.figure()
+    ax2 = fig2.add_subplot(111, projection="3d")
+    dsf.draw_soccer_field_3d(
+        ax2,
+        length=105.0,
+        width=68.0,
+        origin="corner",
+        show_goals=True,
+        show_corner_flags=True,
+        show_pitch_surface=True,
+    )
+    lines2 = ax2.lines
+    assert len(lines2) >= 25
+
+    # Check X bounds span [0, 105] (with net extending to -2.0 and +107.0)
+    min_x2 = min(np.min(line.get_data_3d()[0]) for line in lines2)
+    max_x2 = max(np.max(line.get_data_3d()[0]) for line in lines2)
+    assert min_x2 <= 0.0
+    assert max_x2 >= 105.0
+    plt.close(fig2)
+
+
+def test_plot_calibration_model_3d_headless() -> None:
+    """Test plot_calibration_model_3d creates 3D field, markers, drop lines, and labels in headless mode."""
+    pts = [
+        {"point_name": "center_spot", "point_number": 0, "x": 0.0, "y": 0.0, "z": 0.0},
+        {"point_name": "left_crossbar_center", "point_number": 1, "x": -52.45, "y": 0.0, "z": 2.44},
+        {"point_name": "right_crossbar_center", "point_number": 2, "x": 52.45, "y": 0.0, "z": 2.44},
+        {"point_name": "camera_high", "point_number": 3, "x": -20.0, "y": -40.0, "z": 8.0},
+    ]
+
+    res = dsf.plot_calibration_model_3d(
+        pts,
+        field_csv="soccerfield_ref3d_fifa.csv",
+        title="Test 3D Calibration",
+        aspect_z_factor=4.5,
+    )
+    assert res is not None
+    fig, ax = res
+
+    # Verify scatter points (keypoints)
+    collections = ax.collections
+    assert len(collections) >= 2  # scatter keypoints + drop point scatter / pitch surface
+
+    # Verify text badges exist for all 4 points
+    texts = ax.texts
+    assert len(texts) == 4
+    labels_text = [t.get_text() for t in texts]
+    assert "0: center_spot" in labels_text
+    assert "1: left_crossbar_center" in labels_text
+    assert "2: right_crossbar_center" in labels_text
+    assert "3: camera_high" in labels_text
+
+    # Verify drop lines exist for points with Z > 0 (points 1, 2, 3)
+    drop_lines = [
+        line
+        for line in ax.lines
+        if line.get_linestyle() == "--" or line.get_linestyle() == "dashed"
+    ]
+    assert len(drop_lines) >= 3, f"Expected >= 3 drop lines, found {len(drop_lines)}"
+
+    plt.close(fig)
+
+
+def test_preview_calibration_in_3d_delegation() -> None:
+    """Test preview_calibration_in_3d delegates to plot_calibration_model_3d without errors."""
+    pts = [
+        {"point_name": "p0", "point_number": 0, "x": 0.0, "y": 0.0, "z": 0.0},
+        {"point_name": "p1", "point_number": 1, "x": 10.0, "y": 10.0, "z": 2.44},
+    ]
+    res = dsf.preview_calibration_in_3d(pts, title="Preview Test")
+    assert res is not None
+    fig, ax = res
+    assert ax is not None
+    plt.close(fig)
+
+    # Empty points check
+    res_empty = dsf.preview_calibration_in_3d([])
+    assert res_empty is None
+

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 14 September 2026
-Version: 0.4.0
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -6030,7 +6030,7 @@ def run_markerless_cli_batch(argv: list[str]) -> int:
 
 def convert_mediapipe_to_vaila_format(df_pixel, output_path):
     """
-    Convert MediaPipe format to vailá format (frame, p1_x, p1_y, p2_x, p2_y, ...)
+    Convert MediaPipe format to vailá format (frame, p0_x, p0_y, p1_x, p1_y, ...)
     This mimics the convert_mediapipe_to_pixel_format function from rearrange_data.py
     """
     try:
@@ -6042,8 +6042,8 @@ def convert_mediapipe_to_vaila_format(df_pixel, output_path):
 
         columns = df_pixel.columns[1:]  # Ignore the first column (frame_index)
 
-        # Convert MediaPipe format (landmark_x, landmark_y, landmark_z) to vailá format (p1_x, p1_y, p2_x, p2_y)
-        point_counter = 1
+        # Convert MediaPipe format (landmark_x, landmark_y, landmark_z) to vailá format (p0_x, p0_y, ...)
+        point_counter = 0
         for i in range(0, len(columns), 3):
             if i + 1 < len(columns):  # Ensure we have both x and y columns
                 x_col = columns[i]  # landmark_x

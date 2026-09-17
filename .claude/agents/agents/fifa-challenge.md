@@ -79,8 +79,8 @@ data/
 ```
 
 ## Setup Checklist
-1. CUDA pyproject template: `bash bin/use_pyproject_linux_cuda.sh`
-2. Install extras: `uv sync --extra gpu --extra fifa --extra sam`
+1. CUDA PyTorch group: `bash bin/setup_pyproject.sh --target=cuda --yes`
+2. Install extras: `uv sync --no-group cpu --group cuda --extra fifa --extra sam`
 3. HF login: `uv run hf auth login`
 4. Clone + install SAM 3D Body + download gated weights:
    - Linux/macOS: `bash bin/setup_fifa_sam3d.sh`

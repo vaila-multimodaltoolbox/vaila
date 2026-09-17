@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 16 September 2026
+Update Date: 17 September 2026
 Version: 0.4.3
 
 Example of usage:
@@ -89,11 +89,11 @@ def _sam3_install_instructions() -> str:
         "Install the optional stack, then restart vailá:\n"
         "  uv sync --extra sam\n\n"
         "NVIDIA CUDA workstation:\n"
-        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes\n"
+        "  bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes\n"
         "  # or, after CUDA template is active:\n"
-        "  uv sync --extra gpu --extra sam\n\n"
+        "  uv sync --no-group cpu --group cuda --extra sam\n\n"
         "Windows NVIDIA CUDA workstation:\n"
-        "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes\n\n"
+        "  pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam -Yes\n\n"
         "After install, accept the gated Hugging Face model and authenticate:\n"
         "  uv run hf auth login\n"
         "  uv run vaila/vaila_sam.py --download-weights\n\n"
@@ -120,7 +120,7 @@ def _sapiens_install_instructions() -> str:
         "  uv sync --extra sapiens\n"
         "  bash bin/setup_sapiens2.sh\n\n"
         "NVIDIA CUDA workstation (recommended):\n"
-        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+        "  bash bin/setup_pyproject.sh --target=cuda --extras=sam,sapiens --yes\n"
         "  bash bin/setup_sapiens2.sh\n\n"
         "Weights download (inside bootstrap):\n"
         "  pose: facebook/sapiens2-pose-1b\n"
@@ -3370,7 +3370,7 @@ class Vaila(tk.Tk):
             ),
             (
                 "kiki",
-                "Soccer field 48 KP (Kiki model: 32 pitch + 16 3D features)",
+                "Soccer Field Kiki 49 KP (32 pitch lines + 17 3D features)",
             ),
             ("tennis", "Tennis court (ITF 23.77 × 10.97 m)"),
             ("basketball", "Basketball (FIBA 28 × 15 m)"),
@@ -3829,7 +3829,7 @@ class Vaila(tk.Tk):
         if missing:
             cli_hint = (
                 ">> Required CLI install commands:\n"
-                "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+                "   bash bin/setup_pyproject.sh --target=cuda --extras=sam,sapiens --yes\n"
                 "   bash bin/setup_sapiens2.sh\n"
                 "   uv pip install -e .local/third_party/sapiens2\n"
             )
@@ -3937,7 +3937,7 @@ class Vaila(tk.Tk):
         if missing:
             cli_hint = (
                 ">> Required CLI install commands:\n"
-                "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+                "   bash bin/setup_pyproject.sh --target=cuda --extras=sam,sapiens --yes\n"
                 "   bash bin/setup_sapiens2.sh\n"
                 "   bash bin/setup_fifa_sam3d.sh\n"
                 "   uv pip install -e .local/third_party/sapiens2\n"

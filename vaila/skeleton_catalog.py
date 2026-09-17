@@ -3,7 +3,7 @@
 Loads canonical JSON presets from ``vaila/skeletons/`` (excluding soccer-field
 layouts, which use the dedicated Soccer-Kiki pitch-guide path).
 
-Update Date: 16 September 2026
+Update Date: 17 September 2026
 Version: 0.4.3
 """
 
@@ -63,14 +63,14 @@ def skeletons_dir() -> Path:
 
 
 def _parse_p_index(token: str) -> int | None:
-    """Convert ``pN`` (1-based) to 0-based index, or None if invalid."""
+    """Convert ``pN`` (**0-based** column index) to int, or None if invalid."""
     match = _P_INDEX_RE.match(str(token).strip())
     if not match:
         return None
     n = int(match.group(1))
-    if n < 1:
+    if n < 0:
         return None
-    return n - 1
+    return n
 
 
 def _parse_connections(

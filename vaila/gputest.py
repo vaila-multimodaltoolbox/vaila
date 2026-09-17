@@ -7,8 +7,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 24 August 2026
-Version: 0.3.113
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Description:
 ------------
@@ -115,7 +115,7 @@ def check_pytorch_and_cuda() -> DiagnosticResult:
             details=[f"Import error: {exc}"],
             remediation=[
                 "# 1. Setup PyTorch and CUDA dependencies:",
-                "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa,sapiens --yes",
+                "  bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes",
             ],
         )
 
@@ -194,7 +194,7 @@ def check_pytorch_and_cuda() -> DiagnosticResult:
                 remediation.extend(
                     [
                         "# Switch to Linux CUDA template and synchronize environment:",
-                        "bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa,sapiens --yes",
+                        "bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes",
                         "# If you recently updated NVIDIA drivers, reboot or reload the nvidia kernel module:",
                         "sudo modprobe nvidia",
                     ]
@@ -203,7 +203,7 @@ def check_pytorch_and_cuda() -> DiagnosticResult:
                 remediation.extend(
                     [
                         "# Switch to Windows CUDA template and synchronize environment:",
-                        "pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam,fifa,sapiens -Yes",
+                        "pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam,fifa,sapiens -Yes",
                     ]
                 )
         elif os_sys == "Darwin":
@@ -221,10 +221,10 @@ def check_pytorch_and_cuda() -> DiagnosticResult:
             details.append("Running on CPU. Biomechanical analysis & 2D YOLO work on CPU.")
             if os_sys == "Linux":
                 remediation.append(
-                    "bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu --yes"
+                    "bash bin/setup_pyproject.sh --target=cuda --extras= --yes"
                 )
             elif os_sys == "Windows":
-                remediation.append("pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu -Yes")
+                remediation.append("pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu -Yes")
 
     return DiagnosticResult(
         target="PyTorch & CUDA Core",

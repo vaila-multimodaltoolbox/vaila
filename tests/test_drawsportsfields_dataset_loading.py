@@ -55,6 +55,25 @@ def test_plot_field_fifa_dataset_with_dataset_csv() -> None:
     matplotlib.pyplot.close(fig)
 
 
+def test_kiki_plot_labels_all_49_zero_based_points() -> None:
+    """Kiki title, point badges, and caption must agree on 49 == indices 0..48."""
+    config = dsf.SPORT_REGISTRY["kiki"]
+    df = pd.read_csv(MODELS_DIR / config.model_csv)
+    fig, ax = config.plot_fn(df, title=config.title)
+
+    assert ax.get_title() == (
+        "Soccer Field Kiki — 49 reference points (32 pitch lines + 17 3D features)"
+    )
+    text = [artist.get_text() for artist in ax.texts]
+    numeric_labels = {label for label in text if label.isdigit()}
+    assert numeric_labels == {str(index) for index in range(49)}
+    assert (
+        "Model reference points: 49 keypoints — 32 pitch-line keypoints [0..31] + "
+        "17 3D/pitch features [32..48]"
+    ) in text
+    matplotlib.pyplot.close(fig)
+
+
 def test_fifa32_dataset_xy_from_field_points_both_formats() -> None:
     """_fifa32_dataset_xy_from_field_points must work on both landmark and dataset files."""
     # 1. 37-point pitch line file (soccerfield_ref3d_fifa.csv)

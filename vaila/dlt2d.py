@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.4.3
 Created: November 26, 2024
-Last Updated: 15 September 2026
+Last Updated: 16 September 2026
 ================================================================================
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 2D coordinate transformations.
@@ -34,7 +34,9 @@ Note on point matching:
     Unlike rec2d.py/rec3d.py (where a single pixel file's marker columns are
     read purely by ORDER), dlt2d.py correlates two DIFFERENT files — the pixel
     calibration file and the REF2D reference file — by matching the point
-    LABEL prefix before the underscore (e.g. "p3" in "p3_x"/"p3_y"). This lets
+    LABEL prefix before the underscore (e.g. "p3" in "p3_x"/"p3_y"). Point
+    numbering is 0-based throughout vaila, so a file's first point is "p0".
+    This lets
     a REF2D file define more calibration points than a given pixel file
     actually tracks; only the common points are used. If the pixel and REF2D
     frame counts differ (and REF2D has more than 1 row), common frames are
@@ -229,7 +231,7 @@ def process_files(pixel_file, real_file):
     )
 
     if not common_points:
-        print("Error: No common points (e.g., p1_x, p1_y) found between pixel and reference files.")
+        print("Error: No common points (e.g., p0_x, p0_y) found between pixel and reference files.")
         return []
 
     print(f"Detected {len(common_points)} common points: {', '.join(common_points)}")

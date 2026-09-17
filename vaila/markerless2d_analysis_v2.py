@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 25 August 2026
-Version: 0.3.114
+Update: 17 September 2026
+Version: 0.4.3
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -2033,9 +2033,9 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
     for name in landmark_names:
         headers.extend([f"{name}_x", f"{name}_y", f"{name}_z", f"{name}_conf"])
 
-    # Vaila format: frame, p1_x, p1_y, ... p33_x, p33_y
+    # Vaila format: frame, p0_x, p0_y, ... p32_x, p32_y
     vaila_headers = ["frame"]
-    for i in range(1, 34):
+    for i in range(33):
         vaila_headers.extend([f"p{i}_x", f"p{i}_y"])
 
     # Lists to store landmarks
@@ -2288,15 +2288,15 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
 
     # Save CSVs
     # YOLO 17 keypoint names
-    # Prepare headers in vailá format (p1_x, p1_y, p1_z, p1_conf...)
+    # Prepare headers in vailá format (p0_x, p0_y, p0_z, p0_conf...)
     # MediaPipe has 33 landmarks
     headers = ["frame"]
-    for i in range(1, 34):
+    for i in range(33):
         headers.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z", f"p{i}_conf"])
 
     # YOLO has 17 keypoints
     yolo_headers = ["frame"]
-    for i in range(1, 18):
+    for i in range(17):
         yolo_headers.extend([f"p{i}_x", f"p{i}_y", f"p{i}_conf"])
 
     # YOLO BBox headers

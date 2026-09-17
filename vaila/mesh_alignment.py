@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.99
+Version: 0.4.3
 Created: 04 August 2026
-Last Updated: 04 August 2026
+Last Updated: 16 September 2026
 
 Description:
     Umeyama similarity-transform alignment (rotation + uniform scale +
@@ -47,26 +47,29 @@ from pathlib import Path
 
 import numpy as np
 
-#: (1-based marker index in a p1..p70 MHR70-ordered wide CSV, MHR70 name).
+#: (0-based marker index in a p0..p69 MHR70-ordered wide CSV, MHR70 name).
 #: Torso/hip/knee landmarks only — high real-world confidence, low
 #: soft-tissue artifact, and enough vertical spread (shoulders to knees) to
 #: avoid a near-planar point set. Hand/foot/finger tips and facial points are
 #: deliberately excluded: they are the noisiest MHR70 keypoints and would
-#: destabilize the similarity fit. Indices derived from the fixed MHR70_NAMES
-#: order in vaila/sam3dinov3.py (index + 1 == marker number).
+#: destabilize the similarity fit. Indices are the position in the fixed
+#: MHR70_NAMES order in vaila/sam3dinov3.py, so each one indexes both the
+#: monocular XYZ array and the ``p{i}_x/_y/_z`` columns of a rec3d output with
+#: no arithmetic. These were 1-based until 0.4.3, when every DLT/REC point
+#: column was rebased to ``p0`` to match getpixelvideo.py.
 ALIGNMENT_MARKER_SPEC: tuple[tuple[int, str], ...] = (
-    (6, "left-shoulder"),
-    (7, "right-shoulder"),
-    (10, "left-hip"),
-    (11, "right-hip"),
-    (12, "left-knee"),
-    (13, "right-knee"),
-    (68, "left-acromion"),
-    (69, "right-acromion"),
-    (70, "neck"),
+    (5, "left-shoulder"),
+    (6, "right-shoulder"),
+    (9, "left-hip"),
+    (10, "right-hip"),
+    (11, "left-knee"),
+    (12, "right-knee"),
+    (67, "left-acromion"),
+    (68, "right-acromion"),
+    (69, "neck"),
 )
 
-#: 1-based marker indices only, in the same order as ALIGNMENT_MARKER_SPEC.
+#: 0-based marker indices only, in the same order as ALIGNMENT_MARKER_SPEC.
 ALIGNMENT_MARKER_INDICES: tuple[int, ...] = tuple(idx for idx, _name in ALIGNMENT_MARKER_SPEC)
 
 

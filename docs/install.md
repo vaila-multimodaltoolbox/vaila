@@ -9,7 +9,9 @@ support matrix) is linked, not duplicated, so the two pages can't drift apart.
 _vailá_'s single, official install method on every platform is
 **[uv](https://github.com/astral-sh/uv)** — no separate Python distribution or Conda
 needed. The install scripts below install `uv`, pin Python `3.12.14`, pick the right
-`pyproject_*.toml` template for your hardware, and run `uv sync`.
+PyTorch **dependency group** (`cpu` or `cuda`) for your hardware, and run `uv sync`.
+There is a single portable `pyproject.toml` / `uv.lock` for every machine and OS —
+nothing tracked by git is rewritten per computer.
 
 ## Before you start
 
@@ -41,24 +43,24 @@ bash install_vaila_linux.sh
 
 1. Installs system dependencies via `apt` and self-installs `uv` if missing.
 2. Pins Python `3.12.14` (`uv python pin 3.12.14`).
-3. Detects an NVIDIA GPU and prompts for optional extras (`gpu`, `sam`, `sapiens`, `fifa`).
-4. Copies the matching template (`pyproject_linux_cuda12.toml` for NVIDIA CUDA 12.8,
-   otherwise `pyproject_universal_cpu.toml`) over `pyproject.toml` — **before** creating
-   the virtual environment, since the active template determines what `uv sync`
-   installs.
-5. Runs `uv lock` / `uv sync --extra ...` with fallback logic, then verifies CUDA
-   wheels and the Sapiens2 editable install if those extras were selected.
+3. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
+4. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
+   CUDA 12.8 + TensorRT, otherwise the default `cpu` group. No file is copied.
+5. Runs `uv sync --frozen ...` against the committed universal `uv.lock`, then
+   verifies CUDA wheels and the Sapiens2 editable install if those extras were
+   selected.
 6. Adds finishing touches: a desktop entry and SSH-transfer setup for the File Manager.
 
 For the auto-detecting alternative (same logic, callable any time you want to
-switch templates), see [`bin/setup_pyproject.sh`](../bin/setup_pyproject.sh) in
+switch backend), see [`bin/setup_pyproject.sh`](../bin/setup_pyproject.sh) in
 root `README.md`'s [Installation and Setup](../README.md#installation-and-setup)
 section.
 
 ### GPU vs CPU-only
 
 NVIDIA CUDA 12.8 + TensorRT is used automatically when a compatible GPU is
-detected; otherwise the CPU-only template is used. See root README's
+detected (`uv sync --no-group cpu --group cuda`); otherwise the default `cpu`
+group is used (`uv sync`). See root README's
 [Cross-Platform support note](../README.md#-engine-powered-by-uv) for the full
 matrix, including the one hard exception (SAM 3 video needs CUDA, no CPU/MPS path).
 
@@ -69,7 +71,7 @@ matrix, including the one hard exception (SAM 3 video needs CUDA, no CPU/MPS pat
   most machines don't have. Re-clone with HTTPS instead (as shown above), or add an
   SSH key to your GitHub account.
 - If `uv sync` fails partway through an extra (`sam`/`sapiens`/`fifa`), re-run the
-  install script — it re-applies the template and retries `uv sync` idempotently.
+  install script — it retries `uv sync` idempotently.
 
 ## Windows
 
@@ -95,11 +97,10 @@ powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
 
 1. Self-installs `uv` (winget or the official installer) if missing.
 2. Pins Python `3.12.14`.
-3. Detects an NVIDIA GPU and prompts for optional extras (`gpu`, `sam`, `sapiens`, `fifa`).
-4. Copies the matching template (`pyproject_win_cuda12.toml` for NVIDIA CUDA 12.1,
-   otherwise `pyproject_universal_cpu.toml`) over `pyproject.toml` **before**
-   `uv venv`/`uv sync` — same order-sensitivity as Linux/macOS.
-5. Runs `uv lock` / `uv sync --extra ...` with fallback logic.
+3. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
+4. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
+   CUDA 12.8 + TensorRT, otherwise the default `cpu` group. No file is copied.
+5. Runs `uv sync --frozen ...` against the committed universal `uv.lock`.
 6. Adds finishing touches: PowerShell/batch launchers, Desktop and Start Menu
    shortcuts, and a Windows Terminal profile.
 
@@ -137,11 +138,11 @@ bash install_vaila_mac.sh
 
 1. Installs system dependencies via Homebrew and self-installs `uv` if missing.
 2. Pins Python `3.12.14`.
-3. Prompts for optional extras (`gpu`/`sam`/`sapiens`/`fifa` as applicable to Apple
+3. Prompts for optional extras (`sam`/`sapiens`/`fifa` as applicable to Apple
    hardware).
-4. Copies `pyproject_macos.toml` (Metal/MPS acceleration) over `pyproject.toml`
-   **before** creating the virtual environment.
-5. Runs `uv lock` / `uv sync --extra ...` with fallback logic.
+4. Uses the default `cpu` dependency group — on macOS the PyPI PyTorch wheel **is**
+   the Metal/MPS build, so no file is copied or swapped.
+5. Runs `uv sync --frozen ...` against the committed universal `uv.lock`.
 6. Builds a full `.app` bundle (with icon conversion) so _vailá_ can be launched from
    Applications/Launchpad like a native app.
 
@@ -174,6 +175,6 @@ Don't duplicate those steps here — see root README's *Staying up to date* note
 ## See also
 
 - [Root README — Installation and Setup](../README.md#installation-and-setup)
-- [AGENTS.md](../AGENTS.md) — hybrid CPU/CUDA template workflow, `uv run` recipes
+- [AGENTS.md](../AGENTS.md) — hybrid CPU/CUDA dependency-group workflow, `uv run` recipes
 - [Hugging Face setup](huggingface_setup.md) — gated SAM / SAM 3D / Sapiens2 login
 - [Help Index](help.html) / [Help Guide](help.md) — back to the docs hub

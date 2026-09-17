@@ -3,8 +3,8 @@
 ===============================================================================
 bin/verify_cuda_libs.py
 ===============================================================================
-Update Date: 11 August 2026
-Version: 0.3.104
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Verifies that installed NVIDIA CUDA wheels (``nvidia-*-cu12``) and the
 PyTorch stack (``torch``, ``torchvision``, ``torchaudio``, ``triton``) have
@@ -102,7 +102,7 @@ def main(argv: list[str]) -> int:
             "\nThese packages report as installed (dist-info present) but are "
             "missing their actual files on disk. Fix (reinstalls only the "
             "broken packages, not the whole environment):\n"
-            f"  uv sync {reinstall_flags} --extra gpu ...  # keep your usual --extra flags\n"
+            f"  uv sync {reinstall_flags} --no-group cpu --group cuda ...  # keep your usual --extra flags\n"
             "\nIf it recurs right after: check disk space (`df -h`) and, if the uv "
             "cache and .venv live on different filesystems, `export UV_LINK_MODE=copy`.",
             file=sys.stderr,

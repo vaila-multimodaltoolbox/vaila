@@ -5,7 +5,7 @@ On EVERY machine (weights are gitignored; do not commit .pt):
 1. Accept the SAM 3 license on the model card (browser, once per HF account):
    https://huggingface.co/facebook/sam3
 2. Sync a current checkout so huggingface-hub >= 1.22 (fixes Exit:0 / 0.00B stalls):
-   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+   bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes
 3. Log in (token with Read access):
    uv run hf auth login
    uv run hf auth whoami    # must exit 0, no traceback

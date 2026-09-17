@@ -79,12 +79,12 @@ it into `<data_root>/pitch_points.txt` automatically.
 ## Setup (step-by-step)
 
 ```bash
-# 1. Switch to CUDA pyproject template (Linux workstation)
-bash bin/use_pyproject_linux_cuda.sh
-# Windows: pwsh bin/use_pyproject_win_cuda.ps1
+# 1. Install the CUDA PyTorch group (Linux/Windows NVIDIA workstation)
+bash bin/setup_pyproject.sh --target=cuda --yes
+# Windows: pwsh bin/setup_pyproject.ps1 -Target cuda -Yes
 
 # 2. Install FIFA + SAM + GPU extras
-uv sync --extra gpu --extra fifa --extra sam
+uv sync --no-group cpu --group cuda --extra fifa --extra sam
 
 # 3. Clone sam_3d_body + download gated SAM 3D Body weights
 #    Accept license on https://huggingface.co/facebook/sam-3d-body-dinov3 first,

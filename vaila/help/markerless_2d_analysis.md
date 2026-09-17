@@ -172,7 +172,7 @@ For each processed video:
    - If resize was used, coordinates converted back to original dimensions
 
 7. **vailá Format** (`*_mp_vaila.csv`)
-   - Format: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+   - Format: `frame, p0_x, p0_y, p1_x, p1_y, ...` (33 points = p0 to p32).
 
 8. **Log File** (`log_info.txt`)
    - Processing metadata

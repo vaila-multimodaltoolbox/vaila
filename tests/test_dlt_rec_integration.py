@@ -381,15 +381,15 @@ def test_rec3d_single_row_dlt_fallback(test_data):
     c1_df = pd.DataFrame(
         {
             "frame": [0, 1, 2, 3],
-            "p1_x": [130.0, 130.0, 130.0, 130.0],
-            "p1_y": [140.0, 140.0, 140.0, 140.0],
+            "p0_x": [130.0, 130.0, 130.0, 130.0],
+            "p0_y": [140.0, 140.0, 140.0, 140.0],
         }
     )
     c2_df = pd.DataFrame(
         {
             "frame": [0, 1, 2, 3],
-            "p1_x": [240.0, 240.0, 240.0, 240.0],
-            "p1_y": [270.0, 270.0, 270.0, 270.0],
+            "p0_x": [240.0, 240.0, 240.0, 240.0],
+            "p0_y": [270.0, 270.0, 270.0, 270.0],
         }
     )
     c1_df.to_csv(in_dir / "c1_data.csv", index=False)
@@ -420,6 +420,7 @@ def test_rec3d_single_row_dlt_fallback(test_data):
     assert len(subfolders) == 1
     res_df = pd.read_csv(next(f for f in subfolders[0].iterdir() if f.suffix == ".csv"))
     assert len(res_df) == 4
-    # All frames reconstructed
-    assert not res_df["p1_x"].isna().any()
-    assert (res_df["p1_x"] == 0.3).all()
+    # All frames reconstructed. rec3d.py labels its output from p0 (0.4.3),
+    # matching getpixelvideo.py's pixel columns.
+    assert not res_df["p0_x"].isna().any()
+    assert (res_df["p0_x"] == 0.3).all()

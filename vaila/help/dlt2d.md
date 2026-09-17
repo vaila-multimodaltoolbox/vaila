@@ -7,7 +7,7 @@
 | **Category** | Processing |
 | **File** | `vaila/dlt2d.py` |
 | **Version** | 0.4.3 |
-| **Updated** | 15 September 2026 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |

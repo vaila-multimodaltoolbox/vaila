@@ -48,7 +48,7 @@ SAM3 loads **all session frames** for a session onto the GPU. Long clips exceed 
 
 ## Manual run (full pipeline)
 
-Requires **NVIDIA CUDA**, `uv sync --extra sam` (and `--extra gpu` on the CUDA `pyproject` template if you use TensorRT/CUDA wheels).
+Requires **NVIDIA CUDA**, `uv sync --extra sam` (add `--no-group cpu --group cuda` for the CUDA wheels + TensorRT).
 
 ### BRA_KOR 60-frame example
 

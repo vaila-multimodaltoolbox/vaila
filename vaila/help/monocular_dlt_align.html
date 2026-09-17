@@ -32,7 +32,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing / Markerless 3D</p>
             <p><strong>File:</strong> vaila/monocular_dlt_align.py</p>
-            <p><strong>Version:</strong> 0.3.99</p>
+            <p><strong>Version:</strong> 0.4.3</p>
+            <p><strong>Updated:</strong> 16 September 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes — Frame B → Markerless 3D → Monocular → DLT world &nbsp; <strong>CLI:</strong> Yes</p>
             <p><strong>Runtime:</strong> CPU only; no model weights are loaded</p>
@@ -99,7 +100,7 @@
             <tr><td><code>--ref3d</code></td><td>Optional control points — used only to <strong>validate</strong> the calibration and report the working volume, never to fit anything.</td></tr>
             <tr><td><code>--fps</code></td><td>Point rate in Hz; fractional rates accepted (e.g. <code>119.88012001</code>).</td></tr>
             <tr><td><code>--smooth-hz</code> / <code>--no-smooth</code></td><td>Placement smoothing cutoff (default 6 Hz) / disable it.</td></tr>
-            <tr><td><code>--origin-markers</code></td><td>1-based markers whose midpoint the placement rotates about (default <code>10 11</code>).</td></tr>
+            <tr><td><code>--origin-markers</code></td><td>0-based markers whose midpoint the placement rotates about (default <code>9 10</code>, the MHR70 hips; rebased from 1-based in 0.4.3).</td></tr>
             <tr><td><code>--skeleton</code></td><td>Skeleton JSON for the generated Blender script.</td></tr>
             <tr><td><code>--mesh-source-dir</code></td><td>Directory with <code>meshes/frame_NNNNNN.npz</code> + <code>mesh_faces.npy</code> (needs <code>--save-mesh</code> in the source <code>sam3dinov3.py</code> run). Defaults to <code>--mono3d</code>'s own directory.</td></tr>
             <tr><td><code>--export-mesh {none,obj,ply}</code></td><td>Aligned per-frame mesh format for Blender (default <code>obj</code>); silently skipped when no <code>meshes/</code> source is found.</td></tr>
@@ -108,7 +109,7 @@
         <h2>Outputs</h2>
         <table>
             <tr><th>File</th><th>Content</th></tr>
-            <tr><td><code>&lt;base&gt;.csv</code> / <code>.3d</code></td><td>World-frame 3D, vailá rec3d convention (<code>p1_x,p1_y,p1_z,…</code>)</td></tr>
+            <tr><td><code>&lt;base&gt;.csv</code> / <code>.3d</code></td><td>World-frame 3D, vailá rec3d convention (<code>p0_x,p0_y,p0_z,…</code>)</td></tr>
             <tr><td><code>&lt;base&gt;_m.c3d</code> / <code>&lt;base&gt;_mm.c3d</code></td><td>C3D in metres / millimetres</td></tr>
             <tr><td><code>&lt;base&gt;.bvh</code></td><td>Mocap for Blender (Y/Z swapped)</td></tr>
             <tr><td><code>&lt;base&gt;_blender_skeleton_viz.py</code></td><td>Blender companion script</td></tr>

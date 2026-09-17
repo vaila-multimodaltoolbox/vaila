@@ -42,7 +42,7 @@ Install everything (PyTorch CUDA, SAM 3, Sapiens2, SAM 3D Body, and runtime depe
 ./install_vaila_linux.sh --full
 
 # Or from anywhere via setup_pyproject:
-bash bin/setup_pyproject.sh --target=linux-cuda --full --yes
+bash bin/setup_pyproject.sh --target=cuda --full --yes
 ```
 
 **🪟 Windows (PowerShell):**
@@ -51,7 +51,7 @@ bash bin/setup_pyproject.sh --target=linux-cuda --full --yes
 .\install_vaila_win.ps1 -Full
 
 # Or via setup_pyproject:
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Full -Yes
+pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Yes
 ```
 
 ### 2.2 Hugging Face Authentication (Gated Models)

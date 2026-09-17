@@ -12,7 +12,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.4.3
 Created: August 03, 2025
-Last Updated: 15 September 2026
+Last Updated: 17 September 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
@@ -34,7 +34,7 @@ Description:
     COLUMN ORDER matters — column 0 is the frame identifier and every pair of
     columns after that is one marker's (x, y). This makes the pixel files
     compatible with trackers that use different label conventions (vailá
-    p1_x/p1_y, SAM3, YOLO, MediaPipe named joints, etc.) as long as the same
+    p0_x/p0_y, SAM3, YOLO, MediaPipe named joints, etc.) as long as the same
     markers appear in the same order in every camera's file.
 
     Output: one reconstructed 3D result (CSV + .3d + BVH + a Blender
@@ -188,7 +188,9 @@ def resolve_marker_labels(n_markers, marker_names_file=None, mesh_source_dirs=No
 
     Shared, unchanged, by rec3d.py and rec3d_one_dlt3d.py.
     """
-    fallback = [f"p{i}" for i in range(1, n_markers + 1)]
+    # 0-based, matching getpixelvideo.py's p0_x/p0_y pixel columns and the
+    # p0-based reconstruction header written below.
+    fallback = [f"p{i}" for i in range(n_markers)]
 
     if marker_names_file:
         names = _read_marker_names_file(marker_names_file)
@@ -198,7 +200,7 @@ def resolve_marker_labels(n_markers, marker_names_file=None, mesh_source_dirs=No
             print(
                 f"[yellow]Warning: marker names file {marker_names_file} has "
                 f"{len(names)} name(s), expected {n_markers}; "
-                f"falling back to p1..p{n_markers}[/yellow]"
+                f"falling back to p0..p{n_markers - 1}[/yellow]"
             )
 
     if mesh_source_dirs:
@@ -241,7 +243,7 @@ def save_rec3d_as_bvh(rec3d_df, output_dir, file_base, point_rate, gui=True, swa
     exported as an independent ROOT node in 3D space.
 
     Shared by rec3d.py (per-frame-varying DLT3D) and rec3d_one_dlt3d.py
-    (one fixed DLT3D per camera) — both write the same p1_x,p1_y,p1_z,...
+    (one fixed DLT3D per camera) — both write the same p0_x,p0_y,p0_z,...
     wide column convention, so this needs no per-caller variant.
 
     Args:
@@ -449,38 +451,40 @@ def generate_blender_companion_script(
     import json
     import os
 
-    # Default connections (MediaPipe 33 keypoints) used if no JSON is provided
+    # Default connections (MediaPipe 33 keypoints, 0-based pN) used if no JSON is provided
     default_connections = [
-        ["p12", "p13"],
-        ["p24", "p25"],
+        ["p11", "p12"],
+        ["p23", "p24"],
+        ["p11", "p23"],
         ["p12", "p24"],
-        ["p13", "p25"],
-        ["p12", "p25"],
-        ["p13", "p24"],
-        ["p1", "p3"],
-        ["p1", "p6"],
-        ["p3", "p6"],
-        ["p3", "p8"],
-        ["p6", "p9"],
-        ["p10", "p11"],
+        ["p11", "p24"],
+        ["p12", "p23"],
+        ["p0", "p2"],
+        ["p0", "p5"],
+        ["p2", "p5"],
+        ["p2", "p7"],
+        ["p5", "p8"],
+        ["p9", "p10"],
+        ["p11", "p13"],
+        ["p13", "p15"],
+        ["p15", "p17"],
+        ["p15", "p19"],
+        ["p15", "p21"],
         ["p12", "p14"],
         ["p14", "p16"],
         ["p16", "p18"],
         ["p16", "p20"],
         ["p16", "p22"],
-        ["p13", "p15"],
-        ["p15", "p17"],
-        ["p17", "p19"],
-        ["p17", "p21"],
-        ["p17", "p23"],
+        ["p23", "p25"],
+        ["p25", "p27"],
+        ["p27", "p29"],
+        ["p29", "p31"],
+        ["p27", "p31"],
         ["p24", "p26"],
         ["p26", "p28"],
         ["p28", "p30"],
         ["p30", "p32"],
-        ["p25", "p27"],
-        ["p27", "p29"],
-        ["p29", "p31"],
-        ["p31", "p33"],
+        ["p28", "p32"],
     ]
 
     connections = default_connections
@@ -1142,8 +1146,11 @@ def process_files_in_directory(
             col_start = 1 + marker * 3
             reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
 
+    # Marker m occupies array slot m (col_start = 1 + m * 3) and is labelled
+    # p{m}: 0-based, so the output column names line up one-to-one with the
+    # p0-based pixel input and with REF3D files exported from p0.
     header = ["frame"]
-    for marker in range(1, num_markers + 1):
+    for marker in range(num_markers):
         header.extend([f"p{marker}_x", f"p{marker}_y", f"p{marker}_z"])
 
     rec_coords_df = pd.DataFrame(reconstruction_array, columns=header)  # type: ignore

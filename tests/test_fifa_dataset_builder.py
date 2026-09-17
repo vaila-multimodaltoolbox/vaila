@@ -85,7 +85,7 @@ def test_canonical_flip_pairs_are_geometric_mirrors():
 
 
 def test_centered_meters_match_drawsportsfields_convention():
-    """Centered Y-up convention: top-left corner in upper-left = (-L/2, +W/2)."""
+    """Centered points use the regulation model, not a stretched Roboflow pitch."""
     pts, length_m, width_m = fdb._load_centered_fifa_points_32()
     assert length_m == fdb.DRAWSPORTSFIELDS_LENGTH_M
     assert width_m == fdb.DRAWSPORTSFIELDS_WIDTH_M
@@ -101,6 +101,23 @@ def test_centered_meters_match_drawsportsfields_convention():
     x, y, _z = pts[24]
     assert x == +length_m / 2.0
     assert y == +width_m / 2.0
+
+    # The Roboflow schema is 120 x 70 m with a 20.15 m penalty-box depth.
+    # Scaling it uniformly into this frame used to move all internal markings.
+    # Points 10/11/18/19 instead belong exactly on the regulation penalty-area
+    # front lines, at the Y levels of the goal-area sides.
+    expected = {
+        10: (-35.95, 9.16, 0.0),
+        11: (-35.95, -9.16, 0.0),
+        18: (35.95, 9.16, 0.0),
+        19: (35.95, -9.16, 0.0),
+    }
+    for idx, xyz in expected.items():
+        assert pts[idx] == xyz
+
+    # The intermediate anchors share X with the penalty-area front-line corners.
+    assert pts[10][0] == pts[9][0] == pts[11][0] == pts[12][0]
+    assert pts[18][0] == pts[17][0] == pts[19][0] == pts[20][0]
 
 
 def test_kpsfr_template_matches_drawsportsfields_centered():
@@ -540,6 +557,16 @@ def test_write_keypoint_reference(tmp_path: Path):
     W = fdb.DRAWSPORTSFIELDS_WIDTH_M
     assert abs(float(by_idx[0]["x_center_m"]) - (-L / 2.0)) < 1e-6
     assert abs(float(by_idx[0]["y_center_m"]) - (+W / 2.0)) < 1e-6
+    # Metric reference columns must use the same regulation geometry as the GUI
+    # template, not a proportional transform of the 120 x 70 m Roboflow frame.
+    assert abs(float(by_idx[10]["x_center_m"]) - (-35.95)) < 1e-6
+    assert abs(float(by_idx[10]["y_center_m"]) - 9.16) < 1e-6
+    assert abs(float(by_idx[11]["x_center_m"]) - (-35.95)) < 1e-6
+    assert abs(float(by_idx[11]["y_center_m"]) - (-9.16)) < 1e-6
+    assert abs(float(by_idx[18]["x_center_m"]) - 35.95) < 1e-6
+    assert abs(float(by_idx[18]["y_center_m"]) - 9.16) < 1e-6
+    assert abs(float(by_idx[19]["x_center_m"]) - 35.95) < 1e-6
+    assert abs(float(by_idx[19]["y_center_m"]) - (-9.16)) < 1e-6
     # Roboflow truth columns.
     assert abs(float(by_idx[0]["x_roboflow_cm"])) < 1e-6
     assert abs(float(by_idx[24]["x_roboflow_cm"]) - 12000.0) < 1e-6

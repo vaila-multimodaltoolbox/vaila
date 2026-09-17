@@ -32,7 +32,7 @@
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d.py</p>
             <p><strong>Version:</strong> 0.4.3</p>
-            <p><strong>Updated:</strong> 15 September 2026</p>
+            <p><strong>Updated:</strong> 16 September 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -59,14 +59,14 @@
         <h3>DLT3D file (per camera)</h3>
         <p>CSV with <strong>one row per frame</strong>: <code>frame</code>, then 11 DLT coefficients. <strong>One file per camera</strong>, passed to <code>--dlt-files</code> in the same order the pixel CSVs will sort alphabetically. If a frame is missing from a camera's DLT3D file (or its coefficients contain NaN), that frame is skipped.</p>
         <h3>Pixel CSV (per camera)</h3>
-        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá <code>p1_x</code>/<code>p1_y</code>, SAM3, YOLO, MediaPipe named joints, etc.). Exactly <strong>one CSV per camera</strong> must be placed in <code>--input-dir</code>, matching <code>--dlt-files</code> in count, paired by <strong>sorted filename</strong> (e.g. <code>cam1_pixels.csv</code>, <code>cam2_pixels.csv</code>, ...).</p>
+        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá <code>p0_x</code>/<code>p0_y</code>, SAM3, YOLO, MediaPipe named joints, etc.). Exactly <strong>one CSV per camera</strong> must be placed in <code>--input-dir</code>, matching <code>--dlt-files</code> in count, paired by <strong>sorted filename</strong> (e.g. <code>cam1_pixels.csv</code>, <code>cam2_pixels.csv</code>, ...).</p>
         <p>Only frames present in <strong>every</strong> camera's pixel file, with valid DLT parameters for that frame in every camera, are reconstructed.</p>
 
         <h2>Output files</h2>
         <p>A single reconstruction result is written inside a new subfolder: <code>vaila_rec3d_YYYYMMDD_HHMMSS/</code>.</p>
         <table>
             <tr><th>File</th><th>Description</th></tr>
-            <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p1_x, p1_y, p1_z, p2_x, ...</td></tr>
+            <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p0_x, p0_y, p0_z, p1_x, ... (<strong>0-based since 0.4.3</strong>, matching the <code>p0_x/p0_y</code> pixel columns written by <code>getpixelvideo.py</code>)</td></tr>
             <tr><td><code>rec3d_*.3d</code></td><td>Same data as CSV (duplicate format).</td></tr>
             <tr><td><code>rec3d_*.bvh</code></td><td>Mocap format for Blender (each marker as an independent ROOT node).</td></tr>
             <tr><td><code>rec3d_*_blender_skeleton_viz.py</code></td><td>Companion script (see "Skeleton visualization" below).</td></tr>
@@ -74,7 +74,7 @@
         <p>Unlike <code>rec3d_one_dlt3d</code>, this module does not export C3D; use <code>rec3d_one_dlt3d</code> or <code>readcsv_export</code> if you need C3D from the resulting CSV. <strong>v0.3.99</strong> added the same BVH + skeleton-visualization export <code>rec3d_one_dlt3d</code> already had.</p>
 
         <h2>Skeleton visualization (--swap-yz / --skeleton)</h2>
-        <p>Every run also writes a <code>.bvh</code> file (each marker as an independent ROOT node) and a <code>_blender_skeleton_viz.py</code> companion script. The BVH imports natively into Blender; running the companion script inside Blender's Text Editor afterward draws bone connections between the markers using the <code>--skeleton</code> JSON's <code>"connections"</code> list (<code>[["pA","pB"], ...]</code>, referencing the <strong>1-based</strong> <code>pN</code> column index — always renumbered positionally, regardless of the original tracker's own column labels).</p>
+        <p>Every run also writes a <code>.bvh</code> file (each marker as an independent ROOT node) and a <code>_blender_skeleton_viz.py</code> companion script. The BVH imports natively into Blender; running the companion script inside Blender's Text Editor afterward draws bone connections between the markers using the <code>--skeleton</code> JSON's <code>"connections"</code> list (<code>[["pA","pB"], ...]</code>, referencing the <strong>0-based</strong> <code>pN</code> column index — always renumbered positionally, regardless of the original tracker's own column labels).</p>
         <p>Ready-made presets for every tracker vailá supports ship in <code>vaila/skeletons/</code> (and test templates in <code>tests/skeleton_templates/</code>):</p>
         <table>
             <tr><th>File</th><th>Keypoint set</th><th>Points</th></tr>

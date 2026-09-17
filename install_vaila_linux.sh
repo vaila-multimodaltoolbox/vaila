@@ -531,19 +531,15 @@ case "$PROFILE_CHOICE" in
         ;;
 esac
 
-# Choose template
+# Choose the PyTorch backend. There is a single portable pyproject.toml for
+# every machine and OS: the backend is a uv dependency group ("cpu" by default,
+# "cuda" for NVIDIA), so no file is ever swapped and the git tree stays clean.
+GROUP_ARGS=()
 if [[ "$USE_GPU" == true ]]; then
-    if [ -f "$VAILA_HOME/pyproject_linux_cuda12.toml" ]; then
-        cp "$VAILA_HOME/pyproject_linux_cuda12.toml" "$VAILA_HOME/pyproject.toml"
-        echo "Using Linux CUDA 12.8 configuration."
-    else
-        echo "Warning: pyproject_linux_cuda12.toml not found. Using CPU-only."
-        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-        USE_GPU=false
-    fi
+    GROUP_ARGS=(--no-group cpu --group cuda)
+    echo "Using CUDA 12.8 wheels (uv group: cuda)."
 else
-    cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-    echo "Using CPU-only configuration."
+    echo "Using CPU-only wheels (uv group: cpu)."
 fi
 
 # Initialize uv project
@@ -564,19 +560,14 @@ else
 fi
 
 # Lock + sync:
-# - Git clone (portable): prefer committed uv.lock via `uv sync --frozen` so pull stays clean.
-# - GPU template on a git clone: must relock for CUDA indexes; warn before pull.
+# - Git clone (portable): use the committed uv.lock via `uv sync --frozen`. The
+#   lock already carries the CPU *and* the CUDA resolution, so a GPU machine
+#   never has to relock and `git pull` stays clean.
 # - Profile copy (no .git): `uv lock --upgrade` then sync (legacy behaviour).
 echo ""
 LOCK_WAS_REGENERATED=false
 if [[ "$IS_GIT_TREE" == true ]]; then
-    if [[ "$USE_GPU" == true ]]; then
-        echo "CUDA template selected in a git clone — regenerating uv.lock for this machine..."
-        uv lock
-        LOCK_WAS_REGENERATED=true
-    else
-        echo "Using committed uv.lock (no uv lock --upgrade) so git pull is not blocked."
-    fi
+    echo "Using committed uv.lock (portable: CPU and CUDA resolutions in one lock)."
 else
     echo "Generating lock file (uv.lock)..."
     uv lock --upgrade
@@ -596,12 +587,9 @@ echo ""
 echo "Installing vaila dependencies with uv..."
 echo "This may take a few minutes on first run..."
 
-UV_SYNC_CMD=(uv sync)
+UV_SYNC_CMD=(uv sync "${GROUP_ARGS[@]}")
 if [[ "$IS_GIT_TREE" == true && "$LOCK_WAS_REGENERATED" != true ]]; then
     UV_SYNC_CMD+=(--frozen)
-fi
-if [[ "$USE_GPU" == true ]]; then
-    UV_SYNC_CMD+=(--extra gpu)
 fi
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     UV_SYNC_CMD+=(--extra sam)
@@ -615,10 +603,7 @@ fi
 if ! "${UV_SYNC_CMD[@]}"; then
     if [[ "$IS_GIT_TREE" == true && "$LOCK_WAS_REGENERATED" != true ]]; then
         echo "Frozen sync failed — retrying without --frozen (may update uv.lock)..."
-        UV_SYNC_CMD=(uv sync)
-        if [[ "$USE_GPU" == true ]]; then
-            UV_SYNC_CMD+=(--extra gpu)
-        fi
+        UV_SYNC_CMD=(uv sync "${GROUP_ARGS[@]}")
         if [[ "$USE_SAM_EXTRA" == true ]]; then
             UV_SYNC_CMD+=(--extra sam)
         fi
@@ -631,14 +616,14 @@ if ! "${UV_SYNC_CMD[@]}"; then
         if "${UV_SYNC_CMD[@]}"; then
             LOCK_WAS_REGENERATED=true
         else
-            echo "Error: uv sync failed. Restoring universal CPU configuration..."
-            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+            echo "Error: uv sync failed."
+            echo "Retry with CPU-only wheels:  uv sync   (from $VAILA_HOME)"
             echo "Installation failed. Please check the error messages above."
             exit 1
         fi
     else
-        echo "Error: uv sync failed. Restoring universal CPU configuration..."
-        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
+        echo "Error: uv sync failed."
+        echo "Retry with CPU-only wheels:  uv sync   (from $VAILA_HOME)"
         echo "Installation failed. Please check the error messages above."
         exit 1
     fi
@@ -661,9 +646,8 @@ if [[ "$USE_GPU" == true ]]; then
     if [[ -n "$BROKEN" ]]; then
         echo "Warning: corrupted CUDA wheels detected (metadata present, files missing): $(echo "$BROKEN" | tr '\n' ' ')"
         echo "Reinstalling only the broken packages..."
-        REPAIR_CMD=(uv sync)
+        REPAIR_CMD=(uv sync "${GROUP_ARGS[@]}")
         for pkg in $BROKEN; do REPAIR_CMD+=(--reinstall-package "$pkg"); done
-        if [[ "$USE_GPU" == true ]]; then REPAIR_CMD+=(--extra gpu); fi
         if [[ "$USE_SAM_EXTRA" == true ]]; then REPAIR_CMD+=(--extra sam); fi
         if [[ "$USE_SAPIENS_EXTRA" == true ]]; then REPAIR_CMD+=(--extra sapiens); fi
         if [[ "$USE_FIFA_EXTRA" == true ]]; then REPAIR_CMD+=(--extra fifa); fi
@@ -926,12 +910,11 @@ echo "=================================================================="
 echo ""
 if [[ "$IS_GIT_TREE" == true ]]; then
     if [[ "$LOCK_WAS_REGENERATED" == true ]] || ! git -C "$VAILA_HOME" diff --quiet -- uv.lock pyproject.toml 2>/dev/null; then
-        echo "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo"
-        echo "(common after a CUDA template switch). Before pulling:"
+        echo "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo."
+        echo "Both files are portable (CPU and CUDA share one lock), so you can drop"
+        echo "the local changes before pulling:"
         echo "  git -C \"$VAILA_HOME\" restore uv.lock pyproject.toml"
         echo "  git -C \"$VAILA_HOME\" pull"
-        echo "Then re-apply the platform template if needed:"
-        echo "  bash bin/setup_pyproject.sh --target=linux-cuda --yes"
         echo ""
     else
         echo "Git tree kept clean for uv.lock — you can 'git pull' normally."

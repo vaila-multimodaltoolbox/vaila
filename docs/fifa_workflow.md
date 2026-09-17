@@ -38,7 +38,7 @@
 
 | Stage | vailá module | GUI button | CLI script |
 |---|---|---|---|
-| 0 | — | — | `bin/use_pyproject_linux_cuda.sh`; `uv sync --extra gpu --extra sam --extra fifa` |
+| 0 | — | — | `bin/setup_pyproject.sh --target=cuda --yes`; `uv sync --no-group cpu --group cuda --extra sam --extra fifa` |
 | 1 | `vaila_sam.py` | **vaila_sam** | `uv run vaila/vaila_sam.py` |
 | 2 | `soccerfield_keypoints_ai.py` | **Field KPs (AI)** | `uv run python -m vaila.soccerfield_keypoints_ai` |
 | 3 | `soccerfield_calib.py` (static) **or** `fifa cameras` (broadcast) | **Soccer-Field Calib**, **FIFA cams→DLT** | `uv run vaila/soccerfield_calib.py`, `uv run vaila/vaila_sam.py fifa baseline --export-camera` |
@@ -52,17 +52,17 @@
 > A workstation with NVIDIA CUDA is required. SAM 3 video and SAM 3D Body
 > have **no** CPU / Apple-Metal fallback (`AGENTS.md`).
 
-### 2.1 Switch to the CUDA template
+### 2.1 Select the CUDA PyTorch group
 
 ```bash
 cd /path/to/vaila
-bash bin/use_pyproject_linux_cuda.sh   # Linux  (or pwsh bin/use_pyproject_win_cuda.ps1)
+bash bin/setup_pyproject.sh --target=cuda --yes   # Linux  (or pwsh bin/setup_pyproject.ps1 -Target cuda -Yes)
 ```
 
 ### 2.2 Sync extras
 
 ```bash
-uv sync --extra gpu --extra sam --extra fifa
+uv sync --no-group cpu --group cuda --extra sam --extra fifa
 ```
 
 ### 2.3 Hugging Face access
@@ -218,7 +218,7 @@ EXTERNAL/
 | **5. Align `unified/` to flat** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --prune-unified-to-flat EXTERNAL/check_all_labels --dry-run` then `--apply-prune` | After step 4, drop the same samples from `unified/` so training matches what you validated. |
 | **6. Verify** | `uv run python -m vaila.fifa_dataset_train_readiness --unified EXTERNAL/unified --compare-flat EXTERNAL/check_all_labels` | Expect exit **0** when label counts match the flat `images/` stem count. |
 
-**Train / fine-tune** (workstation: CUDA `pyproject` template + `uv sync --extra gpu`; use an **absolute** `data=` path):
+**Train / fine-tune** (workstation: `uv sync --no-group cpu --group cuda`; use an **absolute** `data=` path):
 
 ```bash
 uv run yolo pose train \
@@ -426,7 +426,7 @@ coefficients. See
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `torch.cuda.is_available() == False` | wrong template | run `bin/use_pyproject_linux_cuda.sh` then `uv sync --extra gpu` |
+| `torch.cuda.is_available() == False` | CPU PyTorch group installed | run `bin/setup_pyproject.sh --target=cuda --yes` then `uv sync --no-group cpu --group cuda` |
 | `403 from huggingface.co` | licence not accepted | accept on HF, then `uv run hf auth login` |
 | SAM 3 OOM in batch | 1 leak in CUDA workspaces | already mitigated by subprocess-per-video; do not pass `--no-isolate-batch` |
 | Pitch keypoints all clustered | old / collapsed model | use the bundled `pitch32_recipeA_400ep/best.pt` |

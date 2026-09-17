@@ -2,8 +2,8 @@
 Script: showc3d.py
 Author: Prof. Paulo Roberto Pereira Santiago
 Date: 29/07/2024
-Updated: 06/09/2026
-Version: 0.3.122
+Updated: 16/09/2026
+Version: 0.4.3
 
 Description:
 ------------
@@ -348,12 +348,28 @@ def show_points_3d(
     ax.set_ylabel("Y (m)", labelpad=8)
     ax.set_zlabel("Z (m)", labelpad=8)
 
-    margin_x = max(0.1 * span_x, 1.0)
-    margin_y = max(0.1 * span_y, 1.0)
-    margin_z = max(0.1 * span_z, 0.5)
-    ax.set_xlim(x_min - margin_x, x_max + margin_x)
-    ax.set_ylim(y_min - margin_y, y_max + margin_y)
-    ax.set_zlim(min(z_min - margin_z, -0.5), max(z_max + margin_z, 2.5))
+    # Padding proportional to each axis span. A fixed Z floor/ceiling used to be
+    # forced here (-0.5 m .. 2.5 m); on a nearly flat model such as a soccer
+    # pitch that inflated the Z range, and combined with Matplotlib's default
+    # (4, 4, 3) box it made 2.44 m goal posts look as tall as the pitch was long.
+    margin_x = max(0.05 * span_x, 0.5)
+    margin_y = max(0.05 * span_y, 0.5)
+    margin_z = max(0.05 * span_z, 0.25)
+    x_lo, x_hi = x_min - margin_x, x_max + margin_x
+    y_lo, y_hi = y_min - margin_y, y_max + margin_y
+    z_lo, z_hi = z_min - margin_z, z_max + margin_z
+    ax.set_xlim(x_lo, x_hi)
+    ax.set_ylim(y_lo, y_hi)
+    ax.set_zlim(z_lo, z_hi)
+
+    # Equal data aspect, i.e. MATLAB's ``daspect([1 1 1])``: one metre must
+    # occupy the same screen distance on X, Y and Z. ``ax.set_aspect("equal")``
+    # is a no-op on a 3D axes, and ``set_box_aspect((1, 1, 1))`` would equalize
+    # the drawing box rather than the metres per box unit, so the box aspect has
+    # to be scaled by the real axis ranges instead.
+    ranges = np.array([x_hi - x_lo, y_hi - y_lo, z_hi - z_lo], dtype=float)
+    ranges = np.maximum(ranges, 1e-6)
+    ax.set_box_aspect(tuple(ranges / ranges.max()))
 
     mode_info = "Soccer Field Environment" if is_field_scale else "Human MoCap Volume"
     frame_info = (

@@ -6,7 +6,8 @@
 |-------|--------|
 | **Category** | Processing / Markerless 3D |
 | **File** | `vaila/monocular_dlt_align.py` |
-| **Version** | 0.3.99 |
+| **Version** | 0.4.3 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes — Frame B → **Markerless 3D** → **Monocular → DLT world** |
 | **CLI** | Yes |
@@ -85,7 +86,7 @@ When the `sam3dinov3.py` run that produced `--mono3d` was made with `--save-mesh
 | `--ref3d` | Optional control points — used only to **validate** the calibration and report the working volume, never to fit anything. |
 | `--fps` | Point rate in Hz; fractional rates accepted (e.g. `119.88012001`). |
 | `--smooth-hz` / `--no-smooth` | Placement smoothing cutoff (default 6 Hz) / disable it. |
-| `--origin-markers` | 1-based markers whose midpoint the placement rotates about (default `10 11`). |
+| `--origin-markers` | 0-based markers whose midpoint the placement rotates about (default `9 10`, the MHR70 hips; rebased from 1-based in 0.4.3). |
 | `--skeleton` | Skeleton JSON for the generated Blender script. |
 | `--mesh-source-dir` | Directory with `meshes/frame_NNNNNN.npz` + `mesh_faces.npy` (needs `--save-mesh` in the source `sam3dinov3.py` run). Defaults to `--mono3d`'s own directory. |
 | `--export-mesh {none,obj,ply}` | Aligned per-frame mesh format for Blender (default `obj`); silently skipped when no `meshes/` source is found. |
@@ -96,7 +97,7 @@ Timestamped subfolder, same conventions as `rec3d_one_dlt3d.py`:
 
 | File | Content |
 |---|---|
-| `<base>.csv` / `.3d` | World-frame 3D, vailá rec3d convention (`p1_x,p1_y,p1_z,…`) |
+| `<base>.csv` / `.3d` | World-frame 3D, vailá rec3d convention (`p0_x,p0_y,p0_z,…`) |
 | `<base>_m.c3d` / `<base>_mm.c3d` | C3D in metres / millimetres |
 | `<base>.bvh` | Mocap for Blender (Y/Z swapped) |
 | `<base>_blender_skeleton_viz.py` | Blender companion script |

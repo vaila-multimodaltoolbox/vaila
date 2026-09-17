@@ -10,7 +10,7 @@
 
 .EXAMPLE
     pwsh bin/sync_repo.ps1
-    pwsh bin/sync_repo.ps1 -Target win-cuda -Extras gpu,sam
+    pwsh bin/sync_repo.ps1 -Target cuda -Extras gpu,sam
 #>
 
 [CmdletBinding()]

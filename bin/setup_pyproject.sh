@@ -2,27 +2,37 @@
 # bin/setup_pyproject.sh
 #
 # Unified interactive bootstrap for vailá: detects OS/arch/NVIDIA, picks the
-# right pyproject_*.toml template, lets the user confirm extras, then runs
-# `uv lock` + `uv sync --extra ...`.
+# PyTorch dependency group (`cpu` or `cuda`) and the optional extras, then runs
+# `uv sync`.
+#
+# There is a SINGLE committed pyproject.toml / uv.lock for every machine and OS:
+# the hardware choice is a uv dependency group, not a file swap. Nothing in the
+# repository is modified by this script, so there is never a machine-specific
+# manifest to keep out of git.
+#
+#   cpu   -> torch/torchvision/torchaudio from https://download.pytorch.org/whl/cpu
+#            (on macOS: the PyPI wheel, which is the Metal/MPS build)
+#   cuda  -> the same trio from https://download.pytorch.org/whl/cu128 + tensorrt
+#            + nvidia-ml-py (NVIDIA only; not available on macOS)
 #
 # Cross-platform (bash): Linux, macOS, WSL, Git Bash / MSYS2 on Windows.
 # For native Windows PowerShell, use bin/setup_pyproject.ps1.
 #
 # Usage:
 #   bin/setup_pyproject.sh                                # interactive, auto-detect
-#   bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam
+#   bin/setup_pyproject.sh --target=cuda --extras=sam
 #   bin/setup_pyproject.sh --target=cpu --non-interactive --yes
 #   bin/setup_pyproject.sh --help
 #
 # Flags:
-#   --target=auto|cpu|linux-cuda|win-cuda|macos   (default: auto)
-#   --extras=a,b,c     Comma-separated extras (gpu, sam, fifa, upscaler, dev)
+#   --target=auto|cpu|cuda     (default: auto; legacy names linux-cuda, win-cuda,
+#                              macos and gpu are still accepted)
+#   --extras=a,b,c     Comma-separated extras (sam, fifa, sapiens, upscaler, dev)
 #   --non-interactive  Do not prompt; use detected/given values
 #   --yes, -y          Accept all suggested defaults (interactive but no prompts)
-#   --no-lock          Skip `uv lock`
+#   --lock             Re-run `uv lock` before syncing (normally unnecessary)
+#   --no-lock          Skip `uv lock` (default)
 #   --no-sync          Skip `uv sync`
-#   --skip-worktree    Hide pyproject.toml & uv.lock from git status via git update-index --skip-worktree
-#   --no-skip-worktree Restore normal git tracking for pyproject.toml & uv.lock
 #   --help, -h         Show this help and exit
 
 set -euo pipefail
@@ -35,13 +45,12 @@ TARGET="auto"
 EXTRAS_CLI=""
 NON_INTERACTIVE=0
 ACCEPT_DEFAULTS=0
-RUN_LOCK=1
+RUN_LOCK=0
 RUN_SYNC=1
-SKIP_WORKTREE=0
 
 # ---------- args ----------
 print_help() {
-    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
@@ -51,10 +60,14 @@ for arg in "$@"; do
         --full|--preset=full) EXTRAS_CLI="all" ;;
         --non-interactive) NON_INTERACTIVE=1 ;;
         -y|--yes)          ACCEPT_DEFAULTS=1 ;;
+        --lock)            RUN_LOCK=1 ;;
         --no-lock)         RUN_LOCK=0 ;;
         --no-sync)         RUN_SYNC=0 ;;
-        --skip-worktree)   SKIP_WORKTREE=1 ;;
-        --no-skip-worktree) SKIP_WORKTREE=2 ;;
+        --skip-worktree|--no-skip-worktree)
+            # Kept for backward compatibility: pyproject.toml / uv.lock are now
+            # identical on every machine, so there is nothing to hide from git.
+            warn "note: $arg is obsolete (single portable pyproject.toml/uv.lock); ignoring."
+            ;;
         -h|--help)         print_help; exit 0 ;;
         *)
             echo "error: unknown argument: $arg" >&2
@@ -125,9 +138,8 @@ fi
 # ---------- auto target selection ----------
 auto_target() {
     case "$OS" in
-        macos)            echo "macos" ;;
-        windows)          [[ "$HAS_NVIDIA" == 1 ]] && echo "win-cuda"   || echo "cpu" ;;
-        linux|wsl)        [[ "$HAS_NVIDIA" == 1 ]] && echo "linux-cuda" || echo "cpu" ;;
+        macos)            echo "cpu" ;;   # PyPI wheel = Metal/MPS build
+        windows|linux|wsl) [[ "$HAS_NVIDIA" == 1 ]] && echo "cuda" || echo "cpu" ;;
         *)                echo "cpu" ;;
     esac
 }
@@ -136,16 +148,16 @@ if [[ "$TARGET" == "auto" ]]; then
     TARGET="$(auto_target)"
 fi
 
-# ---------- target -> template + suggested extras ----------
-template_for_target() {
+# ---------- target -> torch dependency group ----------
+# Legacy target names (linux-cuda / win-cuda / macos / gpu) map onto the two
+# groups declared in pyproject.toml so old commands and docs keep working.
+normalize_target() {
     case "$1" in
-        cpu)        echo "pyproject_universal_cpu.toml" ;;
-        linux-cuda) echo "pyproject_linux_cuda12.toml"  ;;
-        win-cuda)   echo "pyproject_win_cuda12.toml"    ;;
-        macos)      echo "pyproject_macos.toml"         ;;
+        cpu|macos|mac|metal|mps)          echo "cpu" ;;
+        cuda|gpu|linux-cuda|win-cuda|nvidia) echo "cuda" ;;
         *)
             err "unknown target: $1"
-            err "valid: cpu, linux-cuda, win-cuda, macos"
+            err "valid: cpu, cuda (legacy: linux-cuda, win-cuda, macos)"
             exit 2
             ;;
     esac
@@ -165,13 +177,9 @@ detect_installed_extras() {
 }
 
 suggested_extras_for_target() {
+    # tensorrt / nvidia-ml-py now live in the `cuda` dependency group, not in an
+    # extra, so the suggestion is purely "whatever is already installed".
     local base=""
-    case "$1" in
-        cpu)        base="" ;;
-        linux-cuda) base="gpu" ;;
-        win-cuda)   base="gpu" ;;
-        macos)      base="" ;;
-    esac
     local installed
     installed="$(detect_installed_extras)"
     local combined="$base $installed"
@@ -179,12 +187,10 @@ suggested_extras_for_target() {
     echo "$combined" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ' | sed 's/ $//'
 }
 
-SRC="$(template_for_target "$TARGET")"
-if [[ ! -f "$ROOT/$SRC" ]]; then
-    err "template not found: $SRC"
-    err "available templates:"
-    ls "$ROOT"/pyproject_*.toml 2>/dev/null >&2 || true
-    exit 1
+TARGET="$(normalize_target "$TARGET")"
+if [[ "$TARGET" == "cuda" && "$OS" == "macos" ]]; then
+    err "target 'cuda' is not available on macOS (no CUDA wheels); use --target=cpu."
+    exit 2
 fi
 
 SUGGESTED_EXTRAS="$(suggested_extras_for_target "$TARGET")"
@@ -199,7 +205,7 @@ else
     printf '  %-18s %s\n' "NVIDIA GPU:" "${DIM}none detected${RESET}"
 fi
 printf '  %-18s %s\n' "Target:"           "${BOLD}${TARGET}${RESET}"
-printf '  %-18s %s\n' "Template:"         "$SRC"
+printf '  %-18s %s\n' "PyTorch group:"    "$TARGET (uv sync --group $TARGET)"
 printf '  %-18s %s\n' "Suggested extras:" "${SUGGESTED_EXTRAS:-${DIM}none${RESET}}"
 echo ""
 
@@ -218,28 +224,18 @@ ask() {
 
 if [[ "$NON_INTERACTIVE" != 1 && "$ACCEPT_DEFAULTS" != 1 ]]; then
     if ! ask "Use target '$TARGET'?" "Y"; then
-        echo "Available targets: cpu, linux-cuda, win-cuda, macos"
+        echo "Available targets: cpu (CPU wheels / macOS Metal), cuda (NVIDIA CUDA 12.8)"
         read -r -p "Pick target: " new_target
-        TARGET="${new_target:-$TARGET}"
-        SRC="$(template_for_target "$TARGET")"
-        [[ -f "$ROOT/$SRC" ]] || { err "template not found: $SRC"; exit 1; }
+        TARGET="$(normalize_target "${new_target:-$TARGET}")"
         SUGGESTED_EXTRAS="$(suggested_extras_for_target "$TARGET")"
-        info "Switched to target=$TARGET, template=$SRC, suggested extras='$SUGGESTED_EXTRAS'"
+        info "Switched to target=$TARGET, suggested extras='$SUGGESTED_EXTRAS'"
     fi
 fi
 
 # ---------- extras selection ----------
-# Available extras per template (everything defined in [project.optional-dependencies]):
-#   cpu:        sam, fifa, sapiens, upscaler, dev
-#   linux-cuda: gpu, sam, fifa, sapiens, upscaler, dev
-#   win-cuda:   gpu, sam, fifa, sapiens, upscaler, dev
-#   macos:      sam, fifa, sapiens, upscaler, dev
-AVAILABLE_EXTRAS_CPU="sam fifa sapiens upscaler dev"
-AVAILABLE_EXTRAS_CUDA="gpu sam fifa sapiens upscaler dev"
-case "$TARGET" in
-    linux-cuda|win-cuda) AVAILABLE_EXTRAS="$AVAILABLE_EXTRAS_CUDA" ;;
-    *)                   AVAILABLE_EXTRAS="$AVAILABLE_EXTRAS_CPU" ;;
-esac
+# Everything defined in [project.optional-dependencies]; identical on every
+# platform, because there is only one pyproject.toml.
+AVAILABLE_EXTRAS="sam fifa sapiens upscaler dev"
 
 if [[ "$EXTRAS_CLI" == "all" ]]; then
     EXTRAS="$AVAILABLE_EXTRAS"
@@ -249,8 +245,7 @@ elif [[ "$NON_INTERACTIVE" == 1 || "$ACCEPT_DEFAULTS" == 1 ]]; then
     EXTRAS="$SUGGESTED_EXTRAS"
 else
     echo ""
-    info "Available extras for $TARGET: $AVAILABLE_EXTRAS"
-    echo "  gpu      = tensorrt + nvidia-ml-py (CUDA only)"
+    info "Available extras: $AVAILABLE_EXTRAS"
     echo "  sam      = SAM 3 video segmentation (sam3==0.1.3; CUDA at runtime)"
     echo "  fifa     = FIFA Skeletal Tracking Light (pytorch-lightning, timm, ...)"
     echo "  sapiens  = Sapiens2 Pose (transformers + safetensors; CUDA; then bash bin/setup_sapiens2.sh)"
@@ -273,14 +268,9 @@ for e in $EXTRAS; do
     fi
 done
 if [[ -n "$INVALID_EXTRAS" ]]; then
-    warn "Ignoring extras not defined in $SRC: $INVALID_EXTRAS"
+    warn "Ignoring extras not defined in pyproject.toml: $INVALID_EXTRAS"
 fi
 EXTRAS="$(echo "$VALID_EXTRAS" | tr -s ' ' | sed 's/^ //;s/ $//')"
-
-# ---------- apply template ----------
-echo ""
-info "Copying template: $SRC -> pyproject.toml"
-cp "$ROOT/$SRC" "$ROOT/pyproject.toml"
 
 # ---------- lock ----------
 if [[ "$RUN_LOCK" == 1 ]]; then
@@ -291,12 +281,18 @@ if [[ "$RUN_LOCK" == 1 ]]; then
     info "Running: uv lock"
     uv lock
 else
-    info "Skipping 'uv lock' (--no-lock)"
+    info "Using the committed uv.lock (pass --lock to re-resolve)"
 fi
 
 # ---------- sync ----------
 if [[ "$RUN_SYNC" == 1 ]]; then
-    SYNC_CMD=(uv sync)
+    # `cpu` is a default group in pyproject.toml, so the CUDA build must both
+    # drop it and request `cuda` (the two groups are declared as conflicting).
+    GROUP_ARGS=()
+    if [[ "$TARGET" == "cuda" ]]; then
+        GROUP_ARGS=(--no-group cpu --group cuda)
+    fi
+    SYNC_CMD=(uv sync "${GROUP_ARGS[@]}")
     for e in $EXTRAS; do
         SYNC_CMD+=(--extra "$e")
     done
@@ -310,13 +306,13 @@ if [[ "$RUN_SYNC" == 1 ]]; then
     # disk full) -- `import torch` then fails with e.g.
     # "ImportError: libcusparseLt.so.0: cannot open shared object file",
     # invisible to uv's own "already satisfied" bookkeeping.
-    if [[ "$TARGET" == "linux-cuda" || "$TARGET" == "win-cuda" ]]; then
+    if [[ "$TARGET" == "cuda" ]]; then
         info "Verifying NVIDIA/PyTorch CUDA wheel integrity..."
         BROKEN="$(uv run python bin/verify_cuda_libs.py --quiet 2>/dev/null || true)"
         if [[ -n "$BROKEN" ]]; then
             warn "Corrupted CUDA wheels detected (metadata present, files missing): $(echo "$BROKEN" | tr '\n' ' ')"
             warn "Reinstalling only the broken packages..."
-            REPAIR_CMD=(uv sync)
+            REPAIR_CMD=(uv sync "${GROUP_ARGS[@]}")
             for pkg in $BROKEN; do REPAIR_CMD+=(--reinstall-package "$pkg"); done
             for e in $EXTRAS; do REPAIR_CMD+=(--extra "$e"); done
             info "Running: ${REPAIR_CMD[*]}"
@@ -361,22 +357,18 @@ else
     info "Skipping 'uv sync' (--no-sync)"
     say ""
     say "Next, run manually:"
+    GROUP_HINT=""
+    [[ "$TARGET" == "cuda" ]] && GROUP_HINT="--no-group cpu --group cuda "
     if [[ -n "$EXTRAS" ]]; then
-        say "  uv sync $(echo "$EXTRAS" | sed 's/[^ ][^ ]*/--extra &/g')"
+        say "  uv sync ${GROUP_HINT}$(echo "$EXTRAS" | sed 's/[^ ][^ ]*/--extra &/g')"
     else
-        say "  uv sync"
+        say "  uv sync ${GROUP_HINT}"
     fi
 fi
 
-# ---------- git skip-worktree handling ----------
+# ---------- clear any legacy skip-worktree bits ----------
+# Older versions of this script hid pyproject.toml / uv.lock from git status.
+# Both files are portable now, so make sure they are tracked normally again.
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-    if [[ "$SKIP_WORKTREE" == 1 ]]; then
-        git update-index --skip-worktree pyproject.toml uv.lock 2>/dev/null || true
-        ok "Marked pyproject.toml and uv.lock as skip-worktree (hidden from git status)."
-    elif [[ "$SKIP_WORKTREE" == 2 || "$TARGET" == "cpu" ]]; then
-        git update-index --no-skip-worktree pyproject.toml uv.lock 2>/dev/null || true
-        if [[ "$SKIP_WORKTREE" == 2 ]]; then
-            ok "Restored normal git tracking for pyproject.toml and uv.lock."
-        fi
-    fi
+    git update-index --no-skip-worktree pyproject.toml uv.lock 2>/dev/null || true
 fi

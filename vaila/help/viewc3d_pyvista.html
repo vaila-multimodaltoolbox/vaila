@@ -19,8 +19,9 @@
 <body>
 <div class="container">
     <h1>viewc3d_pyvista</h1>
-    <p class="meta"><strong>Version:</strong> 0.3.122 · <strong>Updated:</strong> 06 September 2026 · <strong>File:</strong> <code>vaila/viewc3d_pyvista.py</code> · Backend: PyVista (VTK)</p>
+    <p class="meta"><strong>Version:</strong> 0.4.3 · <strong>Updated:</strong> 16 September 2026 · <strong>File:</strong> <code>vaila/viewc3d_pyvista.py</code> · Backend: PyVista (VTK)</p>
     <p>VTK-based 3D viewer for C3D and CSV marker data. Multi-C3D overlay with per-file colors and a synced master timeline (Open3D Ctrl+L parity). Supports soccer field scale adaptation with green turf plane, white regulation lines, and 3D keypoint labels. Part of <i>vailá</i>.</p>
+    <p><strong>PyVista &gt;= 0.49 compatibility (v0.4.3):</strong> recent PyVista releases already define a <code>pickpoint</code> attribute on the <code>Plotter</code> instance, and <code>pv.set_new_attribute</code> raises for an attribute that already exists. The viewer now pre-seeds it only when it is genuinely missing, so the window no longer fails to open with <code>Attribute 'pickpoint' already exists</code> and fall back to the Matplotlib viewer.</p>
 
     <h2>To run</h2>
     <pre>uv run vaila/viewc3d_pyvista.py -i path/to/file.c3d

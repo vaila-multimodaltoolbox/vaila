@@ -601,19 +601,13 @@ if [[ "$fifa_choice" == "y" || "$fifa_choice" == "Y" ]]; then
     USE_FIFA_EXTRA=true
 fi
 
-# Choose template
+# PyTorch backend. A single portable pyproject.toml serves every machine and OS;
+# the backend is a uv dependency group, never a file swap. On macOS the default
+# `cpu` group resolves to the PyPI wheel, which IS the Metal/MPS build.
 if [[ "$USE_METAL" == true ]]; then
-    if [ -f "$VAILA_HOME/pyproject_macos.toml" ]; then
-        cp "$VAILA_HOME/pyproject_macos.toml" "$VAILA_HOME/pyproject.toml"
-        echo "Using macOS Metal/MPS configuration."
-    else
-        echo "Warning: pyproject_macos.toml not found. Using CPU-only."
-        cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-        USE_METAL=false
-    fi
+    echo "Using the macOS PyTorch wheel (Metal/MPS) from the default uv group."
 else
-    cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
-    echo "Using CPU-only configuration."
+    echo "Using the macOS PyTorch wheel (CPU only)."
 fi
 
 # Initialize uv project
@@ -637,13 +631,7 @@ fi
 echo ""
 LOCK_WAS_REGENERATED=false
 if [[ "$IS_GIT_TREE" == true ]]; then
-    if [[ "$USE_METAL" == true ]]; then
-        echo "macOS Metal template selected in a git clone — regenerating uv.lock for this machine..."
-        uv lock
-        LOCK_WAS_REGENERATED=true
-    else
-        echo "Using committed uv.lock (no uv lock --upgrade) so git pull is not blocked."
-    fi
+    echo "Using committed uv.lock (portable: macOS, CPU and CUDA resolutions in one lock)."
 else
     echo "Generating lock file (uv.lock)..."
     uv lock --upgrade
@@ -685,14 +673,10 @@ if ! "${UV_SYNC_CMD[@]}"; then
                     echo "Base install succeeded (without --extra sam/fifa)."
                     echo "You can retry later on a CUDA host with: uv sync --extra sam --extra fifa"
                 else
-                    echo "Restoring universal CPU configuration..."
-                    cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
                     echo "Installation failed. Please check the error messages above."
                     exit 1
                 fi
             else
-                echo "Restoring universal CPU configuration..."
-                cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
                 echo "Installation failed. Please check the error messages above."
                 exit 1
             fi
@@ -705,14 +689,10 @@ if ! "${UV_SYNC_CMD[@]}"; then
                 echo "Base install succeeded (without --extra sam/fifa)."
                 echo "You can retry later on a CUDA host with: uv sync --extra sam --extra fifa"
             else
-                echo "Restoring universal CPU configuration..."
-                cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
                 echo "Installation failed. Please check the error messages above."
                 exit 1
             fi
         else
-            echo "Restoring universal CPU configuration..."
-            cp "$VAILA_HOME/pyproject_universal_cpu.toml" "$VAILA_HOME/pyproject.toml"
             echo "Installation failed. Please check the error messages above."
             exit 1
         fi
@@ -802,8 +782,7 @@ else
     cat <<EOF > "$RUN_SCRIPT"
 #!/bin/bash
 cd "$VAILA_HOME" || exit 1
-# Use uv run with --no-extra gpu to exclude TensorRT on macOS
-uv run --no-sync --no-extra gpu vaila.py
+uv run --no-sync vaila.py
 EOF
     chmod +x "$RUN_SCRIPT"
 fi
@@ -826,7 +805,7 @@ VAILA_WRAPPER
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$SCRIPT_DIR" || exit 1
 if command -v uv &> /dev/null; then
-    uv run --no-sync --no-extra gpu python vaila.py "$@"
+    uv run --no-sync python vaila.py "$@"
 else
     echo "Error: uv not found in PATH"
     exit 1
@@ -862,12 +841,11 @@ echo "============================================================"
 echo ""
 if [[ "$IS_GIT_TREE" == true ]]; then
     if [[ "$LOCK_WAS_REGENERATED" == true ]] || ! git -C "$VAILA_HOME" diff --quiet -- uv.lock pyproject.toml 2>/dev/null; then
-        echo "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo"
-        echo "(common after a Metal template switch). Before pulling:"
+        echo "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo."
+        echo "Both files are portable (macOS, CPU and CUDA share one lock), so you can"
+        echo "drop the local changes before pulling:"
         echo "  git -C \"$VAILA_HOME\" restore uv.lock pyproject.toml"
         echo "  git -C \"$VAILA_HOME\" pull"
-        echo "Then re-apply the platform template if needed:"
-        echo "  bash bin/setup_pyproject.sh --target=macos --yes"
         echo ""
     else
         echo "Git tree kept clean for uv.lock — you can 'git pull' normally."

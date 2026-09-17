@@ -29,8 +29,8 @@
         <table>
             <tr><th>Choice</th><th>Tool</th><th>Model file (<code>vaila/models/</code>)</th></tr>
             <tr><td>Soccer</td><td><code>drawsportsfields.run_drawsportsfields("soccer")</code></td><td><code>soccerfield_ref3d.csv</code> (full FIFA markings)</td></tr>
-            <tr><td>FIFA Dataset (32 KP order)</td><td><code>drawsportsfields.run_drawsportsfields("fifa_dataset")</code></td><td><code>soccerfield_ref3d_fifa.csv</code> + overlay <code>01..32</code> canonical keypoints from <code>fifa_dataset_builder</code></td></tr>
-            <tr><td>FIFA 49 KP (Kiki Model)</td><td><code>drawsportsfields.run_drawsportsfields("kiki")</code></td><td><code>soccerfield_kiki.csv</code> (32 pitch + 16 3D features + center spot point 48)</td></tr>
+            <tr><td>FIFA Dataset (32 KP order)</td><td><code>drawsportsfields.run_drawsportsfields("fifa_dataset")</code></td><td><code>soccerfield_ref3d_fifa.csv</code> + overlay <code>0..31</code> canonical keypoints from <code>fifa_dataset_builder</code></td></tr>
+            <tr><td>Soccer Field Kiki &mdash; 49 KP</td><td><code>drawsportsfields.run_drawsportsfields("kiki")</code></td><td><code>soccerfield_kiki.csv</code> (32 pitch-line keypoints [0..31] + 17 3D/pitch features [32..48])</td></tr>
             <tr><td>Tennis</td><td><code>drawsportsfields.run_drawsportsfields("tennis")</code></td><td><code>tenniscourt_ref3d.csv</code></td></tr>
             <tr><td>Basketball</td><td><code>drawsportsfields.run_drawsportsfields("basketball")</code></td><td><code>basketballcourt_ref3d.csv</code></td></tr>
             <tr><td>Volleyball</td><td><code>drawsportsfields.run_drawsportsfields("volleyball")</code></td><td><code>volleyball_ref3d.csv</code></td></tr>
@@ -38,11 +38,64 @@
             <tr><td>Handball</td><td><code>drawsportsfields.run_drawsportsfields("handball")</code></td><td><code>handball_ref3d.csv</code></td></tr>
         </table>
 
-        <h2>FIFA 49 KP (Kiki Model) & De-overlapped Coincident Keypoints</h2>
-        <p>Use <code>--type kiki</code> (or load <code>vaila/models/soccerfield_kiki.csv</code>) to visualize all 49 keypoints (32 pitch line intersections, 16 3D features: corner flag tops at z=1.5 m, goal post tops at z=2.44 m, goal net ground points, plus the center spot point 48 at (0,0,0)).</p>
+        <h2>Soccer Field Kiki (49 KP) &amp; De-overlapped Coincident Keypoints</h2>
+        <p>Use <code>--type kiki</code> (or load <code>vaila/models/soccerfield_kiki.csv</code>) to visualize all 49 reference points, indices 0..48 (32 pitch line intersections [0..31] plus 17 3D/pitch features [32..48]: corner flag tops at z=1.5 m, goal post tops at z=2.44 m, goal net ground points, plus the center spot point 48 at (0,0,0)).</p>
         <p><strong>Center field spot (point 48):</strong> Explicitly marks the central point inside the center circle at (X=0, Y=0, Z=0), next in numerical order.</p>
         <p><strong>Differentiated position & orientation:</strong> Points sharing coincident (x, y) ground coordinates (corner ground points <code>0, 5, 24, 29</code> vs corner flag tops <code>38, 39, 46, 47</code>, or goal post bases vs tops) are rendered with separated offsets, horizontal orientation, and dotted leader lines connecting badges to markers so that neither markers nor text labels collide.</p>
         <p><strong>Goal post vs net separation:</strong> Goal post labels and net points are drawn backwards (&ldquo;para tr&aacute;s&rdquo;, behind the goal line) avoiding crossing or encroaching into the penalty area.</p>
+
+        <h2>Penalty arc (&ldquo;meia lua&rdquo;) geometry</h2>
+        <p>Law 1 / the FIFA <i>Football Stadiums Guidelines</i> define the penalty arc as the part of a
+        <strong>circle of radius 9.15 m centred on the penalty mark</strong> that falls outside the penalty area.
+        Its two endpoints are therefore not free parameters: they are the
+        <strong>intersections of that circle with the penalty-area line</strong>.</p>
+        <p><code>penalty_arc_geometry()</code> computes those endpoints from that definition rather than reading them
+        from the model, so the drawn arc always starts and ends exactly on the penalty-area line. On a regulation
+        105 x 68 m pitch the penalty-area line is 5.5 m from the penalty mark, so the half-angle is
+        <code>theta = arccos((16.5 - 11) / 9.15) = 53.0518&deg;</code> and
+        <code>dy = sqrt(9.15&sup2; - 5.5&sup2;) = 7.312489 m</code>.</p>
+        <p>The arc radius is resolved in this order:</p>
+        <ol>
+            <li>the distance from the penalty mark to a stored <code>*_penalty_arc_*_intersection</code> point, which keeps
+            non-uniformly scaled models (small-sided pitches) consistent with their own stored geometry;</li>
+            <li>the model's own centre-circle radius, which the norm makes equal to the arc radius (this is the path taken
+            by <code>soccerfield_kiki.csv</code>, which stores no arc keypoints);</li>
+            <li>the regulation 9.15 m.</li>
+        </ol>
+        <div class="note"><code>*_penalty_arc_top</code> is the arc <strong>apex</strong>, at 11 + 9.15 = 20.15 m
+        (and 105 - 11 - 9.15 = 84.85 m), <em>not</em> a point on the penalty-area line.</div>
+        <p>Regulation values now encoded exactly in <code>soccerfield_ref3d.csv</code>,
+        <code>soccerfield_ref3d_fifa.csv</code> and <code>soccerfield_kiki.csv</code>:</p>
+        <table>
+            <tr><th>Marking</th><th>Value</th></tr>
+            <tr><td>Goal width (posts)</td><td>7.32 m, i.e. 34 &plusmn; 3.66 =&gt; <code>30.34</code> / <code>37.66</code></td></tr>
+            <tr><td>Goal area</td><td>5.5 m deep x 18.32 m wide =&gt; <code>24.84</code> / <code>43.16</code></td></tr>
+            <tr><td>Penalty area</td><td>16.5 m deep x 40.32 m wide =&gt; <code>13.84</code> / <code>54.16</code></td></tr>
+            <tr><td>Penalty mark</td><td>11 m from the goal line</td></tr>
+            <tr><td>Penalty arc / centre circle radius</td><td>9.15 m</td></tr>
+            <tr><td>Arc endpoints on the penalty-area line</td><td><code>26.687511</code> / <code>41.312489</code></td></tr>
+            <tr><td>Arc apex</td><td><code>20.15</code> / <code>84.85</code></td></tr>
+        </table>
+        <p><code>vaila/models/planar_targets/soccerfield_broadcast.toml</code> carries the same arc as angles for the
+        homography overlay: <code>-53.0518 .. 53.0518</code> (left) and <code>126.9482 .. 233.0518</code> (right).</p>
+
+        <h3>Points 10, 11, 18 and 19: Kiki versus FIFA Dataset</h3>
+        <p>The two modes deliberately share the index order but no longer conflate
+        two different purposes:</p>
+        <ul>
+            <li><strong>Soccer Field Kiki &mdash; 49 KP</strong> is the visual/calibration model.
+            Points <strong>10/11</strong> (left) and <strong>18/19</strong> (right) are the
+            four visible meetings between the penalty arcs and penalty-area front lines:
+            <code>(&plusmn;35.95, &plusmn;7.312489)</code> in the centred frame. Their orange
+            markers therefore sit exactly on the ends of the white arcs.</li>
+            <li><strong>FIFA Dataset &mdash; 32 KP</strong> remains compatible with the existing
+            Roboflow/Supervision training schema. Its same indices are virtual subdivision
+            anchors at the goal-area Y levels <code>(&plusmn;35.95, &plusmn;9.16)</code>;
+            changing those coordinates would invalidate existing YOLO labels and trained models.</li>
+        </ul>
+        <p>The Kiki CSV names the four visible points explicitly as
+        <code>*_penalty_arc_*_intersection</code>. The numbered badge is offset slightly
+        from its orange marker so the badge does not cover the actual intersection.</p>
 
         <h2>Interactive Calibration Keypoint Editor</h2>
         <p>Button <strong>Calib Keypoints</strong> (in the top toolbar):</p>
@@ -53,12 +106,21 @@
             <li><strong>Create from scratch:</strong> Use <em>Create From Scratch (Clear All)</em> to hide reference points while keeping pitch markings visible, allowing you to build a calibration model from zero.</li>
             <li><strong>Save Model CSV:</strong> Export the keypoints to CSV for direct use in DLT3D, REC3D, getpixelvideo, and <code>readcsv.py</code>.</li>
             <li><strong>Save Model C3D:</strong> Export the keypoints directly to a standard <code>.c3d</code> file for inspection in 3D viewers.</li>
-            <li><strong>View in 3D:</strong> Instantly launch 3D visualization of the calibration keypoints in PyVista or Matplotlib to verify elevations, pitch alignment, and labels.</li>
+            <li><strong>View in 3D:</strong> Instantly launch complete 3D soccer field visualization in native Matplotlib (<code>plot_calibration_model_3d</code>) with 3D field lines, regulation 3D goals (vertical posts, crossbars, net depth frames and back supports), 4 corner flagpoles with pennants, keypoint drop lines (Z&rarr;0), and human-friendly box aspect ratio (<code>daspect</code>) control.</li>
         </ol>
 
-        <h2>3D Environment Verification (showc3d, readcsv, viewc3d_pyvista)</h2>
+        <h2>Responsive 2-Row Toolbar</h2>
+        <p>To prevent buttons from falling outside the visible window area on standard resolution displays (&ge; 800 px width), <code>run_soccerfield</code> organizes controls into two clear, structured rows:</p>
+        <ul>
+            <li><strong>Row 1 (Field &amp; View):</strong> <code>Load Default Field</code>, <code>Load Custom Field</code>, <code>Surface Color</code>, <code>Hide/Show Reference Points</code>, <code>Show/Hide Axis Values</code>, <code>Heatmap</code>, <code>Help</code>.</li>
+            <li><strong>Row 2 (Tools &amp; Calib):</strong> <code>Load Markers CSV</code>, <code>Select Markers</code>, <code>Load Scout CSV</code>, <code>Scout Filters</code>, <code>Create Manual Markers</code>, <code>Clear All Markers</code>, <code>Calib Keypoints</code> (teal), <code>Export REF3D&hellip;</code> (blue).</li>
+        </ul>
+        <p>In the Calibration Keypoint Editor dialog, window dimensions are set to <code>780x640</code> with listbox height 6 and minimum constraints, ensuring all action buttons at the bottom remain permanently anchored and visible.</p>
+
+        <h2>3D Environment Verification (plot_calibration_model_3d, showc3d, readcsv, viewc3d_pyvista)</h2>
         <p>Soccer field calibration keypoints can be checked in full 3D spatial environments:</p>
         <ul>
+            <li><strong><code>plot_calibration_model_3d</code> (Native Matplotlib):</strong> Built into <code>drawsportsfields.py</code> for calibration model building. Renders full 3D pitch markings, 3D regulation goals (posts [traves] and crossbars [travess&otilde;es] up to 2.44 m, rear net supports), 4 corner flagpoles (1.5 m), keypoint drop lines connecting elevated points to the turf (Z=0), camera angle presets (Isometric, Touchline, Behind Goal, Top-Down Plan), and human-friendly daspect control (4.5x Z toggleable to 1:1 true scale).</li>
             <li><strong><code>showc3d.py</code> (Matplotlib):</strong> Automatically adapts to soccer field scale (105x68m), renders regulation pitch boundary, halfway line, center circle, and 3D point labels with toggle support.</li>
             <li><strong><code>viewc3d_pyvista.py</code> (PyVista):</strong> Renders pitch turf plane and white lines at ground level, auto-enables labels for calibration models, and provides interactive point picking.</li>
             <li><strong><code>readcsv.py</code>:</strong> Recognizes calibration model CSV files directly, passing keypoint coordinates to your choice of 3D visualizer (PyVista, Open3D, or Matplotlib).</li>
@@ -70,7 +132,7 @@
         <code>vaila.fifa_dataset_builder</code>. This mode draws the same FIFA field
         and overlays:</p>
         <ul>
-            <li>the canonical keypoint order <strong>01..32</strong> (exact YOLO-pose order),</li>
+            <li>the canonical keypoint order <strong>0..31</strong> (exact zero-based YOLO-pose order),</li>
             <li>short semantic names near each point for human QA,</li>
             <li>a footer reminder that ordering matches dataset/getpixelvideo export.</li>
         </ul>
@@ -82,12 +144,24 @@
         <ol>
           <li>Multi-select control points from the loaded model (or the 32 FIFA
             dataset keypoints when <code>--type fifa_dataset</code>).</li>
-          <li>Choose p-index base <strong>1</strong> (recommended for
-            <code>dlt3d.py</code>) or <strong>0</strong> (FIFA getpixelvideo
-            slot style).</li>
+          <li>Choose p-index base <strong>0</strong> (default, and the <i>vailá</i>
+            standard: <code>getpixelvideo.py</code>, <code>dlt3d.py</code> and
+            <code>rec3d*.py</code> all number points from <code>p0</code>) or
+            <strong>1</strong> (legacy only, for interoperability with 1-based
+            datasets).</li>
           <li>Saves <code>*.ref3d</code>, <code>*.ref3d_map.csv</code>, and
             optional <code>*_pixel_template.csv</code>.</li>
         </ol>
+        <p>The dialog header states how many reference points the loaded model
+          exposes and their label range, so the count cannot be confused with the
+          last label (the Kiki model has <strong>49</strong> points labelled
+          <code>0..48</code>, not 48 points).</p>
+        <p>Because <code>dlt3d.py</code> pairs pixel and reference points
+          <strong>by numeric index</strong>, a reference file exported with a
+          different base than the pixel file would pair <code>pN</code> with
+          <code>pN</code> where <code>pN-1</code> was meant; since 0.4.3
+          <code>dlt3d.py</code> detects that exact shift-by-one and refuses the run
+          instead of returning a plausible but wrong calibration.</p>
         <p>Workflow: mark the same <code>pN</code> order in getpixelvideo →
           <code>dlt3d.py</code> (pixel + <code>.ref3d</code>) →
           <code>.dlt3d</code> for <code>rec3d_one_dlt3d.py</code>.
@@ -125,6 +199,7 @@ uv run vaila/drawsportsfields.py --markers data.csv --heatmap</code></pre>
         </ul>
 
         <div class="footer">
+            <p><strong>Version:</strong> 0.4.3 · <strong>Updated:</strong> 17 September 2026</p>
             <p><a href="index.html">Help index</a> · <a href="https://github.com/vaila-multimodaltoolbox/vaila">vailá on GitHub</a></p>
         </div>
     </div>

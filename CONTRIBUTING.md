@@ -12,7 +12,7 @@ Thank you for helping improve **vailá** (AGPL-3.0). This document complements [
 ## Development setup
 
 ```bash
-uv sync                    # or uv sync --extra gpu on supported NVIDIA setups
+uv sync                    # or uv sync --no-group cpu --group cuda on supported NVIDIA setups
 uv run ruff check vaila/ --fix && uv run ruff format vaila/
 uv run ty check vaila/
 uv run pytest tests/ -v

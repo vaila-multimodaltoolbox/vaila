@@ -4,7 +4,7 @@
 
 - **Category:** Markerless 3D / Meta (Facebook)
 - **Version:** 0.4.3
-- **Updated:** 2026-09-16
+- **Updated:** 2026-09-17
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -40,7 +40,7 @@ per-joint 3D trajectories usable for biomechanics.
 .\install_vaila_win.ps1 -Full              # Windows
 
 # Or manual template switch:
-bash bin/setup_pyproject.sh --target=linux-cuda --full --yes
+bash bin/setup_pyproject.sh --target=cuda --full --yes
 uv run hf auth login
 uv run hf auth whoami   # must exit 0; need huggingface-hub >= 1.22
 uv run vaila/vaila_sam.py --download-weights

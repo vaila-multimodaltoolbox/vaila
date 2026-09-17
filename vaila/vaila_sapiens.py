@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -867,7 +867,7 @@ def _require_sapiens_installed() -> None:
             "\n" + "=" * 72 + "\n"
             "[ERROR] Sapiens2 package not found in Python environment.\n"
             ">> Required setup commands (CLI):\n"
-            "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes\n"
+            "   bash bin/setup_pyproject.sh --target=cuda --extras=sam,sapiens --yes\n"
             "   bash bin/setup_sapiens2.sh\n"
             "   uv pip install -e .local/third_party/sapiens2\n" + "=" * 72 + "\n"
         )

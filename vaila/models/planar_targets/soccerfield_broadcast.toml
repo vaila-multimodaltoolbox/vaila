@@ -52,14 +52,14 @@ samples = 64
 name = "left_penalty_arc"
 center_point = 11
 radius = 9.15
-angle_start_deg = -53.0
-angle_end_deg = 53.0
+angle_start_deg = -53.0518
+angle_end_deg = 53.0518
 samples = 32
 
 [[arcs]]
 name = "right_penalty_arc"
 center_point = 16
 radius = 9.15
-angle_start_deg = 127.0
-angle_end_deg = 233.0
+angle_start_deg = 126.9482
+angle_end_deg = 233.0518
 samples = 32

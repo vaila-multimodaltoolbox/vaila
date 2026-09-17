@@ -37,7 +37,7 @@ bash install_vaila_linux.sh</code></pre>
         <li>Installs system dependencies via <code>apt</code>; self-installs <code>uv</code> if missing.</li>
         <li>Pins Python <code>3.12.14</code>.</li>
         <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
-        <li>Copies the matching template (<code>pyproject_linux_cuda12.toml</code> or <code>pyproject_universal_cpu.toml</code>) over <code>pyproject.toml</code> <strong>before</strong> creating the virtual environment.</li>
+        <li>Picks the PyTorch dependency group (<code>--no-group cpu --group cuda</code> for NVIDIA CUDA 12.8, otherwise the default <code>cpu</code> group). The committed <code>pyproject.toml</code> is never modified.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic; verifies CUDA wheels and the Sapiens2 editable install when selected.</li>
         <li>Adds a desktop entry and SSH-transfer setup for the File Manager.</li>
       </ol>
@@ -48,7 +48,7 @@ bash install_vaila_linux.sh</code></pre>
       <h3>Troubleshooting</h3>
       <ul class="tight">
         <li><strong>Permission denied (publickey)</strong> during Git LFS / clone / update check: your <code>origin</code> remote is SSH-based; re-clone with HTTPS instead, or add a GitHub SSH key.</li>
-        <li>If <code>uv sync</code> fails partway through an extra, re-run the install script — it re-applies the template and retries idempotently.</li>
+        <li>If <code>uv sync</code> fails partway through an extra, re-run the install script — it retries idempotently.</li>
       </ul>
     </div>
 
@@ -68,7 +68,7 @@ powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1</code></pre>
         <li>Self-installs <code>uv</code> (winget or official installer) if missing.</li>
         <li>Pins Python <code>3.12.14</code>.</li>
         <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
-        <li>Copies the matching template (<code>pyproject_win_cuda12.toml</code> or <code>pyproject_universal_cpu.toml</code>) over <code>pyproject.toml</code> <strong>before</strong> <code>uv venv</code>/<code>uv sync</code>.</li>
+        <li>Picks the PyTorch dependency group (<code>--no-group cpu --group cuda</code> for NVIDIA CUDA 12.8, otherwise the default <code>cpu</code> group). The committed <code>pyproject.toml</code> is never modified.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>
         <li>Adds PowerShell/batch launchers, Desktop and Start Menu shortcuts, and a Windows Terminal profile.</li>
       </ol>
@@ -96,7 +96,7 @@ bash install_vaila_mac.sh</code></pre>
         <li>Installs system dependencies via Homebrew; self-installs <code>uv</code> if missing.</li>
         <li>Pins Python <code>3.12.14</code>.</li>
         <li>Prompts for optional extras (<code>gpu</code>/<code>sam</code>/<code>sapiens</code>/<code>fifa</code> as applicable to Apple hardware).</li>
-        <li>Copies <code>pyproject_macos.toml</code> (Metal/MPS) over <code>pyproject.toml</code> <strong>before</strong> creating the virtual environment.</li>
+        <li>Uses the default <code>cpu</code> dependency group — on macOS the PyPI PyTorch wheel <em>is</em> the Metal/MPS build, so no file is swapped.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>
         <li>Builds a full <code>.app</code> bundle (with icon conversion) for Applications/Launchpad.</li>
       </ol>

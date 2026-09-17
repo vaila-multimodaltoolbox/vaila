@@ -4,8 +4,8 @@
 
 - **Category:** Visualization
 - **File:** `vaila/viewc3d_pyvista.py`
-- **Version:** 0.3.122
-- **Updated:** 06 September 2026
+- **Version:** 0.4.3
+- **Updated:** 16 September 2026
 - **Author:** Paulo Santiago
 - **GUI Interface:** Yes
 - **Backend:** PyVista (VTK)
@@ -15,6 +15,12 @@
 VTK-based 3D viewer for C3D and CSV marker data. Timeline, interactive marker picking (left-click to select), skeleton connections, trails, export (screenshot, PNG sequence, MP4), quality stats. Same color palette and marker visibility options as the Open3D viewer (`viewc3d.py`).
 
 **Soccer Field Environment (v0.3.122):** Automatically detects large field-scale models (e.g. 105m x 68m soccer field), rendering green turf ground plane, regulation white boundary lines, halfway line, center circle at $Z=0$, and auto-enables 3D keypoint labels for single-frame calibration models (like `soccerfield_kiki.csv` or C3D calibration exports).
+
+**PyVista >= 0.49 compatibility (v0.4.3):** recent PyVista releases already define
+a `pickpoint` attribute on the `Plotter` instance, and `pv.set_new_attribute` raises
+for an attribute that already exists. The viewer now pre-seeds it only when it is
+genuinely missing, so the window no longer fails to open with
+`Attribute 'pickpoint' already exists` and fall back to the Matplotlib viewer.
 
 **Multi-C3D (v0.3.121):** load several `.c3d` files in one window with distinct per-file colors and a synchronized master timeline (Open3D Ctrl+L parity). Press **L** at runtime, multi-select at startup, or pass multiple paths via CLI `-i`.
 

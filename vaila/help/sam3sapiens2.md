@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.3.120
-- **Updated:** 2026-09-03
+- **Version:** 0.4.3
+- **Updated:** 2026-09-17
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3sapiens2_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
@@ -27,7 +27,7 @@ This avoids duplicate person detection, reduces false positives from the full fr
 Both optional CUDA pipelines must already work:
 
 ```bash
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes
+bash bin/setup_pyproject.sh --target=cuda --extras=sam,sapiens --yes
 bash bin/setup_sapiens2.sh
 uv run hf auth login
 uv run vaila/vaila_sam.py --download-weights

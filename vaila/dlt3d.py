@@ -11,7 +11,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Roberto Pereira Santiago
 Version: 0.4.3
 Create: 24 February, 2025
-Last Updated: 15 September 2026
+Last Updated: 16 September 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -77,7 +77,7 @@ def _find_frame_column(df: pd.DataFrame) -> str:
 
 
 def _is_format1_dataframe(df: pd.DataFrame) -> bool:
-    """True when *df* already uses the wide format-1 header (frame, p1_x, …)."""
+    """True when *df* already uses the wide format-1 header (frame, p0_x, …)."""
     has_frame = any(str(c).strip().lower() == "frame" for c in df.columns)
     if not has_frame:
         return False
@@ -145,7 +145,10 @@ def detect_ref3d_format(file_path: str) -> int | None:
         return None
 
     lowered = first_line.lower()
-    if lowered.startswith("frame,") or ",p1_x," in lowered or lowered.endswith(",p1_x"):
+    # Any pN_x column identifies the wide format, whatever the point base:
+    # probing for the literal ",p1_x" used to miss a p0-based header.
+    header_cells = [cell.strip() for cell in lowered.split(",")]
+    if header_cells[0] == "frame" or _point_numbers_from_columns(header_cells):
         return 1
 
     # Headed long format before the no-header numeric probes: a ``point,x,y,z``
@@ -182,11 +185,18 @@ def normalize_ref3d_to_format1(file_path: str, *, min_points: int = 6) -> pd.Dat
     """
     Load any supported REF3D variant and return the canonical format-1 DataFrame.
 
-    Format 1: ``frame,p1_x,p1_y,p1_z,...`` (wide, optional multi-row per frame).
-    Format 2: one ``x,y,z`` triplet per row, no header; row order defines p1..pN.
-    Format 3: one ``index,x,y,z`` row per point, no header; index column defines pN.
-    Format 4: headed long ``point,x,y,z`` (or ``x,y,z``); 0-based point ids are
-    shifted to 1-based so they align with getpixelvideo ``p1..pN`` CSVs.
+    Format 1: ``frame,p0_x,p0_y,p0_z,...`` (wide, optional multi-row per frame).
+    Format 2: one ``x,y,z`` triplet per row, no header; row order defines p0..p(N-1).
+    Format 3: one ``index,x,y,z`` row per point, no header; index column defines pN
+    verbatim (no rebasing: an index of 0 stays ``p0``).
+    Format 4: headed long ``point,x,y,z`` (or ``x,y,z``); point ids are used
+    verbatim, and an id-less file is numbered from ``p0`` by row order.
+
+    Point numbering is 0-based throughout vailá: ``getpixelvideo.py`` writes
+    ``p0_x, p0_y, ...`` and ``dlt3d``/``rec3d*`` read and write the same base.
+    Earlier versions shifted formats 2 and 4 to 1-based, which silently paired
+    reference point ``p1`` with pixel point ``p1`` while the intended pairing was
+    ``p0``/``p0`` — see the offset guard in :func:`process_files`.
 
     ``min_points`` defaults to 6 (DLT3D). Pass 4 for planar DLT2D / Quick Measure.
     """
@@ -214,19 +224,17 @@ def normalize_ref3d_to_format1(file_path: str, *, min_points: int = 6) -> pd.Dat
                 row = headed.iloc[row_idx]
                 rows.append(
                     (
-                        row_idx + 1,
+                        row_idx,
                         float(row[x_col]),
                         float(row[y_col]),
                         float(row[z_col]),
                     )
                 )
         else:
-            raw_ids = [int(v) for v in headed[index_col].tolist()]
-            offset = 1 if raw_ids and min(raw_ids) == 0 else 0
             for _, row in headed.iterrows():
                 rows.append(
                     (
-                        int(row[index_col]) + offset,
+                        int(row[index_col]),
                         float(row[x_col]),
                         float(row[y_col]),
                         float(row[z_col]),
@@ -238,7 +246,7 @@ def normalize_ref3d_to_format1(file_path: str, *, min_points: int = 6) -> pd.Dat
             for row_idx in range(len(raw)):
                 row = raw.iloc[row_idx]
                 x, y, z = (float(row[0]), float(row[1]), float(row[2]))
-                rows.append((row_idx + 1, x, y, z))
+                rows.append((row_idx, x, y, z))
         else:
             for _, row in raw.iterrows():
                 idx = int(row[0])
@@ -329,6 +337,24 @@ def process_files(pixel_file, ref3d_file):
     pixel_points = _point_numbers(pixel_df.columns)
     ref_points = _point_numbers(ref_df.columns)
     common_points = sorted(pixel_points & ref_points)
+
+    # Points are paired by numeric index, so a reference file exported with a
+    # different point base than the pixel file does not fail loudly - it pairs
+    # ref pN with pixel pN while the intended pairing was pN-1, and returns a
+    # plausible-looking but wrong calibration. Refuse when the two index sets
+    # are identical apart from a shift of exactly one, which is what a legacy
+    # p1-based REF3D against a p0-based getpixelvideo CSV looks like.
+    if pixel_points and ref_points:
+        for shift in (1, -1):
+            if {i + shift for i in pixel_points} == ref_points:
+                print(
+                    f"Error: the REF3D point indices {sorted(ref_points)} are the pixel "
+                    f"indices {sorted(pixel_points)} shifted by {shift:+d}. Points are "
+                    "paired by index, so this would silently mis-pair every point. Both "
+                    "files must use the same point base (vaila standard: p0). Re-export "
+                    "the REF3D file with p-index base 0 (Draw Sports Fields > Export REF3D)."
+                )
+                return None
 
     if len(common_points) < 6:
         print(

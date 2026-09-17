@@ -10,32 +10,38 @@ Guidance for **AI Agents** (Antigravity, Cursor, Claude Code, Windsurf, etc.) an
 
 ### Hybrid CPU laptop vs NVIDIA workstation
 
-Repo ships **several `pyproject_*.toml` templates**. Checked-in **`pyproject.toml` matches `pyproject_universal_cpu.toml`**: portable **CPU** PyTorch (laptops / no CUDA). That manifest defines optional extras `dev`, `upscaler`, `sam`, **`fifa`** (FIFA Skeletal Tracking Light pipeline: vendored `sam_3d_body` + PyTorch Lightning stack) — does **not** define `gpu` (so `uv sync --extra gpu` fails till template switch).
+Repo ships **one portable `pyproject.toml` + one `uv.lock` for every machine and OS**. The PyTorch backend is a **uv dependency group**, never a file swap:
 
-**Recommended, any dev (Linux / macOS / WSL / Windows):** unified interactive bootstrap. Auto-detects OS + NVIDIA, suggests right template + extras, runs `uv lock` + `uv sync`:
+- `cpu` (default group) — torch trio from `download.pytorch.org/whl/cpu`; on macOS the PyPI wheel, i.e. the **Metal/MPS** build.
+- `cuda` — torch trio from `download.pytorch.org/whl/cu128`, plus `tensorrt` + `nvidia-ml-py`.
+
+The two groups are declared conflicting (`[tool.uv].conflicts`), so `uv.lock` carries **both** resolutions and a CUDA workstation commits the **same bytes** as a CPU laptop. Optional extras stay `dev`, `upscaler`, `sam`, **`fifa`**, `sapiens`.
+
+```bash
+uv sync                                  # CPU / macOS Metal (default groups: dev + cpu)
+uv sync --no-group cpu --group cuda      # NVIDIA CUDA 12.8 + TensorRT
+```
+
+**Recommended, any dev (Linux / macOS / WSL / Windows):** unified interactive bootstrap. Auto-detects OS + NVIDIA, picks the group + extras, runs `uv sync`:
 
 ```bash
 # Linux / macOS / WSL / Git Bash
 bash bin/setup_pyproject.sh                           # interactive, auto-detect
-bash bin/setup_pyproject.sh --target=linux-cuda --full --yes  # all AI extras (gpu,sam,sapiens,fifa)
+bash bin/setup_pyproject.sh --target=cuda --full --yes  # all AI extras (gpu,sam,sapiens,fifa)
 bash bin/setup_pyproject.sh --target=cpu --non-interactive
 
 # Windows PowerShell
 pwsh bin/setup_pyproject.ps1                          # interactive, auto-detect
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Full -Yes      # all AI extras
+pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Yes      # all AI extras
 ```
 
-Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`. CI: `--non-interactive --no-sync` swaps template + locks, no install.
+Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--lock`, `--no-sync`, `--help` (legacy `linux-cuda`/`win-cuda`/`macos` targets still accepted). The bootstrap **never writes tracked files** — it only chooses the `uv sync` arguments, so the git tree stays clean.
 
-**Legacy per-platform switchers** (thin wrappers around `setup_pyproject.sh/.ps1`, kept for back-compat):
-
-| Platform | Switch (from repo root) | Then |
-|----------|-------------------------|------|
-| Linux CUDA 12.8 | `bash bin/use_pyproject_linux_cuda.sh` | `uv sync --extra gpu` and optionally `--extra sam` |
-| Windows CUDA 12.1 | `pwsh bin/use_pyproject_win_cuda.ps1` | same |
-| macOS (Metal) | `bash bin/use_pyproject_macos_metal.sh` | `uv sync` |
-
-Each switch runs `uv lock`, rewrites `uv.lock` for that hardware matrix. Default lock in git targets **CPU**; CUDA users regenerate locally after switch.
+| Platform | Command (from repo root) |
+|----------|--------------------------|
+| Linux/Windows + NVIDIA | `uv sync --no-group cpu --group cuda` |
+| CPU laptop | `uv sync` |
+| macOS (Metal/MPS) | `uv sync` |
 
 **Recommended multi-machine sync (avoiding Git conflicts across Linux / macOS / Windows):**
 Whenever switching between workstations, use the automated sync runner to pull changes and auto-adapt the local environment without merge conflicts:
@@ -49,24 +55,24 @@ bash bin/sync_repo.sh --skip-worktree          # also hides pyproject.toml & uv.
 pwsh bin/sync_repo.ps1
 ```
 
-The checked-in `pyproject.toml` and `uv.lock` on GitHub must **always** be the portable CPU PyTorch version (`pyproject_universal_cpu.toml`). A Git pre-commit hook (installed via `bash install-hooks.sh`) blocks committing hardware-specific (CUDA) `pyproject.toml` files to prevent cross-machine breakage.
+`pyproject.toml` and `uv.lock` are **hardware-independent**: a CUDA workstation, a CPU laptop and an Apple Silicon Mac all commit identical files, so there is nothing to restore before `git pull` / `git commit`. The pre-commit hook (installed via `bash install-hooks.sh`) now only blocks staged files **≥ 20 MiB**.
 
 SAM 3 video (`vaila_sam.py`) needs **NVIDIA CUDA** at runtime (`torch.cuda.is_available()`), even with `sam` extra installed. **No** CPU-only or **macOS Metal/MPS** path here; `--frame-by-frame` only lowers **VRAM on CUDA**, not CPU fallback. Without CUDA, use other vailá modules (e.g. Markerless 2D / YOLO) or CUDA workstation/cloud GPU. Checkpoint auto-detect supports both `vaila/models/sam3/` and repo-root `models/sam3/`.
 
 **Sapiens2 Pose (optional):** `uv sync --extra sapiens` plus `bash bin/setup_sapiens2.sh` (clones into `.local/third_party/sapiens2/`, editable install, downloads `facebook/sapiens2-pose-1b` + `facebook/detr-resnet-101-dc5` into `vaila/models/sapiens2/`). GUI: Frame B → **YOLO + FB** → **Sapiens2 Pose** (`vaila/vaila_sapiens.py`). Default model **1B** fits RTX 4090 24 GiB. Help: `vaila/help/vaila_sapiens.md`. License: Meta Sapiens2 License (not AGPL).
 
-**FIFA Skeletal Tracking Light (optional):** `uv sync --extra fifa` (workstation: combine CUDA template + `--extra gpu`). `sam_3d_body/` **not committed** — clone via `bash bin/setup_fifa_sam3d.sh` (or `pwsh bin/setup_fifa_sam3d.ps1` Windows), which also downloads gated `facebook/sam-3d-body-dinov3` weights into `vaila/models/sam-3d-dinov3/`. Vendored MIT starter-kit utils in `vaila/fifa_starter_lib/` (`camera_tracker.py`, `postprocess.py`, `pitch_points.txt`; see `vaila/fifa_starter_lib/VENDOR.md`). CLI: `uv run vaila/vaila_sam.py fifa <subcommand> --help`, subcommands `bootstrap` (symlinks + sequences + pitch_points), `prepare`, `boxes`, `preprocess`, `baseline`, **`dlt-export`** (FIFA `cameras/*.npz` → per-frame `.dlt2d`/`.dlt3d` via `vaila/fifa_to_dlt.py` for **`rec2d.py` / `rec3d.py`** on moving broadcast cameras), `pack`. Use **`rec2d_one_dlt2d.py` / `rec3d_one_dlt3d.py` only for fixed cameras** (single DLT row). Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib**, Frame C of `vaila.py`) fits **single-frame** DLT2D homography from 29 FIFA keypoints; GUI **FIFA cams→DLT** exports per-frame DLT after `baseline --export-camera`. Tests: `uv run pytest tests/test_fifa_skeletal_pipeline.py tests/test_fifa_bootstrap.py tests/test_fifa_to_dlt.py tests/test_soccerfield_calib.py -v`. Full `data/` layout (`cameras/`, `boxes/`, …) still from official starter kit / Hugging Face dataset when available.
+**FIFA Skeletal Tracking Light (optional):** `uv sync --extra fifa` (workstation: add `--no-group cpu --group cuda`). `sam_3d_body/` **not committed** — clone via `bash bin/setup_fifa_sam3d.sh` (or `pwsh bin/setup_fifa_sam3d.ps1` Windows), which also downloads gated `facebook/sam-3d-body-dinov3` weights into `vaila/models/sam-3d-dinov3/`. Vendored MIT starter-kit utils in `vaila/fifa_starter_lib/` (`camera_tracker.py`, `postprocess.py`, `pitch_points.txt`; see `vaila/fifa_starter_lib/VENDOR.md`). CLI: `uv run vaila/vaila_sam.py fifa <subcommand> --help`, subcommands `bootstrap` (symlinks + sequences + pitch_points), `prepare`, `boxes`, `preprocess`, `baseline`, **`dlt-export`** (FIFA `cameras/*.npz` → per-frame `.dlt2d`/`.dlt3d` via `vaila/fifa_to_dlt.py` for **`rec2d.py` / `rec3d.py`** on moving broadcast cameras), `pack`. Use **`rec2d_one_dlt2d.py` / `rec3d_one_dlt3d.py` only for fixed cameras** (single DLT row). Companion tool `vaila/soccerfield_calib.py` (button **Soccer-Field Calib**, Frame C of `vaila.py`) fits **single-frame** DLT2D homography from 29 FIFA keypoints; GUI **FIFA cams→DLT** exports per-frame DLT after `baseline --export-camera`. Tests: `uv run pytest tests/test_fifa_skeletal_pipeline.py tests/test_fifa_bootstrap.py tests/test_fifa_to_dlt.py tests/test_soccerfield_calib.py -v`. Full `data/` layout (`cameras/`, `boxes/`, …) still from official starter kit / Hugging Face dataset when available.
 
 ```bash
 # Run the application (recommended)
 uv run vaila.py
 
 # Install dependencies (after choosing the right pyproject.toml as above)
-uv sync                          # default / universal CPU template
+uv sync                          # CPU wheels / macOS Metal (default groups)
 uv sync --extra sam              # optional SAM 3 deps (HF gated weights; CUDA at runtime)
-uv sync --extra gpu              # only after Linux/Windows CUDA template is active
-uv sync --extra gpu --extra sam  # CUDA template + SAM
-uv sync --extra fifa             # FIFA skeletal pipeline (SAM 3D Body + Lightning; use with GPU template for CUDA)
+uv sync --no-group cpu --group cuda              # NVIDIA CUDA 12.8 + TensorRT
+uv sync --no-group cpu --group cuda --extra sam  # CUDA + SAM
+uv sync --extra fifa             # FIFA skeletal pipeline (SAM 3D Body + Lightning; add the cuda group for CUDA)
 
 # Lint and format
 uv run ruff check vaila/           # Lint
@@ -166,23 +172,23 @@ vaila/                 ← root
 │   ├── skills/        ← Step-by-step skills (new module, port MATLAB)
 │   └── commands/      ← Slash-command specs (/check, /new-module)
 ├── .cursor/rules/     ← Cursor IDE rules
-├── pyproject.toml     ← Default (CPU)
-├── pyproject_*.toml   ← Platform-specific templates
-└── uv.lock
+├── pyproject.toml     ← Single portable manifest (cpu / cuda dependency groups)
+└── uv.lock            ← Universal lock (CPU + CUDA + macOS resolutions)
 ```
 
 **`vaila/models/`:** Reference **`.csv`** (similar small files) **tracked**. Downloaded weights (**`.pt`**, **`.ckpt`**, **`.onnx`**, **`.engine`**, **`.task`**, **`.safetensors`**, etc.) and **`vaila/models/**/.cache/`** **gitignored**; fetch via first run or Hub download on **each PC** (see **[docs/huggingface_setup.md](docs/huggingface_setup.md)** — `huggingface-hub>=1.22`, `hf auth login`, lock cleanup for `0.00B` stalls). Examples: [facebook/sam3](https://huggingface.co/facebook/sam3), `facebook/sam-3d-body-dinov3` via `bash bin/setup_fifa_sam3d.sh`. Small default **`.pkl`** (walkway ML) may stay tracked if **< 20 MiB**. Pre-commit blocks staged files **≥ 20 MiB**. Details: [CONTRIBUTING.md](CONTRIBUTING.md#vaila-models-directory). **`tests/SAM/*.mp4`** gitignored (place sample locally; see `tests/SAM/README.md`).
 
 ## Platform-Specific Configuration
 
-Project uses **template-based pyproject.toml system** for hardware-specific deps. Before creating venv, correct template must be copied to `pyproject.toml`:
+There is **no per-platform template file**. A single `pyproject.toml` + `uv.lock` covers every machine; hardware is selected at sync time:
 
-- `pyproject_win_cuda12.toml` — Windows NVIDIA CUDA 12.1
-- `pyproject_linux_cuda12.toml` — Linux NVIDIA CUDA 12.8
-- `pyproject_macos.toml` — macOS Metal/MPS (Apple Silicon)
-- `pyproject_universal_cpu.toml` — CPU-only fallback
+| Hardware | Command |
+|----------|---------|
+| Windows/Linux + NVIDIA (CUDA 12.8 + TensorRT) | `uv sync --no-group cpu --group cuda` |
+| macOS Apple Silicon (Metal/MPS) | `uv sync` |
+| CPU-only | `uv sync` |
 
-Install scripts (`install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`) handle automatically. Manual setup: copy template **before** running `uv python pin` / `uv venv`.
+Install scripts (`install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`) and `bin/setup_pyproject.sh/.ps1` pick the group automatically. Nothing tracked by git is ever rewritten.
 
 ## Architecture
 

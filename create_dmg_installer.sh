@@ -100,10 +100,9 @@ INSTALLER_DIR="$DMG_TEMP_DIR/vaila_installer"
 mkdir -p "$INSTALLER_DIR"
 
 # Copy all project files needed for installation (similar to what install script does)
-# Note: Before creating the DMG installer, pyproject.toml should already be replaced
-# with the OS-specific template (pyproject_macos.toml for macOS). The template files
-# (pyproject_*.toml) are not needed in the final installer as the correct configuration
-# is already in pyproject.toml. The rsync will copy everything, but templates are not required.
+# Note: there is a single portable pyproject.toml for every machine and OS (the
+# PyTorch backend is a uv dependency group, not a separate template file), so it is
+# copied as-is and needs no platform-specific replacement.
 echo "  Copying project files..."
 rsync -av \
     --exclude='.venv' \
@@ -120,8 +119,6 @@ rsync -av \
     --exclude='install_vaila_linux.sh' \
     --exclude='uninstall_vaila_linux.sh' \
     --exclude='vaila_installer.iss' \
-    --exclude='pyproject_win_*.toml' \
-    --exclude='pyproject_linux_*.toml' \
     "$PROJECT_DIR/" "$INSTALLER_DIR/"
 
 # Make install script executable

@@ -188,7 +188,7 @@ uv run python -m vaila.sam_to_yolo build \
 
 Standard coordinate format used by vailá toolbox.
 
-**Format:** `frame, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y, ...`
+**Format:** `frame, p0_x, p0_y, p1_x, p1_y, p2_x, p2_y, ...`
 
 **Example:**
 
@@ -535,7 +535,7 @@ Persistence mode shows markers from previous frames, creating a visual "trail":
 
 #### Standard Save (Save button)
 
-- **Format:** `frame, p1_x, p1_y, p2_x, p2_y, ...` (or sparse FIFA header when FIFA mode is on)
+- **Format:** `frame, p0_x, p0_y, p1_x, p1_y, ...` (or sparse FIFA header when FIFA mode is on)
 - **File:** `{video_name}_markers.csv`
 - **Location:** Same directory as video file
 
@@ -558,13 +558,13 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
 #### 1 Line Save
 
-- **Format:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
+- **Format:** `frame, p0_x, p0_y, p1_x, p1_y, ...`
 - **File:** `{video_name}_markers_sequential.csv`
 - **Use:** For path tracing and contour data
 
 #### Sequential Save
 
-- **Format:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
+- **Format:** `frame, p0_x, p0_y, p1_x, p1_y, ...`
 - **File:** `{video_name}_markers_sequential.csv`
 - **Use:** For multiple point annotations
 

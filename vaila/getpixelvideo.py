@@ -254,7 +254,7 @@ VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
 GETPIXELVIDEO_VERSION = "0.4.3"
-GETPIXELVIDEO_UPDATE_DATE = "16 September 2026"
+GETPIXELVIDEO_UPDATE_DATE = "17 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -9631,9 +9631,9 @@ def play_video_with_controls(
             default=0,
         )
 
-        # Create header: frame column and p1_x, p1_y, p2_x, p2_y, etc.
+        # Create header: frame column and p0_x, p0_y, p1_x, p1_y, ...
         header = ["frame"]
-        for i in range(1, max_marker + 2):  # +2 because we need to add one more than max index
+        for i in range(max_marker + 1):
             header.extend([f"p{i}_x", f"p{i}_y"])
 
         # Get the frame number from the first non-deleted marker
@@ -9658,7 +9658,7 @@ def play_video_with_controls(
         # Fill in the non-deleted marker positions
         for idx, (_, x, y) in enumerate(one_line_markers):
             if idx not in deleted_markers and x is not None and y is not None:
-                # Marker indices are 1-based in the CSV
+                # Marker indices are 0-based in the CSV (p0, p1, ...)
                 row_values[idx * 2 + 1] = int(round(x))
                 row_values[idx * 2 + 2] = int(round(y))
             # Se for None, deixar como vazio (já inicializado como "")
@@ -15334,7 +15334,7 @@ def export_pose_dataset(
     keypoint_names=None,
     flip_idx=None,
     keypoint_start_idx: int = 0,
-    keypoint_index_base: int = 1,
+    keypoint_index_base: int = 0,
     coord_format: str = "int",
     coord_decimals: int = 1,
     layout=None,

@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.122
+Version: 0.4.3
 Created: 06 February 2025
-Last Updated: 06 September 2026
+Last Updated: 16 September 2026
 
 To run:
   uv run vaila/viewc3d_pyvista.py -i path/to/file.c3d

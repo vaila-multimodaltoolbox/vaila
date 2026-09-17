@@ -4,9 +4,9 @@
 
 - **Category:** Visualization
 - **File:** `vaila/showc3d.py`
-- **Version:** 0.3.122
+- **Version:** 0.4.3
 - **Author:** Prof. Paulo Roberto Pereira Santiago
-- **Updated:** 06/09/2026
+- **Updated:** 16/09/2026
 - **GUI Interface:** ✅ Yes
 
 ## 📖 Description
@@ -14,8 +14,8 @@
 Script: showc3d.py
 Author: Prof. Paulo Roberto Pereira Santiago
 Date: 29/07/2024
-Updated: 06/09/2026
-Version: 0.3.122
+Updated: 16/09/2026
+Version: 0.4.3
 
 Description:
 ------------
@@ -30,6 +30,11 @@ Features:
 - Frame slider and Play/Pause animation for multi-frame MoCap,
   with streamlined display for single-frame calibration models.
 - Standalone CLI execution, GUI invocation, and programmatic `show_points_3d()`.
+- Equal data aspect (v0.4.3): one metre spans the same screen distance on X, Y
+  and Z, the equivalent of MATLAB's `daspect([1 1 1])`. Axis limits now pad each
+  span proportionally instead of forcing a fixed -0.5 m .. 2.5 m Z window, so a
+  nearly flat model such as a soccer pitch no longer makes 2.44 m goal posts look
+  as tall as the pitch is long.
 
 Usage:
 ------

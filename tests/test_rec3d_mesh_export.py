@@ -71,12 +71,13 @@ THIGH_RANGE_M = (0.387 * 0.75, 0.387 * 1.25)
 SHANK_RANGE_M = (0.371 * 0.75, 0.371 * 1.25)
 SHOULDER_WIDTH_RANGE_M = (0.360 * 0.75, 0.360 * 1.25)
 
-# MHR70 marker indices (1-based, p{i}) used below — see mesh_alignment.py's
-# ALIGNMENT_MARKER_SPEC for the full name mapping.
-P_LEFT_SHOULDER, P_RIGHT_SHOULDER = 6, 7
-P_LEFT_HIP, P_RIGHT_HIP = 10, 11
-P_LEFT_KNEE, P_RIGHT_KNEE = 12, 13
-P_LEFT_ANKLE, P_RIGHT_ANKLE = 14, 15
+# MHR70 marker indices (0-based, p{i}) used below — see mesh_alignment.py's
+# ALIGNMENT_MARKER_SPEC for the full name mapping. rec3d output columns were
+# rebased from p1 to p0 in 0.4.3 to match getpixelvideo.py's pixel columns.
+P_LEFT_SHOULDER, P_RIGHT_SHOULDER = 5, 6
+P_LEFT_HIP, P_RIGHT_HIP = 9, 10
+P_LEFT_KNEE, P_RIGHT_KNEE = 11, 12
+P_LEFT_ANKLE, P_RIGHT_ANKLE = 13, 14
 
 
 def _segment_length(df, p_a, p_b):

@@ -61,9 +61,6 @@ dependencies = [
     "jaxlib",
     "xgboost",
     "mediapipe",
-    "torch==2.11.0",
-    "torchvision==0.26.0",
-    "torchaudio==2.11.0",
     "ultralytics",
     "boxmot",
     "trackers==2.4.0",
@@ -178,6 +175,11 @@ build-backend = "hatchling.build"
 packages = ["vaila"]
 
 [tool.uv]
+# `cpu` ships in every default sync; `cuda` is opt-in (see [dependency-groups]).
+default-groups = ["dev", "cpu"]
+conflicts = [
+    [{ group = "cpu" }, { group = "cuda" }],
+]
 override-dependencies = [
     "regex>=2025.11.3",
     "setuptools>=83",
@@ -189,6 +191,32 @@ override-dependencies = [
 
 [tool.uv.workspace]
 # Workspace configuration if needed
+
+# PyTorch wheel indexes. `explicit = true` means nothing is pulled from them
+# unless a [tool.uv.sources] entry below asks for it.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+    { index = "pytorch-cpu", group = "cpu", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu128", group = "cuda", marker = "sys_platform != 'darwin'" },
+]
+torchvision = [
+    { index = "pytorch-cpu", group = "cpu", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu128", group = "cuda", marker = "sys_platform != 'darwin'" },
+]
+torchaudio = [
+    { index = "pytorch-cpu", group = "cpu", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu128", group = "cuda", marker = "sys_platform != 'darwin'" },
+]
 
 [tool.ruff]
 # Ruff configuration
@@ -250,6 +278,33 @@ dev = [
     "pytest>=8.0.0",
 ]
 
+# ---------------------------------------------------------------------------
+# PyTorch hardware backend — ONE pyproject.toml for every machine and OS.
+#
+# `cpu` and `cuda` are mutually exclusive groups (declared in [tool.uv].conflicts),
+# so `uv.lock` carries BOTH resolutions and the same committed file works on a
+# CPU-only laptop, an NVIDIA workstation, Windows and Apple Silicon:
+#
+#   uv sync                                # default: dev + cpu wheels
+#   uv sync --no-group cpu --group cuda    # NVIDIA (CUDA 12.8 wheels + TensorRT)
+#
+# macOS never uses the download.pytorch.org indexes (no wheels published there);
+# the sources below are marked `sys_platform != 'darwin'`, so Apple Silicon always
+# resolves the PyPI wheel, which is the Metal/MPS build.
+# ---------------------------------------------------------------------------
+cpu = [
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "torchaudio==2.11.0",
+]
+cuda = [
+    "torch==2.11.0",
+    "torchvision==0.26.0",
+    "torchaudio==2.11.0",
+    "tensorrt; sys_platform != 'darwin'",
+    "nvidia-ml-py; sys_platform != 'darwin'",
+]
+
 # https://docs.astral.sh/ty/ — type checker (Astral). Para "strict": use [tool.ty.rules] all = "error" quando o projeto estiver limpo.
 [tool.ty.environment]
 python-version = "3.12"
@@ -275,6 +330,12 @@ exclude = [
 # all = "warn"
 
 [tool.pytest.ini_options]
+norecursedirs = [
+    ".*",
+    "build",
+    "dist",
+    "tests/skeleton_templates",
+]
 # Suppress third-party deprecation warnings (matplotlib, pyparsing, dash)
 filterwarnings = [
     "ignore::pyparsing.warnings.PyparsingDeprecationWarning",

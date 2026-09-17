@@ -12,7 +12,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.4.3
 Created: August 9, 2024
-Last Updated: 15 September 2026
+Last Updated: 16 September 2026
 
 Description:
     Optimized batch processing of 2D coordinates reconstruction using corresponding
@@ -22,7 +22,7 @@ Description:
     to 2D real-world coordinates.
     Pixel CSV column LABELS are not inspected — only column ORDER matters:
     column 0 is the frame identifier and every pair of columns after that is
-    one marker's (x, y), regardless of header text (vailá p1_x/p1_y, SAM3,
+    one marker's (x, y), regardless of header text (vailá p0_x/p0_y, SAM3,
     YOLO, MediaPipe named joints, etc.). Output always uses vailá's standard
     "Frame" label for column 0; coordinate column labels are preserved as-is
     from the input file.
@@ -132,7 +132,7 @@ def process_files_in_directory(
 
         # Column labels are not inspected: column 0 is the frame identifier and
         # every pair of columns after that is one marker's (x, y), regardless
-        # of the header text (vailá p1_x/p1_y, SAM3, YOLO, MediaPipe, ...).
+        # of the header text (vailá p0_x/p0_y, SAM3, YOLO, MediaPipe, ...).
         num_coords = (pixel_coords_df.shape[1] - 1) // 2
         total_frames = len(pixel_coords_df)
 

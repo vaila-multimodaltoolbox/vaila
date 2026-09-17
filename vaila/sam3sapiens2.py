@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -2144,7 +2144,7 @@ def main() -> None:
             print(f"[ERROR] SAM3+Sapiens2 failed on {video.name}: {exc}", file=sys.stderr)
             print(">> Required setup/install commands (CLI):", file=sys.stderr)
             print(
-                "   bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,sapiens --yes",
+                "   bash bin/setup_pyproject.sh --target=cuda --extras=sam,sapiens --yes",
                 file=sys.stderr,
             )
             print("   bash bin/setup_sapiens2.sh", file=sys.stderr)

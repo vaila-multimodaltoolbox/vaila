@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.3 (see `vaila.py`). **Package version:** 0.4.3 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-16
+**Last updated:** 2026-09-17
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
 momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
@@ -269,10 +269,9 @@ vaila
 ├── skills/preto-loop/             # Portable biomechanics/data-science loop skill
 ├── CONTRIBUTING.md               # PR workflow, versioning, models policy
 ├── vaila.py                      # Main Tkinter GUI entry point
-├── pyproject.toml                # Active manifest (default: universal CPU; Hatchling + uv)
-├── pyproject_*.toml              # Platform templates (Linux/Windows CUDA, macOS, CPU)
-├── uv.lock                       # Locked deps (re-run uv lock after template switch)
-├── bin/                          # setup_pyproject.sh/.ps1, sync_repo.sh/.ps1, use_pyproject_*.sh/.ps1 shims
+├── pyproject.toml                # Single portable manifest (cpu/cuda groups; Hatchling + uv)
+├── uv.lock                       # Universal lock (CPU + CUDA + macOS in one file)
+├── bin/                          # setup_pyproject.sh/.ps1, sync_repo.sh/.ps1
 ├── install_vaila_linux.sh        # Linux installer (uv-only)
 ├── install_vaila_mac.sh          # macOS installer (uv-only)
 ├── install_vaila_win.ps1         # Windows installer (uv-only)
@@ -310,31 +309,31 @@ _vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Pytho
 - **Simplicity:** No separate Python distribution required — uv manages Python 3.12 for you.
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
-- **Dynamic Hardware Optimization:** Automatically detects hardware (NVIDIA GPU, Apple Silicon) and selects the optimized configuration template for your system.
+- **Dynamic Hardware Optimization:** Automatically detects hardware (NVIDIA GPU, Apple Silicon) and installs the matching PyTorch build — from the **same** `pyproject.toml` / `uv.lock` on every machine.
 - **Cross-Platform:** **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](vaila/help/vaila_sam.md) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
 
 #### 🎯 Smart Configuration System
 
-_vailá_ uses a **template-based configuration system** that automatically selects the optimal dependencies for your hardware:
+_vailá_ ships **one portable `pyproject.toml` and one `uv.lock` for every computer and OS**. There are no platform template files to copy: the PyTorch backend is a **uv dependency group** chosen when you sync.
 
-- **`pyproject.toml`** (in repository): Universal CPU-only configuration (default in repository, compatible with all systems)
-- **`pyproject_win_cuda12.toml`**: Windows with NVIDIA CUDA 12.1 support (TensorRT, GPU acceleration)
-- **`pyproject_linux_cuda12.toml`**: Linux with NVIDIA CUDA 12.8 support (TensorRT, GPU acceleration)
-- **`pyproject_macos.toml`**: macOS with Metal/MPS acceleration (Apple Silicon optimized)
-- **`pyproject_universal_cpu.toml`**: Universal CPU-only fallback (backup template)
+| Hardware | Command | What you get |
+|----------|---------|--------------|
+| Linux / Windows + NVIDIA | `uv sync --no-group cpu --group cuda` | PyTorch CUDA 12.8 wheels + TensorRT + `nvidia-ml-py` |
+| CPU-only laptop | `uv sync` | PyTorch CPU wheels |
+| macOS Apple Silicon | `uv sync` | PyTorch PyPI wheel = Metal/MPS build |
 
-**Manual template switch (developers / second machine):** prefer the **unified interactive bootstrap** which auto-detects OS + NVIDIA + arch and runs `uv lock` + `uv sync`:
+`[dependency-groups]` declares `cpu` and `cuda`, and `[tool.uv] conflicts` marks them mutually exclusive, so `uv.lock` stores **all** resolutions at once. A CUDA workstation and a CPU laptop therefore commit **byte-identical** `pyproject.toml` / `uv.lock` — `git pull`, `git commit` and `git push` never need a `git restore` first.
+
+**Developers / second machine:** the **unified interactive bootstrap** auto-detects OS + NVIDIA + arch and runs the right `uv sync` (it never rewrites tracked files):
 
 ```bash
 bash bin/setup_pyproject.sh                                       # Linux / macOS / WSL / Git Bash (interactive)
 pwsh bin/setup_pyproject.ps1                                      # Windows PowerShell (interactive)
-bash bin/setup_pyproject.sh --target=linux-cuda --full --yes       # Linux CUDA + all AI extras (gpu,sam,sapiens,fifa)
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Full -Yes          # Windows CUDA + all AI extras
+bash bin/setup_pyproject.sh --target=cuda --full --yes       # NVIDIA CUDA + all AI extras (sam,sapiens,fifa,upscaler)
+pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Yes          # Windows CUDA + all AI extras
 ```
 
-Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`, `--help`.
-
-Legacy per-platform shims (thin wrappers around the bootstrap, kept for backward compatibility): `bin/use_pyproject_linux_cuda.sh`, `bin/use_pyproject_universal_cpu.sh`, `bin/use_pyproject_macos_metal.sh`, plus the Windows PowerShell equivalents. See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
+Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--lock`, `--no-sync`, `--help` (legacy `linux-cuda` / `win-cuda` / `macos` target names still accepted). See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
 
 **How it works (step-by-step):**
 
@@ -345,20 +344,12 @@ Legacy per-platform shims (thin wrappers around the bootstrap, kept for backward
    - Windows: "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]"
    - Linux: "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
    - macOS: "Apple Silicon detected. Use Metal/MPS acceleration? [Y/n]"
-3. **Template Selection**: Based on your choice, it selects the appropriate template:
-   - **Windows + GPU** → `pyproject_win_cuda12.toml` (CUDA 12.1 + TensorRT)
-   - **Linux + GPU** → `pyproject_linux_cuda12.toml` (CUDA 12.8 + TensorRT)
-   - **macOS (Apple Silicon) + Metal** → `pyproject_macos.toml` (Metal/MPS optimized)
-   - **Otherwise** → `pyproject_universal_cpu.toml` (CPU-only)
-4. **Backup**: Backs up current `pyproject.toml` to `pyproject_universal_cpu.toml`
-5. **Template Application**: **Copies the selected template to `pyproject.toml` BEFORE creating the virtual environment**
-   - ⚠️ **Critical**: This happens **before** `uv python pin` and `uv venv` are executed
-   - This ensures the virtual environment is created with the correct dependencies from the start
-6. **Environment Creation**: `uv` creates the `.venv` with the correct dependencies from the beginning
-7. **Dependency Installation**: Runs `uv sync` (or `uv sync --extra gpu` if GPU support was selected)
-8. **Automatic Fallback**: If installation fails, it automatically restores the universal CPU configuration and retries
+3. **Backend Selection**: Based on your choice, it picks the PyTorch dependency group — `cuda` (NVIDIA, CUDA 12.8 + TensorRT) or `cpu` (CPU wheels; on macOS the PyPI wheel, which is the Metal/MPS build). **No file is copied or modified.**
+4. **Environment Creation**: `uv` creates the `.venv` (`uv python pin` + `uv venv`)
+5. **Dependency Installation**: Runs `uv sync` (or `uv sync --no-group cpu --group cuda` for NVIDIA), using the committed `uv.lock` — no relock needed, because that lock already contains every hardware variant
+6. **Automatic Fallback**: If the CUDA install fails, you can install the CPU stack with a plain `uv sync`
 
-**Important:** The template selection happens **before** `uv python pin` and `uv venv` are executed. This ensures the virtual environment is created with the correct dependencies from the beginning, avoiding dependency resolution conflicts.
+**Important:** `pyproject.toml` and `uv.lock` stay untouched on every machine, so your git tree is always clean after installing.
 
 This ensures that:
 
@@ -375,7 +366,7 @@ Several GUI tools (Frame B → **Markerless 2D** / **Markerless 3D**, including 
 
 - **[Script Help Index (HTML)](vaila/help/index.html)** · **[Script Help Index (Markdown)](vaila/help/index.md)**
 
-For the hybrid CPU-laptop vs. NVIDIA-workstation workflow (which `pyproject_*.toml` template, which extras, `bin/setup_pyproject.sh`), see **[AGENTS.md](AGENTS.md)**.
+For the hybrid CPU-laptop vs. NVIDIA-workstation workflow (which dependency group, which extras, `bin/setup_pyproject.sh`), see **[AGENTS.md](AGENTS.md)**.
 
 ---
 
@@ -428,9 +419,9 @@ The script will:
 
 1.  Detect if you have an **NVIDIA GPU**.
 2.  Ask if you want to install with GPU support (optimizes for CUDA 12.1).
-3.  Automatically select and apply the correct configuration template:
-    - **GPU detected + user chooses GPU**: Uses `pyproject_win_cuda12.toml` (CUDA 12.1, TensorRT)
-    - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+3.  Automatically select the PyTorch dependency group (no file is modified):
+    - **GPU detected + user chooses GPU**: `cuda` group (CUDA 12.8 wheels, TensorRT)
+    - **No GPU or user chooses CPU**: `cpu` group (CPU-only wheels)
 4.  Install **uv** and all dependencies with the selected configuration.
 
 **Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for a profile/system install: as **Administrator** → `C:\Program Files\vaila`; as a **Standard User** → `~\vaila`.
@@ -449,11 +440,10 @@ The installation script automatically:
 
 - Checks for **uv**; if missing, installs it automatically
 - **Detects your hardware** (NVIDIA GPU) and prompts for GPU support preference
-- **Selects the optimal configuration template** (`pyproject_win_cuda12.toml` or `pyproject_universal_cpu.toml`)
-- **Applies the template** to `pyproject.toml` **before** creating the virtual environment
+- **Selects the PyTorch dependency group** (`cuda` or `cpu`) — the committed `pyproject.toml` is never modified
 - Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
-- Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
+- Syncs all dependencies using `uv sync` (with `--no-group cpu --group cuda` if GPU support was selected)
 - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
 - Configures shortcuts:
   - **Desktop shortcut** with proper icon
@@ -549,9 +539,9 @@ The script will:
 
 1. Detect if you have an **NVIDIA GPU**.
 2. Ask if you want to install with GPU support (optimizes for CUDA 12.8).
-3. Automatically select and apply the correct configuration template:
-   - **GPU detected + user chooses GPU**: Uses `pyproject_linux_cuda12.toml` (CUDA 12.8, TensorRT)
-   - **No GPU or user chooses CPU**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+3. Automatically select the PyTorch dependency group (no file is modified):
+   - **GPU detected + user chooses GPU**: `cuda` group (CUDA 12.8 wheels, TensorRT)
+   - **No GPU or user chooses CPU**: `cpu` group (CPU-only wheels)
 4. Install **uv** and all dependencies with the selected configuration.
 
 **Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for user profile install (`~/vaila`).
@@ -570,11 +560,10 @@ The installation script automatically:
 
 - Checks for **uv**; if missing, installs it automatically
 - **Detects your hardware** (NVIDIA GPU via `nvidia-smi`) and prompts for GPU support preference
-- **Selects the optimal configuration template** (`pyproject_linux_cuda12.toml` or `pyproject_universal_cpu.toml`)
-- **Applies the template** to `pyproject.toml` **before** creating the virtual environment
+- **Selects the PyTorch dependency group** (`cuda` or `cpu`) — the committed `pyproject.toml` is never modified
 - Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
-- Syncs all dependencies using `uv sync` (with `--extra gpu` if GPU support was selected)
+- Syncs all dependencies using `uv sync` (with `--no-group cpu --group cuda` if GPU support was selected)
 - Installs system packages via package manager if needed (`python3-tk`, `ffmpeg`, etc.)
 - Configures desktop shortcut and application launcher (`~/.local/share/applications/vaila.desktop`)
 - **Automatically falls back** to CPU-only configuration if GPU installation fails
@@ -591,33 +580,24 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 git clone https://github.com/vaila-multimodaltoolbox/vaila
 cd vaila
 
-# ⚠️ IMPORTANT: Select GPU configuration BEFORE creating virtual environment
-# The template must be copied to pyproject.toml BEFORE running uv python pin and uv venv
-# For NVIDIA GPU with CUDA 12.8:
-# cp pyproject_linux_cuda12.toml pyproject.toml
-# For CPU-only (default):
-# The default pyproject.toml is already CPU-only, so no copy needed for CPU
-# (or explicitly: cp pyproject_universal_cpu.toml pyproject.toml)
+# The same pyproject.toml works on every machine: the hardware is a uv group.
 
-# Initialize Python version (uses the pyproject.toml you just configured)
+# Initialize Python version
 uv python pin 3.12.14
 
-# Create virtual environment (uses the pyproject.toml you just configured)
+# Create virtual environment
 uv venv --python 3.12.14
 
-# Generate lock file
-uv lock --upgrade
-
-# Install dependencies
+# Install dependencies (committed uv.lock already covers CPU, CUDA and macOS)
 uv sync
-# Or with GPU support (if you selected GPU template):
-# uv sync --extra gpu
+# Or, on an NVIDIA GPU (CUDA 12.8 + TensorRT):
+# uv sync --no-group cpu --group cuda
 
 # Run vailá
 uv run vaila.py
 ```
 
-**⚠️ Critical Note:** When installing manually, you **MUST** copy the appropriate template to `pyproject.toml` **BEFORE** running `uv python pin` and `uv venv`. The installation scripts do this automatically, but for manual installation you need to do it yourself. The order matters because `uv` reads `pyproject.toml` when creating the virtual environment.
+**Note:** there is nothing to copy or configure beforehand — pass `--no-group cpu --group cuda` to `uv sync` on an NVIDIA machine and plain `uv sync` everywhere else.
 
 ---
 
@@ -654,9 +634,9 @@ The script will:
 
 1. Detect your architecture (**Apple Silicon** `arm64` vs **Intel** `x86_64`).
 2. If Apple Silicon, ask if you want to use **Metal/MPS** acceleration (recommended).
-3. Automatically select and apply the correct configuration template:
-   - **Apple Silicon + user chooses Metal**: Uses `pyproject_macos.toml` (Metal/MPS optimized)
-   - **Intel or user chooses CPU-only**: Uses `pyproject_universal_cpu.toml` (CPU-only)
+3. Automatically select the PyTorch dependency group (no file is modified):
+   - **Apple Silicon**: default `cpu` group — the macOS PyPI wheel **is** the Metal/MPS build
+   - **Intel**: same default group, CPU-only at runtime
 4. Install **uv** and all dependencies with the selected configuration.
 
 **Note:** Default install location is **Local/Portable** (the current repo directory). Choose option **[2]** for user profile install (`~/vaila`).
@@ -668,8 +648,7 @@ The installation script automatically:
 - Checks for **uv**; if missing, installs it automatically
 - Installs system dependencies via Homebrew (if needed)
 - **Detects your architecture** (Apple Silicon vs Intel) and prompts for Metal/MPS acceleration
-- **Selects the optimal configuration template** (`pyproject_macos.toml` or `pyproject_universal_cpu.toml`)
-- **Applies the template** to `pyproject.toml` **before** creating the virtual environment
+- **Selects the PyTorch dependency group** (`cpu`, i.e. the Metal/MPS wheel on Apple Silicon) — the committed `pyproject.toml` is never modified
 - Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync`
@@ -760,11 +739,10 @@ During installation, the scripts automatically:
 
 - **Detect NVIDIA GPUs** (Windows/Linux) or **Apple Silicon** (macOS)
 - **Prompt you** to choose GPU or CPU-only installation
-- **Select the optimal configuration template**:
-  - Windows: `pyproject_win_cuda12.toml` (CUDA 12.1 + TensorRT)
-  - Linux: `pyproject_linux_cuda12.toml` (CUDA 12.8 + TensorRT)
-  - macOS: `pyproject_macos.toml` (Metal/MPS acceleration)
-  - Fallback: `pyproject_universal_cpu.toml` (CPU-only, always available)
+- **Select the PyTorch dependency group**:
+  - Windows / Linux + NVIDIA: `cuda` (CUDA 12.8 + TensorRT)
+  - macOS: `cpu` (the PyPI wheel provides Metal/MPS)
+  - Fallback: `cpu` (CPU-only, always available)
 
 ### Runtime GPU Optimization
 
@@ -858,12 +836,12 @@ Every module and script in vailá — description, GUI button location, required
 
 ### 📖 Additional Documentation
 
-- **[AGENTS.md](AGENTS.md)** - `uv run` recipes, hybrid CPU vs CUDA `pyproject` templates, SAM 3 / FIFA pointers
+- **[AGENTS.md](AGENTS.md)** - `uv run` recipes, hybrid CPU vs CUDA dependency groups, SAM 3 / FIFA pointers
 - **[Hardware & GPU Diagnostics Guide](vaila/help/gpu_guide.md)** - GPU testing, TensorRT profiles, and CUDA diagnostics (`gputest.py` / footer button **GPU Test**)
 - **[Project Documentation](docs/index.md)** - Overview and module documentation
 - **[Hugging Face setup (per PC)](docs/huggingface_setup.md)** - Gated SAM / SAM 3D / Sapiens2 login + download
 - **[Help Guide](docs/help.md)** - User guide and installation instructions
-- **[Install & Run Guide](docs/install.md)** - Detailed Linux/Windows/macOS install, GPU template selection, and troubleshooting
+- **[Install & Run Guide](docs/install.md)** - Detailed Linux/Windows/macOS install, GPU backend selection, and troubleshooting
 - **[GUI Button Documentation](docs/vaila_buttons/README.md)** - Complete documentation for all GUI buttons
 
 ---

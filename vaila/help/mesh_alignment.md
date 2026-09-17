@@ -6,7 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/mesh_alignment.py` |
-| **Version** | 0.3.99 |
+| **Version** | 0.4.3 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | No |
 | **CLI** | No (library module) |
@@ -22,7 +23,7 @@ Shared support module for **rec3d_one_dlt3d**'s mesh-for-Blender export feature.
 - `best_camera_alignment(source_points_per_camera, target_points)` — fit per camera, return the lowest-residual non-degenerate result (used to pick which camera's mesh to use for a given frame).
 - `read_obj_vertices` / `write_obj_mesh` / `write_ply_mesh` — minimal ASCII OBJ/PLY vertex I/O (faces are loaded once from a shared `mesh_faces.npy`, not re-parsed per frame).
 - `apply_blender_yz_swap(vertices, faces)` — rotate vertices `(x, y, z) -> (x, z, -y)` into the Y-up file frame Blender's own importers expect (the convention `rec3d.save_rec3d_as_bvh` writes under `--swap-yz`). **Not applied to the mesh export:** mesh vertices are written in the raw `(x, y, z)` DLT frame, because mesh-*sequence* add-ons (Stop Motion OBJ / OBJSequence) assign `v x y z` straight to the mesh with no axis conversion and no forward/up setting to override. This helper is kept to document and test the BVH-side convention. The negation is what makes it a **rotation** (determinant +1) instead of a mirror: a bare column swap to `(x, z, y)` has determinant -1, and Blender's own Y-up→Z-up rotation on import leaves the subject **reflected** — anatomical left and right swapped, silently inverting every asymmetry conclusion. Face winding is preserved, because a proper rotation already keeps outward normals outward.
-- `ALIGNMENT_MARKER_SPEC` / `ALIGNMENT_MARKER_INDICES` — the fixed torso/hip/knee MHR70 marker subset (1-based `p{i}` indices) used for the fit: `left-shoulder`, `right-shoulder`, `left-hip`, `right-hip`, `left-knee`, `right-knee`, `left-acromion`, `right-acromion`, `neck`. Hand/foot/finger tips and facial points are deliberately excluded — they are the noisiest MHR70 keypoints and would destabilize the fit.
+- `ALIGNMENT_MARKER_SPEC` / `ALIGNMENT_MARKER_INDICES` — the fixed torso/hip/knee MHR70 marker subset (0-based `p{i}` indices, rebased from 1-based in 0.4.3) used for the fit: `left-shoulder`, `right-shoulder`, `left-hip`, `right-hip`, `left-knee`, `right-knee`, `left-acromion`, `right-acromion`, `neck`. Hand/foot/finger tips and facial points are deliberately excluded — they are the noisiest MHR70 keypoints and would destabilize the fit.
 
 This module never loads SAM3/SAM 3D Body weights and has no CUDA/GPU dependency — it is pure NumPy linear algebra plus file I/O, so it runs anywhere `rec3d_one_dlt3d.py` runs.
 

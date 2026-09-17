@@ -3,16 +3,26 @@
     Unified interactive bootstrap for vailá on Windows (PowerShell).
 
 .DESCRIPTION
-    Detects OS / architecture / NVIDIA GPU, picks the right pyproject_*.toml
-    template, lets the user confirm extras, then runs `uv lock` + `uv sync --extra ...`.
+    Detects OS / architecture / NVIDIA GPU, picks the PyTorch dependency group
+    (`cpu` or `cuda`) and the optional extras, then runs `uv sync`.
+
+    There is a SINGLE committed pyproject.toml / uv.lock for every machine and
+    OS: the hardware choice is a uv dependency group, not a file swap, so this
+    script never modifies anything tracked by git.
+
+      cpu   -> torch trio from https://download.pytorch.org/whl/cpu
+               (on macOS: the PyPI wheel, i.e. the Metal/MPS build)
+      cuda  -> torch trio from https://download.pytorch.org/whl/cu128,
+               plus tensorrt + nvidia-ml-py
 
     Linux / macOS / WSL / Git Bash: use bin/setup_pyproject.sh instead.
 
 .PARAMETER Target
-    auto | cpu | linux-cuda | win-cuda | macos. Default: auto.
+    auto | cpu | cuda. Default: auto. Legacy names linux-cuda, win-cuda, macos
+    and gpu are still accepted.
 
 .PARAMETER Extras
-    Comma-separated list of extras (gpu, sam, fifa, upscaler, dev).
+    Comma-separated list of extras (sam, fifa, sapiens, upscaler, dev).
 
 .PARAMETER NonInteractive
     Skip all prompts; use detected / supplied values.
@@ -20,26 +30,30 @@
 .PARAMETER Yes
     Accept all suggested defaults (no prompts).
 
+.PARAMETER Lock
+    Re-run `uv lock` before syncing (normally unnecessary).
+
 .PARAMETER NoLock
-    Skip `uv lock`.
+    Skip `uv lock` (default).
 
 .PARAMETER NoSync
     Skip `uv sync`.
 
 .EXAMPLE
     pwsh bin/setup_pyproject.ps1
-    pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam
+    pwsh bin/setup_pyproject.ps1 -Target cuda -Extras sam
     pwsh bin/setup_pyproject.ps1 -Target cpu -NonInteractive -Yes
 #>
 
 [CmdletBinding()]
 param(
-    [ValidateSet('auto','cpu','linux-cuda','win-cuda','macos')]
+    [ValidateSet('auto','cpu','cuda','gpu','linux-cuda','win-cuda','macos')]
     [string]$Target = 'auto',
     [string]$Extras = '',
     [switch]$Full,
     [switch]$NonInteractive,
     [switch]$Yes,
+    [switch]$Lock,
     [switch]$NoLock,
     [switch]$NoSync,
     [switch]$SkipWorktree,
@@ -91,24 +105,30 @@ $HasNvidia = [bool]$GpuInfo
 function Resolve-Target($t) {
     if ($t -ne 'auto') { return $t }
     switch ($OsKind) {
-        'macos'   { 'macos' }
-        'windows' { if ($HasNvidia) { 'win-cuda' }   else { 'cpu' } }
-        'linux'   { if ($HasNvidia) { 'linux-cuda' } else { 'cpu' } }
-        'wsl'     { if ($HasNvidia) { 'linux-cuda' } else { 'cpu' } }
+        'macos'   { 'cpu' }   # PyPI wheel = Metal/MPS build
+        'windows' { if ($HasNvidia) { 'cuda' } else { 'cpu' } }
+        'linux'   { if ($HasNvidia) { 'cuda' } else { 'cpu' } }
+        'wsl'     { if ($HasNvidia) { 'cuda' } else { 'cpu' } }
         default   { 'cpu' }
     }
 }
 
-$Target = Resolve-Target $Target
-
-function Template-For($t) {
+# Legacy target names map onto the two dependency groups in pyproject.toml.
+function Normalize-Target($t) {
     switch ($t) {
-        'cpu'        { 'pyproject_universal_cpu.toml' }
-        'linux-cuda' { 'pyproject_linux_cuda12.toml' }
-        'win-cuda'   { 'pyproject_win_cuda12.toml' }
-        'macos'      { 'pyproject_macos.toml' }
+        'cpu'        { 'cpu' }
+        'macos'      { 'cpu' }
+        'cuda'       { 'cuda' }
+        'gpu'        { 'cuda' }
+        'linux-cuda' { 'cuda' }
+        'win-cuda'   { 'cuda' }
         default      { throw "unknown target: $t" }
     }
+}
+
+$Target = Normalize-Target (Resolve-Target $Target)
+if ($Target -eq 'cuda' -and $OsKind -eq 'macos') {
+    throw "target 'cuda' is not available on macOS (no CUDA wheels); use -Target cpu."
 }
 
 function Detect-InstalledExtras {
@@ -125,22 +145,13 @@ function Detect-InstalledExtras {
 }
 
 function Suggested-Extras($t) {
-    $base = switch ($t) {
-        'cpu'        { @() }
-        'linux-cuda' { @('gpu') }
-        'win-cuda'   { @('gpu') }
-        'macos'      { @() }
-    }
+    # tensorrt / nvidia-ml-py live in the `cuda` dependency group, not an extra.
+    $base = @()
     $installed = Detect-InstalledExtras
     $all = ($base + $installed) | Select-Object -Unique
     return ($all -join ' ')
 }
 
-$Src = Template-For $Target
-if (-not (Test-Path (Join-Path $Root $Src))) {
-    Write-Error "template not found: $Src"
-    exit 1
-}
 $SuggestedExtras = Suggested-Extras $Target
 
 # ---------- summary ----------
@@ -153,7 +164,7 @@ if ($GpuInfo) {
     Write-Host ("  {0,-18} none detected" -f 'NVIDIA GPU:') -ForegroundColor DarkGray
 }
 Write-Host ("  {0,-18} {1}" -f 'Target:', $Target)
-Write-Host ("  {0,-18} {1}" -f 'Template:', $Src)
+Write-Host ("  {0,-18} {1}" -f 'PyTorch group:', "$Target (uv sync --group $Target)")
 $shown = if ($SuggestedExtras) { $SuggestedExtras } else { '(none)' }
 Write-Host ("  {0,-18} {1}" -f 'Suggested extras:', $shown)
 Write-Host ''
@@ -169,24 +180,19 @@ function Confirm-Default($msg, [bool]$default) {
 
 if (-not $NonInteractive -and -not $Yes) {
     if (-not (Confirm-Default "Use target '$Target'?" $true)) {
-        Write-Host 'Available targets: cpu, linux-cuda, win-cuda, macos'
+        Write-Host 'Available targets: cpu (CPU wheels / macOS Metal), cuda (NVIDIA CUDA 12.8)'
         $new = Read-Host 'Pick target'
         if ($new) {
-            $Target = $new
-            $Src = Template-For $Target
-            if (-not (Test-Path (Join-Path $Root $Src))) { throw "template not found: $Src" }
+            $Target = Normalize-Target $new
             $SuggestedExtras = Suggested-Extras $Target
-            Write-Host "Switched to target=$Target, template=$Src, suggested extras='$SuggestedExtras'" -ForegroundColor Cyan
+            Write-Host "Switched to target=$Target, suggested extras='$SuggestedExtras'" -ForegroundColor Cyan
         }
     }
 }
 
 # ---------- extras ----------
-$AvailableExtras = switch ($Target) {
-    'linux-cuda' { @('gpu','sam','fifa','sapiens','upscaler','dev') }
-    'win-cuda'   { @('gpu','sam','fifa','sapiens','upscaler','dev') }
-    default      { @('sam','fifa','sapiens','upscaler','dev') }
-}
+# Identical on every platform, because there is only one pyproject.toml.
+$AvailableExtras = @('sam','fifa','sapiens','upscaler','dev')
 
 if ($Full -or $Extras -eq 'all') {
     $Chosen = $AvailableExtras
@@ -196,8 +202,7 @@ if ($Full -or $Extras -eq 'all') {
     $Chosen = $SuggestedExtras -split '[,\s]+' | Where-Object { $_ }
 } else {
     Write-Host ''
-    Write-Host "Available extras for ${Target}: $($AvailableExtras -join ', ')" -ForegroundColor Cyan
-    Write-Host '  gpu      = tensorrt + nvidia-ml-py (CUDA only)'
+    Write-Host "Available extras: $($AvailableExtras -join ', ')" -ForegroundColor Cyan
     Write-Host '  sam      = SAM 3 video segmentation (sam3==0.1.3; CUDA at runtime)'
     Write-Host '  fifa     = FIFA Skeletal Tracking Light (pytorch-lightning, timm, ...)'
     Write-Host '  sapiens  = Sapiens2 Pose (transformers + safetensors; CUDA; then bin/setup_sapiens2.ps1)'
@@ -213,17 +218,12 @@ foreach ($e in $Chosen) {
     if ($AvailableExtras -contains $e) { $Valid += $e } else { $Invalid += $e }
 }
 if ($Invalid.Count -gt 0) {
-    Write-Warning "Ignoring extras not defined in ${Src}: $($Invalid -join ', ')"
+    Write-Warning "Ignoring extras not defined in pyproject.toml: $($Invalid -join ', ')"
 }
 $ExtrasList = $Valid
 
-# ---------- apply template ----------
-Write-Host ''
-Write-Host "Copying template: $Src -> pyproject.toml" -ForegroundColor Cyan
-Copy-Item (Join-Path $Root $Src) (Join-Path $Root 'pyproject.toml') -Force
-
 # ---------- lock ----------
-if (-not $NoLock) {
+if ($Lock -and -not $NoLock) {
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
         Write-Error 'uv not found in PATH. Install: https://docs.astral.sh/uv/getting-started/installation/'
         exit 1
@@ -231,12 +231,15 @@ if (-not $NoLock) {
     Write-Host 'Running: uv lock' -ForegroundColor Cyan
     & uv lock
 } else {
-    Write-Host "Skipping 'uv lock' (-NoLock)" -ForegroundColor Cyan
+    Write-Host 'Using the committed uv.lock (pass -Lock to re-resolve)' -ForegroundColor Cyan
 }
 
 # ---------- sync ----------
 if (-not $NoSync) {
+    # `cpu` is a default group in pyproject.toml, so the CUDA build must both
+    # drop it and request `cuda` (the two groups are declared as conflicting).
     $argList = @('sync')
+    if ($Target -eq 'cuda') { $argList += @('--no-group', 'cpu', '--group', 'cuda') }
     foreach ($e in $ExtrasList) { $argList += @('--extra', $e) }
     Write-Host "Running: uv $($argList -join ' ')" -ForegroundColor Cyan
     & uv @argList
@@ -247,23 +250,21 @@ if (-not $NoSync) {
     Write-Host "Skipping 'uv sync' (-NoSync)" -ForegroundColor Cyan
     Write-Host ''
     Write-Host 'Next, run manually:'
+    $groupHint = if ($Target -eq 'cuda') { '--no-group cpu --group cuda ' } else { '' }
     if ($ExtrasList.Count -gt 0) {
         $tail = ($ExtrasList | ForEach-Object { "--extra $_" }) -join ' '
-        Write-Host "  uv sync $tail"
+        Write-Host "  uv sync $groupHint$tail"
     } else {
-        Write-Host '  uv sync'
+        Write-Host "  uv sync $groupHint".TrimEnd()
     }
 }
 
-# ---------- git skip-worktree handling ----------
+# ---------- clear any legacy skip-worktree bits ----------
+# Older versions of this script hid pyproject.toml / uv.lock from git status.
+# Both files are portable now, so make sure they are tracked normally again.
 if (Get-Command git -ErrorAction SilentlyContinue) {
-    if ($SkipWorktree) {
-        git update-index --skip-worktree pyproject.toml uv.lock 2>$null
-        Write-Host "Marked pyproject.toml and uv.lock as skip-worktree in Git." -ForegroundColor Green
-    } elseif ($NoSkipWorktree -or ($Target -eq 'cpu')) {
-        git update-index --no-skip-worktree pyproject.toml uv.lock 2>$null
-        if ($NoSkipWorktree) {
-            Write-Host "Restored normal git tracking for pyproject.toml and uv.lock." -ForegroundColor Green
-        }
+    git update-index --no-skip-worktree pyproject.toml uv.lock 2>$null
+    if ($SkipWorktree -or $NoSkipWorktree) {
+        Write-Host 'note: -SkipWorktree / -NoSkipWorktree are obsolete (single portable pyproject.toml/uv.lock).' -ForegroundColor Yellow
     }
 }

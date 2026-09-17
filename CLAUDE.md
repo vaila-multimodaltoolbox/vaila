@@ -17,7 +17,7 @@ Guide for **AI Assistants** (Claude Code, Antigravity, Cursor, Windsurf, etc.) w
 
 ## Astral Toolchain
 
-Project uses full [Astral](https://astral.sh) Rust toolchain:
+Full [Astral](https://astral.sh) Rust toolchain:
 
 | Tool                                   | Purpose                                                    | Replaces                        |
 | -------------------------------------- | ---------------------------------------------------------- | ------------------------------- |
@@ -38,8 +38,8 @@ Project uses full [Astral](https://astral.sh) Rust toolchain:
 uv run vaila.py
 
 # Sync dependencies (reads uv.lock + pyproject.toml)
-uv sync                        # default template's dependencies (see note below)
-uv sync --extra gpu            # only defined on CUDA templates (tensorrt + nvidia-ml-py)
+uv sync                        # CPU wheels / macOS Metal (default groups: dev + cpu)
+uv sync --no-group cpu --group cuda            # NVIDIA CUDA 12.8 wheels + tensorrt + nvidia-ml-py
 uv sync --extra sam            # SAM 3 optional stack; video still needs NVIDIA CUDA at runtime
 uv sync --extra sapiens        # Sapiens2 Pose (308 kp); bash bin/setup_sapiens2.sh after
 uv sync --extra fifa           # FIFA Skeletal Tracking Light (SAM 3D Body + PyTorch Lightning)
@@ -48,10 +48,8 @@ uv sync --frozen               # CI mode: fail if lock is outdated
 # RECOMMENDED: unified interactive bootstrap (auto-detects OS + NVIDIA + extras)
 bash bin/setup_pyproject.sh                                      # Linux / macOS / WSL / Git Bash
 pwsh bin/setup_pyproject.ps1                                     # Windows PowerShell
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
-# Legacy per-platform wrappers (thin shims):
-# bin/use_pyproject_universal_cpu.sh | use_pyproject_linux_cuda.sh | use_pyproject_macos_metal.sh
-# bin/use_pyproject_universal_cpu.ps1 | use_pyproject_win_cuda.ps1
+bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes
+# The bootstrap only picks `uv sync` arguments — it never rewrites tracked files.
 
 # Manage dependencies
 uv add <package>               # Add runtime dependency
@@ -152,7 +150,7 @@ include = ["vaila", "tests"]
 exclude = ["vaila/_generated"]
 ```
 
-> `ty` beta — not drop-in mypy/Pyright replacement; different design/defaults. Use alongside ruff, not instead.
+> `ty` beta — no drop-in mypy/Pyright replacement; different design/defaults. Use alongside ruff, not instead.
 
 ---
 
@@ -176,8 +174,8 @@ Edit any Python script (`*.py`) in repo → also update metadata so users see co
 - **Edited script header**: update top module docstring/header:
   - **Update Date**: today
   - **Version**: **global vailá version** (same as `vaila.py` header/banner)
-- **Main entry point**: change impacts GUI/CLI banner → update `vaila.py` header + banner strings.
-- **Install scripts**: install/run UX impacted → review/update:
+- **Main entry point**: change hits GUI/CLI banner → update `vaila.py` header + banner strings.
+- **Install scripts**: install/run UX hit → review/update:
   - `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`, `install-hooks.sh`
 - **Repo README**: update root `README.md` line `Last updated: YYYY-MM-DD` to today.
 - **Help docs**:
@@ -186,7 +184,7 @@ Edit any Python script (`*.py`) in repo → also update metadata so users see co
 
 ### Writing convention: how to style "vailá"
 
-Write project name **lowercase, italicized** in prose — `*vailá*` Markdown, `<i>vailá</i>` HTML — matches root `README.md` canonical `# _vailá_ - Multimodal Toolbox` title, body usage (`_vailá_`). Never bold (`**vailá**` / `<strong>vailá</strong>`), never capitalize ("Vailá"/"VAILA") in prose. Audit 2026-08-04 found `vaila/help/*.md`/`*.html` overwhelmingly plain/unstyled (106/148 `.md`, ~135/148 `.html`), handful bolded (9/148 each) or already italicized (3–4/148 each) — no consistent prior norm; italic-lowercase standard going forward. Apply when touching help page for other reason; repo-wide sweep not done yet.
+Write project name **lowercase, italicized** in prose — `*vailá*` Markdown, `<i>vailá</i>` HTML — matches root `README.md` canonical `# _vailá_ - Multimodal Toolbox` title, body usage (`_vailá_`). Never bold (`**vailá**` / `<strong>vailá</strong>`), never capitalize ("Vailá"/"VAILA") in prose. Audit 2026-08-04 found `vaila/help/*.md`/`*.html` mostly plain/unstyled (106/148 `.md`, ~135/148 `.html`), few bolded (9/148 each) or already italicized (3–4/148 each) — no consistent prior norm; italic-lowercase standard going forward. Apply when touching help page for other reason; repo-wide sweep not done yet.
 
 ---
 
@@ -202,7 +200,7 @@ Write project name **lowercase, italicized** in prose — `*vailá*` Markdown, `
 | **Frame B** | Multimodal Analysis — IMU, MoCap, Markerless 2D/3D, EMG, Force Plate, GNSS          |
 | **Frame C** | Tools — CSV editing, C3D conversion, DLT reconstruction, video/image, visualization |
 
-**Lazy imports** used in all handler methods, avoid loading full dependency graph at startup.
+**Lazy imports** in all handler methods, avoid loading full dependency graph at startup.
 
 Two dispatch patterns:
 
@@ -252,18 +250,27 @@ Full ASCII map + descriptions: `README.md` § *vailá Structure and Interface*; 
 
 ## Platform-Specific Configuration
 
-Copy correct template to `pyproject.toml` **before** running `uv python pin` / `uv venv`:
+**One `pyproject.toml` + one `uv.lock` for every machine and OS.** No template files, no file copying: the PyTorch backend is a uv **dependency group**, chosen at sync time.
 
-| Template                       | Target                          |
-| ------------------------------ | ------------------------------- |
-| `pyproject_win_cuda12.toml`    | Windows + NVIDIA CUDA 12.1      |
-| `pyproject_linux_cuda12.toml`  | Linux + NVIDIA CUDA 12.8        |
-| `pyproject_macos.toml`         | macOS Apple Silicon (Metal/MPS) |
-| `pyproject_universal_cpu.toml` | CPU-only fallback               |
+| Hardware                        | Command                                | Wheels                              |
+| ------------------------------- | -------------------------------------- | ----------------------------------- |
+| Windows/Linux + NVIDIA          | `uv sync --no-group cpu --group cuda`   | `whl/cu128` + tensorrt, nvidia-ml-py |
+| CPU-only laptop                 | `uv sync`                              | `whl/cpu`                           |
+| macOS Apple Silicon (Metal/MPS) | `uv sync`                              | PyPI wheel (MPS build)              |
 
-Install scripts handle automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
+`[dependency-groups]` defines `cpu` and `cuda`; `[tool.uv] default-groups = ["dev", "cpu"]` and
+`conflicts = [[{group = "cpu"}, {group = "cuda"}]]` make uv resolve **both** variants into the
+single committed `uv.lock`. Consequence: a CUDA workstation and a CPU laptop commit byte-identical
+`pyproject.toml`/`uv.lock`, so `git pull` / `git commit` never need `git restore`.
 
-> Active template can drift from what other docs claim (plain file copy, not symlink). Before assuming CPU-vs-CUDA, check directly: `diff pyproject.toml pyproject_universal_cpu.toml` (empty output = CPU active; else diff against CUDA/macOS templates to identify match).
+Which backend is installed here?
+
+```bash
+uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+# 2.11.0+cu128 True  -> cuda group   |   2.11.0+cpu False -> cpu group
+```
+
+Install scripts handle it automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
 
 ---
 
@@ -340,12 +347,12 @@ Open-source under **AGPL-3.0** — never commit API keys, tokens, local credenti
 
 ## Agents and skills
 
-Step-by-step workflows, specialized agent roles stored in `.claude/` dir. Meant for any AI assistant (Claude Code, Antigravity, Cursor, etc.).
+Step-by-step workflows, specialized agent roles in `.claude/` dir. For any AI assistant (Claude Code, Antigravity, Cursor, etc.).
 
 
 ### Recent GUI Notes
 
-Detailed per-change notes (what/why/gotchas/validation) for every recent module addition, GUI reorg — Crop Face, Smart Load Tracking CSV, SAM3/Sapiens2/DINOv3 pipelines, DLT/REC family, Markerless 2D/3D chooser reorgs, Geometric ReID v2, GUI→CLI mirror, rec3d Blender export fixes, joint-angle extraction, monocular↔DLT alignment, Sapiens2 3D Pose — moved to **[docs/claude-session-notes-archive.md](docs/claude-session-notes-archive.md)**, keeps this file under char budget. Skim before touching those modules; append new entries there, not here.
+Per-change notes (what/why/gotchas/validation) for every recent module addition, GUI reorg — Crop Face, Smart Load Tracking CSV, SAM3/Sapiens2/DINOv3 pipelines, DLT/REC family, Markerless 2D/3D chooser reorgs, Geometric ReID v2, GUI→CLI mirror, rec3d Blender export fixes, joint-angle extraction, monocular↔DLT alignment, Sapiens2 3D Pose — moved to **[docs/claude-session-notes-archive.md](docs/claude-session-notes-archive.md)**, keeps this file under char budget. Skim before touching those modules; append new entries there, not here.
 
 ### Specialized Agents (`.claude/agents/`)
 

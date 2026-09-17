@@ -30,8 +30,8 @@ The project uses the full Astral Rust-based stack. **Never use** bare `pip`, `bl
 
 ```bash
 uv run vaila.py                  # run the app
-uv sync                          # default: CUDA 12.8 PyTorch (pytorch-cu128 index)
-uv sync --extra gpu              # adds tensorrt + nvidia-ml-py on CUDA workstation
+uv sync                          # default groups (dev + cpu): CPU wheels / macOS Metal
+uv sync --no-group cpu --group cuda              # CUDA 12.8 wheels + tensorrt + nvidia-ml-py
 uv sync --extra sam              # optional SAM 3; CUDA required at runtime
 uv sync --extra fifa             # FIFA Skeletal Tracking Light stack
 uv sync --frozen                 # CI mode: strict lock
@@ -43,23 +43,22 @@ uv export --format requirements-txt > requirements.txt
 
 > Always prefix tool runs with `uv run` — never activate the venv manually.
 
-> **Note (v0.3.44):** the checked-in `pyproject.toml` now points `torch`,
-> `torchvision`, `torchaudio` at the explicit `pytorch-cu128` index. CPU-only
-> machines must switch to the universal template before `uv sync`
-> (`bash bin/use_pyproject_universal_cpu.sh`).
+> **Note:** there is a single portable `pyproject.toml` / `uv.lock` for every
+> machine and OS. `torch`/`torchvision`/`torchaudio` live in the conflicting
+> `cpu` and `cuda` dependency groups, so the hardware choice is a `uv sync`
+> flag, not a file swap — nothing tracked by git ever changes per machine.
 
-> **Recommended (v0.3.45):** use the unified interactive bootstrap which
-> auto-detects OS + NVIDIA and runs `uv lock` + `uv sync`:
+> **Recommended:** use the unified interactive bootstrap which
+> auto-detects OS + NVIDIA and runs `uv sync`:
 >
 > ```bash
 > bash bin/setup_pyproject.sh                                     # Linux / macOS / WSL
 > pwsh bin/setup_pyproject.ps1                                    # Windows
-> bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes
+> bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes
 > ```
 >
-> Flags: `--target=auto|cpu|linux-cuda|win-cuda|macos`,
-> `--extras=a,b,c`, `--non-interactive`, `--yes`, `--no-lock`, `--no-sync`.
-> The legacy `bin/use_pyproject_*.sh/.ps1` helpers are kept as thin wrappers.
+> Flags: `--target=auto|cpu|cuda`, `--extras=a,b,c`, `--non-interactive`,
+> `--yes`, `--lock`, `--no-sync` (legacy target names still accepted).
 
 ---
 
@@ -243,7 +242,7 @@ def _on_my_analysis(self) -> None:
 - **Sapiens2 output dir (v0.3.76):** one `processed_sapiens_<timestamp>/` per run; isolated workers get `--output-base` — see `docs/sessions/2026-07-07-sapiens-output-dir-fix.md`
 
 ### FIFA Skeletal Tracking Light (`vaila_sam.py fifa`)
-- Extra: `uv sync --extra fifa` (combine with `--extra gpu` on CUDA template)
+- Extra: `uv sync --extra fifa` (add `--no-group cpu --group cuda` on an NVIDIA workstation)
 - Subcommands: `bootstrap`, `prepare`, `boxes`, `preprocess`, `baseline`, **`dlt-export`**, `pack`
 - Per-frame DLT for moving broadcast cameras: `vaila/fifa_to_dlt.py` (CLI + GUI **FIFA cams→DLT**); feeds **`rec2d.py` / `rec3d.py`**. Fixed-camera-only: `rec2d_one_dlt2d.py` / `rec3d_one_dlt3d.py`
 - Pipeline: `vaila/fifa_skeletal_pipeline.py`
@@ -287,23 +286,21 @@ Sample data: `tests/vaila_and_jump/` (CSV + TOML). SAM smoke tests: `tests/SAM/`
 
 ---
 
-## Platform Configuration (pyproject.toml templates)
+## Platform Configuration (dependency groups, no templates)
 
-Copy the correct template **before** `uv python pin` / `uv venv`:
+One `pyproject.toml` + one `uv.lock` for every platform:
 
-| File | Platform | `uv sync` flags |
-|------|----------|-----------------|
-| `pyproject_linux_cuda12.toml` (**default in git**) | Linux + NVIDIA CUDA 12.8 | `--extra gpu` (tensorrt + nvidia-ml-py) |
-| `pyproject_win_cuda12.toml` | Windows + NVIDIA CUDA 12.1 | `--extra gpu` |
-| `pyproject_macos.toml` | macOS Apple Silicon (Metal/MPS) | none |
-| `pyproject_universal_cpu.toml` | CPU-only fallback | none |
+| Platform | `uv sync` command | Wheels |
+|----------|-------------------|--------|
+| Linux/Windows + NVIDIA | `uv sync --no-group cpu --group cuda` | `whl/cu128` + tensorrt, nvidia-ml-py |
+| CPU-only | `uv sync` | `whl/cpu` |
+| macOS Apple Silicon | `uv sync` | PyPI wheel (Metal/MPS) |
 
-The checked-in `pyproject.toml` mirrors **`pyproject_linux_cuda12.toml`**
-(version `0.3.44`): PyTorch resolves from the explicit `pytorch-cu128` index.
-Use `bin/setup_pyproject.sh` (Linux/macOS/WSL) or `bin/setup_pyproject.ps1`
-(Windows) — the unified interactive bootstrap that detects OS + NVIDIA,
-copies the right template, runs `uv lock` and regenerates `uv.lock`. Legacy
-`bin/use_pyproject_*.sh/.ps1` are now thin wrappers around the bootstrap.
+`[dependency-groups]` defines `cpu` + `cuda`, `[tool.uv].conflicts` declares them
+mutually exclusive, so `uv.lock` holds every variant and each machine installs
+its own without touching tracked files. Use `bin/setup_pyproject.sh`
+(Linux/macOS/WSL) or `bin/setup_pyproject.ps1` (Windows) to detect the hardware
+and run the right `uv sync`.
 
 ---
 

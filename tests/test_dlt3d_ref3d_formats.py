@@ -36,39 +36,69 @@ def test_detect_ref3d_format(path: Path, expected: int) -> None:
     assert detect_ref3d_format(str(path)) == expected
 
 
-def test_all_formats_normalize_to_identical_format1() -> None:
+def test_explicit_legacy_formats_preserve_their_one_based_indices() -> None:
     df1 = normalize_ref3d_to_format1(str(FORMAT1))
-    df2 = normalize_ref3d_to_format1(str(FORMAT2))
     df3 = normalize_ref3d_to_format1(str(FORMAT3))
-    assert df1 is not None and df2 is not None and df3 is not None
+    assert df1 is not None and df3 is not None
 
-    pd.testing.assert_frame_equal(df1, df2)
     pd.testing.assert_frame_equal(df1, df3)
-
     assert df1.shape == (1, 76)  # frame + 25 points × 3 axes
+    assert "p1_x" in df1.columns and "p25_z" in df1.columns
     assert float(df1.iloc[0]["p25_z"]) == pytest.approx(1.19)
 
 
-def test_read_ref3d_file_returns_format1_for_all_variants() -> None:
+def test_implicit_format2_uses_vaila_zero_based_order() -> None:
+    df2 = normalize_ref3d_to_format1(str(FORMAT2))
+    assert df2 is not None
+    assert df2.shape == (1, 76)  # frame + 25 points × 3 axes
+    assert "p0_x" in df2.columns and "p24_z" in df2.columns
+    assert float(df2.iloc[0]["p24_z"]) == pytest.approx(1.19)
+
+
+def test_read_ref3d_file_preserves_explicit_and_implicit_bases() -> None:
     ref1 = read_ref3d_file(str(FORMAT1))
     ref2 = read_ref3d_file(str(FORMAT2))
     ref3 = read_ref3d_file(str(FORMAT3))
     assert ref1 is not None and ref2 is not None and ref3 is not None
-    pd.testing.assert_frame_equal(ref1, ref2)
     pd.testing.assert_frame_equal(ref1, ref3)
+    assert "p1_x" in ref1.columns and "p25_z" in ref1.columns
+    assert "p0_x" in ref2.columns and "p24_z" in ref2.columns
 
 
-def test_process_files_yields_identical_dlt_for_all_ref3d_formats() -> None:
+def test_process_files_preserves_legacy_explicit_formats() -> None:
     dlt1 = process_files(str(PIXEL_FILE), str(FORMAT1))
-    dlt2 = process_files(str(PIXEL_FILE), str(FORMAT2))
     dlt3 = process_files(str(PIXEL_FILE), str(FORMAT3))
-    assert dlt1 is not None and dlt2 is not None and dlt3 is not None
+    assert dlt1 is not None and dlt3 is not None
 
     frames = sorted(dlt1.keys())
-    assert frames == sorted(dlt2.keys()) == sorted(dlt3.keys())
+    assert frames == sorted(dlt3.keys())
     for frame in frames:
-        np.testing.assert_allclose(dlt1[frame], dlt2[frame], rtol=1e-9, atol=1e-6)
         np.testing.assert_allclose(dlt1[frame], dlt3[frame], rtol=1e-9, atol=1e-6)
+
+
+def test_process_files_rejects_one_based_pixels_with_zero_based_ref3d(capsys) -> None:
+    assert process_files(str(PIXEL_FILE), str(FORMAT2)) is None
+    output = capsys.readouterr().out
+    assert "shifted by -1" in output
+    assert "vaila standard: p0" in output
+
+
+def test_process_files_accepts_zero_based_pixels_with_implicit_ref3d(tmp_path: Path) -> None:
+    pixel_df = pd.read_csv(PIXEL_FILE)
+    renamed = {}
+    for column in pixel_df.columns:
+        if column.startswith("p") and "_" in column:
+            point, axis = column.split("_", maxsplit=1)
+            renamed[column] = f"p{int(point[1:]) - 1}_{axis}"
+    zero_pixel_file = tmp_path / "pixels_zero_based.csv"
+    pixel_df.rename(columns=renamed).to_csv(zero_pixel_file, index=False)
+
+    legacy_dlt = process_files(str(PIXEL_FILE), str(FORMAT1))
+    zero_dlt = process_files(str(zero_pixel_file), str(FORMAT2))
+    assert legacy_dlt is not None and zero_dlt is not None
+    assert sorted(legacy_dlt) == sorted(zero_dlt)
+    for frame in legacy_dlt:
+        np.testing.assert_allclose(legacy_dlt[frame], zero_dlt[frame], rtol=1e-9, atol=1e-6)
 
 
 def test_format3_uses_index_column_not_row_order(tmp_path: Path) -> None:
@@ -96,7 +126,7 @@ def test_normalize_rejects_too_few_points(tmp_path: Path) -> None:
 
 
 def test_headed_long_format4_point_xyz(tmp_path: Path) -> None:
-    """User mode2: headed ``point,x,y,z`` (0-based ids shift to p1..)."""
+    """Headed ``point,x,y,z`` preserves explicit zero-based point ids."""
     headed = tmp_path / "mode2.ref3d"
     headed.write_text(
         "point,x,y,z\n"
@@ -111,6 +141,6 @@ def test_headed_long_format4_point_xyz(tmp_path: Path) -> None:
     assert detect_ref3d_format(str(headed)) == 4
     df = normalize_ref3d_to_format1(str(headed), min_points=4)
     assert df is not None
-    assert float(df.iloc[0]["p1_x"]) == pytest.approx(0.0)
-    assert float(df.iloc[0]["p2_x"]) == pytest.approx(1.0)
-    assert "p6_z" in df.columns
+    assert float(df.iloc[0]["p0_x"]) == pytest.approx(0.0)
+    assert float(df.iloc[0]["p1_x"]) == pytest.approx(1.0)
+    assert "p5_z" in df.columns

@@ -1,5 +1,8 @@
 """FIFA Dataset Builder — unified 32-pt soccer-pitch keypoint dataset.
 
+Update Date: 17 September 2026
+Version: 0.4.3
+
 Goal
 ----
 Aggregate, normalise and merge multiple open-source soccer-pitch keypoint
@@ -121,9 +124,11 @@ import numpy as np
 #   * dimensions ≈ 104.9 m × 67.9 m (FIFA standard) — see
 #     ``vaila/models/soccerfield_ref3d_fifa.csv``.
 #
-# When we need the centered-metres convention we derive it from the Roboflow
-# normalised coords; for homography projection we use the KpSFR template
-# (114.83 × 74.37 yards = 105 × 68 m, Y-down, origin top-left).
+# The Roboflow frame below remains the source of truth for YOLO label order and
+# normalised coordinates.  The centered-metre frame is a distinct regulation
+# geometry loaded from ``soccerfield_ref3d_fifa_dataset.csv``; proportional
+# scaling of the 120 × 70 m Roboflow template would move internal markings off
+# the 105 × 68 m pitch lines.
 ROBOFLOW_FIELD_LENGTH_CM = 12000
 ROBOFLOW_FIELD_WIDTH_CM = 7000
 ROBOFLOW_PEN_BOX_LEN_CM = 2015
@@ -682,23 +687,62 @@ def _load_centered_fifa_points_32() -> tuple[list[tuple[float, float, float]], f
 
     * origin = field center ``(0, 0, 0)``
     * X grows to the right, Y grows UP
-    * field dimensions = ``DRAWSPORTSFIELDS_LENGTH_M × DRAWSPORTSFIELDS_WIDTH_M``
-      (FIFA standard: 104.9 × 67.9 m)
+    * field line-centre span =
+      ``DRAWSPORTSFIELDS_LENGTH_M × DRAWSPORTSFIELDS_WIDTH_M`` (104.9 × 67.9 m)
+
+    The point order is the Roboflow 32-keypoint schema, but its world coordinates
+    come from ``soccerfield_ref3d_fifa_dataset.csv``.  Do not obtain them by
+    stretching the Roboflow 120 × 70 m template: that source has different pitch
+    proportions (including a 20.15 m penalty-box depth), so a linear scale puts
+    interior control points off the regulation markings drawn by
+    :mod:`vaila.drawsportsfields`.
+
+    In particular, points 10/11/18/19 are deliberate subdivision anchors on the
+    front lines of the two penalty areas at the goal-area Y levels.  They are not
+    the penalty-arc intersections, which lie at ``|Y| = 7.312489...`` m.
 
     The ``length_m`` and ``width_m`` values returned describe the FIFA field
     in metres (X span and Y span respectively).  Used by the homography
     converters and by ``_write_keypoint_reference``.
     """
-    L_m = DRAWSPORTSFIELDS_LENGTH_M
-    W_m = DRAWSPORTSFIELDS_WIDTH_M
+    model_path = Path(__file__).resolve().parent / "models" / "soccerfield_ref3d_fifa_dataset.csv"
+    by_index: dict[int, tuple[str, tuple[float, float, float]]] = {}
+    with model_path.open(encoding="utf-8", newline="") as model_file:
+        for row in csv.DictReader(model_file):
+            idx = int(row["point_number"])
+            if 0 <= idx < NUM_KEYPOINTS:
+                by_index[idx] = (
+                    str(row["point_name"]),
+                    (float(row["x"]), float(row["y"]), float(row["z"])),
+                )
+
+    missing = [idx for idx in range(NUM_KEYPOINTS) if idx not in by_index]
+    if missing:
+        raise ValueError(f"Centered FIFA model is missing canonical point(s): {missing}")
+
     centered: list[tuple[float, float, float]] = []
-    for nx, ny in _canonical_vertices_normalized():
-        # Roboflow: origin top-left, Y-down, normalised in [0,1].
-        # Centered drawsportsfields: origin centre, Y-up, scaled to FIFA dims.
-        x_m = (nx - 0.5) * L_m
-        y_m = (0.5 - ny) * W_m
-        centered.append((x_m, y_m, 0.0))
-    return centered, L_m, W_m
+    for idx, expected_name in enumerate(CANONICAL_KP_NAMES_32):
+        actual_name, xyz = by_index[idx]
+        if actual_name != expected_name:
+            raise ValueError(
+                "Centered FIFA model schema mismatch at "
+                f"point {idx}: expected {expected_name!r}, found {actual_name!r}"
+            )
+        centered.append(xyz)
+
+    x_values = [point[0] for point in centered]
+    y_values = [point[1] for point in centered]
+    length_m = max(x_values) - min(x_values)
+    width_m = max(y_values) - min(y_values)
+    if (
+        abs(length_m - DRAWSPORTSFIELDS_LENGTH_M) > 1e-9
+        or abs(width_m - DRAWSPORTSFIELDS_WIDTH_M) > 1e-9
+    ):
+        raise ValueError(
+            "Centered FIFA model dimensions do not match the drawsportsfields "
+            f"frame: found {length_m:g} × {width_m:g} m"
+        )
+    return centered, length_m, width_m
 
 
 def _centered_meters_to_kpsfr_template(

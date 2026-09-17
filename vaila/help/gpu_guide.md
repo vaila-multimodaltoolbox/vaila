@@ -64,10 +64,10 @@ If the diagnostic report indicates errors or missing dependencies, apply the rel
 ### 1. Switch Hardware Template (Linux / Windows CUDA)
 ```bash
 # Linux CUDA Workstation (RTX 4090 / 3090 / Ada / Blackwell)
-bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa,sapiens --yes
+bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes
 
 # Windows CUDA Workstation
-pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam,fifa,sapiens -Yes
+pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam,fifa,sapiens -Yes
 ```
 
 ### 2. Sapiens2 Setup
@@ -152,7 +152,7 @@ If you dual-boot the same machine, *vailá* will detect the OS change and genera
 If your report shows `Mode: LITE` or `CUDA Available: False` but you have an NVIDIA GPU:
 1.  Run the **GPU Test** button in the `vaila.py` footer or run `uv run python vaila/gputest.py`.
 2.  Ensure you have the latest **NVIDIA Drivers** installed (`nvidia-smi`).
-3.  Ensure you activated the CUDA template (`bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam,fifa,sapiens --yes`).
+3.  Ensure you activated the CUDA template (`bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes`).
 
 ### "Out of Memory" (OOM)
 If you get memory errors during Auto-Export on cards with limited VRAM:

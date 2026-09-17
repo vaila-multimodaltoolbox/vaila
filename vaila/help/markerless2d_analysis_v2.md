@@ -219,7 +219,7 @@ Five model sizes available, balancing speed and accuracy:
 - **File:** `*_mp_pixel.csv`
 
 #### *vailá* Format
-- **Format:** `frame, p1_x, p1_y, p2_x, p2_y, ..., p33_x, p33_y`
+- **Format:** `frame, p0_x, p0_y, p1_x, p1_y, ..., p32_x, p32_y`
 - **Use Case:** Compatibility with *vailá* analysis tools
 - **File:** `*_mp_vaila.csv`
 
@@ -248,7 +248,7 @@ Five model sizes available, balancing speed and accuracy:
 - **Use Case:** Direct visualization, pixel-level measurements, integration with image processing tools
 
 ### 4. *vailá* Format CSV (`*_mp_vaila.csv`)
-- **Format:** `frame, p1_x, p1_y, p2_x, p2_y, ..., p33_x, p33_y`
+- **Format:** `frame, p0_x, p0_y, p1_x, p1_y, ..., p32_x, p32_y`
 - **Total Columns:** 1 (frame) + 33 points × 2 (x, y) = 67 columns
 - **Use Case:** Compatibility with *vailá* plotting and analysis modules
 

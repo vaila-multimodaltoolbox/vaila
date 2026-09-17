@@ -807,19 +807,15 @@ switch ($profileChoice) {
     }
 }
 
-# Choose template
+# Choose the PyTorch backend. There is a single portable pyproject.toml for every
+# machine and OS: the backend is a uv dependency group ("cpu" by default, "cuda"
+# for NVIDIA), so no file is swapped and the git tree stays clean.
+$torchGroupArgs = @()
 If ($useGPU) {
-    If (Test-Path "$vailaProgramPath\pyproject_win_cuda12.toml") {
-        Copy-Item "$vailaProgramPath\pyproject_win_cuda12.toml" "$vailaProgramPath\pyproject.toml" -Force
-        Write-Host "Using Windows CUDA 12.1 configuration." -ForegroundColor Green
-    } Else {
-        Write-Warning "pyproject_win_cuda12.toml not found. Using CPU-only configuration."
-        Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
-        $useGPU = $false
-    }
+    $torchGroupArgs = @("--no-group", "cpu", "--group", "cuda")
+    Write-Host "Using CUDA 12.8 wheels (uv group: cuda)." -ForegroundColor Green
 } Else {
-    Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
-    Write-Host "Using CPU-only configuration." -ForegroundColor Green
+    Write-Host "Using CPU-only wheels (uv group: cpu)." -ForegroundColor Green
 }
 
 # Initialize uv project
@@ -856,13 +852,7 @@ Try {
 # Lock + sync (same policy as Linux/mac installers)
 Write-Host ""
 If ($isGitTree) {
-    If ($useGPU) {
-        Write-Host "CUDA template selected in a git clone — regenerating uv.lock for this machine..." -ForegroundColor Yellow
-        & uv lock
-        $script:LockWasRegenerated = $true
-    } Else {
-        Write-Host "Using committed uv.lock (no uv lock --upgrade) so git pull is not blocked." -ForegroundColor Green
-    }
+    Write-Host "Using committed uv.lock (portable: CPU and CUDA resolutions in one lock)." -ForegroundColor Green
 } Else {
     Write-Host "Generating lock file (uv.lock)..." -ForegroundColor Yellow
     & uv lock --upgrade
@@ -878,7 +868,7 @@ function Invoke-VailaUvSync {
     param([switch]$Frozen)
     $syncArgs = @("sync")
     If ($Frozen) { $syncArgs += "--frozen" }
-    if ($useGPU) { $syncArgs += @("--extra", "gpu") }
+    $syncArgs += $torchGroupArgs
     if ($useSamExtra) { $syncArgs += @("--extra", "sam") }
     if ($useSapiensExtra) { $syncArgs += @("--extra", "sapiens") }
     if ($useFifaExtra) { $syncArgs += @("--extra", "fifa") }
@@ -919,7 +909,7 @@ Try {
                 Write-Host "Reinstalling only the broken packages..." -ForegroundColor Yellow
                 $repairArgs = @("sync")
                 ForEach ($pkg in $broken) { $repairArgs += @("--reinstall-package", $pkg) }
-                if ($useGPU) { $repairArgs += @("--extra", "gpu") }
+                $repairArgs += $torchGroupArgs
                 if ($useSamExtra) { $repairArgs += @("--extra", "sam") }
                 if ($useSapiensExtra) { $repairArgs += @("--extra", "sapiens") }
                 if ($useFifaExtra) { $repairArgs += @("--extra", "fifa") }
@@ -1058,8 +1048,7 @@ Try {
         }
     }
 } Catch {
-    Write-Warning "uv sync failed. Restoring universal CPU configuration..."
-    Copy-Item "$vailaProgramPath\pyproject_universal_cpu.toml" "$vailaProgramPath\pyproject.toml" -Force
+    Write-Warning "uv sync failed. Retry with CPU-only wheels: uv sync (from $vailaProgramPath)"
     Write-Error "Installation failed. Please check the error messages above."
     Exit 1
 }
@@ -1378,12 +1367,11 @@ If ($isGitTree) {
         Pop-Location
     }
     If ($lockDirty) {
-        Write-Host "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo" -ForegroundColor Yellow
-        Write-Host "(common after a CUDA template switch). Before pulling:" -ForegroundColor Yellow
+        Write-Host "NOTE (git pull): local pyproject.toml / uv.lock differ from the repo." -ForegroundColor Yellow
+        Write-Host "Both files are portable (CPU and CUDA share one lock), so you can drop" -ForegroundColor Yellow
+        Write-Host "the local changes before pulling:" -ForegroundColor Yellow
         Write-Host "  git -C `"$vailaProgramPath`" restore uv.lock pyproject.toml" -ForegroundColor Cyan
         Write-Host "  git -C `"$vailaProgramPath`" pull" -ForegroundColor Cyan
-        Write-Host "Then re-apply the platform template if needed:" -ForegroundColor Yellow
-        Write-Host "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Yes" -ForegroundColor Cyan
         Write-Host ""
     } Else {
         Write-Host "Git tree kept clean for uv.lock — you can 'git pull' normally." -ForegroundColor Green

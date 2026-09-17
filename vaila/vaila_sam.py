@@ -5,12 +5,12 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
-    Install: ``uv sync --extra sam``; **inference requires NVIDIA CUDA** (see AGENTS.md / ``bin/use_pyproject_*`` for CPU laptop vs CUDA workstation).
+    Install: ``uv sync --extra sam``; **inference requires NVIDIA CUDA** (on a CUDA workstation add ``--no-group cpu --group cuda``).
 
 Auth (gated ``facebook/sam3``):
     - Hugging Face: accept the model, then ``uv run hf auth login``
@@ -69,7 +69,7 @@ More detail: ``vaila/help/vaila_sam.md`` / ``vaila/help/vaila_sam.html``.
 FIFA Skeletal Tracking Light (optional ``--extra fifa``): subcommand ``fifa`` delegates to
 ``vaila.fifa_skeletal_pipeline`` (prepare, boxes, preprocess, baseline, dlt-export, pack). Example:
 
-    uv sync --extra fifa --extra sam --extra gpu   # CUDA template + deps
+    uv sync --no-group cpu --group cuda --extra fifa --extra sam   # CUDA template + deps
     uv run vaila/vaila_sam.py fifa prepare --video-source DIR --data-root data/
     uv run vaila/vaila_sam.py fifa boxes --data-root data/ --sequences data/sequences_val.txt
     uv run vaila/vaila_sam.py fifa preprocess --data-root data/ --sequences data/sequences_val.txt
@@ -277,11 +277,11 @@ def _print_sam3_install_instructions() -> None:
         "Install the optional stack, then restart vailá:\n"
         "  uv sync --extra sam\n\n"
         "NVIDIA CUDA workstation:\n"
-        "  bash bin/setup_pyproject.sh --target=linux-cuda --extras=gpu,sam --yes\n"
+        "  bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes\n"
         "  # or, after CUDA template is active:\n"
-        "  uv sync --extra gpu --extra sam\n\n"
+        "  uv sync --no-group cpu --group cuda --extra sam\n\n"
         "Windows NVIDIA CUDA workstation:\n"
-        "  pwsh bin/setup_pyproject.ps1 -Target win-cuda -Extras gpu,sam -Yes\n\n"
+        "  pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam -Yes\n\n"
         "After install, accept the gated Hugging Face model and authenticate:\n"
         "  uv run hf auth login\n"
         "  uv run vaila/vaila_sam.py --download-weights\n\n"
@@ -743,7 +743,7 @@ def _resolve_bpe_path() -> Path:
         raise RuntimeError(
             "Optional dependency 'sam3' is not installed. Install the SAM 3 stack with "
             "`uv sync --extra sam` (and on NVIDIA workstations also switch to the CUDA "
-            "pyproject template + `uv sync --extra gpu`)."
+            "pyproject template + `uv sync --no-group cpu --group cuda`)."
         ) from e
 
     candidates = [
@@ -771,13 +771,13 @@ def _resolve_bpe_path() -> Path:
         "wheel is missing required CLIP tokenizer data.\n\n"
         "Repair from the vailá repository root:\n"
         "  Linux NVIDIA CUDA:\n"
-        "    bash bin/setup_pyproject.sh --target=linux-cuda "
-        "--extras=gpu,sam --yes\n"
+        "    bash bin/setup_pyproject.sh --target=cuda "
+        "--extras=sam --yes\n"
         "  Windows NVIDIA CUDA (PowerShell):\n"
-        "    pwsh bin/setup_pyproject.ps1 -Target win-cuda "
+        "    pwsh bin/setup_pyproject.ps1 -Target cuda "
         "-Extras gpu,sam -Yes\n"
         "  If the correct CUDA template is already active:\n"
-        "    uv sync --extra gpu --extra sam\n\n"
+        "    uv sync --no-group cpu --group cuda --extra sam\n\n"
         "Temporary repair for the current .venv (older vailá checkout):\n"
         "    uv pip install openai-clip==1.0.1\n\n"
         "Then run SAM 3 again. New vailá installations include openai-clip "
@@ -3655,7 +3655,7 @@ def run_sam3_on_video(
         raise RuntimeError(
             "Optional dependency 'sam3' is not installed. Install the SAM 3 stack with "
             "`uv sync --extra sam` (and on NVIDIA workstations also switch to the CUDA "
-            "pyproject template + `uv sync --extra gpu`)."
+            "pyproject template + `uv sync --no-group cpu --group cuda`)."
         ) from e
 
     if not torch.cuda.is_available():

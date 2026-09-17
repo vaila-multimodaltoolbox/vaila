@@ -7,7 +7,7 @@
 | **Category** | Processing |
 | **File** | `vaila/rec2d.py` |
 | **Version** | 0.4.3 |
-| **Updated** | 15 September 2026 |
+| **Updated** | 16 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -30,7 +30,7 @@ Every CSV file in the input directory is processed **independently** (each is a 
 
 ### Pixel CSV (per file in the input directory)
 
-- **Column labels are not inspected — only column order matters.** Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá `p1_x`/`p1_y`, SAM3, YOLO, MediaPipe named joints, etc.).
+- **Column labels are not inspected — only column order matters.** Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá `p0_x`/`p0_y`, SAM3, YOLO, MediaPipe named joints, etc.).
 - Output always uses vailá's standard `Frame` label for column 0 (renamed regardless of the input's original label); coordinate column labels are preserved as-is from the input file.
 
 ---

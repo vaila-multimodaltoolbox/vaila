@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 09 September 2026
-Version: 0.3.131
+Update Date: 17 September 2026
+Version: 0.4.3
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -272,8 +272,8 @@ def convert_mediapipe_to_pixel_format(file_path, save_directory):
         if i + 1 < len(columns):
             x_col = columns[i]
             y_col = columns[i + 1]
-            new_df[f"p{i // 3 + 1}_x"] = df[x_col]
-            new_df[f"p{i // 3 + 1}_y"] = df[y_col]
+            new_df[f"p{i // 3}_x"] = df[x_col]
+            new_df[f"p{i // 3}_y"] = df[y_col]
 
     # Save the new CSV file in the desired format
     base_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -1938,9 +1938,9 @@ def convert_dvideo_to_vaila(file_path, save_directory):
         # Calculate the number of points (assuming the first column is 'frame')
         num_points = (df.shape[1] - 1) // 2
 
-        # Create headers in the format: frame, p1_x, p1_y, p2_x, p2_y, ..., pN_x, pN_y
+        # Create headers in the format: frame, p0_x, p0_y, p1_x, p1_y, ..., pN_x, pN_y
         headers = ["frame"] + [
-            f"p{i + 1}_x" if j % 2 == 0 else f"p{i + 1}_y"
+            f"p{i}_x" if j % 2 == 0 else f"p{i}_y"
             for i in range(num_points)
             for j in range(2)
         ]

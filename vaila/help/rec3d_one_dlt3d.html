@@ -30,7 +30,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d_one_dlt3d.py</p>
-            <p><strong>Version:</strong> 0.3.99</p>
+            <p><strong>Version:</strong> 0.4.3</p>
+            <p><strong>Updated:</strong> 16 September 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -47,13 +48,13 @@
         <h3>DLT3D file</h3>
         <p>CSV with one row of 11 DLT coefficients (e.g. from the <i>vailá</i> <strong>dlt3d</strong> module). <strong>One file per camera</strong>; order must match the pixel file order.</p>
         <h3>Pixel CSV</h3>
-        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of the header text. This makes the file compatible with <i>vailá</i>'s own <code>frame,p1_x,p1_y,...</code> convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file. <strong>One file per camera</strong>; same number of markers and overlapping frame sets recommended. In GUI mode, each file can be chosen from a <strong>different directory</strong> (one dialog per camera).</p>
+        <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of the header text. This makes the file compatible with <i>vailá</i>'s own <code>frame,p0_x,p0_y,...</code> convention as well as CSVs coming from SAM3, YOLO, MediaPipe (named joints), or any other tracker — as long as the same markers appear in the same order in every camera's file. <strong>One file per camera</strong>; same number of markers and overlapping frame sets recommended. In GUI mode, each file can be chosen from a <strong>different directory</strong> (one dialog per camera).</p>
 
         <h2>Output files</h2>
         <p>All outputs share the same base name and are written inside a new subfolder: <code>rec3d_YYYYMMDD_HHMMSS/</code>.</p>
         <table>
             <tr><th>File</th><th>Description</th></tr>
-            <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p1_x, p1_y, p1_z, p2_x, ...</td></tr>
+            <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p0_x, p0_y, p0_z, p1_x, ... (<strong>0-based since 0.4.3</strong>, matching <code>getpixelvideo.py</code>)</td></tr>
             <tr><td><code>rec3d_*.3d</code></td><td>Same data as CSV (duplicate format).</td></tr>
             <tr><td><code>rec3d_*_m.c3d</code></td><td>C3D in <strong>meters</strong> (POINT:UNITS=m, POINT:FRAMES set).</td></tr>
             <tr><td><code>rec3d_*_mm.c3d</code></td><td>C3D in <strong>millimeters</strong> (POINT:UNITS=mm).</td></tr>
@@ -61,7 +62,7 @@
         <p>C3D files are compatible with <strong>viewc3d</strong>, <strong>viewc3d_pyvista</strong>, <strong>readc3d_export</strong> (inspect/convert), and standard C3D tools.</p>
 
         <h2>Optional: mesh-for-Blender export</h2>
-        <p>If your pixel files are the MHR70-ordered <code>p1_x,p1_y,...,p70_x,p70_y</code> markers CSVs written by <strong>sam3dinov3_visualize.py</strong>'s "Visualize ID" output, you can also export a per-frame <strong>body mesh</strong> aligned into this same DLT world space.</p>
+        <p>If your pixel files are the MHR70-ordered <code>p0_x,p0_y,...,p69_x,p69_y</code> markers CSVs written by <strong>sam3dinov3_visualize.py</strong>'s "Visualize ID" output, you can also export a per-frame <strong>body mesh</strong> aligned into this same DLT world space.</p>
         <p>For each camera, pass a <code>--mesh-source-dir</code> (same order as <code>--dlt3d</code>) pointing at that camera's Visualize-ID output directory. Each must contain <code>&lt;stem&gt;_markers.csv</code> (2D pixel markers), <code>&lt;stem&gt;_mhr70_rec3d.csv</code> (that camera's own monocular 3D MHR70 estimate), a <code>meshes_obj/</code> or <code>meshes_ply/</code> folder of per-frame meshes, and <code>mesh_faces.npy</code> (shared face topology).</p>
         <p><code>--pixels</code> <strong>can be omitted</strong> when <code>--mesh-source-dir</code> is given: each run directory already contains its own <code>*_markers.csv</code>, so one path per camera (the run directory itself) drives both triangulation and mesh alignment. Explicit <code>--pixels</code> is still supported (required if not using mesh export, or if pixel CSVs live elsewhere).</p>
         <p>At each frame, a <strong>similarity transform</strong> (rotation + uniform scale + translation, Umeyama 1991) is fit per camera from its monocular MHR70 estimate (torso/hip/knee subset) onto the DLT-triangulated skeleton; the camera with the lowest fit residual is used as that frame's mesh source, and the same transform is applied to its mesh vertices. This is a <strong>coordinate-frame reconciliation, not a re-triangulation</strong> — mesh shape/proportion accuracy is inherited entirely from the monocular estimate.</p>
