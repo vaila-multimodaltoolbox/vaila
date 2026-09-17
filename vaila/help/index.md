@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 134 | **Categories:** 7 | **Generated on:** 16/09/2026 (v0.4.3)
+**Documented topics:** 135 | **Categories:** 7 | **Generated on:** 17/09/2026 (v0.4.3)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -159,7 +159,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
 
-## Tools (43)
+## Tools (44)
 
 - **brainstorm** — brainstorm.py is a Tkinter workspace for creative text workflows inside vailá. It records or loads audio, transcribes speech, edits text prompts, generates m...
   - [HTML](brainstorm.html) · [Markdown](brainstorm.md)
@@ -203,6 +203,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](merge_multivideos.html) · [Markdown](merge_multivideos.md)
 - **mergestack** — This script allows you to merge and stack CSV files.
   - [HTML](mergestack.html) · [Markdown](mergestack.md)
+- **mkvis3d** — Location: /home/preto/data/mkvis3d/mkvis3d.py
+  - [HTML](mkvis3d.html) · [Markdown](mkvis3d.md)
 - **numberframes** — This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected dire...
   - [HTML](numberframes.html) · [Markdown](numberframes.md)
 - **numstepsmp** — Opens a dialog to select a CSV file of foot coordinates and calculates the number of steps based on foot position using MediaPipe data. Includes Butterworth...

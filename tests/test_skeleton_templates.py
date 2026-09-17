@@ -1,7 +1,7 @@
 """Tests for skeleton templates and presets in vaila/skeletons and tests/skeleton_templates.
 
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 17 September 2026
+Version: 0.4.3
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from vaila.rec3d import generate_blender_companion_script
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SKEL_DIR = REPO_ROOT / "vaila" / "skeletons"
 TEMPLATE_DIR = REPO_ROOT / "tests" / "skeleton_templates"
+MODELS_SKEL_DIR = REPO_ROOT / "vaila" / "models" / "skeleton_templates"
 REC3D_DIR = REPO_ROOT / "tests" / "rec3d_one_dlt3d"
 
 EXPECTED_PRESETS = [
@@ -29,6 +30,7 @@ EXPECTED_PRESETS = [
     ("soccerfield_pitch32.json", 32),
     ("mediapipe_pose33.json", 33),
     ("mediapipe_hands42.json", 42),
+    ("soccerfield_kiki49.json", 49),
     ("sam3dinov3_mhr70.json", 70),
     ("mediapipe_holistic75.json", 75),
     ("coco_wholebody133.json", 133),
@@ -77,10 +79,10 @@ def _check_skeleton_json_structure(file_path: Path, expected_count: int | None =
         ia = int(a[1:])
         ib = int(b[1:])
         assert ia != ib, f"Self-connection {pair} in {file_path.name}"
-        assert ia >= 1 and ib >= 1, f"Non-positive index in {pair} in {file_path.name}"
+        assert ia >= 0 and ib >= 0, f"Negative index in {pair} in {file_path.name}"
         if num_kp is not None:
-            assert ia <= num_kp, f"Index {ia} exceeds num_keypoints ({num_kp}) in {file_path.name}"
-            assert ib <= num_kp, f"Index {ib} exceeds num_keypoints ({num_kp}) in {file_path.name}"
+            assert ia < num_kp, f"Index {ia} exceeds num_keypoints ({num_kp}) in {file_path.name}"
+            assert ib < num_kp, f"Index {ib} exceeds num_keypoints ({num_kp}) in {file_path.name}"
 
         edge_key = tuple(sorted((ia, ib)))
         assert edge_key not in seen_edges, f"Duplicate connection {pair} in {file_path.name}"
@@ -101,6 +103,12 @@ def test_tests_skeleton_templates_presets(filename: str, expected_count: int) ->
     _check_skeleton_json_structure(path, expected_count)
 
 
+@pytest.mark.parametrize(("filename", "expected_count"), EXPECTED_PRESETS)
+def test_models_skeleton_templates_presets(filename: str, expected_count: int) -> None:
+    path = MODELS_SKEL_DIR / filename
+    _check_skeleton_json_structure(path, expected_count)
+
+
 @pytest.mark.parametrize(
     ("alias_name", "target_file"),
     [
@@ -118,6 +126,12 @@ def test_template_aliases(alias_name: str, target_file: str) -> None:
     target_path = TEMPLATE_DIR / target_file
     _check_skeleton_json_structure(alias_path)
     assert json.loads(alias_path.read_text(encoding="utf-8")) == json.loads(
+        target_path.read_text(encoding="utf-8")
+    )
+    # Also verify alias in models/skeleton_templates/
+    models_alias = MODELS_SKEL_DIR / alias_name
+    _check_skeleton_json_structure(models_alias)
+    assert json.loads(models_alias.read_text(encoding="utf-8")) == json.loads(
         target_path.read_text(encoding="utf-8")
     )
 
@@ -174,10 +188,23 @@ def test_rec3d_one_dlt3d_cli_with_skeleton_templates(tmp_path: Path, template_fi
     import subprocess
     import sys
 
+    import pandas as pd
+
     dlt1 = str(REC3D_DIR / "cam1_dlt_calib.dlt3d")
     dlt2 = str(REC3D_DIR / "cam2_dlt_calib.dlt3d")
-    pix1 = str(REC3D_DIR / "cam01_makerless.csv")
-    pix2 = str(REC3D_DIR / "cam02_markerless.csv")
+
+    # Generate synthetic pixel data covering up to 310 markers
+    pix1 = tmp_path / "cam01.csv"
+    pix2 = tmp_path / "cam02.csv"
+    num_markers = 310
+    cols = ["frame"] + [f"p{i}_{axis}" for i in range(num_markers) for axis in ("x", "y")]
+    row1 = [0] + [100.0 + (i % 50) * 5.0 for i in range(num_markers * 2)]
+    row2 = [1] + [102.0 + (i % 50) * 5.0 for i in range(num_markers * 2)]
+    row1_c2 = [0] + [120.0 + (i % 50) * 5.0 for i in range(num_markers * 2)]
+    row2_c2 = [1] + [122.0 + (i % 50) * 5.0 for i in range(num_markers * 2)]
+    pd.DataFrame([row1, row2], columns=cols).to_csv(pix1, index=False)
+    pd.DataFrame([row1_c2, row2_c2], columns=cols).to_csv(pix2, index=False)
+
     skel_file = str(TEMPLATE_DIR / template_file)
     output_dir = tmp_path / "out"
 
@@ -190,8 +217,8 @@ def test_rec3d_one_dlt3d_cli_with_skeleton_templates(tmp_path: Path, template_fi
             dlt1,
             dlt2,
             "--pixels",
-            pix1,
-            pix2,
+            str(pix1),
+            str(pix2),
             "--fps",
             "100",
             "--output",
@@ -202,7 +229,7 @@ def test_rec3d_one_dlt3d_cli_with_skeleton_templates(tmp_path: Path, template_fi
         capture_output=True,
         text=True,
     )
-    assert res.returncode == 0, f"rec3d_one_dlt3d failed with {template_file}: {res.stderr}"
+    assert res.returncode == 0, f"rec3d_one_dlt3d failed with {template_file}: {res.stderr}\nSTDOUT: {res.stdout}"
 
     # Check that companion script was generated and contains custom connections
     viz_scripts = list(output_dir.rglob("*_blender_skeleton_viz.py"))

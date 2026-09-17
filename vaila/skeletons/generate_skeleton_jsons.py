@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.3.112
+Version: 0.4.3
 Created: 04 August 2026
-Last Updated: 24 August 2026
+Last Updated: 17 September 2026
 
 Description:
     Maintenance/dev tool that regenerates all standard skeleton-connection
@@ -30,11 +30,13 @@ Description:
       - coco_wholebody133.json   <- COCO WholeBody / Sapiens-133 (133 keypoints)
       - soccerfield_pitch32.json <- Soccer Field 32 Pitch Keypoints (32 points)
       - soccerfield_calib29.json <- Soccer Field 29 FIFA Calib Keypoints (29 points)
+      - soccerfield_kiki49.json  <- Soccer Field Kiki 49 Pitch + Goals + Flags (49 points)
 
-    "pN" in every emitted connection is the 1-based column index of that
-    keypoint in the wide CSV rec3d_one_dlt3d.py/rec3d.py write (frame,
-    p1_x,p1_y,p1_z,...), i.e. keypoint index 0 (0-based) in the source
-    definition becomes p1, index 1 becomes p2, etc.
+    "pN" in every emitted connection is the **0-based** column index of that
+    keypoint in the wide CSV ``rec3d`` / ``getpixelvideo`` write
+    (``frame, p0_x, p0_y, p0_z, ...``). Source keypoint index 0 → ``p0``,
+    index 1 → ``p1``, etc. Generator bodies below may still list legacy
+    1-based ``pN`` literals; :func:`_emit_zero_based` rebases them on write.
 
 Usage:
     uv run python vaila/skeletons/generate_skeleton_jsons.py
@@ -49,7 +51,62 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKEL_DIR = Path(__file__).resolve().parent
 TEST_SKEL_DIR = REPO_ROOT / "tests" / "skeleton_templates"
+MODELS_SKEL_DIR = REPO_ROOT / "vaila" / "models" / "skeleton_templates"
 TEST_REC3D_DIR = REPO_ROOT / "tests" / "rec3d_one_dlt3d"
+MKVIS3D_SKEL_DIR = Path("/home/preto/data/mkvis3d/skeleton_templates")
+
+_P_TOKEN_RE = re.compile(r"^p(\d+)$", re.IGNORECASE)
+
+
+def _rebase_p_token(token: str) -> str:
+    """Convert a legacy 1-based ``pN`` token to 0-based ``p(N-1)``."""
+    match = _P_TOKEN_RE.match(str(token).strip())
+    if not match:
+        raise ValueError(f"invalid skeleton joint token: {token!r}")
+    n = int(match.group(1))
+    if n < 1:
+        raise ValueError(f"expected legacy 1-based pN (>=1), got {token!r}")
+    return f"p{n - 1}"
+
+
+def _note_zero_based(note: str) -> str:
+    """Rewrite note prose from the old 1-based convention to 0-based."""
+    text = note.replace("1-based", "0-based")
+    text = re.sub(r"\bp1=(nose)", r"p0=\1", text)
+    text = re.sub(r"\bp1=(wrist)", r"p0=\1", text)
+    text = re.sub(
+        r"p(\d+)=([a-zA-Z][\w-]*)\((\d+)\)",
+        lambda m: (
+            f"p{int(m.group(1)) - 1}={m.group(2)}({m.group(3)})"
+            if int(m.group(1)) == int(m.group(3)) + 1
+            else m.group(0)
+        ),
+        text,
+    )
+    text = re.sub(
+        r"\bp(\d+)\.\.p(\d+)\b",
+        lambda m: f"p{int(m.group(1)) - 1}..p{int(m.group(2)) - 1}",
+        text,
+    )
+    text = re.sub(
+        r"\bp(\d+)=([a-zA-Z_]+)\b",
+        lambda m: f"p{int(m.group(1)) - 1}={m.group(2)}",
+        text,
+    )
+    return text
+
+
+def _emit_zero_based(payload: dict) -> dict:
+    """Return a copy of *payload* with 0-based connection tokens and note."""
+    connections = []
+    for pair in payload["connections"]:
+        if not isinstance(pair, (list, tuple)) or len(pair) != 2:
+            raise ValueError(f"invalid connection pair: {pair!r}")
+        connections.append([_rebase_p_token(pair[0]), _rebase_p_token(pair[1])])
+    out = dict(payload)
+    out["connections"] = connections
+    out["note"] = _note_zero_based(str(payload.get("note", "")))
+    return out
 
 
 def _generate_mediapipe_pose33() -> dict:
@@ -911,6 +968,135 @@ def _generate_soccerfield_calib29() -> dict:
     }
 
 
+def _generate_soccerfield_kiki49() -> dict:
+    names = [
+        "top_left_corner",
+        "left_pen_box_top_outer",
+        "left_goal_area_top_outer",
+        "left_goal_area_bottom_outer",
+        "left_pen_box_bottom_outer",
+        "bottom_left_corner",
+        "left_goal_area_top_inner",
+        "left_goal_area_bottom_inner",
+        "left_penalty_spot",
+        "left_pen_box_top_inner",
+        "left_pen_box_inner_top_at_goal_y",
+        "left_pen_box_inner_bottom_at_goal_y",
+        "left_pen_box_bottom_inner",
+        "midfield_top",
+        "center_circle_top",
+        "center_circle_bottom",
+        "midfield_bottom",
+        "right_pen_box_top_inner",
+        "right_pen_box_inner_top_at_goal_y",
+        "right_pen_box_inner_bottom_at_goal_y",
+        "right_pen_box_bottom_inner",
+        "right_penalty_spot",
+        "right_goal_area_top_inner",
+        "right_goal_area_bottom_inner",
+        "top_right_corner",
+        "right_pen_box_top_outer",
+        "right_goal_area_top_outer",
+        "right_goal_area_bottom_outer",
+        "right_pen_box_bottom_outer",
+        "bottom_right_corner",
+        "center_circle_left",
+        "center_circle_right",
+        "left_goal_bottom_post_base",
+        "left_goal_top_post_base",
+        "left_goal_bottom_post_top",
+        "left_goal_top_post_top",
+        "left_goal_net_bottom_ground",
+        "left_goal_net_top_ground",
+        "left_corner_flag_top",
+        "left_corner_flag_bottom",
+        "right_goal_bottom_post_base",
+        "right_goal_top_post_base",
+        "right_goal_bottom_post_top",
+        "right_goal_top_post_top",
+        "right_goal_net_bottom_ground",
+        "right_goal_net_top_ground",
+        "right_corner_flag_top",
+        "right_corner_flag_bottom",
+        "center_field",
+    ]
+    connections = [
+        # Top touchline
+        ["p1", "p14"],
+        ["p14", "p25"],
+        # Bottom touchline
+        ["p6", "p17"],
+        ["p17", "p30"],
+        # Left goal line
+        ["p1", "p2"],
+        ["p2", "p3"],
+        ["p3", "p4"],
+        ["p4", "p5"],
+        ["p5", "p6"],
+        # Right goal line
+        ["p25", "p26"],
+        ["p26", "p27"],
+        ["p27", "p28"],
+        ["p28", "p29"],
+        ["p29", "p30"],
+        # Midfield line
+        ["p14", "p15"],
+        ["p15", "p16"],
+        ["p16", "p17"],
+        # Left penalty box
+        ["p2", "p10"],
+        ["p10", "p11"],
+        ["p11", "p12"],
+        ["p12", "p13"],
+        ["p13", "p5"],
+        # Left goal area
+        ["p3", "p7"],
+        ["p7", "p8"],
+        ["p8", "p4"],
+        # Right penalty box
+        ["p26", "p18"],
+        ["p18", "p19"],
+        ["p19", "p20"],
+        ["p20", "p21"],
+        ["p21", "p29"],
+        # Right goal area
+        ["p27", "p23"],
+        ["p23", "p24"],
+        ["p24", "p28"],
+        # Left goal posts + crossbar + net
+        ["p33", "p35"],
+        ["p34", "p36"],
+        ["p35", "p36"],
+        ["p33", "p37"],
+        ["p34", "p38"],
+        ["p37", "p38"],
+        # Right goal posts + crossbar + net
+        ["p41", "p43"],
+        ["p42", "p44"],
+        ["p43", "p44"],
+        ["p41", "p45"],
+        ["p42", "p46"],
+        ["p45", "p46"],
+        # Corner flags
+        ["p1", "p39"],
+        ["p6", "p40"],
+        ["p25", "p47"],
+        ["p30", "p48"],
+    ]
+    return {
+        "schema": "soccerfield_kiki_49",
+        "num_keypoints": 49,
+        "note": (
+            "pN is 1-based index into vaila soccerfield_kiki.csv / soccerfield_kiki_custom.c3d: "
+            "p1..p32=pitch (as pitch32), p33..p38=left goal posts+net, p39..p40=left corner flags, "
+            "p41..p46=right goal, p47..p48=right flags, p49=center_field. Center circle and penalty arcs "
+            "are drawn procedurally in the viewer (not as bones)."
+        ),
+        "keypoints": names,
+        "connections": connections,
+    }
+
+
 def _write_compact(payload: dict, out_path: Path) -> None:
     """Write with clean formatted JSON."""
     lines = ["{"]
@@ -932,7 +1118,7 @@ def _write_compact(payload: dict, out_path: Path) -> None:
 
 
 def generate_all_presets() -> dict[str, dict]:
-    """Generate all skeleton dictionary specifications."""
+    """Generate all skeleton dictionary specifications (0-based ``pN``)."""
     presets = {
         "mediapipe_pose33.json": _generate_mediapipe_pose33(),
         "yolo_coco17.json": _generate_yolo_coco17(),
@@ -945,6 +1131,7 @@ def generate_all_presets() -> dict[str, dict]:
         "halpe26.json": _generate_halpe26(),
         "soccerfield_pitch32.json": _generate_soccerfield_pitch32(),
         "soccerfield_calib29.json": _generate_soccerfield_calib29(),
+        "soccerfield_kiki49.json": _generate_soccerfield_kiki49(),
     }
 
     try:
@@ -957,11 +1144,11 @@ def generate_all_presets() -> dict[str, dict]:
     except FileNotFoundError as e:
         print(f"skipped coco_wholebody133.json: {e}")
 
-    return presets
+    return {name: _emit_zero_based(payload) for name, payload in presets.items()}
 
 
 def write_all(presets: dict[str, dict]) -> None:
-    """Write all presets to vaila/skeletons/ and tests/skeleton_templates/."""
+    """Write all presets to vaila/skeletons/, tests/skeleton_templates/, and vaila/models/."""
     # 1. Target: vaila/skeletons/
     for filename, data in presets.items():
         out_path = SKEL_DIR / filename
@@ -974,7 +1161,13 @@ def write_all(presets: dict[str, dict]) -> None:
         out_path = TEST_SKEL_DIR / filename
         _write_compact(data, out_path)
 
-    # 3. Compatibility aliases in tests/skeleton_templates/
+    # 3. Target: vaila/models/skeleton_templates/
+    MODELS_SKEL_DIR.mkdir(parents=True, exist_ok=True)
+    for filename, data in presets.items():
+        out_path = MODELS_SKEL_DIR / filename
+        _write_compact(data, out_path)
+
+    # 4. Compatibility aliases in tests/skeleton_templates/ and vaila/models/skeleton_templates/
     aliases = {
         "skeleton_pose_mediapipe.json": "mediapipe_pose33.json",
         "skeleton_pose_yolo.json": "yolo_coco17.json",
@@ -986,10 +1179,10 @@ def write_all(presets: dict[str, dict]) -> None:
     }
     for alias_name, target in aliases.items():
         if target in presets:
-            out_path = TEST_SKEL_DIR / alias_name
-            _write_compact(presets[target], out_path)
+            _write_compact(presets[target], TEST_SKEL_DIR / alias_name)
+            _write_compact(presets[target], MODELS_SKEL_DIR / alias_name)
 
-    # 4. Compatibility files in tests/rec3d_one_dlt3d/
+    # 5. Compatibility files in tests/rec3d_one_dlt3d/
     TEST_REC3D_DIR.mkdir(parents=True, exist_ok=True)
     rec3d_fixtures = {
         "skeleton_pose_mediapipe.json": "mediapipe_pose33.json",

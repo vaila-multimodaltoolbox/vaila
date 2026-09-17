@@ -3,9 +3,9 @@
 Shipped `--skeleton` presets for `rec3d.py` and `rec3d_one_dlt3d.py`'s optional
 Blender skeleton-visualization companion script
 (`generate_blender_companion_script()`). Each file's `"connections"` list is
-`[["pA","pB"], ...]` pairs referencing the **1-based marker index** a
-reconstructed `rec3d_*.csv`/`.bvh` uses for that column (`p1_x,p1_y,p1_z`,
-`p2_x,...`, always renumbered 1..N in column order regardless of the
+`[["pA","pB"], ...]` pairs referencing the **0-based marker index** a
+reconstructed `rec3d_*.csv`/`.bvh` uses for that column (`p0_x,p0_y,p0_z`,
+`p1_x,...`, always renumbered 0..N-1 in column order regardless of the
 original tracker's own labels — see `rec3d.load_pixel_csv_positional`).
 
 The same body/hand JSON files (excluding `soccerfield_*`) are listed by
@@ -30,7 +30,7 @@ The same body/hand JSON files (excluding `soccerfield_*`) are listed by
 ## Usage
 
 Pick the preset matching **the tracker that produced your pixel CSVs** (the
-same 2D keypoint order the reconstruction re-numbers as `p1..pN`), then pass
+same 2D keypoint order the reconstruction re-numbers as `p0..pN-1`), then pass
 it as `--skeleton`:
 
 ```bash
