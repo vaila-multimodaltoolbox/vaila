@@ -43,6 +43,13 @@ Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`
 | CPU laptop | `uv sync` |
 | macOS (Metal/MPS) | `uv sync` |
 
+> **On a CUDA machine, never run a bare `uv run`.** It auto-syncs with the default
+> groups (`dev` + `cpu`) and silently replaces the cu128 wheels with the CPU ones
+> (`torch.cuda.is_available()` becomes `False`). Use `uv run --no-sync ...`,
+> `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`. Explicit `uv sync --no-group cpu
+> --group cuda` is unaffected; the installers and `bin/setup_*` scripts already export
+> `UV_NO_SYNC=1` after their sync.
+
 **Recommended multi-machine sync (avoiding Git conflicts across Linux / macOS / Windows):**
 Whenever switching between workstations, use the automated sync runner to pull changes and auto-adapt the local environment without merge conflicts:
 

@@ -93,8 +93,8 @@ bash bin/setup_fifa_sam3d.sh        # Linux/macOS
 ### 2.5 Smoke check
 
 ```bash
-uv run python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
-uv run pytest tests/test_vaila_sam.py tests/test_fifa_skeletal_pipeline.py -v
+uv run --no-sync python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0))"
+uv run --no-sync pytest tests/test_vaila_sam.py tests/test_fifa_skeletal_pipeline.py -v
 ```
 
 ---

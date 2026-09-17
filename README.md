@@ -322,6 +322,13 @@ _vailá_ ships **one portable `pyproject.toml` and one `uv.lock` for every compu
 | CPU-only laptop | `uv sync` | PyTorch CPU wheels |
 | macOS Apple Silicon | `uv sync` | PyTorch PyPI wheel = Metal/MPS build |
 
+> **On a CUDA machine, never run a bare `uv run`.** It auto-syncs with the default
+> groups (`dev` + `cpu`) and silently replaces the cu128 wheels with the CPU ones
+> (`torch.cuda.is_available()` becomes `False`). Use `uv run --no-sync ...`,
+> `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`. Explicit `uv sync --no-group cpu
+> --group cuda` is unaffected; the installers and `bin/setup_*` scripts already export
+> `UV_NO_SYNC=1` after their sync.
+
 `[dependency-groups]` declares `cpu` and `cuda`, and `[tool.uv] conflicts` marks them mutually exclusive, so `uv.lock` stores **all** resolutions at once. A CUDA workstation and a CPU laptop therefore commit **byte-identical** `pyproject.toml` / `uv.lock` — `git pull`, `git commit` and `git push` never need a `git restore` first.
 
 **Developers / second machine:** the **unified interactive bootstrap** auto-detects OS + NVIDIA + arch and runs the right `uv sync` (it never rewrites tracked files):
@@ -595,9 +602,11 @@ uv sync
 
 # Run vailá
 uv run vaila.py
+# On an NVIDIA machine, skip the auto-sync so the CUDA wheels survive:
+# uv run --no-sync vaila.py      (or: bash bin/run_vaila.sh)
 ```
 
-**Note:** there is nothing to copy or configure beforehand — pass `--no-group cpu --group cuda` to `uv sync` on an NVIDIA machine and plain `uv sync` everywhere else.
+**Note:** there is nothing to copy or configure beforehand — pass `--no-group cpu --group cuda` to `uv sync` on an NVIDIA machine and plain `uv sync` everywhere else. After that, run with `uv run --no-sync` (or `export UV_NO_SYNC=1`) on CUDA machines: a bare `uv run` re-syncs the default `cpu` group and would undo the CUDA install.
 
 ---
 

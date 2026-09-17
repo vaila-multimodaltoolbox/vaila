@@ -296,6 +296,13 @@ One `pyproject.toml` + one `uv.lock` for every platform:
 | CPU-only | `uv sync` | `whl/cpu` |
 | macOS Apple Silicon | `uv sync` | PyPI wheel (Metal/MPS) |
 
+> **On a CUDA machine, never run a bare `uv run`.** It auto-syncs with the default
+> groups (`dev` + `cpu`) and silently replaces the cu128 wheels with the CPU ones
+> (`torch.cuda.is_available()` becomes `False`). Use `uv run --no-sync ...`,
+> `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`. Explicit `uv sync --no-group cpu
+> --group cuda` is unaffected; the installers and `bin/setup_*` scripts already export
+> `UV_NO_SYNC=1` after their sync.
+
 `[dependency-groups]` defines `cpu` + `cuda`, `[tool.uv].conflicts` declares them
 mutually exclusive, so `uv.lock` holds every variant and each machine installs
 its own without touching tracked files. Use `bin/setup_pyproject.sh`

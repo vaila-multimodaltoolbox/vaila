@@ -62,6 +62,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# A bare `uv run` re-resolves the project with the default dependency groups
+# (dev + cpu), which on a CUDA machine silently replaces the cu128 wheels with
+# the CPU ones. Use the environment exactly as the installer left it.
+If (-not $env:UV_NO_SYNC) { $env:UV_NO_SYNC = "1" }
+
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..')
 Set-Location $Root
 
@@ -245,7 +250,7 @@ if (-not $NoSync) {
     & uv @argList
     Write-Host ''
     Write-Host "Done. vailá ready for target='$Target' with extras=[$($ExtrasList -join ' ')]." -ForegroundColor Green
-    Write-Host 'Run the GUI:   uv run vaila.py'
+    Write-Host 'Run the GUI:   uv run --no-sync vaila.py'
 } else {
     Write-Host "Skipping 'uv sync' (-NoSync)" -ForegroundColor Cyan
     Write-Host ''

@@ -629,6 +629,13 @@ if ! "${UV_SYNC_CMD[@]}"; then
     fi
 fi
 echo "Dependencies installed successfully."
+
+# From here on, every `uv run` in this installer (and in the setup scripts it
+# calls) must NOT re-sync the environment: a bare `uv run` would re-resolve
+# with the default groups (dev + cpu) and silently replace the CUDA wheels
+# just installed with the CPU ones. UV_NO_SYNC makes `uv run` use the venv
+# as-is; explicit `uv sync` calls below are unaffected.
+export UV_NO_SYNC=1
 echo ""
 echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
 

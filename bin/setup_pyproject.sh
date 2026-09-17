@@ -299,6 +299,11 @@ if [[ "$RUN_SYNC" == 1 ]]; then
     info "Running: ${SYNC_CMD[*]}"
     "${SYNC_CMD[@]}"
 
+    # A bare `uv run` re-resolves with the default groups (dev + cpu) and would
+    # replace the CUDA wheels just installed with the CPU ones. Every `uv run`
+    # below must therefore use the environment as-is.
+    export UV_NO_SYNC=1
+
     # ---- verify + repair CUDA wheel integrity (linux-cuda / win-cuda only) ----
     # Real bug hit in production: uv sync can report "nothing to do" for an
     # nvidia-*-cu12 package whose dist-info is present but whose actual .so
@@ -352,7 +357,7 @@ if [[ "$RUN_SYNC" == 1 ]]; then
 
     ok ""
     ok "Done. vailá ready for target='$TARGET' with extras=[$EXTRAS]."
-    say "Run the GUI:   uv run vaila.py"
+    say "Run the GUI:   uv run --no-sync vaila.py   (or: bash bin/run_vaila.sh)"
 else
     info "Skipping 'uv sync' (--no-sync)"
     say ""

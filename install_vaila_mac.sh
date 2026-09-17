@@ -699,6 +699,13 @@ if ! "${UV_SYNC_CMD[@]}"; then
     fi
 fi
 echo "Dependencies installed successfully."
+
+# From here on, every `uv run` in this installer (and in the setup scripts it
+# calls) must NOT re-sync the environment: a bare `uv run` would re-resolve
+# with the default groups (dev + cpu) and silently replace the CUDA wheels
+# just installed with the CPU ones. UV_NO_SYNC makes `uv run` use the venv
+# as-is; explicit `uv sync` calls below are unaffected.
+export UV_NO_SYNC=1
 echo ""
 echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
 
@@ -855,7 +862,7 @@ fi
 echo "Ways to run vaila:"
 echo "1. Recommended: $RUN_SCRIPT"
 echo "2. Or: cd \"$VAILA_HOME\" && .venv/bin/python vaila.py"
-echo "3. Or: cd \"$VAILA_HOME\" && uv run vaila.py"
+echo "3. Or: cd \"$VAILA_HOME\" && uv run --no-sync vaila.py"
 if [[ "${INSTALL_PATH_CHOICE:-local}" == "applications" ]]; then
     echo "4. App bundle: Launchpad, Spotlight, /Applications/vaila.app, or ~/Applications/vaila.app"
 else

@@ -266,9 +266,18 @@ single committed `uv.lock`. Consequence: a CUDA workstation and a CPU laptop com
 Which backend is installed here?
 
 ```bash
-uv run python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
+uv run --no-sync python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 # 2.11.0+cu128 True  -> cuda group   |   2.11.0+cpu False -> cpu group
 ```
+
+> **CUDA machines: never use a bare `uv run`.** `uv run` auto-syncs with the
+> *default* groups (`dev` + `cpu`), so it silently uninstalls the cu128 wheels and
+> reinstalls the CPU ones — `torch.cuda.is_available()` then returns `False`.
+> Use `uv run --no-sync ...` (or `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`).
+> uv has no env var to *add* a group and `default-groups` is rejected in `uv.toml`,
+> so `--no-sync`/`UV_NO_SYNC` is the only portable guard. Explicit
+> `uv sync --no-group cpu --group cuda ...` is unaffected. The installers and the
+> `bin/setup_*.sh|.ps1` bootstrappers export `UV_NO_SYNC=1` right after their sync.
 
 Install scripts handle it automatically: `install_vaila_linux.sh`, `install_vaila_mac.sh`, `install_vaila_win.ps1`.
 

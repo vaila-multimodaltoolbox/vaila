@@ -16,6 +16,11 @@
 # ============================================================================
 set -euo pipefail
 
+# A bare `uv run` re-resolves the project with the default dependency groups
+# (dev + cpu), which on a CUDA machine silently replaces the cu128 wheels with
+# the CPU ones. Use the environment exactly as the installer left it.
+export UV_NO_SYNC="${UV_NO_SYNC:-1}"
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "${SCRIPT_DIR}/.." && pwd)"
 SAM3D_DIR="${REPO_ROOT}/sam_3d_body"

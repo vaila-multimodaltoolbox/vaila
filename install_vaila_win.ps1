@@ -893,6 +893,13 @@ Try {
     }
     Write-Host "Dependencies installed successfully." -ForegroundColor Green
 
+    # From here on, every `uv run` in this installer (and in the setup scripts it
+    # calls) must NOT re-sync the environment: a bare `uv run` would re-resolve
+    # with the default groups (dev + cpu) and silently replace the CUDA wheels
+    # just installed with the CPU ones. UV_NO_SYNC makes `uv run` use the venv
+    # as-is; explicit `uv sync` calls below are unaffected.
+    $env:UV_NO_SYNC = "1"
+
     # Verify + repair CUDA wheel integrity (GPU template only).
     # Real bug hit in production (Linux): uv sync can report "nothing to do" for
     # an nvidia-*-cu12 package whose dist-info is present but whose actual .dll/.so

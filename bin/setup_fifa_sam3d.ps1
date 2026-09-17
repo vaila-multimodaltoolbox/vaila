@@ -10,6 +10,11 @@
 # ============================================================================
 $ErrorActionPreference = "Stop"
 
+# A bare `uv run` re-resolves the project with the default dependency groups
+# (dev + cpu), which on a CUDA machine silently replaces the cu128 wheels with
+# the CPU ones. Use the environment exactly as the installer left it.
+If (-not $env:UV_NO_SYNC) { $env:UV_NO_SYNC = "1" }
+
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Resolve-Path (Join-Path $ScriptDir "..")
 $Sam3dDir   = Join-Path $RepoRoot "sam_3d_body"
