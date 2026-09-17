@@ -22,7 +22,7 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                            #
-# Update: 15 September 2026
+# Update: 17 September 2026
 # Version: 0.4.3
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
@@ -356,30 +356,10 @@ if [[ "${VAILA_TEST_APP_BUNDLE_ONLY:-0}" == "1" ]]; then
     exit 0
 fi
 
-# ============================================================================
-# INSTALL LOCATION
-# ============================================================================
-
-echo "---------------------------------------------"
-echo "Install Location Selection"
-echo "  [1] Current Directory ($(pwd)) - Local/Portable - Recommended"
-echo "  [2] User Profile (~/vaila)"
-echo "---------------------------------------------"
-printf "Choose an option [1-2] (default: 1): "
-read INSTALL_LOC_OPTION
-INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
-
-if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
-    VAILA_HOME="$USER_HOME/vaila"
-    echo "Installing in user profile: $VAILA_HOME"
-else
-    VAILA_HOME="$(pwd)"
-    echo "Installing in current directory (portable): $VAILA_HOME"
-fi
-
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Bootstrap: clone repo if pyproject.toml is missing locally
+# Bootstrap: clone repo if pyproject.toml is missing locally. Runs before the
+# install-location prompt so the question is asked once, by the child.
 if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
     echo "Bootstrap Mode: vaila source not found locally."
     echo "Cloning vaila repository from GitHub..."
@@ -395,12 +375,46 @@ if [ ! -f "$PROJECT_DIR/pyproject.toml" ]; then
 
     echo "Running installer from downloaded source..."
     chmod +x "$TEMP_DIR/vaila/install_vaila_mac.sh"
+    # The child runs from the temp clone while the user's working directory is
+    # still the one they launched from, so a "portable" install there has no
+    # source files. VAILA_BOOTSTRAP_SRC tells the child to copy the clone into
+    # ./vaila instead of assuming the current directory already is the repo.
+    export VAILA_BOOTSTRAP_SRC="$TEMP_DIR/vaila"
     "$TEMP_DIR/vaila/install_vaila_mac.sh" "$@"
     EXIT_CODE=$?
 
     echo "Cleaning up temporary files..."
     rm -rf "$TEMP_DIR"
     exit $EXIT_CODE
+fi
+
+# ============================================================================
+# INSTALL LOCATION
+# ============================================================================
+
+# One-line (bootstrap) install: the source lives in a temp clone, so the
+# portable target is a fresh ./vaila subdirectory of the launch directory --
+# never the launch directory itself, which holds the user's own files.
+PORTABLE_TARGET="$(pwd)"
+if [[ -n "${VAILA_BOOTSTRAP_SRC:-}" ]]; then
+    PORTABLE_TARGET="$(pwd)/vaila"
+fi
+
+echo "---------------------------------------------"
+echo "Install Location Selection"
+echo "  [1] Current Directory ($PORTABLE_TARGET) - Local/Portable - Recommended"
+echo "  [2] User Profile (~/vaila)"
+echo "---------------------------------------------"
+printf "Choose an option [1-2] (default: 1): "
+read INSTALL_LOC_OPTION
+INSTALL_LOC_OPTION=${INSTALL_LOC_OPTION:-1}
+
+if [[ "$INSTALL_LOC_OPTION" == "2" ]]; then
+    VAILA_HOME="$USER_HOME/vaila"
+    echo "Installing in user profile: $VAILA_HOME"
+else
+    VAILA_HOME="$PORTABLE_TARGET"
+    echo "Installing in current directory (portable): $VAILA_HOME"
 fi
 
 # ============================================================================
@@ -531,7 +545,15 @@ fi
 
 echo "Preparing destination directory..."
 
-if [[ "$INSTALL_LOC_OPTION" != "2" ]]; then
+if [[ "$INSTALL_LOC_OPTION" != "2" ]] && [[ -n "${VAILA_BOOTSTRAP_SRC:-}" ]]; then
+    # Bootstrap portable install: the source is the temp clone, which is deleted
+    # as soon as this script returns, so it must be copied into VAILA_HOME now.
+    # .git is copied too, so the install stays a git tree (committed uv.lock is
+    # kept and `git pull` works). Nothing is deleted from the target directory.
+    echo "Bootstrap install: copying vaila source into $VAILA_HOME..."
+    mkdir -p "$VAILA_HOME"
+    rsync -a --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' "$PROJECT_DIR/" "$VAILA_HOME/"
+elif [[ "$INSTALL_LOC_OPTION" != "2" ]]; then
     echo "Local/portable install selected. Skipping rsync file copy."
     echo "Using current directory as VAILA_HOME."
 else

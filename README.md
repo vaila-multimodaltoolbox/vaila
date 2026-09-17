@@ -74,6 +74,11 @@ whichever your machine has:
 > fall back to the defaults. With `"$(...)"` the terminal stays connected and the
 > prompts work.
 
+> Run from an empty folder, the one-liner clones *vailá* into a temporary
+> directory and then installs it as `./vaila` inside the directory you launched
+> it from, so nothing is written next to your own files. Choosing `[2] User
+> Profile` installs to `~/vaila` instead.
+
 **Already cloned the repo?** Prefer the local script (keeps `uv.lock` / `git pull` clean) — again identical on both systems:
 
 ```bash

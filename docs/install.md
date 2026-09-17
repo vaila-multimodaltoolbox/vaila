@@ -41,6 +41,10 @@ Same command shape as macOS — only the script name differs. Use `curl` or `wge
 > stdin, so the installer's questions (location, profile, GPU/SAM 3/Sapiens2) read
 > EOF and silently take the defaults.
 
+> Without a local clone, the script downloads *vailá* to a temporary directory
+> and installs it as `./vaila` inside the directory you launched it from;
+> option `[2]` installs to `~/vaila` instead.
+
 ### Clone-first install (recommended)
 
 ```bash
@@ -141,6 +145,14 @@ Same command shape as Linux — only the script name differs. Use `curl` or `wge
 # with wget (brew install wget first)
 /bin/bash -c "$(wget -qO- https://raw.githubusercontent.com/vaila-multimodaltoolbox/vaila/main/install_vaila_mac.sh)"
 ```
+
+> Keep the `/bin/bash -c "$(...)"` form instead of `... | bash`: a piped script owns
+> stdin, so the installer's questions (location, profile, extras) read EOF and
+> silently take the defaults.
+
+> Without a local clone, the script downloads *vailá* to a temporary directory
+> and installs it as `./vaila` inside the directory you launched it from;
+> option `[2]` installs to `~/vaila` instead.
 
 ### Clone-first install (recommended)
 
