@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Train AI Tracker — vailá</title>
+  <style>
+    body { font-family: Georgia, serif; max-width: 720px; margin: 2rem auto; line-height: 1.5; padding: 0 1rem; }
+    code, pre { font-family: Consolas, monospace; background: #f4f4f4; }
+    pre { padding: 0.75rem; overflow-x: auto; }
+    h1 { font-size: 1.6rem; }
+  </style>
+</head>
+<body>
+  <h1>Train AI Tracker</h1>
+  <p><em>vailá</em> · Version 0.4.4 · Updated 2026-09-18</p>
+  <p>Offline fine-tuning for Track AI backbones (<code>.pth</code>) and discriminator
+  checkpoints (<code>discriminator_*.npz</code>) using datasets from getpixelvideo
+  <strong>Save ML</strong> (pose or detect).</p>
+  <h2>Workflow</h2>
+  <ol>
+    <li>getpixelvideo: mark targets, <strong>Rename</strong> slots to COCO/custom classes.</li>
+    <li><strong>Save ML</strong> → 1=pose or 2=detect.</li>
+    <li>Main GUI → Markerless 2D → <strong>Train AI Tracker</strong>.</li>
+    <li>Pick <code>data.yaml</code> + base <code>.pth</code>, mode backbone / discriminator / both.</li>
+  </ol>
+  <h2>CLI</h2>
+  <pre>uv run --no-sync python -m vaila.ai_tracker_train \
+  --data /path/to/data.yaml \
+  --weights vaila/models/ai_tracker/resnet50_imagenet.pth \
+  --mode both --epochs 10 --profile athletics</pre>
+  <p>Outputs land under <code>vaila/models/ai_tracker/</code>. ImageNet base weights are
+  never overwritten automatically.</p>
+</body>
+</html>

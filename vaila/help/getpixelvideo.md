@@ -41,7 +41,8 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 - **Labeling Mode:** Create bounding box annotations for Machine Learning datasets
 - **Dataset Export:** Export structured datasets (train/val/test) with images and JSON annotations; loaded tracking bboxes can be saved directly as a YOLO detection dataset
 - **YOLO-pose dataset (F9):** Export clicked markers as an Ultralytics pose dataset (`data.yaml` with `kpt_shape`, train/val/test splits); append across videos with F7 + F8; may write `keypoints.json` when keypoint names are known; terminal output prints the exact `data.yaml` path and a `vaila.yolotrain --dry-run` validation command
-- **Save ML (button / Ctrl+E):** Export a PNG pose dataset with user-selected `train/val/test` split and create `all_labels/` with split-prefixed label copies for didactic review
+- **Save ML (button / Ctrl+E):** Choose **pose** or **detect**, pick `train/val/test` split, export PNG images + labels, build `all_labels/`, and write `ai_tracker_train.json` for offline Track AI training
+- **Rename (button / Ctrl+N):** Map marker slots `p0/p1…` to COCO-80 or custom names (pose keypoints or detect classes) before Save ML
 - **FIFA Labeling Mode:** Configure via **TOML** (Soccer-Kiki / `K` key — no separate Tk config dialog). Default **31** pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
 - **Guide (`G`):** **Visual only** overlay for active template:
   - **Soccer-Kiki / soccerfield:** loads `vaila/models/soccerfield_kiki.csv` (49 landmarks) so you can walk and mark those named points; optional reference map (`V`)
@@ -461,7 +462,8 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **F7**          | Load dataset folder – next Save appends (Labeling Mode Only) |
 | **F8**          | Open another video (keeps dataset; no need to close app) |
 | **F9**          | Export YOLO-pose dataset from clicked markers (see Pose dataset section) |
-| **Ctrl+E**      | Save ML: choose split, export PNG dataset + `all_labels/` didactic view |
+| **Ctrl+N** / **Rename** | Rename marker slots to COCO/custom (pose kpts or detect classes) |
+| **Ctrl+E**      | Save ML: pose|detect + split + PNG dataset + `all_labels/` |
 | **W**           | Open Swap Markers dialog (multi-rule range swap)  |
 | **1**           | Decrease persistence frames                       |
 | **2**           | Increase persistence frames                      |
@@ -584,7 +586,20 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 - **Use:** Retraining pose networks (e.g. soccer field keypoints)
 - **Activation:** Press **F9** when at least one frame has markers
 
-#### Save ML dataset (PNG split + all_labels) — **Button or Ctrl+E**
+#### Save ML dataset (pose|detect + PNG split + all_labels) — **Button or Ctrl+E**
+
+1. Prompt: `1=pose` (markers → keypoints) or `2=detect` (each marker → class box; labels from **Rename**).
+2. Prompt: split ratios (`1=70/15/15`, …).
+3. Writes Ultralytics `data.yaml` + `classes.txt` (and `ai_tracker_train.json`).
+4. Same folder trains via Markerless 2D → **Train YOLOv26** or **Train AI Tracker**.
+
+#### Rename marker slots — **Button or Ctrl+N**
+
+Map `p0`, `p1`, … to COCO-80 names (`person`, `sports ball`, …) or custom tags before Save ML. Option 5 sets the pose object class (`current_label`).
+
+#### Save ML dataset (legacy note)
+
+Older docs referred only to pose PNG exports; detect mode and Rename were added in 0.4.4.
 
 - Runs pose export with `train/val/test` split (same base flow as F9) and saves frame images as `.png`.
 - Before export, choose one preset or type custom percentages:

@@ -6,11 +6,17 @@ This directory is the sole canonical local location for the AI Tracker
   - Online-discriminator checkpoints: discriminator_<profile>.npz
     (default: discriminator_default.npz). Updated across sessions (JIT /
     transfer learning); kept local to the user/machine.
+  - Offline-trained discriminator: same naming via Markerless 2D →
+    Train AI Tracker (vaila/ai_tracker_train.py) using getpixelvideo Save ML
+    datasets (pose or detect).
   - Backbone ImageNet weights (scientist-visible, reusable, retrainable):
       resnet50_imagenet.pth          (default primary)
       resnet152_imagenet.pth         (optional)
       mobilenet_v3_small_imagenet.pth (optional, CPU-friendly)
       efficientnet_b0_imagenet.pth   (optional, CPU-friendly)
+  - Fine-tuned backbones from Train AI Tracker:
+      {variant}_finetuned_YYYYMMDD_HHMMSS.pth
+    Load these in Track AI (Deep / browse) like any other local .pth.
 
 When Deep NN is enabled and a variant has no file here, getpixelvideo prompts:
   1 = Browse an existing .pth/.pt

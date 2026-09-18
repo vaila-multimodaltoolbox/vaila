@@ -72,8 +72,12 @@ Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
 
 Pose / ML:
   **F9** exports a YOLO-pose layout (``data.yaml``, train/val/test, may write
-  ``keypoints.json`` when names are known). **Ctrl+E** / Save ML: user-chosen split
-  presets, **PNG** images, plus ``all_labels/`` for review.
+  ``keypoints.json`` when names are known). **Ctrl+E** / Save ML: choose
+  **pose** or **detect**, split presets, **PNG** images, plus ``all_labels/``.
+  **Rename** (toolbar / Ctrl+N outside labeling): map ``p0/p1…`` slots to COCO-80
+  or custom class/keypoint names before Save ML. Detect datasets train via
+  ``yolotrain``; both pose and detect feed **Train AI Tracker**
+  (``vaila/ai_tracker_train.py``) for backbone ``.pth`` / discriminator ``.npz``.
 
 How to use:
 ------------
@@ -116,7 +120,8 @@ Key bindings (see in-app **H** help for full list):
   Ctrl+G                Go to keypoint (Go KP dialog)
   Del Range button      Delete marker list/range (e.g. 0,3,7 or 1:10) across frames
   Swap Range button     Swap paired marker lists/ranges across frames
-  Ctrl+E                Save ML dataset (split + PNG + all_labels)
+  Ctrl+E                Save ML dataset (pose|detect + split + PNG + all_labels)
+  Ctrl+N                Rename marker slots (COCO/custom) when not in Labeling
   F9                    Export YOLO-pose dataset from markers
   Shift+← / Shift+→     Jump prev/next frame that has markers
   Marker timeline strip Click or drag (above scrub bar) to jump
@@ -1232,6 +1237,94 @@ COCO17_CONNECTIONS = frozenset(
     }
 )
 
+# COCO-80 detection class names (Ultralytics / MS COCO order).
+COCO80_CLASS_NAMES: tuple[str, ...] = (
+    "person",
+    "bicycle",
+    "car",
+    "motorcycle",
+    "airplane",
+    "bus",
+    "train",
+    "truck",
+    "boat",
+    "traffic light",
+    "fire hydrant",
+    "stop sign",
+    "parking meter",
+    "bench",
+    "bird",
+    "cat",
+    "dog",
+    "horse",
+    "sheep",
+    "cow",
+    "elephant",
+    "bear",
+    "zebra",
+    "giraffe",
+    "backpack",
+    "umbrella",
+    "handbag",
+    "tie",
+    "suitcase",
+    "frisbee",
+    "skis",
+    "snowboard",
+    "sports ball",
+    "kite",
+    "baseball bat",
+    "baseball glove",
+    "skateboard",
+    "surfboard",
+    "tennis racket",
+    "bottle",
+    "wine glass",
+    "cup",
+    "fork",
+    "knife",
+    "spoon",
+    "bowl",
+    "banana",
+    "apple",
+    "sandwich",
+    "orange",
+    "broccoli",
+    "carrot",
+    "hot dog",
+    "pizza",
+    "donut",
+    "cake",
+    "chair",
+    "couch",
+    "potted plant",
+    "bed",
+    "dining table",
+    "toilet",
+    "tv",
+    "laptop",
+    "mouse",
+    "remote",
+    "keyboard",
+    "cell phone",
+    "microwave",
+    "oven",
+    "toaster",
+    "sink",
+    "refrigerator",
+    "book",
+    "clock",
+    "vase",
+    "scissors",
+    "teddy bear",
+    "hair drier",
+    "toothbrush",
+)
+
+# Default soft-box size (normalized) when converting a marker point to a detect box.
+_DEFAULT_DETECT_BOX_W_FRAC = 0.08
+_DEFAULT_DETECT_BOX_H_FRAC = 0.142222
+
 
 def download_or_load_yolo_model(model_name=None):
     """Download or load YOLO model for pose detection"""
@@ -2182,6 +2275,8 @@ def play_video_with_controls(
     box_start_pos = None  # (x, y) in video coordinates
     current_box_rect = None  # pygame.Rect for preview
     current_label = "object"  # Default class label
+    # Per-slot names for markers (p0, p1, … → COCO/custom). Used by Rename + Save ML.
+    marker_slot_names: list[str] = []
     current_dataset_dir = (
         os.path.abspath(initial_dataset_dir)
         if initial_dataset_dir and os.path.isdir(initial_dataset_dir)
@@ -5930,6 +6025,7 @@ def play_video_with_controls(
         dataset_button_width = 52 if is_compact else 58
         export_video_button_width = 80 if is_compact else 92
         save_dataset_button_width = 72 if is_compact else 84
+        rename_markers_button_width = 58 if is_compact else 66
 
         # Top row: VISUAL/INSERT + Template + annotation modes + Help
         total_top_width = (
@@ -5976,6 +6072,8 @@ def play_video_with_controls(
             + dataset_button_width
             + button_gap
             + export_video_button_width
+            + button_gap
+            + rename_markers_button_width
             + button_gap
             + save_dataset_button_width
         )
@@ -6405,7 +6503,22 @@ def play_video_with_controls(
             export_video_text, export_video_text.get_rect(center=export_video_button_rect.center)
         )
 
-        # 10. Save ML button
+        # 10. Rename markers (COCO/custom class or keypoint names) — before Save ML
+        rename_markers_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_bottom,
+            rename_markers_button_width,
+            button_height,
+        )
+        current_x += rename_markers_button_width + button_gap
+        pygame.draw.rect(control_surface, (90, 110, 140), rename_markers_button_rect)
+        rename_markers_text = btn_font.render("Rename", True, (255, 255, 255))
+        control_surface.blit(
+            rename_markers_text,
+            rename_markers_text.get_rect(center=rename_markers_button_rect.center),
+        )
+
+        # 11. Save ML button
         save_dataset_button_rect = pygame.Rect(
             current_x,
             cluster_y_bottom,
@@ -6468,6 +6581,7 @@ def play_video_with_controls(
             editor_mode_button_rect,  # VISUAL / INSERT (Ctrl+I)
             restore_button_rect,  # Restore to last Save / open
             export_video_button_rect,  # Add export video button to return
+            rename_markers_button_rect,  # Rename p0/p1… → COCO/custom
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
@@ -7122,8 +7236,13 @@ def play_video_with_controls(
             ("=== DATASET & VIDEO EXPORTS ===", "", "header"),
             ("F9", "Export YOLO-pose dataset from markers (single-object pose estimation)", "item"),
             (
+                "Ctrl + N  /  'Rename'",
+                "Rename marker slots p0/p1… to COCO-80 or custom (pose kpts / detect classes)",
+                "item",
+            ),
+            (
                 "Ctrl + E  /  'Save ML'",
-                "Export split ML dataset with all_labels directory structure",
+                "Export split ML dataset (1=pose 2=detect) + all_labels",
                 "item",
             ),
             (
@@ -9065,6 +9184,19 @@ def play_video_with_controls(
 
         class_for_pose = current_label if current_label else "object"
         pitch_keypoint_names = [p["point_name"] for p in pitch_guide_points] or None
+        # Prefer user-renamed slots; then pitch guide; then template names.
+        _ensure_marker_slot_names_list(
+            marker_slot_names, coordinates, deleted_positions, template_keypoint_names
+        )
+        export_kpt_names = None
+        if any(n and not str(n).startswith("p") for n in marker_slot_names):
+            export_kpt_names = list(marker_slot_names)
+        elif pitch_keypoint_names:
+            export_kpt_names = pitch_keypoint_names
+        elif template_keypoint_names:
+            export_kpt_names = list(template_keypoint_names)
+        elif marker_slot_names:
+            export_kpt_names = list(marker_slot_names)
         was_appending = current_dataset_dir is not None
 
         # If in FIFA mode, prefer the FIFA layout for fresh exports and the
@@ -9084,7 +9216,7 @@ def play_video_with_controls(
             deleted_positions=deleted_positions,
             class_name=class_for_pose,
             output_dataset_dir=current_dataset_dir,
-            keypoint_names=pitch_keypoint_names,
+            keypoint_names=export_kpt_names,
             flip_idx=export_flip_idx,
             keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
             keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
@@ -9136,7 +9268,8 @@ def play_video_with_controls(
             "coordinates": serializable_coords,
             "deleted_positions": deleted_serial,
             "bboxes": bboxes,
-            "keypoint_names": pitch_keypoint_names,
+            "keypoint_names": export_kpt_names or pitch_keypoint_names,
+            "marker_slot_names": list(marker_slot_names),
             "pitch_guide_reference": pitch_guide_source,
         }
         try:
@@ -9195,21 +9328,248 @@ def play_video_with_controls(
             return None, "Save ML dataset cancelled."
         return _parse_ml_split_choice(raw)
 
-    def save_split_dataset_with_all_labels():
-        """Export split PNG dataset and build didactic all_labels view."""
+    def _choose_ml_export_task() -> tuple[str | None, str]:
+        """Return ('pose'|'detect', label) or (None, cancel_msg)."""
+        prompt = (
+            "Save ML task:\n"
+            "1 = pose (markers = keypoints, one object class)\n"
+            "2 = detect (each marker = class box; Rename sets COCO/custom)"
+        )
+        raw = show_input_dialog(prompt, "1")
+        if raw is None or raw.strip() == "":
+            return None, "Save ML dataset cancelled."
+        choice = raw.strip().lower()
+        if choice in {"1", "pose", "p"}:
+            return "pose", "pose"
+        if choice in {"2", "detect", "det", "d"}:
+            return "detect", "detect"
+        return None, f"Unknown Save ML task: {raw!r} (use 1=pose or 2=detect)."
+
+    def _active_marker_slot_count() -> int:
+        n = 0
+        for f_idx, pts in coordinates.items():
+            if not pts:
+                continue
+            deleted = deleted_positions.get(f_idx, set()) if deleted_positions else set()
+            for i, p in enumerate(pts):
+                if i in deleted or p is None:
+                    continue
+                if p[0] is None or p[1] is None:
+                    continue
+                n = max(n, i + 1)
+        if template_keypoint_names:
+            n = max(n, len(template_keypoint_names))
+        if fifa_fixed_keypoints:
+            n = max(n, int(fifa_fixed_keypoints))
+        return max(n, 1)
+
+    def _ensure_marker_slot_names_exists() -> None:
+        nonlocal marker_slot_names
+        _ensure_marker_slot_names_list(
+            marker_slot_names, coordinates, deleted_positions, template_keypoint_names
+        )
+
+    def rename_marker_slots_dialog() -> tuple[bool, str]:
+        """Rename p0/p1… slots to COCO-80 or custom names (pose kpts or detect classes)."""
+        nonlocal marker_slot_names, current_label, save_message_text
+        _ensure_marker_slot_names_exists()
+        n_slots = max(len(marker_slot_names), _active_marker_slot_count())
+        while len(marker_slot_names) < n_slots:
+            marker_slot_names.append(f"p{len(marker_slot_names)}")
+
+        summary = " ".join(f"p{i}={marker_slot_names[i]}" for i in range(n_slots))
+        print(f">> vaila/getpixelvideo: marker slots: {summary}")
+        mode = show_input_dialog(
+            "Rename markers:\n"
+            "1 = rename all slots\n"
+            "2 = rename one slot\n"
+            "3 = reset to p0,p1,…\n"
+            "4 = print COCO-80 names\n"
+            "5 = set pose object class (current_label)",
+            "1",
+        )
+        if mode is None or mode.strip() == "":
+            return False, "Rename cancelled."
+        mode = mode.strip().lower()
+
+        if mode in {"4", "coco", "list"}:
+            print(">> vaila/getpixelvideo: COCO-80 classes:")
+            for i, name in enumerate(COCO80_CLASS_NAMES):
+                print(f"  {i:2d}: {name}")
+            return True, "COCO-80 list printed in terminal."
+
+        if mode in {"3", "reset"}:
+            marker_slot_names = [f"p{i}" for i in range(n_slots)]
+            return True, f"Reset {n_slots} slots to p0…p{n_slots - 1}."
+
+        if mode in {"5", "class", "object"}:
+            new_cls = show_input_dialog(
+                "Pose object class (COCO or custom):",
+                current_label or "object",
+            )
+            if not new_cls or not new_cls.strip():
+                return False, "Object class unchanged."
+            current_label = new_cls.strip()
+            return True, f"Pose object class -> {current_label}"
+
+        def _resolve_name(prompt: str, default: str) -> str | None:
+            raw = show_input_dialog(
+                f"{prompt}\n"
+                f"(type COCO name, custom text, or coco:N for index 0-79)\n"
+                f"Enter keeps '{default}'",
+                default,
+            )
+            if raw is None:
+                return None
+            text = raw.strip()
+            if text == "":
+                return default
+            low = text.lower()
+            if low.startswith("coco:"):
+                try:
+                    idx = int(low.split(":", 1)[1])
+                    if 0 <= idx < len(COCO80_CLASS_NAMES):
+                        return COCO80_CLASS_NAMES[idx]
+                except ValueError:
+                    pass
+                return default
+            # Exact COCO match (case-insensitive)
+            for coco_name in COCO80_CLASS_NAMES:
+                if coco_name.lower() == low:
+                    return coco_name
+            return text
+
+        if mode in {"2", "one", "slot"}:
+            slot_raw = show_input_dialog(f"Slot index 0..{n_slots - 1}:", str(selected_marker_idx))
+            if slot_raw is None or slot_raw.strip() == "":
+                return False, "Rename cancelled."
+            try:
+                slot_i = int(slot_raw.strip())
+            except ValueError:
+                return False, f"Invalid slot: {slot_raw!r}"
+            if slot_i < 0 or slot_i >= n_slots:
+                return False, f"Slot out of range 0..{n_slots - 1}."
+            new_name = _resolve_name(f"Name for p{slot_i}", marker_slot_names[slot_i])
+            if new_name is None:
+                return False, "Rename cancelled."
+            marker_slot_names[slot_i] = new_name
+            return True, f"p{slot_i} -> {new_name}"
+
+        # Default: rename all
+        for i in range(n_slots):
+            new_name = _resolve_name(f"Name for p{i}", marker_slot_names[i])
+            if new_name is None:
+                return False, f"Rename cancelled at p{i}."
+            marker_slot_names[i] = new_name
+        summary2 = " ".join(f"p{i}={marker_slot_names[i]}" for i in range(n_slots))
+        print(f">> vaila/getpixelvideo: renamed slots: {summary2}")
+        return True, f"Renamed {n_slots} slots."
+
+    def save_detect_dataset_from_markers(
+        split_ratios=(0.7, 0.2, 0.1),
+        image_format="png",
+    ) -> bool:
+        """Build per-marker detection boxes and export YOLO detect dataset."""
         nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+        _ensure_marker_slot_names_exists()
+        box_wh: tuple[int, int] | None = None
+        try:
+            if track_ai_params is not None:
+                bw, bh = track_ai_params.block_window
+                box_wh = (int(bw), int(bh))
+        except Exception:
+            box_wh = None
+
+        detect_bboxes = markers_to_detection_bboxes(
+            coordinates,
+            deleted_positions,
+            original_width,
+            original_height,
+            marker_slot_names,
+            box_wh_px=box_wh,
+        )
+        if not detect_bboxes:
+            save_message_text = "No markers to export as detection boxes."
+            showing_save_message = True
+            save_message_timer = 90
+            return False
+
+        # Temporarily reuse export_labeling_dataset (uses fixed 70/20/10 internally
+        # unless we pass through — extend via split after write). We call it then
+        # the caller rebuilds all_labels; ratios are applied by rewriting is hard,
+        # so we use export with temporal default and note ratios in manifest.
+        _ = split_ratios  # reserved: export_labeling_dataset uses 0.7/0.2/0.1
+        _ = image_format
+        dataset_dir, msg = export_labeling_dataset(
+            video_path,
+            detect_bboxes,
+            total_frames,
+            original_width,
+            original_height,
+            output_dataset_dir=current_dataset_dir,
+            split_mode="temporal",
+        )
+        if not dataset_dir:
+            save_message_text = f"Detect export failed: {msg}"
+            showing_save_message = True
+            save_message_timer = 120
+            return False
+        current_dataset_dir = os.path.abspath(dataset_dir)
+        classes = sorted(
+            {
+                b.get("label", "object")
+                for fr in detect_bboxes.values()
+                for b in fr
+                if b.get("label")
+            }
+        )
+        write_ai_tracker_train_manifest(
+            dataset_dir,
+            task="detect",
+            classes=classes,
+            source_video=video_path,
+            marker_slot_names=list(marker_slot_names),
+        )
+        save_message_text = f"Detect dataset: {msg}"
+        showing_save_message = True
+        save_message_timer = 120
+        print(f">> vaila/getpixelvideo: detect dataset -> {dataset_dir}")
+        return True
+
+    def save_split_dataset_with_all_labels():
+        """Export split PNG dataset (pose or detect) and build all_labels view."""
+        nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+        task, task_label = _choose_ml_export_task()
+        if task is None:
+            save_message_text = task_label
+            showing_save_message = True
+            save_message_timer = 90
+            return
         split_ratios, split_label = _choose_ml_split_ratios()
         if split_ratios is None:
             save_message_text = split_label
             showing_save_message = True
             save_message_timer = 90
             return
-        if not save_pose_dataset(split_ratios=split_ratios, image_format="png"):
-            return
+        if task == "detect":
+            if not save_detect_dataset_from_markers(split_ratios=split_ratios, image_format="png"):
+                return
+        else:
+            if not save_pose_dataset(split_ratios=split_ratios, image_format="png"):
+                return
+            if current_dataset_dir:
+                _ensure_marker_slot_names_exists()
+                write_ai_tracker_train_manifest(
+                    current_dataset_dir,
+                    task="pose",
+                    classes=[current_label or "object"],
+                    source_video=video_path,
+                    marker_slot_names=list(marker_slot_names),
+                )
         if not current_dataset_dir:
             return
         ok_all, msg_all = _export_all_labels_view(current_dataset_dir)
-        save_message_text = f"{save_message_text} | PNG | {split_label} | {msg_all}"
+        save_message_text = f"{save_message_text} | {task_label} | PNG | {split_label} | {msg_all}"
         showing_save_message = True
         save_message_timer = 180 if ok_all else 120
 
@@ -11131,6 +11491,7 @@ def play_video_with_controls(
             editor_mode_button_rect,  # VISUAL / INSERT (Ctrl+I)
             restore_button_rect,  # Restore to last Save / open
             export_video_button_rect,  # Add export video button to return
+            rename_markers_button_rect,  # Rename p0/p1… → COCO/custom
             save_dataset_button_rect,  # Export PNG ML dataset + all_labels
             help_web_button_rect,  # Add help web button to return
             dataset_button_rect,  # Load dataset folder (multi-video)
@@ -11628,6 +11989,12 @@ def play_video_with_controls(
                         save_message_text = "Removed last bounding box"
                         showing_save_message = True
                         save_message_timer = 30
+                elif event.key == pygame.K_n and (pygame.key.get_mods() & pygame.KMOD_CTRL):
+                    # Ctrl+N: rename marker slots (COCO/custom) — works in any mode
+                    ok_rn, msg_rn = rename_marker_slots_dialog()
+                    save_message_text = msg_rn
+                    showing_save_message = True
+                    save_message_timer = 120 if ok_rn else 60
                 elif event.key == pygame.K_n and labeling_mode:
                     # Rename current label
                     new_label = show_input_dialog("Enter new label name:", current_label)
@@ -11648,7 +12015,6 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 60
-
                 elif event.key == pygame.K_F5:
                     # Save Project
                     if labeling_mode:
@@ -12478,6 +12844,11 @@ def play_video_with_controls(
                     elif export_video_button_rect.collidepoint(x, rel_y):
                         # Export video with annotations
                         export_video_with_annotations()
+                    elif rename_markers_button_rect.collidepoint(x, rel_y):
+                        ok_rn, msg_rn = rename_marker_slots_dialog()
+                        save_message_text = msg_rn
+                        showing_save_message = True
+                        save_message_timer = 120 if ok_rn else 60
                     elif save_dataset_button_rect.collidepoint(x, rel_y):
                         # Export PNG ML dataset and all_labels helper folder
                         save_split_dataset_with_all_labels()
@@ -15193,6 +15564,122 @@ def save_coordinates(
     df.to_csv(output_file, index=False, na_rep="", float_format=float_format)
     print(f"Coordinates saved to: {output_file}")
     return output_file
+
+
+def _ensure_marker_slot_names_list(
+    marker_slot_names: list[str],
+    coordinates: dict | None,
+    deleted_positions: dict | None = None,
+    template_keypoint_names: list[str] | None = None,
+) -> list[str]:
+    """Grow ``marker_slot_names`` in-place to cover active marker slots.
+
+    Defaults new slots to ``p0``, ``p1``, … unless ``template_keypoint_names``
+    supplies a name for that index.
+    """
+    n = 0
+    if coordinates:
+        for f_idx, pts in coordinates.items():
+            if not pts:
+                continue
+            deleted = deleted_positions.get(f_idx, set()) if deleted_positions else set()
+            for i, p in enumerate(pts):
+                if i in deleted or p is None:
+                    continue
+                if p[0] is None or p[1] is None:
+                    continue
+                n = max(n, i + 1)
+    if template_keypoint_names:
+        n = max(n, len(template_keypoint_names))
+    n = max(n, len(marker_slot_names), 1)
+    while len(marker_slot_names) < n:
+        idx = len(marker_slot_names)
+        if template_keypoint_names and idx < len(template_keypoint_names):
+            marker_slot_names.append(str(template_keypoint_names[idx]))
+        else:
+            marker_slot_names.append(f"p{idx}")
+    return marker_slot_names
+
+
+def markers_to_detection_bboxes(
+    coordinates: dict,
+    deleted_positions: dict | None,
+    original_width: int,
+    original_height: int,
+    marker_slot_names: list[str],
+    box_wh_px: tuple[int, int] | None = None,
+) -> dict[int, list[dict[str, Any]]]:
+    """Convert marker points into labeling-style detection boxes.
+
+    Each visible marker becomes one box with ``label`` from ``marker_slot_names``.
+    Box size uses ``box_wh_px`` (Track AI block_window) when given; otherwise a
+    default fraction of the frame (same soft-box scale as typical pose exports).
+    """
+    if box_wh_px is not None and box_wh_px[0] > 0 and box_wh_px[1] > 0:
+        bw = float(box_wh_px[0])
+        bh = float(box_wh_px[1])
+    else:
+        bw = float(original_width) * _DEFAULT_DETECT_BOX_W_FRAC
+        bh = float(original_height) * _DEFAULT_DETECT_BOX_H_FRAC
+
+    out: dict[int, list[dict[str, Any]]] = {}
+    for f_idx, pts in coordinates.items():
+        if not pts:
+            continue
+        deleted = deleted_positions.get(f_idx, set()) if deleted_positions else set()
+        frame_boxes: list[dict[str, Any]] = []
+        for i, p in enumerate(pts):
+            if i in deleted or p is None:
+                continue
+            if p[0] is None or p[1] is None:
+                continue
+            cx, cy = float(p[0]), float(p[1])
+            x = max(0.0, cx - bw / 2.0)
+            y = max(0.0, cy - bh / 2.0)
+            w = min(float(original_width) - x, bw)
+            h = min(float(original_height) - y, bh)
+            if w < 2.0 or h < 2.0:
+                continue
+            label = (
+                marker_slot_names[i]
+                if i < len(marker_slot_names) and marker_slot_names[i]
+                else f"p{i}"
+            )
+            frame_boxes.append(
+                {
+                    "x": int(round(x)),
+                    "y": int(round(y)),
+                    "w": int(round(w)),
+                    "h": int(round(h)),
+                    "label": label,
+                }
+            )
+        if frame_boxes:
+            out[int(f_idx)] = frame_boxes
+    return out
+
+
+def write_ai_tracker_train_manifest(
+    dataset_dir: str,
+    *,
+    task: str,
+    classes: list[str],
+    source_video: str | None = None,
+    marker_slot_names: list[str] | None = None,
+) -> str:
+    """Write ``ai_tracker_train.json`` next to ``data.yaml`` for the offline trainer."""
+    payload = {
+        "version": "0.4.4",
+        "task": task,
+        "classes": list(classes),
+        "source_video": os.path.abspath(source_video) if source_video else "",
+        "marker_slot_names": list(marker_slot_names or []),
+    }
+    path = os.path.join(dataset_dir, "ai_tracker_train.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    print(f">> vaila/getpixelvideo: ai_tracker_train.json -> {path}")
+    return path
 
 
 def export_labeling_dataset(

@@ -366,9 +366,14 @@
               appending to an existing folder (F7)
             </li>
             <li>
-              <strong>Save ML (button / Ctrl+E):</strong> Export a PNG pose
-              dataset with user-selected train/val/test split and build an
-              <code>all_labels/</code> didactic view with split-prefixed label copies
+              <strong>Save ML (button / Ctrl+E):</strong> Choose pose or detect,
+              export PNG split dataset and build an
+              <code>all_labels/</code> didactic view; writes
+              <code>ai_tracker_train.json</code> for Train AI Tracker
+            </li>
+            <li>
+              <strong>Rename (button / Ctrl+N):</strong> Map marker slots
+              <code>p0/p1…</code> to COCO-80 or custom names before Save ML
             </li>
             <li>
               <strong>Guide (<code>G</code>):</strong> Visual-only overlay for active template (FIFA field or pose skeleton).
@@ -1584,7 +1589,12 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
           <li><strong>Activation:</strong> Press <strong>F9</strong> when markers exist.</li>
         </ul>
 
-        <h3>Save ML dataset (PNG split + all_labels) — <span class="key">Ctrl+E</span> or button</h3>
+        <h3>Save ML dataset (pose|detect + PNG split + all_labels) — <span class="key">Ctrl+E</span> or button</h3>
+        <p>Prompt 1 = pose / 2 = detect; then split ratios. Detect uses Rename slot names as classes.
+        Same folder trains via Markerless 2D → Train YOLOv26 or Train AI Tracker.</p>
+        <h3>Rename marker slots — <span class="key">Ctrl+N</span> or button</h3>
+        <p>Map <code>p0</code>, <code>p1</code>, … to COCO-80 or custom names before Save ML.</p>
+        <h3>Save ML dataset (legacy PNG note)</h3>
         <ul>
           <li>
             <strong>Export:</strong> Runs split export (<code>train/val/test</code>) using

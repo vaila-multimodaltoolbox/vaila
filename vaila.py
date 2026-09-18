@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 17 September 2026
+Update Date: 18 September 2026
 Version: 0.4.4
 
 Example of usage:
@@ -2015,7 +2015,7 @@ class Vaila(tk.Tk):
         (SAM3+DINOv3) live under Markerless 3D instead.
         """
         dialog, place_button, place_section = self._build_grid_chooser_dialog(
-            "Markerless 2D — Select Tool", width=680, height=600
+            "Markerless 2D — Select Tool", width=680, height=640
         )
 
         # Ensure Ultralytics never downloads into repo root.
@@ -2142,6 +2142,18 @@ class Vaila(tk.Tk):
             except Exception as e:
                 messagebox.showerror("Error in YOLO Training", f"Error: {str(e)}")
 
+        def use_train_ai_tracker():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 2D",
+                "Train AI Tracker",
+                "uv run --no-sync python -u -m vaila.ai_tracker_train",
+            )
+            try:
+                run_vaila_module("vaila.ai_tracker_train", extra_py_flags=("-u",))
+            except Exception as e:
+                messagebox.showerror("Error in AI Tracker Training", f"Error: {str(e)}")
+
         def use_sam():
             dialog.destroy()
             _print_chooser_launch(
@@ -2221,6 +2233,7 @@ class Vaila(tk.Tk):
         place_button("Pose (tracking)", use_yolov26_pose_tracking)
         place_button("Seg (v26)", use_yolov26_seg)
         place_button("Train YOLOv26", use_train_yolov26)
+        place_button("Train AI Tracker", use_train_ai_tracker)
 
         place_section("SAM3 / Sapiens2 (2D)")
         place_button("SAM 3 video", use_sam)
