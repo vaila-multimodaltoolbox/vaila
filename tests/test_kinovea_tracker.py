@@ -9,8 +9,8 @@ Validates:
 5. Real-data test on JJ_Kabuto video with sparse keyframe anchors.
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 11 September 2026
-Version: 0.3.137
+Update Date: 18 September 2026
+Version: 0.4.4
 """
 
 from __future__ import annotations
@@ -508,3 +508,41 @@ def test_ai_tracker_tracking_shape_parameters_and_centroid(tmp_path: os.PathLike
     assert res.location is not None
     assert abs(res.location[0] - 62.0) < 2.0
     assert abs(res.location[1] - 61.0) < 2.0
+
+
+def test_track_frame_edge_clip_does_not_raise_opencv5_assert() -> None:
+    """Near-edge search ROI must not hit OpenCV 5 incomparable-size matchTemplate assert."""
+    frame = _render_synthetic_marker((200, 200), (10.0, 10.0), seed=7)
+    params = AITrackerParameters(
+        search_window=(140, 140),
+        block_window=(36, 36),
+        use_mask=True,
+        use_deep_features=False,
+    )
+    tracker = AITracker(parameters=params)
+    tracker.set_reference(frame, (10.0, 10.0))
+    # Prediction near corner previously built a clipped ROI taller/narrower than the
+    # template in only one axis → OpenCV(5) Assertion failed (_img <= _templ).
+    res = tracker.track_frame(frame, (5.0, 5.0))
+    assert res.location is not None
+    assert isinstance(res.accepted, bool)
+
+
+def test_track_frame_stale_template_larger_than_block_window() -> None:
+    """If block_window shrinks after set_reference, tracking must fail soft — not raise."""
+    frame = _render_synthetic_marker((400, 400), (200.0, 200.0), seed=8)
+    params = AITrackerParameters(
+        search_window=(100, 50),
+        block_window=(60, 60),
+        use_mask=True,
+        use_deep_features=False,
+    )
+    tracker = AITracker(parameters=params)
+    tracker.set_reference(frame, (200.0, 200.0))
+    assert tracker.template is not None
+    assert tracker.template.shape[:2] == (60, 60)
+    tracker.params.block_window = (30, 30)
+    # Asymmetric search + stale 60x60 template used to raise; now pads / fail-softs.
+    res = tracker.track_frame(frame, (200.0, 10.0))
+    assert res.accepted is False or res.location is not None
+    assert res.similarity >= 0.0

@@ -1254,7 +1254,6 @@ class AITracker:
 
         h_img, w_img = frame.shape[:2]
         sw, sh = self.params.search_window
-        bw, bh = self.params.block_window
 
         # Global scene-change score: mean abs diff of downsampled grayscale prev-vs-
         # current frame, normalized [0, 1]. Cheap (64x64), and only ever used to
@@ -1291,22 +1290,54 @@ class AITracker:
         pred_y = float(kf_x_pred[1])
         lx, ly = int(round(pred_x)), int(round(pred_y))
 
-        # Search window bounding box centered on prediction
+        # Search window bounding box centered on prediction. OpenCV 5 matchTemplate
+        # rejects "incomparable" sizes (ROI smaller than template in one dim and larger
+        # in the other). Pad clipped borders like extract_patch so the ROI stays a full
+        # search_window and is always componentwise >= the live template.
+        th, tw = int(self.template.shape[0]), int(self.template.shape[1])
+        sw = max(int(sw), tw)
+        sh = max(int(sh), th)
         sx1 = lx - sw // 2
         sy1 = ly - sh // 2
         sx2 = sx1 + sw
         sy2 = sy1 + sh
 
-        # Intersect with frame dimensions
         crop_sx1 = max(0, sx1)
         crop_sy1 = max(0, sy1)
         crop_sx2 = min(w_img, sx2)
         crop_sy2 = min(h_img, sy2)
 
+        pad_left = crop_sx1 - sx1
+        pad_top = crop_sy1 - sy1
+        pad_right = sx2 - crop_sx2
+        pad_bottom = sy2 - crop_sy2
+
         roi = frame[crop_sy1:crop_sy2, crop_sx1:crop_sx2]
-        if roi.shape[0] < bh or roi.shape[1] < bw:
-            # No measurement this frame: propagate-only (predicted state becomes the new
-            # belief, uncertainty keeps growing under Q).
+        if roi.size == 0:
+            self._kf_x = kf_x_pred
+            self._kf_P = kf_p_pred
+            self._lost_streak += 1
+            return TemplateMatchResult(
+                similarity=0.0,
+                ncc_score=0.0,
+                deep_score=0.0,
+                location=last_point,
+                raw_location=(int(round(last_point[0])), int(round(last_point[1]))),
+                template_updated=False,
+                accepted=False,
+            )
+        if pad_left > 0 or pad_top > 0 or pad_right > 0 or pad_bottom > 0:
+            roi = cv2.copyMakeBorder(
+                roi,
+                pad_top,
+                pad_bottom,
+                pad_left,
+                pad_right,
+                cv2.BORDER_REPLICATE,
+            )
+
+        # Prefer live template shape over params.block_window (can drift after shape drag).
+        if roi.shape[0] < th or roi.shape[1] < tw:
             self._kf_x = kf_x_pred
             self._kf_P = kf_p_pred
             self._lost_streak += 1
@@ -1320,11 +1351,18 @@ class AITracker:
                 accepted=False,
             )
 
-        # Match template using NCC (cv2.TM_CCOEFF_NORMED)
+        # Match template using NCC (cv2.TM_CCOEFF_NORMED). Mask path needs img >= templ
+        # in both dims; on any OpenCV failure treat as no measurement (do not retry the
+        # same illegal sizes — that re-raises the OpenCV 5 incomparable-size assert).
         mask_to_use = self.mask if (self.params.use_mask and self.mask is not None) else None
+        smap: np.ndarray | None = None
         try:
-            if mask_to_use is not None:
-                if len(roi.shape) == 3 and mask_to_use.ndim == 2:
+            if (
+                mask_to_use is not None
+                and mask_to_use.shape[0] == th
+                and mask_to_use.shape[1] == tw
+            ):
+                if roi.ndim == 3 and mask_to_use.ndim == 2:
                     cv_mask = cv2.merge([mask_to_use, mask_to_use, mask_to_use])
                 else:
                     cv_mask = mask_to_use
@@ -1332,15 +1370,31 @@ class AITracker:
             else:
                 smap = cv2.matchTemplate(roi, self.template, cv2.TM_CCOEFF_NORMED)
         except Exception:
-            smap = cv2.matchTemplate(roi, self.template, cv2.TM_CCOEFF_NORMED)
+            try:
+                smap = cv2.matchTemplate(roi, self.template, cv2.TM_CCOEFF_NORMED)
+            except Exception:
+                smap = None
+        if smap is None or smap.size == 0:
+            self._kf_x = kf_x_pred
+            self._kf_P = kf_p_pred
+            self._lost_streak += 1
+            return TemplateMatchResult(
+                similarity=0.0,
+                ncc_score=0.0,
+                deep_score=0.0,
+                location=last_point,
+                raw_location=(int(round(last_point[0])), int(round(last_point[1]))),
+                template_updated=False,
+                accepted=False,
+            )
 
         # Handle NaNs or Infs
         if np.isnan(smap).any() or np.isinf(smap).any():
             smap = np.nan_to_num(smap, nan=-1.0, posinf=1.0, neginf=-1.0)
 
-        # 2D Gaussian Spatial Motion Prior around predicted position
-        center_map_x = lx - crop_sx1 - bw // 2
-        center_map_y = ly - crop_sy1 - bh // 2
+        # 2D Gaussian Spatial Motion Prior around predicted position (padded ROI origin = sx1,sy1)
+        center_map_x = lx - sx1 - tw // 2
+        center_map_y = ly - sy1 - th // 2
         sh_map, sw_map = smap.shape[:2]
         yy, xx = np.mgrid[:sh_map, :sw_map]
         dist2 = (xx - center_map_x) ** 2 + (yy - center_map_y) ** 2
@@ -1357,19 +1411,19 @@ class AITracker:
         ref_x, ref_y = refine_location_parabola(smap, max_loc, ncc_score)
 
         # Compute candidate point in full image coordinates (center of template)
-        cand_x = float(crop_sx1 + ref_x + bw / 2.0)
-        cand_y = float(crop_sy1 + ref_y + bh / 2.0)
+        cand_x = float(sx1 + ref_x + tw / 2.0)
+        cand_y = float(sy1 + ref_y + th / 2.0)
 
         # Extract candidate patch for visual / discriminator evaluation
-        cand_patch = self.extract_patch(frame, (cand_x, cand_y), (bw, bh))
+        cand_patch = self.extract_patch(frame, (cand_x, cand_y), (tw, th))
 
         # Shape-aware centroid refinement: compute feature centroid for circle or box
         shape_mode = getattr(self.params, "tracking_shape", "point").lower()
         if shape_mode in ("circle", "box", "rectangle") and cand_patch.size > 0:
-            cx_c, cy_c = self.compute_shape_centroid(cand_patch, shape_mode, bw, bh)
-            cand_x = float(crop_sx1 + ref_x + cx_c)
-            cand_y = float(crop_sy1 + ref_y + cy_c)
-            cand_patch = self.extract_patch(frame, (cand_x, cand_y), (bw, bh))
+            cx_c, cy_c = self.compute_shape_centroid(cand_patch, shape_mode, tw, th)
+            cand_x = float(sx1 + ref_x + cx_c)
+            cand_y = float(sy1 + ref_y + cy_c)
+            cand_patch = self.extract_patch(frame, (cand_x, cand_y), (tw, th))
 
         # Deep Feature Cosine Similarity Verification
         deep_score = None
@@ -1484,8 +1538,8 @@ class AITracker:
 
         template_updated = False
         raw_loc = (
-            int(crop_sx1 + max_loc[0] + bw // 2),
-            int(crop_sy1 + max_loc[1] + bh // 2),
+            int(sx1 + max_loc[0] + tw // 2),
+            int(sy1 + max_loc[1] + th // 2),
         )
 
         if not accepted:
