@@ -436,20 +436,18 @@ def _draw_instance(
     return _draw_sam_contour_outline_and_id(out, instance, contour, selected_id=selected_id)
 
 
-def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[cv2.VideoWriter, Path]:
+def _open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[Any, Path]:
     path.parent.mkdir(parents=True, exist_ok=True)
-    for suffix, codec in ((".mp4", "mp4v"), (".avi", "XVID")):
-        candidate = path.with_suffix(suffix)
-        writer = cv2.VideoWriter(
-            str(candidate),
-            cv2.VideoWriter_fourcc(*codec),  # ty: ignore[unresolved-attribute]
-            fps,
-            size,
-        )
-        if writer.isOpened():
-            return writer, candidate
-        writer.release()
-    raise OSError(f"Could not open a video writer for {path}")
+    try:
+        from .vaila_sam import _open_sam3_video_writer
+    except ImportError:
+        from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
+    return _open_sam3_video_writer(
+        path,
+        fps,
+        size,
+        purpose="SAM3+DINOv3 visualize overlay",
+    )
 
 
 def render_selected_video(

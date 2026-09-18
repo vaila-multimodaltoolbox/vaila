@@ -1807,16 +1807,27 @@ def _open_sam3_video_writer(
     *,
     purpose: str = "SAM3 video",
 ) -> tuple[Any, Path]:
-    """Open a video writer with mp4v → MJPG/XVID → ffmpeg pipe fallback.
+    """Open a video writer preferring ffmpeg libx264, then mp4v/MJPG/XVID.
+
+    Prefer the ffmpeg pipe when available: OpenCV ``mp4v`` (MPEG-4 Part 2)
+    inflates high-speed overlays (hundreds of Mb/s). OpenCV ``avc1`` is still
+    avoided (broken ``h264_v4l2m2m`` on some ARM boards). Every source frame is
+    written at the given ``fps`` so frame indices stay aligned with analysis CSVs.
 
     Removes any stale destination file first. Returns ``(writer, actual_path)``;
-    ``actual_path`` may use ``.avi`` when ``mp4v`` fails (same pattern as
-    ``yolov26track`` overlay export).
+    ``actual_path`` may use ``.avi`` when only OpenCV codecs succeed.
     """
     w, h = size
     if w <= 0 or h <= 0:
         raise OSError(f"{purpose}: invalid frame size {w}x{h}")
+    write_fps = float(fps)
     tried: list[str] = []
+    if _sam3_ffmpeg_available():
+        try:
+            return _open_sam3_ffmpeg_pipe_writer(path, write_fps, size, purpose=purpose)
+        except OSError as exc:
+            tried.append(f"ffmpeg-pipe({exc})")
+
     parent = path.parent
     stem = path.stem
     for fourcc_name, ext in _SAM3_WRITER_FALLBACKS:
@@ -1824,7 +1835,7 @@ def _open_sam3_video_writer(
         with contextlib.suppress(OSError):
             candidate.unlink(missing_ok=True)
         fourcc = cv2.VideoWriter_fourcc(*fourcc_name)  # ty: ignore[unresolved-attribute]
-        writer = cv2.VideoWriter(str(candidate), fourcc, float(fps), (w, h))
+        writer = cv2.VideoWriter(str(candidate), fourcc, write_fps, (w, h))
         if writer.isOpened():
             if ext != path.suffix.lower():
                 print(
@@ -1834,12 +1845,8 @@ def _open_sam3_video_writer(
             return writer, candidate.resolve()
         writer.release()
         tried.append(f"{fourcc_name}({candidate.name})")
-    try:
-        return _open_sam3_ffmpeg_pipe_writer(path, fps, size, purpose=purpose)
-    except OSError as exc:
-        tried.append(f"ffmpeg-pipe({exc})")
     raise OSError(
-        f"Could not open VideoWriter for {purpose} ({w}x{h} @ {fps:.3f} fps). "
+        f"Could not open VideoWriter for {purpose} ({w}x{h} @ {write_fps:.3f} fps). "
         f"Tried: {', '.join(tried)}"
     )
 
