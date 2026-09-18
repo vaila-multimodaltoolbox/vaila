@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 16 September 2026
-Version: 0.4.3
+Update: 18 September 2026
+Version: 0.4.4
 Python Version: 3.12.14
 
 Description:
@@ -25,8 +25,9 @@ AI Track & JIT Online Learning (toolbar AI Track button / T key):
     ``vaila/models/ai_tracker/discriminator_<profile>.npz`` (default: discriminator_default.npz).
     Subsequent sessions load and incrementally update the checkpoint via sample-count
     weighted averaging (transfer learning), preventing catastrophic forgetting.
-  - Deep NN Features: optional ResNet50/ResNet152 semantic embedding (2048-D) via
-    PyTorch/CUDA (weights at ``vaila/models/ai_tracker/`` or Torch hub cache), also
+  - Deep NN Features: optional ResNet50/ResNet152/MobileNetV3/EfficientNet semantic
+    embedding via PyTorch/CUDA. Weights live under ``vaila/models/ai_tracker/``
+    (browse or download clean official ImageNet checkpoints when missing); also
     optionally concatenated into the retrained online discriminator's feature vector.
   - Shape & Batch: point/circle/box region features, Shift+T batch RTS smoothing.
   - Ground Truth Preservation: existing manual coordinates are never overwritten.
@@ -253,8 +254,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.3"
-GETPIXELVIDEO_UPDATE_DATE = "17 September 2026"
+GETPIXELVIDEO_VERSION = "0.4.4"
+GETPIXELVIDEO_UPDATE_DATE = "18 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -4333,16 +4334,83 @@ def play_video_with_controls(
     # Alias for clarity
     run_ai_batch_tracking = run_subspace_rts_tracking
 
+    def _ensure_track_ai_backbone_weights(
+        variant: str = "resnet50",
+        *,
+        weights_path: str = "",
+        interactive: bool = True,
+    ) -> str | None:
+        """Resolve backbone weights under vaila/models/ai_tracker/ (browse or download).
+
+        Returns absolute path string, or None if cancelled / unavailable. Updates
+        ``track_ai_params.deep_weights_path`` and ``resnet_variant`` when found.
+        """
+        nonlocal track_ai_params, save_message_text, showing_save_message, save_message_timer
+        from vaila.tracking import AITrackerParameters, ensure_backbone_weights
+        from vaila.tracking.ai_tracker import _default_checkpoint_dir
+
+        if track_ai_params is None:
+            track_ai_params = AITrackerParameters(
+                use_deep_features=track_ai_use_deep,
+                deep_weight=0.25 if track_ai_use_deep else 0.0,
+                tracking_shape=track_ai_shape,
+            )
+
+        total_h = window_height + control_panel_height
+        ai_dir = _default_checkpoint_dir()
+        ai_dir.mkdir(parents=True, exist_ok=True)
+
+        def _prompt_choice(v: str) -> str | None:
+            if not interactive:
+                return None
+            choice = show_input_dialog(
+                "AI Track backbone weights missing under\n"
+                f"  {ai_dir}\n\n"
+                f"Variant: {v}\n"
+                "1 = Browse existing .pth/.pt\n"
+                "2 = Download clean official ImageNet weights\n"
+                "Enter / Esc = cancel",
+                "2",
+            )
+            if choice is None:
+                return None
+            return str(choice).strip()
+
+        def _browse() -> str | None:
+            if not interactive:
+                return None
+            picked = pygame_file_dialog(
+                initial_dir=str(ai_dir),
+                file_extensions=[".pth", ".pt"],
+                restore_size=(window_width, total_h),
+            )
+            return picked if (picked and os.path.isfile(picked)) else None
+
+        resolved = ensure_backbone_weights(
+            variant,
+            weights_path=weights_path or None,
+            prompt_fn=_prompt_choice if interactive else None,
+            browse_fn=_browse if interactive else None,
+        )
+        if resolved is None:
+            save_message_text = f"AI Track: no {variant} weights (cancelled)"
+            showing_save_message = True
+            save_message_timer = 100
+            return None
+
+        path_str = str(resolved)
+        track_ai_params.deep_weights_path = path_str
+        track_ai_params.resnet_variant = variant
+        print(f">> AI Track: {variant} weights ready -> {path_str}")
+        return path_str
+
     def select_track_ai_weights() -> None:
         """Cycle or select backbone deep feature weights (.pth/.pt) for Track AI.
 
         Cycles through all four selectable backbones (resnet50, resnet152,
-        mobilenet_v3_small, efficientnet_b0), not just the ones with a local
-        checkpoint file already on disk: a variant with no local checkpoint gets
-        one "Torch Hub default" cycle entry that auto-downloads its pretrained
-        weights on first use (via `torchvision.models.get_model_weights`), so a
-        machine with only resnet50_imagenet.pth downloaded can still reach every
-        other backbone from this one button/hotkey. Past the last entry, opens a
+        mobilenet_v3_small, efficientnet_b0). A variant with no local checkpoint
+        under ``vaila/models/ai_tracker/`` prompts to browse or download a clean
+        official ImageNet file into that folder. Past the last entry, opens a
         file browser for a fully custom .pth/.pt (variant inferred from filename).
         """
         nonlocal track_ai_params, track_ai_use_deep, live_tracker
@@ -4370,8 +4438,8 @@ def play_video_with_controls(
                 return "efficientnet_b0"
             return "resnet50"
 
-        # One cycle entry per discovered local checkpoint; one "Torch Hub default"
-        # entry (empty path) for any variant with none found locally yet.
+        # One cycle entry per discovered local checkpoint; one empty-path entry
+        # for any variant with none found locally yet (triggers browse/download).
         _variants = ("resnet50", "resnet152", "mobilenet_v3_small", "efficientnet_b0")
         entries: list[tuple[str, str]] = []
         for _variant in _variants:
@@ -4389,7 +4457,10 @@ def play_video_with_controls(
         if cur_idx + 1 < len(entries):
             inferred_variant, chosen_path = entries[cur_idx + 1]
         else:
-            init_d = os.path.dirname(video_path) if video_path else os.getcwd()
+            from vaila.tracking.ai_tracker import _default_checkpoint_dir
+
+            init_d = str(_default_checkpoint_dir())
+            _default_checkpoint_dir().mkdir(parents=True, exist_ok=True)
             custom = pygame_file_dialog(
                 initial_dir=init_d,
                 file_extensions=[".pth", ".pt"],
@@ -4397,6 +4468,15 @@ def play_video_with_controls(
             )
             chosen_path = custom if (custom and os.path.isfile(custom)) else ""
             inferred_variant = _infer_variant_from_filename(chosen_path)
+
+        ensured = _ensure_track_ai_backbone_weights(
+            inferred_variant,
+            weights_path=chosen_path,
+            interactive=True,
+        )
+        if ensured is None:
+            return
+        chosen_path = ensured
 
         track_ai_params.deep_weights_path = chosen_path
         track_ai_params.use_deep_features = True
@@ -4406,14 +4486,12 @@ def play_video_with_controls(
 
         if live_tracker is not None:
             live_tracker.params = track_ai_params
-            # Switching backbone can trigger a fresh, blocking Torch Hub download or
-            # model build; keep the event loop pumping (see toggle_track_ai) instead
-            # of freezing the window for however long that takes.
+            # Backbone build can take seconds; keep the event loop pumping.
             _extractor, _ext_err = _run_blocking_with_loading_banner(
                 screen,
                 f"Loading {inferred_variant} weights",
                 lambda: DeepFeatureExtractor.get_shared(
-                    weights_path=chosen_path or None, variant=inferred_variant
+                    weights_path=chosen_path, variant=inferred_variant
                 ),
             )
             if _ext_err is not None:
@@ -4421,13 +4499,11 @@ def play_video_with_controls(
             else:
                 live_tracker.extractor = _extractor
 
-        tag = os.path.basename(chosen_path) if chosen_path else "Default Torch Hub"
+        tag = os.path.basename(chosen_path)
         save_message_text = f"AI Track: {inferred_variant} weights -> {tag}"
         showing_save_message = True
         save_message_timer = 100
-        print(
-            f">> AI Track: {inferred_variant} weights configured -> {chosen_path or 'Default Torch Hub'}"
-        )
+        print(f">> AI Track: {inferred_variant} weights configured -> {chosen_path}")
 
     def _handle_track_ai_toml_dialog() -> None:
         """Modal dialog rendered natively in Pygame to Save, Load, or Reset Track AI parameters."""
@@ -4802,7 +4878,7 @@ def play_video_with_controls(
 
     def toggle_track_ai_deep(explicit_state: bool | None = None) -> None:
         """Toggle Deep NN features used by AI Track (checkbox beside AI Track, to its right)."""
-        nonlocal track_ai_use_deep, live_tracker
+        nonlocal track_ai_use_deep, live_tracker, track_ai_params
         nonlocal showing_save_message, save_message_text, save_message_timer
 
         new_state = (not track_ai_use_deep) if explicit_state is None else bool(explicit_state)
@@ -4811,20 +4887,55 @@ def play_video_with_controls(
             live_tracker.params.use_deep_features = track_ai_use_deep
             live_tracker.params.deep_weight = 0.25 if track_ai_use_deep else 0.0
             if track_ai_use_deep and live_tracker.extractor is None:
-                # Pre-warm backbone so the next track_frame() does not block mid-play.
+                # Ensure weights under vaila/models/ai_tracker/ before warming the backbone.
                 from vaila.tracking import DeepFeatureExtractor
 
-                _deep_weights_path = live_tracker.params.deep_weights_path or None
-                _deep_variant = live_tracker.params.resnet_variant
+                _deep_variant = getattr(live_tracker.params, "resnet_variant", "resnet50") or (
+                    "resnet50"
+                )
+                _curr_w = getattr(live_tracker.params, "deep_weights_path", "") or ""
+                _ensured = _ensure_track_ai_backbone_weights(
+                    _deep_variant, weights_path=_curr_w, interactive=True
+                )
+                if _ensured is None:
+                    track_ai_use_deep = False
+                    live_tracker.params.use_deep_features = False
+                    live_tracker.params.deep_weight = 0.0
+                    save_message_text = "AI Track Deep checkbox: OFF (no weights)"
+                    showing_save_message = True
+                    save_message_timer = 100
+                    print(">> AI Track Deep checkbox: OFF (no weights)")
+                    return
+                live_tracker.params.deep_weights_path = _ensured
+                if track_ai_params is not None:
+                    track_ai_params.deep_weights_path = _ensured
                 live_tracker.extractor, _deep_err = _run_blocking_with_loading_banner(
                     screen,
                     f"Loading {_deep_variant} weights",
-                    lambda wp=_deep_weights_path, v=_deep_variant: DeepFeatureExtractor.get_shared(
+                    lambda wp=_ensured, v=_deep_variant: DeepFeatureExtractor.get_shared(
                         weights_path=wp, variant=v
                     ),
                 )
                 if _deep_err is not None:
                     print(f">> Track AI Deep NN warmup warning: {_deep_err}")
+        elif track_ai_use_deep:
+            # Deep ON before Track AI is active: resolve weights early so the first
+            # anchor click does not surprise-download into ~/.cache.
+            _deep_variant = "resnet50"
+            _curr_w = ""
+            if track_ai_params is not None:
+                _deep_variant = getattr(track_ai_params, "resnet_variant", "resnet50") or "resnet50"
+                _curr_w = getattr(track_ai_params, "deep_weights_path", "") or ""
+            _ensured = _ensure_track_ai_backbone_weights(
+                _deep_variant, weights_path=_curr_w, interactive=True
+            )
+            if _ensured is None:
+                track_ai_use_deep = False
+                save_message_text = "AI Track Deep checkbox: OFF (no weights)"
+                showing_save_message = True
+                save_message_timer = 100
+                print(">> AI Track Deep checkbox: OFF (no weights)")
+                return
         state_str = "ON" if track_ai_use_deep else "OFF"
         save_message_text = f"AI Track Deep checkbox: {state_str}"
         showing_save_message = True
@@ -4836,7 +4947,7 @@ def play_video_with_controls(
         nonlocal track_ai_active, live_tracker, live_track_target_marker, live_track_last_frame
         nonlocal selected_marker_idx, marker_selection_locked, frame_count, last_valid_frame
         nonlocal showing_save_message, save_message_text, save_message_timer
-        nonlocal live_track_protected_frames
+        nonlocal live_track_protected_frames, track_ai_use_deep, track_ai_params
 
         new_state = (not track_ai_active) if explicit_state is None else bool(explicit_state)
 
@@ -4967,6 +5078,19 @@ def play_video_with_controls(
 
         try:
             from vaila.tracking import AITracker, AITrackerParameters
+
+            if track_ai_use_deep:
+                _var = "resnet50"
+                _wp = ""
+                if track_ai_params is not None:
+                    _var = getattr(track_ai_params, "resnet_variant", "resnet50") or "resnet50"
+                    _wp = getattr(track_ai_params, "deep_weights_path", "") or ""
+                _ensured = _ensure_track_ai_backbone_weights(
+                    _var, weights_path=_wp, interactive=True
+                )
+                if _ensured is None:
+                    track_ai_use_deep = False
+                    print(">> Track AI: Deep NN disabled (no local backbone weights).")
 
             if track_ai_params is not None:
                 params = copy.deepcopy(track_ai_params)
@@ -12629,6 +12753,34 @@ def play_video_with_controls(
                                     try:
                                         from vaila.tracking import AITracker, AITrackerParameters
 
+                                        if track_ai_use_deep:
+                                            _var = "resnet50"
+                                            _wp = ""
+                                            if track_ai_params is not None:
+                                                _var = (
+                                                    getattr(
+                                                        track_ai_params,
+                                                        "resnet_variant",
+                                                        "resnet50",
+                                                    )
+                                                    or "resnet50"
+                                                )
+                                                _wp = (
+                                                    getattr(
+                                                        track_ai_params, "deep_weights_path", ""
+                                                    )
+                                                    or ""
+                                                )
+                                            _ensured = _ensure_track_ai_backbone_weights(
+                                                _var, weights_path=_wp, interactive=True
+                                            )
+                                            if _ensured is None:
+                                                track_ai_use_deep = False
+                                                print(
+                                                    ">> Track AI: Deep NN disabled "
+                                                    "(no local backbone weights)."
+                                                )
+
                                         if track_ai_params is not None:
                                             params = copy.deepcopy(track_ai_params)
                                         else:
@@ -12845,6 +12997,21 @@ def play_video_with_controls(
                             deleted_positions[frame_count].discard(target_idx)
 
                             try:
+                                if track_ai_use_deep and live_tracker is None:
+                                    _var = (
+                                        getattr(track_ai_params, "resnet_variant", "resnet50")
+                                        or "resnet50"
+                                    )
+                                    _wp = getattr(track_ai_params, "deep_weights_path", "") or ""
+                                    _ensured = _ensure_track_ai_backbone_weights(
+                                        _var, weights_path=_wp, interactive=True
+                                    )
+                                    if _ensured is None:
+                                        track_ai_use_deep = False
+                                        print(
+                                            ">> Track AI: Deep NN disabled "
+                                            "(no local backbone weights)."
+                                        )
                                 params = copy.deepcopy(track_ai_params)
                                 params.use_deep_features = track_ai_use_deep
                                 params.deep_weight = 0.25 if track_ai_use_deep else 0.0

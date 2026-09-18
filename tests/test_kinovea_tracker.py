@@ -25,7 +25,6 @@ import pytest
 from vaila.tracking.ai_tracker import (
     AITracker,
     AITrackerParameters,
-    DeepFeatureExtractor,
     KinoveaTrackerParameters,
     infill_and_smooth,
     refine_location_parabola,
@@ -185,7 +184,15 @@ test_kinovea_template_update_policy = test_ai_template_update_policy
 
 def test_deep_feature_extractor() -> None:
     """Validates ResNet50 visual feature extractor and cosine similarity."""
-    extractor = DeepFeatureExtractor.get_shared()
+    from vaila.tracking import DeepFeatureExtractor, ensure_backbone_weights
+
+    # Prefer scientist-visible ai_tracker/ (migrate from hub cache if needed).
+    weights = ensure_backbone_weights("resnet50", prompt_fn=None)
+    if weights is None:
+        pytest.skip("No local ResNet50 weights under vaila/models/ai_tracker/.")
+
+    DeepFeatureExtractor._instances.clear()
+    extractor = DeepFeatureExtractor.get_shared(weights_path=weights, variant="resnet50")
     if not extractor.enabled:
         pytest.skip("Torch / Torchvision ResNet50 not available.")
 
@@ -415,7 +422,9 @@ def test_ai_tracker_online_discriminator() -> None:
 
     assert 0.0 <= score_pos <= 1.0
     assert 0.0 <= score_bg <= 1.0
-    assert score_pos > score_bg, f"Positive score ({score_pos:.3f}) should exceed BG ({score_bg:.3f})"
+    assert score_pos > score_bg, (
+        f"Positive score ({score_pos:.3f}) should exceed BG ({score_bg:.3f})"
+    )
 
 
 def test_ai_tracker_toml_save_load(tmp_path: os.PathLike) -> None:
@@ -465,7 +474,9 @@ def test_ai_tracker_tracking_shape_parameters_and_centroid(tmp_path: os.PathLike
     assert AITrackerParameters.from_toml(str(toml_box)).tracking_shape == "box"
 
     # 2. Centroid of point returns geometric center
-    assert AITracker.compute_shape_centroid(np.zeros((36, 36, 3), dtype=np.uint8), "point", 36, 36) == (18.0, 18.0)
+    assert AITracker.compute_shape_centroid(
+        np.zeros((36, 36, 3), dtype=np.uint8), "point", 36, 36
+    ) == (18.0, 18.0)
 
     # 3. Centroid of synthetic circle (bright circle centered at (22, 14) in 36x36 patch)
     circle_patch = np.zeros((36, 36), dtype=np.uint8)
@@ -487,7 +498,9 @@ def test_ai_tracker_tracking_shape_parameters_and_centroid(tmp_path: os.PathLike
     assert (f_x, f_y) == (18.0, 18.0)
 
     # 6. Tracker integration with circle and box shape
-    tracker = AITracker(parameters=AITrackerParameters(tracking_shape="circle", use_deep_features=False))
+    tracker = AITracker(
+        parameters=AITrackerParameters(tracking_shape="circle", use_deep_features=False)
+    )
     frame1 = _render_synthetic_marker((120, 120), (60.0, 60.0))
     tracker.set_reference(frame1, (60.0, 60.0))
     frame2 = _render_synthetic_marker((120, 120), (62.0, 61.0))

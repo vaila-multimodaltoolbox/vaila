@@ -9,17 +9,19 @@ into the retrained online discriminator's feature vector. Integrates bidirection
 keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 14 September 2026
-Version: 0.4.1
+Update Date: 18 September 2026
+Version: 0.4.4
 """
 
 from __future__ import annotations
 
+import shutil
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.request import urlopen
 
 import cv2
 import numpy as np
@@ -97,6 +99,35 @@ _BACKBONE_FEATURE_DIM = {
 # (MobileNetV3-Small ImageNet weights are ~9.8 MB).
 _BACKBONE_MIN_FILE_BYTES = 1_000_000
 
+# Official torchvision DEFAULT ImageNet checkpoint URLs (download into ai_tracker/, never
+# leave the scientist-facing home as ~/.cache/torch/hub/checkpoints/).
+_BACKBONE_WEIGHT_URLS: dict[str, str] = {
+    "resnet50": "https://download.pytorch.org/models/resnet50-11ad3fa6.pth",
+    "resnet152": "https://download.pytorch.org/models/resnet152-f82ba261.pth",
+    "mobilenet_v3_small": "https://download.pytorch.org/models/mobilenet_v3_small-047dcff4.pth",
+    "efficientnet_b0": (
+        "https://download.pytorch.org/models/efficientnet_b0_rwightman-7f5810bc.pth"
+    ),
+}
+
+
+def _normalize_backbone_variant(variant: str | None) -> str:
+    if variant not in _BACKBONE_VARIANTS:
+        return "resnet50"
+    return variant
+
+
+def _is_valid_weight_file(path: Path) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size > _BACKBONE_MIN_FILE_BYTES
+    except OSError:
+        return False
+
+
+def _torch_hub_checkpoints_dir() -> Path:
+    """Torch hub cache path (migration source only — never the permanent home)."""
+    return Path.home() / ".cache" / "torch" / "hub" / "checkpoints"
+
 
 def _ai_tracker_resnet_local_path(variant: str = "resnet50") -> Path:
     """Canonical local checkpoint path for a backbone variant, under vaila/models/ai_tracker/.
@@ -105,8 +136,7 @@ def _ai_tracker_resnet_local_path(variant: str = "resnet50") -> Path:
     the sole canonical location (see instructions_ai_tracker.txt). A legacy fallback to
     the general vaila/models/ directory used to exist here and has been removed.
     """
-    if variant not in _BACKBONE_VARIANTS:
-        variant = "resnet50"
+    variant = _normalize_backbone_variant(variant)
     return Path(__file__).resolve().parents[1] / "models" / "ai_tracker" / f"{variant}_imagenet.pth"
 
 
@@ -115,52 +145,41 @@ def _default_checkpoint_dir() -> Path:
     return Path(__file__).resolve().parents[1] / "models" / "ai_tracker"
 
 
-def get_available_resnet_checkpoints(variant: str = "resnet50") -> list[Path]:
-    """Scan and return all detected backbone weight checkpoints (.pth / .pt) for `variant`.
-
-    `variant` is any of `_BACKBONE_VARIANTS` (ResNet50/152, MobileNetV3-Small,
-    EfficientNet-B0) -- name kept for backward compatibility with earlier callers/tests.
-
-    Searches in:
-      1. vaila/models/ai_tracker/ (sole canonical local directory)
-      2. Torch hub cache (~/.cache/torch/hub/checkpoints/)
-    """
-    if variant not in _BACKBONE_VARIANTS:
-        variant = "resnet50"
+def _scan_weight_files(directory: Path, variant: str) -> list[Path]:
+    """Return valid .pth/.pt files under `directory` whose name contains `variant`."""
     found: list[Path] = []
     seen: set[str] = set()
-
-    def _add_if_valid(p: Path) -> None:
+    if not directory.is_dir():
+        return found
+    for cand in sorted(directory.glob(f"*{variant}*.pth")) + sorted(
+        directory.glob(f"*{variant}*.pt")
+    ):
         try:
-            resolved = p.resolve()
-            k = str(resolved)
-            if (
-                resolved.is_file()
-                and k not in seen
-                and resolved.stat().st_size > _BACKBONE_MIN_FILE_BYTES
-            ):
-                seen.add(k)
+            resolved = cand.resolve()
+            key = str(resolved)
+            if key not in seen and _is_valid_weight_file(resolved):
+                seen.add(key)
                 found.append(resolved)
         except OSError:
             pass
-
-    # 1. Models ai_tracker directory (canonical)
-    ai_dir = _default_checkpoint_dir()
-    if ai_dir.is_dir():
-        for cand in sorted(ai_dir.glob(f"*{variant}*.pth")) + sorted(
-            ai_dir.glob(f"*{variant}*.pt")
-        ):
-            _add_if_valid(cand)
-
-    # 2. Torch hub checkpoint cache
-    torch_hub = Path.home() / ".cache" / "torch" / "hub" / "checkpoints"
-    if torch_hub.is_dir():
-        for cand in sorted(torch_hub.glob(f"*{variant}*.pth")) + sorted(
-            torch_hub.glob(f"*{variant}*.pt")
-        ):
-            _add_if_valid(cand)
-
     return found
+
+
+def get_available_resnet_checkpoints(variant: str = "resnet50") -> list[Path]:
+    """Scan backbone weight checkpoints under vaila/models/ai_tracker/ only.
+
+    `variant` is any of `_BACKBONE_VARIANTS`. Torch hub cache is intentionally NOT
+    listed here — Ctrl+W / Cfg must advertise the scientist-visible directory only.
+    Use :func:`ensure_backbone_weights` to migrate a one-time hub-cache hit into
+    ``ai_tracker/``.
+    """
+    variant = _normalize_backbone_variant(variant)
+    return _scan_weight_files(_default_checkpoint_dir(), variant)
+
+
+def _hub_cache_checkpoints(variant: str = "resnet50") -> list[Path]:
+    """Scan Torch hub cache for a variant (migration source only)."""
+    return _scan_weight_files(_torch_hub_checkpoints_dir(), _normalize_backbone_variant(variant))
 
 
 def get_available_resnet50_checkpoints() -> list[Path]:
@@ -171,6 +190,127 @@ def get_available_resnet50_checkpoints() -> list[Path]:
 def _ai_tracker_resnet50_local_path() -> Path:
     """Backward-compatible alias for _ai_tracker_resnet_local_path("resnet50")."""
     return _ai_tracker_resnet_local_path("resnet50")
+
+
+def download_backbone_weights(variant: str = "resnet50", dest: Path | None = None) -> Path:
+    """Download official clean ImageNet weights into ``vaila/models/ai_tracker/``.
+
+    Never writes to ``~/.cache/torch/hub/checkpoints/``. Uses a temp file + atomic
+    rename so a partial download cannot leave a corrupt canonical path.
+    """
+    variant = _normalize_backbone_variant(variant)
+    url = _BACKBONE_WEIGHT_URLS[variant]
+    dest_path = dest if dest is not None else _ai_tracker_resnet_local_path(variant)
+    dest_path = Path(dest_path)
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = dest_path.with_suffix(dest_path.suffix + ".download")
+
+    print(f">> AI Track: downloading {variant} weights from {url}")
+    print(f">> AI Track: destination -> {dest_path}")
+    try:
+        with urlopen(url, timeout=120) as response, tmp_path.open("wb") as out_f:
+            shutil.copyfileobj(response, out_f)
+        if not _is_valid_weight_file(tmp_path):
+            raise RuntimeError(
+                f"Downloaded {variant} weights look corrupt or too small "
+                f"({tmp_path.stat().st_size if tmp_path.is_file() else 0} bytes)."
+            )
+        tmp_path.replace(dest_path)
+    except Exception:
+        tmp_path.unlink(missing_ok=True)
+        raise
+
+    print(f">> AI Track: {variant} weights saved to {dest_path}")
+    return dest_path.resolve()
+
+
+def _migrate_hub_cache_to_ai_tracker(variant: str, hub_path: Path) -> Path | None:
+    """Copy a Torch hub cache checkpoint into the canonical ai_tracker/ filename."""
+    dest = _ai_tracker_resnet_local_path(variant)
+    try:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if dest.resolve() == hub_path.resolve():
+            return dest.resolve()
+        shutil.copy2(hub_path, dest)
+        if not _is_valid_weight_file(dest):
+            dest.unlink(missing_ok=True)
+            return None
+        print(
+            f">> AI Track: migrated {variant} weights from Torch hub cache\n"
+            f"   source: {hub_path}\n"
+            f"   -> {dest}"
+        )
+        return dest.resolve()
+    except OSError as err:
+        print(f">> AI Track: could not migrate hub cache weights ({err})")
+        return None
+
+
+def ensure_backbone_weights(
+    variant: str = "resnet50",
+    *,
+    weights_path: str | Path | None = None,
+    prompt_fn: Callable[[str], str | None] | None = None,
+    browse_fn: Callable[[], str | Path | None] | None = None,
+) -> Path | None:
+    """Resolve backbone weights under ``vaila/models/ai_tracker/``, prompting if needed.
+
+    Resolution order:
+      1. Explicit ``weights_path`` when valid
+      2. Canonical ``ai_tracker/{variant}_imagenet.pth``
+      3. Any other matching file already under ``ai_tracker/``
+      4. Torch hub cache hit → copy into ``ai_tracker/`` (one-time migration)
+      5. ``prompt_fn(variant)`` → ``"browse"`` | ``"download"`` | cancel/None
+
+    Returns the absolute path to load, or ``None`` if the user cancelled / no file.
+    """
+    variant = _normalize_backbone_variant(variant)
+
+    if weights_path:
+        explicit = Path(weights_path)
+        if _is_valid_weight_file(explicit):
+            return explicit.resolve()
+
+    canonical = _ai_tracker_resnet_local_path(variant)
+    if _is_valid_weight_file(canonical):
+        return canonical.resolve()
+
+    local_matches = get_available_resnet_checkpoints(variant)
+    if local_matches:
+        return local_matches[0]
+
+    hub_matches = _hub_cache_checkpoints(variant)
+    if hub_matches:
+        migrated = _migrate_hub_cache_to_ai_tracker(variant, hub_matches[0])
+        if migrated is not None:
+            return migrated
+
+    if prompt_fn is None:
+        print(
+            f">> AI Track: no local {variant} weights under {canonical.parent}. "
+            "Pass prompt_fn to browse or download a clean official checkpoint."
+        )
+        return None
+
+    choice = (prompt_fn(variant) or "").strip().lower()
+    if choice in {"1", "browse", "b", "buscar", "search"}:
+        if browse_fn is None:
+            print(">> AI Track: browse requested but no browse_fn provided.")
+            return None
+        browsed = browse_fn()
+        if browsed and _is_valid_weight_file(Path(browsed)):
+            return Path(browsed).resolve()
+        print(">> AI Track: browse cancelled or invalid file.")
+        return None
+    if choice in {"2", "download", "d", "baixar"}:
+        try:
+            return download_backbone_weights(variant)
+        except Exception as err:
+            print(f">> AI Track: download failed ({err})")
+            return None
+
+    print(">> AI Track: weight selection cancelled.")
+    return None
 
 
 def default_checkpoint_path(name: str = "default") -> Path:
@@ -440,22 +580,25 @@ class DeepFeatureExtractor:
                     DeepFeatureExtractor._threads_configured = True
 
             resolved = self._resolve_weights_path(weights_path, self.variant)
+            if resolved is None:
+                print(
+                    f">> DeepFeatureExtractor: no local {self.variant} weights under "
+                    f"{_default_checkpoint_dir()}. "
+                    "Call ensure_backbone_weights() to browse or download into "
+                    "vaila/models/ai_tracker/ first."
+                )
+                return
+
             model = tv_models.get_model(self.variant, weights=None)
-            if resolved is not None:
-                state = torch.load(resolved, map_location="cpu", weights_only=True)
-                if isinstance(state, dict) and "state_dict" in state:
-                    state = state["state_dict"]
-                # Torchvision DEFAULT checkpoint keys may include the head's own
-                # weights (e.g. "fc.*"/"classifier.*") — load then strip the head below.
-                missing_unexpected = model.load_state_dict(state, strict=False)
-                _ = missing_unexpected
-                print(f">> DeepFeatureExtractor: loaded {self.variant} weights from {resolved}")
-            else:
-                # DEFAULT is a real enum member on every torchvision weights class, but
-                # get_model_weights()'s generic return type (type[WeightsEnum]) hides it
-                # from the static checker -- see torchvision.models._api.
-                weights = tv_models.get_model_weights(self.variant).DEFAULT  # ty: ignore[unresolved-attribute]
-                model = tv_models.get_model(self.variant, weights=weights)
+            state = torch.load(resolved, map_location="cpu", weights_only=True)
+            if isinstance(state, dict) and "state_dict" in state:
+                state = state["state_dict"]
+            # Torchvision DEFAULT checkpoint keys may include the head's own
+            # weights (e.g. "fc.*"/"classifier.*") — load then strip the head below.
+            missing_unexpected = model.load_state_dict(state, strict=False)
+            _ = missing_unexpected
+            print(f">> DeepFeatureExtractor: loaded {self.variant} weights from {resolved}")
+            self.weights_path = str(resolved)
 
             # Remove the classification head to output the pooled feature vector.
             # Head attribute differs by family: "fc" for ResNet, "classifier" for
@@ -490,20 +633,19 @@ class DeepFeatureExtractor:
     def _resolve_weights_path(
         weights_path: str | Path | None, variant: str = "resnet50"
     ) -> Path | None:
+        """Resolve a local weight file under ai_tracker/ (never Torch hub cache)."""
         candidates: list[Path] = []
         if weights_path:
             candidates.append(Path(weights_path))
-        # 1. Canonical path under vaila/models/ai_tracker/ (sole local directory)
         candidates.append(_ai_tracker_resnet_local_path(variant))
-        # 2. Any detected weights from scan (ai_tracker/ + torch hub cache)
         for extra in get_available_resnet_checkpoints(variant):
             candidates.append(extra)
         for cand in candidates:
-            try:
-                if cand.is_file() and cand.stat().st_size > _BACKBONE_MIN_FILE_BYTES:
+            if _is_valid_weight_file(cand):
+                try:
                     return cand.resolve()
-            except OSError:
-                pass
+                except OSError:
+                    continue
         return None
 
     @classmethod

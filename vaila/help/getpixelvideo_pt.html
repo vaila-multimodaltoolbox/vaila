@@ -155,9 +155,9 @@
         <h1>getpixelvideo.py - Documentação Completa</h1>
 
         <div class="version-info">
-            <strong>Versão:</strong> 0.3.46<br>
+            <strong>Versão:</strong> 0.4.4<br>
             <strong>Data:</strong> 28 de Maio de 2026<br>
-            <strong>Atualizado:</strong> 10 de Junho de 2026<br>
+            <strong>Atualizado:</strong> 18 de Setembro de 2026<br>
             <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro<br>
             <strong>Projeto:</strong> vailá - Multimodal Toolbox<br>
             <strong>Novo na 0.5.0:</strong> <strong>F9</strong> exporta dataset YOLO-pose a partir dos marcadores
@@ -461,7 +461,7 @@
                         </tr>
                         <tr>
                             <td><span class="key">Ctrl+W</span> / <span class="key">Alt+W</span></td>
-                            <td>Selecionar/alternar pesos da ResNet-50 (.pth/.pt) de <code>vaila/models/ai_tracker/</code>, navegador de arquivos em qualquer diretório ou padrão do Torch Hub</td>
+                            <td>Selecionar/alternar pesos do backbone em <code>vaila/models/ai_tracker/</code>; se faltar, pergunta buscar arquivo ou baixar pesos oficiais limpos nessa pasta</td>
                         </tr>
                         <tr>
                             <td><span class="key">Track AI Shape</span></td>
@@ -668,11 +668,11 @@
                 </li>
                 <li><strong>Transfer Learning entre Sessões:</strong> Ao ligar o AI Track, o checkpoint anterior é carregado automaticamente. O retreinamento online faz uma média ponderada pelo número de amostras (<code>_live_n_samples</code>), permitindo que a rede evolua continuamente e se torne cada vez melhor sem perda de conhecimento prévio.</li>
                 <li><strong>Diretório Ignorado no Git:</strong> A pasta <code>vaila/models/ai_tracker/</code> está no <code>.gitignore</code>, assegurando que modelos pessoais e pesos pesados fiquem restritos ao ambiente local do usuário.</li>
-                <li><strong>Rede Neural Profunda (ResNet50) e Carregamento de Pesos:</strong> O botão <code>Track AI Deep NN (ResNet50)</code> ativa a extração de embeddings profundos semânticos (2048-D). Os pesos podem ser carregados de três formas:
+                <li><strong>Rede Neural Profunda (ResNet50) e Carregamento de Pesos:</strong> O botão <code>Track AI Deep NN</code> ativa a extração de embeddings profundos semânticos. Os pesos ficam em <code>vaila/models/ai_tracker/</code>:
                     <ul>
                         <li><strong>Detecção Automática Local:</strong> Detecta automaticamente arquivos <code>.pth</code> ou <code>.pt</code> em <code>vaila/models/ai_tracker/resnet50_imagenet.pth</code> (ou outros salvos nesta pasta).</li>
-                        <li><strong>Diretório Escolhido pelo Usuário (Qualquer Caminho):</strong> Use o atalho de teclado <span class="key">Ctrl+W</span> (ou <span class="key">Alt+W</span>) na tela de vídeo, ou clique no botão <span class="key">Pesos (W)</span> dentro do cartão de configuração (<span class="key">Ctrl+T</span>). Um navegador gráfico de arquivos é aberto permitindo selecionar pesos personalizados em qualquer pasta ou disco.</li>
-                        <li><strong>Fallback Padrão (Torch Hub):</strong> Se nenhum peso local for selecionado, utiliza os pesos oficiais pré-treinados do Torch Hub em cache (<code>~/.cache/torch/hub/checkpoints/</code>).</li>
+                        <li><strong>Buscar / Baixar:</strong> Se faltar o arquivo, a GUI pergunta: <strong>1 = buscar</strong> um <code>.pth</code>/<code>.pt</code> existente, ou <strong>2 = baixar</strong> pesos oficiais limpos do ImageNet para <code>vaila/models/ai_tracker/</code>. O cache Torch (<code>~/.cache/torch</code>) não é o destino permanente; se houver cópia lá, ela é migrada uma vez para <code>ai_tracker/</code>.</li>
+                        <li><strong>Atalho:</strong> Use <span class="key">Ctrl+W</span> / <span class="key">Alt+W</span> ou o botão <span class="key">Pesos (W)</span> no cartão <span class="key">Ctrl+T</span>.</li>
                     </ul>
                 </li>
                 <li><strong>Controles e Indicador Visual:</strong> Tecla <span class="key">T</span> ou botão <strong>AI Track</strong> liga/desliga (o botão acende imediatamente em <strong>verde brilhante</strong> quando ativo ou armado; vermelho quando inativo); <span class="key">Espaço</span> reproduz rastreando; <span class="key">Shift+Clique</span> ou <span class="key">Shift+T</span> executa rastreamento batch RTS bidirecional; botão direito (ou <span class="key">Ctrl+T</span>) abre a configuração TOML com ajuste de hiperparâmetros e botão de pesos.</li>

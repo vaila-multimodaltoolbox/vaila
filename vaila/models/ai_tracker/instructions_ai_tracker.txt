@@ -1,11 +1,24 @@
 # AI Tracker Discriminator Checkpoints & Weights
-This directory is the sole canonical local location for the AI Tracker (getpixelvideo.py):
-online-discriminator checkpoints (*.npz) and backbone weights (resnet50_imagenet.pth, and
-optionally resnet152_imagenet.pth, mobilenet_v3_small_imagenet.pth, efficientnet_b0_imagenet.pth).
-There is no other fallback directory under vaila/models/.
-Checkpoints are incrementally updated across sessions (JIT learning / transfer learning) and are
-kept local to the user/machine. resnet152_imagenet.pth, mobilenet_v3_small_imagenet.pth, and
-efficientnet_b0_imagenet.pth are all optional (opt-in variants, selectable as primary_variant/
-resnet_variant or as the cascade fallback_variant); resnet50_imagenet.pth (or the Torch hub
-cache) is used by default.
-Do not commit large weights or user-specific .npz models to git.
+
+This directory is the sole canonical local location for the AI Tracker
+(getpixelvideo.py):
+
+  - Online-discriminator checkpoints: discriminator_<profile>.npz
+    (default: discriminator_default.npz). Updated across sessions (JIT /
+    transfer learning); kept local to the user/machine.
+  - Backbone ImageNet weights (scientist-visible, reusable, retrainable):
+      resnet50_imagenet.pth          (default primary)
+      resnet152_imagenet.pth         (optional)
+      mobilenet_v3_small_imagenet.pth (optional, CPU-friendly)
+      efficientnet_b0_imagenet.pth   (optional, CPU-friendly)
+
+When Deep NN is enabled and a variant has no file here, getpixelvideo prompts:
+  1 = Browse an existing .pth/.pt
+  2 = Download a clean official torchvision ImageNet checkpoint into THIS folder
+
+Torch hub cache (~/.cache/torch/hub/checkpoints/) is never the permanent home.
+If a matching file is found only there, vailá copies it here once and prints the
+destination path so the weights stay easy to find on Linux, macOS, and Windows.
+
+Do not commit large weights or user-specific .npz models to git
+(vaila/models/ai_tracker/* is gitignored except *.txt).

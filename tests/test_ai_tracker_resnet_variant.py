@@ -5,11 +5,13 @@ feeding into the retrained online discriminator (Part 3) of the AI Tracker.
 Uses a stubbed DeepFeatureExtractor (no real weights download) so it always runs in CI.
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 13 September 2026
-Version: 0.3.138
+Update Date: 18 September 2026
+Version: 0.4.4
 """
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -268,6 +270,150 @@ def test_discriminator_feature_never_touches_fallback_extractor(monkeypatch) -> 
     feat = tracker._discriminator_feature(patch, "point")
     assert feat.shape == (ait._FEATURE_DIM + 2048,)
     assert calls == []  # fallback never invoked, regardless of fallback_threshold
+
+
+# --- Backbone weights under vaila/models/ai_tracker/ (no silent Torch hub home) ---
+
+
+def test_get_available_resnet_checkpoints_ignores_hub_cache(tmp_path, monkeypatch) -> None:
+    ai_dir = tmp_path / "ai_tracker"
+    ai_dir.mkdir()
+    hub = tmp_path / ".cache" / "torch" / "hub" / "checkpoints"
+    hub.mkdir(parents=True)
+    big = b"0" * 2_000_000
+    (hub / "resnet50-11ad3fa6.pth").write_bytes(big)
+
+    monkeypatch.setattr(ait, "_default_checkpoint_dir", lambda: ai_dir)
+    monkeypatch.setattr(ait, "_torch_hub_checkpoints_dir", lambda: hub)
+    monkeypatch.setattr(ait.Path, "home", staticmethod(lambda: tmp_path))
+
+    assert ait.get_available_resnet_checkpoints("resnet50") == []
+
+
+def test_ensure_backbone_weights_prefers_canonical_over_hub(tmp_path, monkeypatch) -> None:
+    ai_dir = tmp_path / "ai_tracker"
+    ai_dir.mkdir()
+    hub = tmp_path / ".cache" / "torch" / "hub" / "checkpoints"
+    hub.mkdir(parents=True)
+    big = b"0" * 2_000_000
+    canonical = ai_dir / "resnet50_imagenet.pth"
+    canonical.write_bytes(big)
+    (hub / "resnet50-11ad3fa6.pth").write_bytes(big + b"hub")
+
+    monkeypatch.setattr(ait, "_default_checkpoint_dir", lambda: ai_dir)
+    monkeypatch.setattr(
+        ait,
+        "_ai_tracker_resnet_local_path",
+        lambda variant="resnet50": ai_dir / f"{variant}_imagenet.pth",
+    )
+    monkeypatch.setattr(ait, "_torch_hub_checkpoints_dir", lambda: hub)
+
+    resolved = ait.ensure_backbone_weights("resnet50")
+    assert resolved is not None
+    assert resolved == canonical.resolve()
+
+
+def test_ensure_backbone_weights_migrates_hub_cache(tmp_path, monkeypatch) -> None:
+    ai_dir = tmp_path / "ai_tracker"
+    ai_dir.mkdir()
+    hub = tmp_path / ".cache" / "torch" / "hub" / "checkpoints"
+    hub.mkdir(parents=True)
+    big = b"0" * 2_000_000
+    hub_file = hub / "resnet50-11ad3fa6.pth"
+    hub_file.write_bytes(big)
+
+    monkeypatch.setattr(ait, "_default_checkpoint_dir", lambda: ai_dir)
+    monkeypatch.setattr(
+        ait,
+        "_ai_tracker_resnet_local_path",
+        lambda variant="resnet50": ai_dir / f"{variant}_imagenet.pth",
+    )
+    monkeypatch.setattr(ait, "_torch_hub_checkpoints_dir", lambda: hub)
+
+    resolved = ait.ensure_backbone_weights("resnet50")
+    dest = ai_dir / "resnet50_imagenet.pth"
+    assert resolved == dest.resolve()
+    assert dest.is_file()
+    assert dest.stat().st_size == len(big)
+
+
+def test_ensure_backbone_weights_download_via_prompt(tmp_path, monkeypatch) -> None:
+    ai_dir = tmp_path / "ai_tracker"
+    ai_dir.mkdir()
+    dest = ai_dir / "resnet50_imagenet.pth"
+    big = b"1" * 2_000_000
+
+    monkeypatch.setattr(ait, "_default_checkpoint_dir", lambda: ai_dir)
+    monkeypatch.setattr(
+        ait,
+        "_ai_tracker_resnet_local_path",
+        lambda variant="resnet50": ai_dir / f"{variant}_imagenet.pth",
+    )
+    monkeypatch.setattr(ait, "_torch_hub_checkpoints_dir", lambda: tmp_path / "__no_hub__")
+
+    def _fake_download(variant: str = "resnet50", dest_path=None):
+        out = Path(dest_path) if dest_path is not None else dest
+        out.write_bytes(big)
+        return out.resolve()
+
+    monkeypatch.setattr(ait, "download_backbone_weights", _fake_download)
+
+    resolved = ait.ensure_backbone_weights("resnet50", prompt_fn=lambda _v: "download")
+    assert resolved == dest.resolve()
+    assert dest.is_file()
+
+
+def test_ensure_backbone_weights_browse_via_prompt(tmp_path, monkeypatch) -> None:
+    ai_dir = tmp_path / "ai_tracker"
+    ai_dir.mkdir()
+    custom = tmp_path / "custom_resnet50.pth"
+    custom.write_bytes(b"2" * 2_000_000)
+
+    monkeypatch.setattr(ait, "_default_checkpoint_dir", lambda: ai_dir)
+    monkeypatch.setattr(
+        ait,
+        "_ai_tracker_resnet_local_path",
+        lambda variant="resnet50": ai_dir / f"{variant}_imagenet.pth",
+    )
+    monkeypatch.setattr(ait, "_torch_hub_checkpoints_dir", lambda: tmp_path / "__no_hub__")
+
+    resolved = ait.ensure_backbone_weights(
+        "resnet50",
+        prompt_fn=lambda _v: "browse",
+        browse_fn=lambda: custom,
+    )
+    assert resolved == custom.resolve()
+
+
+def test_deep_feature_extractor_does_not_call_torchvision_default(tmp_path, monkeypatch) -> None:
+    """Missing local weights must not invoke get_model(..., weights=DEFAULT)."""
+    ai_dir = tmp_path / "ai_tracker"
+    ai_dir.mkdir()
+    monkeypatch.setattr(ait, "_default_checkpoint_dir", lambda: ai_dir)
+    monkeypatch.setattr(
+        ait,
+        "_ai_tracker_resnet_local_path",
+        lambda variant="resnet50": ai_dir / f"{variant}_imagenet.pth",
+    )
+    monkeypatch.setattr(ait, "get_available_resnet_checkpoints", lambda variant="resnet50": [])
+
+    if not ait.TORCH_AVAILABLE:
+        pytest.skip("torch/torchvision not available")
+
+    calls: list[object] = []
+    real_get_model = ait.tv_models.get_model
+
+    def _tracking_get_model(name, weights=None, **kwargs):
+        calls.append(weights)
+        return real_get_model(name, weights=None, **kwargs)
+
+    monkeypatch.setattr(ait.tv_models, "get_model", _tracking_get_model)
+    ait.DeepFeatureExtractor._instances.clear()
+
+    extractor = ait.DeepFeatureExtractor(weights_path=None, variant="resnet50")
+    assert extractor.enabled is False
+    # Must return before get_model when no weights (calls empty) — or only with weights=None.
+    assert all(c is None for c in calls)
 
 
 if __name__ == "__main__":

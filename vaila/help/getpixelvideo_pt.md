@@ -4,11 +4,11 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.3.46  
+**Versão:** 0.4.4  
 **Data:** 28 de Maio de 2026  
-**Atualizado:** 10 de Junho de 2026  
+**Atualizado:** 18 de Setembro de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
-**Projeto:** vailá - Multimodal Toolbox
+**Projeto:** *vailá* - Multimodal Toolbox
 
 ## Principais Recursos
 
@@ -190,7 +190,7 @@ Rastreamento semi-automático de alta performance baseado em Correlação Cruzad
      (Padrão: `vaila/models/ai_tracker/discriminator_default.npz`).
    - **Transfer Learning (Entre Sessões):** Ao ativar o AI Track, o checkpoint anterior é carregado automaticamente. O retreinamento online calcula uma média ponderada pelo número cumulativo de amostras (`_live_n_samples`), acumulando o aprendizado entre vídeos e sessões sem esquecimento catastrófico.
    - **Diretório Ignorado no Git:** A pasta `vaila/models/ai_tracker/` está configurada no `.gitignore` para que redes pessoais e pesos pesados nunca sejam comitados ao repositório público.
-   - **Rede Neural Profunda (ResNet50):** O botão `Track AI Deep NN (ResNet50)` ativa a extração de embeddings semânticos para evitar que o rastreador se perca em distractores ou oclusões. Os pesos são lidos do cache Torch (`~/.cache/torch/hub/checkpoints/`) ou de `vaila/models/resnet50_imagenet.pth`.
+   - **Rede Neural Profunda (ResNet50 e variantes):** O botão `Track AI Deep NN` ativa embeddings semânticos. Os pesos ficam em `vaila/models/ai_tracker/` (`resnet50_imagenet.pth`, etc.). Se faltar, a GUI pergunta: **1 = buscar** arquivo `.pth`/`.pt` ou **2 = baixar** pesos oficiais limpos nessa pasta (não usa `~/.cache/torch` como destino permanente).
 
 2. **Controles e Atalhos:**
    - **Clique Esquerdo:** No botão `AI Track`, ativa/desativa o rastreamento. Quando ativo, pressione **Espaço** para reproduzir e rastrear em tempo real. Segure `←`/`→` para avançar quadro a quadro e `↑`/`↓` para saltos rápidos.
