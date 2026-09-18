@@ -355,9 +355,42 @@ if [[ "$RUN_SYNC" == 1 ]]; then
         fi
     fi
 
+    # ---- persist UV_NO_SYNC=1 in the user's shell RC (CUDA only) ----
+    # A bare `uv run` re-syncs with the default groups (dev + cpu) and replaces
+    # CUDA wheels with CPU ones.  Exporting UV_NO_SYNC=1 only survives the
+    # current session; to make the fix permanent we append it to the user's
+    # shell RC file if it isn't there yet.
+    if [[ "$TARGET" == "cuda" ]]; then
+        _persist_uv_no_sync() {
+            local rc="$1"
+            [[ -f "$rc" ]] || return 1
+            if ! grep -q 'export UV_NO_SYNC=1' "$rc" 2>/dev/null; then
+                printf '\n# vailá / uv: prevent bare `uv run` from re-syncing (would replace CUDA wheels with CPU)\nexport UV_NO_SYNC=1\n' >> "$rc"
+                ok "Added 'export UV_NO_SYNC=1' to $rc"
+            fi
+        }
+        # Detect the active shell's RC file
+        _shell_rc=""
+        case "${SHELL:-}" in
+            */zsh)  _shell_rc="$HOME/.zshrc"  ;;
+            */bash) _shell_rc="$HOME/.bashrc" ;;
+        esac
+        # Fallback: if SHELL isn't set, try .bashrc then .zshrc
+        if [[ -z "$_shell_rc" ]]; then
+            if [[ -f "$HOME/.bashrc" ]]; then _shell_rc="$HOME/.bashrc"
+            elif [[ -f "$HOME/.zshrc" ]]; then _shell_rc="$HOME/.zshrc"
+            fi
+        fi
+        if [[ -n "$_shell_rc" ]]; then
+            _persist_uv_no_sync "$_shell_rc"
+        else
+            warn "Could not detect shell RC file; add 'export UV_NO_SYNC=1' to your shell profile manually."
+        fi
+    fi
+
     ok ""
     ok "Done. vailá ready for target='$TARGET' with extras=[$EXTRAS]."
-    say "Run the GUI:   uv run --no-sync vaila.py   (or: bash bin/run_vaila.sh)"
+    say "Run the GUI:   uv run vaila.py   (or: bash bin/run_vaila.sh)"
 else
     info "Skipping 'uv sync' (--no-sync)"
     say ""

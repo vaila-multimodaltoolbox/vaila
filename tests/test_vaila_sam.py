@@ -783,37 +783,82 @@ def test_delete_mask_artifacts(tmp_path):
 def test_sam3_writer_fallbacks_prefer_software_codecs() -> None:
     from vaila.vaila_sam import _SAM3_WRITER_FALLBACKS
 
+    # OpenCV path still avoids avc1 (broken h264_v4l2m2m on some ARM boards).
     assert _SAM3_WRITER_FALLBACKS[0][0] == "mp4v"
     assert not any(fourcc == "avc1" for fourcc, _ext in _SAM3_WRITER_FALLBACKS)
 
 
-def test_open_sam3_video_writer_ffmpeg_pipe_fallback(
+def test_open_sam3_video_writer_prefers_ffmpeg_when_available(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """When OpenCV codecs fail, fall back to ffmpeg libx264 pipe."""
+    """With ffmpeg on PATH, prefer libx264 pipe over OpenCV mp4v."""
     import numpy as np
 
     import vaila.vaila_sam as sam
 
+    opened: list[str] = []
+
     class FakeCvWriter:
         def isOpened(self) -> bool:  # noqa: N802
-            return False
+            return True
+
+        def write(self, _frame: object) -> None:
+            return None
 
         def release(self) -> None:
             return None
 
-    monkeypatch.setattr(sam.cv2, "VideoWriter", lambda *_a, **_k: FakeCvWriter())
+    def fake_cv_writer(path: str, *_a: object, **_k: object) -> FakeCvWriter:
+        opened.append(f"cv:{path}")
+        return FakeCvWriter()
+
+    monkeypatch.setattr(sam.cv2, "VideoWriter", fake_cv_writer)
     monkeypatch.setattr(sam, "_sam3_ffmpeg_available", lambda: True)
 
-    target = tmp_path / "pipe_out.mp4"
+    target = tmp_path / "prefer_ffmpeg.mp4"
     writer, actual = sam._open_sam3_video_writer(target, 30.0, (64, 48), purpose="unit test")
     try:
         assert isinstance(writer, sam._FfmpegPipeVideoWriter)
+        assert opened == []  # OpenCV must not be tried first
         writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
     finally:
         writer.release()
     assert actual.suffix == ".mp4"
     assert actual.stat().st_size > 0
+
+
+def test_open_sam3_video_writer_ffmpeg_pipe_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When ffmpeg is unavailable, fall back to OpenCV codecs."""
+    import numpy as np
+
+    import vaila.vaila_sam as sam
+
+    class FakeCvWriter:
+        def __init__(self) -> None:
+            self._n = 0
+
+        def isOpened(self) -> bool:  # noqa: N802
+            return True
+
+        def write(self, _frame: object) -> None:
+            self._n += 1
+
+        def release(self) -> None:
+            return None
+
+    monkeypatch.setattr(sam, "_sam3_ffmpeg_available", lambda: False)
+    monkeypatch.setattr(sam.cv2, "VideoWriter", lambda *_a, **_k: FakeCvWriter())
+
+    target = tmp_path / "opencv_fallback.mp4"
+    writer, actual = sam._open_sam3_video_writer(target, 30.0, (64, 48), purpose="unit test")
+    try:
+        assert not isinstance(writer, sam._FfmpegPipeVideoWriter)
+        writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+    finally:
+        writer.release()
+    assert actual.suffix in {".mp4", ".avi"}
 
 
 def test_open_sam3_video_writer_creates_file(tmp_path: Path) -> None:

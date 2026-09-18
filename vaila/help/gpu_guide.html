@@ -154,10 +154,10 @@
     <ul>
         <li><strong>GUI:</strong> Click the <strong>GPU Test</strong> button in the footer of <code>vaila.py</code> (next to <strong>Help</strong> and <strong>Check for Updates</strong>).</li>
         <li><strong>CLI:</strong> Run in terminal:
-            <pre><code>uv run python vaila/gputest.py</code></pre>
+            <pre><code>uv run --no-sync python vaila/gputest.py</code></pre>
         </li>
         <li><strong>GUI Dialog from Terminal:</strong>
-            <pre><code>uv run python vaila/gputest.py --gui</code></pre>
+            <pre><code>uv run --no-sync python vaila/gputest.py --gui</code></pre>
         </li>
     </ul>
 
@@ -192,11 +192,35 @@ bash bin/setup_fifa_sam3d.sh</code></pre>
         <h3>4. Gated Hugging Face Weights Authentication</h3>
         <p>Full per-PC steps (licenses, hub version, lock cleanup):
           <a href="../../docs/huggingface_setup.md"><code>docs/huggingface_setup.md</code></a>.</p>
-        <pre><code>uv run hf auth login
-uv run hf auth whoami   # must exit 0 (need huggingface-hub &gt;= 1.22)
-uv run vaila/vaila_sam.py --download-weights
+        <h2>Never use a bare <code>uv run</code> on a CUDA machine</h2>
+        <p><code>uv run</code> <strong>auto-syncs the project with the default dependency groups
+        (<code>dev</code> + <code>cpu</code>)</strong> before it runs anything. On a CUDA machine that
+        silently does two destructive things:</p>
+        <ol>
+            <li>it replaces the <code>torch</code>/<code>torchvision</code>/<code>torchaudio</code>
+            <strong>cu128</strong> wheels with the <strong>CPU</strong> ones, so
+            <code>torch.cuda.is_available()</code> starts returning <code>False</code>; and</li>
+            <li>it uninstalls the <code>sapiens</code> editable install, because
+            <code>uv pip install -e</code> registers it outside <code>uv.lock</code> — after which
+            <code>import sapiens</code> fails.</li>
+        </ol>
+        <p>The visible symptoms are exactly the two most-reported SAM3+Sapiens2 failures:
+        <code>SAM3 stage failed with subprocess exit=2</code> (SAM 3 refuses to run without CUDA) and
+        <code>ImportError: Failed to load PyTorch C extensions</code> while validating
+        <code>import sapiens</code>.</p>
+        <pre><code>uv run --no-sync vaila.py        # per command
+export UV_NO_SYNC=1              # per shell
+bash bin/run_vaila.sh            # wrapper that already sets it</code></pre>
+        <p>Explicit <code>uv sync --no-group cpu --group cuda ...</code> is unaffected, but note that
+        every <code>uv sync</code> still drops the <code>sapiens</code> editable install, so re-run
+        <code>bash bin/setup_sapiens2.sh</code> (or
+        <code>uv pip install -e .local/third_party/sapiens2</code>) after any sync.
+        <code>bin/setup_pyproject.sh</code> does this automatically.</p>
+        <pre><code>uv run --no-sync hf auth login
+uv run --no-sync hf auth whoami   # must exit 0 (need huggingface-hub &gt;= 1.22)
+uv run --no-sync vaila/vaila_sam.py --download-weights
 bash bin/setup_fifa_sam3d.sh   # SAM 3D Body → vaila/models/sam-3d-dinov3/
-uv run vaila/vaila_sapiens.py --download-weights --model 1b</code></pre>
+uv run --no-sync vaila/vaila_sapiens.py --download-weights --model 1b</code></pre>
     </div>
 
     <h2>How Hardware Profiles Work</h2>
