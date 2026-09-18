@@ -10,7 +10,7 @@ Update Date: 17 September 2026
 Version: 0.4.4
 
 Example of usage:
-uv run vaila.py
+uv run --no-sync vaila.py
 
 
 Description:
@@ -94,11 +94,11 @@ def _sam3_install_instructions() -> str:
         "Windows NVIDIA CUDA workstation:\n"
         "  pwsh bin/setup_pyproject.ps1 -Target cuda -Extras sam -Yes\n\n"
         "After install, accept the gated Hugging Face model and authenticate:\n"
-        "  uv run hf auth login\n"
-        "  uv run vaila/vaila_sam.py --download-weights\n\n"
+        "  uv run --no-sync hf auth login\n"
+        "  uv run --no-sync vaila/vaila_sam.py --download-weights\n\n"
         "CLI help / examples:\n"
-        "  uv run vaila/vaila_sam.py --open-help\n"
-        "  uv run vaila/vaila_sam.py --print-examples\n\n"
+        "  uv run --no-sync vaila/vaila_sam.py --open-help\n"
+        "  uv run --no-sync vaila/vaila_sam.py --print-examples\n\n"
         "Runtime note: SAM 3 video requires NVIDIA CUDA. CPU and macOS Metal/MPS are "
         "not supported for this integration.\n"
         "See also: AGENTS.md - Hybrid CPU vs NVIDIA workstation."
@@ -125,8 +125,8 @@ def _sapiens_install_instructions() -> str:
         "  pose: facebook/sapiens2-pose-1b\n"
         "  detector: facebook/detr-resnet-101-dc5\n\n"
         "CLI help / quick test:\n"
-        "  uv run vaila/vaila_sapiens.py --open-help\n"
-        "  uv run vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run\n\n"
+        "  uv run --no-sync vaila/vaila_sapiens.py --open-help\n"
+        "  uv run --no-sync vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o /tmp/out --dry-run\n\n"
         "Runtime note: Sapiens2 Pose requires NVIDIA CUDA. Default model is 1B (fits RTX 4090 24 GiB).\n"
         "License: Sapiens2 uses Meta's Sapiens2 License (not AGPL). See vaila/help/vaila_sapiens.md."
     )
@@ -2029,7 +2029,9 @@ class Vaila(tk.Tk):
         def use_standard():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Standard (CPU/GPU)", "uv run vaila/markerless_2d_analysis.py"
+                "Markerless 2D",
+                "Standard (CPU/GPU)",
+                "uv run --no-sync vaila/markerless_2d_analysis.py",
             )
             try:
                 run_vaila_module("vaila.markerless_2d_analysis")
@@ -2041,7 +2043,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 2D",
                 "Advanced (YOLO + MediaPipe)",
-                "uv run vaila/markerless2d_analysis_v2.py",
+                "uv run --no-sync vaila/markerless2d_analysis_v2.py",
             )
             try:
                 run_vaila_module(
@@ -2053,7 +2055,9 @@ class Vaila(tk.Tk):
         def use_yolo_pose_only():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "YOLOv26 Pose Only", "uv run vaila/markerless2d_yolo26.py"
+                "Markerless 2D",
+                "YOLOv26 Pose Only",
+                "uv run --no-sync vaila/markerless2d_yolo26.py",
             )
             try:
                 run_vaila_module("vaila.markerless2d_yolo26", script_path="markerless2d_yolo26.py")
@@ -2063,14 +2067,16 @@ class Vaila(tk.Tk):
         def use_mpyolo():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Yolo + Markerless_MP", "uv run vaila/markerless2d_mpyolo.py"
+                "Markerless 2D",
+                "Yolo + Markerless_MP",
+                "uv run --no-sync vaila/markerless2d_mpyolo.py",
             )
             self.markerless2d_mpyolo()
 
         def use_yolov26_tracker():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Tracker (v26)", "uv run python -u -m vaila.yolov26track"
+                "Markerless 2D", "Tracker (v26)", "uv run --no-sync python -u -m vaila.yolov26track"
             )
             try:
                 run_vaila_module("vaila.yolov26track", extra_py_flags=("-u",))
@@ -2082,7 +2088,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 2D",
                 "Pose (video)",
-                "uv run python -u -m vaila.yolov26track",
+                "uv run --no-sync python -u -m vaila.yolov26track",
                 note="Launched in-process from main vailá; pose params print after Run.",
             )
             try:
@@ -2097,7 +2103,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 2D",
                 "Pose (tracking)",
-                "uv run python -u -m vaila.yolov26track",
+                "uv run --no-sync python -u -m vaila.yolov26track",
                 note="Step 1: track CLI; step 2: pose-from-tracking GUI (see terminal hints).",
             )
             try:
@@ -2114,7 +2120,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 2D",
                 "Seg (v26)",
-                "uv run python -u -m vaila.yolov26track",
+                "uv run --no-sync python -u -m vaila.yolov26track",
                 note="In the tracker GUI choose a -seg.pt model and track+seg run mode.",
             )
             messagebox.showinfo(
@@ -2129,7 +2135,7 @@ class Vaila(tk.Tk):
         def use_train_yolov26():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Train YOLOv26", "uv run python -u -m vaila.yolotrain"
+                "Markerless 2D", "Train YOLOv26", "uv run --no-sync python -u -m vaila.yolotrain"
             )
             try:
                 run_vaila_module("vaila.yolotrain", extra_py_flags=("-u",))
@@ -2139,21 +2145,23 @@ class Vaila(tk.Tk):
         def use_sam():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "SAM 3 video", "uv run python -u vaila/vaila_sam.py"
+                "Markerless 2D", "SAM 3 video", "uv run --no-sync python -u vaila/vaila_sam.py"
             )
             self.sam_video()
 
         def use_sapiens2():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Sapiens2 Pose", "uv run python -u vaila/vaila_sapiens.py"
+                "Markerless 2D",
+                "Sapiens2 Pose",
+                "uv run --no-sync python -u vaila/vaila_sapiens.py",
             )
             self.sapiens_video()
 
         def use_sam3sapiens2():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "SAM3+Sapiens2", "uv run python -u vaila/sam3sapiens2.py"
+                "Markerless 2D", "SAM3+Sapiens2", "uv run --no-sync python -u vaila/sam3sapiens2.py"
             )
             self.sam3sapiens2_video()
 
@@ -2162,36 +2170,42 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 2D",
                 "SAM3+Sapiens2 Visualize ID",
-                "uv run python -u vaila/sam3sapiens2_visualize.py",
+                "uv run --no-sync python -u vaila/sam3sapiens2_visualize.py",
             )
             self.sam3sapiens2_visualize_video()
 
         def use_markerless_hands():
             dialog.destroy()
-            _print_chooser_launch("Markerless 2D", "Markerless Hands", "uv run vaila/mphands.py")
+            _print_chooser_launch(
+                "Markerless 2D", "Markerless Hands", "uv run --no-sync vaila/mphands.py"
+            )
             self.markerless_hands()
 
         def use_mp_angles():
             dialog.destroy()
-            _print_chooser_launch("Markerless 2D", "MP Angles", "uv run vaila/mpangles.py")
+            _print_chooser_launch(
+                "Markerless 2D", "MP Angles", "uv run --no-sync vaila/mpangles.py"
+            )
             self.mp_angles_calculation()
 
         def use_face_mesh():
             dialog.destroy()
-            _print_chooser_launch("Markerless 2D", "Face Mesh", "uv run vaila/mp_facemesh.py")
+            _print_chooser_launch(
+                "Markerless 2D", "Face Mesh", "uv run --no-sync vaila/mp_facemesh.py"
+            )
             self.face_mesh_analysis()
 
         def use_crop_face():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Crop Face", "uv run python vaila/crop_faces_atletas.py"
+                "Markerless 2D", "Crop Face", "uv run --no-sync python vaila/crop_faces_atletas.py"
             )
             self.crop_faces_atletas()
 
         def use_markerless_live():
             dialog.destroy()
             _print_chooser_launch(
-                "Markerless 2D", "Markerless Live", "uv run vaila/markerless_live.py"
+                "Markerless 2D", "Markerless Live", "uv run --no-sync vaila/markerless_live.py"
             )
             self.markerless_live()
 
@@ -2237,7 +2251,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 3D",
                 "SAM3+DINOv3 3D",
-                "uv run python -u vaila/sam3dinov3.py",
+                "uv run --no-sync python -u vaila/sam3dinov3.py",
                 note="SAM 3 boxes/masks -> SAM 3D Body (DINOv3) MHR mesh",
             )
             self.sam3dinov3_video()
@@ -2247,7 +2261,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 3D",
                 "SAM3+DINOv3 Visualize ID",
-                "uv run python -u vaila/sam3dinov3_visualize.py",
+                "uv run --no-sync python -u vaila/sam3dinov3_visualize.py",
             )
             self.sam3dinov3_visualize_video()
 
@@ -2256,7 +2270,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 3D",
                 "Sapiens2 3D Pose",
-                "uv run python -u vaila/sapiens2_3d.py",
+                "uv run --no-sync python -u vaila/sapiens2_3d.py",
                 note="Sapiens2 308-kp guided bbox tightening -> SAM 3D Body (DINOv3) mesh",
             )
             self.sapiens2_3d_video()
@@ -2266,7 +2280,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 3D",
                 "Monocular -> DLT world",
-                "uv run python -m vaila.monocular_dlt_align",
+                "uv run --no-sync python -m vaila.monocular_dlt_align",
                 note="place a 1-camera monocular reconstruction in the calibrated lab frame",
             )
             self.monocular_dlt_align()
@@ -2276,7 +2290,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 3D",
                 "Monocular -> Planar world",
-                "uv run python -m vaila.monocular_planar_align",
+                "uv run --no-sync python -m vaila.monocular_planar_align",
                 note="place monocular 3D on a metric floor via Planar Geo homographies.npz",
             )
             self.monocular_planar_align()
@@ -2286,7 +2300,7 @@ class Vaila(tk.Tk):
             _print_chooser_launch(
                 "Markerless 3D",
                 "Multi-Camera Mesh Pipeline",
-                "uv run python -u vaila/rec3d_mesh_pipeline.py",
+                "uv run --no-sync python -u vaila/rec3d_mesh_pipeline.py",
                 note="repeat Sapiens2 3D -> Visualize ID -> DLT3D merge on other files (N cameras)",
             )
             self.rec3d_mesh_pipeline_video()
@@ -3442,7 +3456,7 @@ class Vaila(tk.Tk):
         """Run GPU, PyTorch, CUDA, and AI model diagnostics (terminal report + GUI dialog)."""
         print("\n" + "=" * 60)
         print("Launching: GPU & AI Stack Diagnostics (vaila.gputest)")
-        print(">> Equivalent launch CLI: uv run python vaila/gputest.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python vaila/gputest.py")
         print(
             "Validating: PyTorch, CUDA, sam3dinov3.py, sam3sapiens2.py, "
             "markerless2d_yolo26.py, yolov26track.py"
@@ -3749,12 +3763,12 @@ class Vaila(tk.Tk):
             "SAM 3 video needs:\n"
             "• NVIDIA GPU + CUDA on this machine\n"
             "• Hugging Face: accept the license for facebook/sam3, then in a terminal:\n"
-            "    uv run hf auth login\n"
+            "    uv run --no-sync hf auth login\n"
             "  (same account that has access; use --force if the wrong user is cached)\n"
-            "• Or download weights: uv run vaila/vaila_sam.py --download-weights\n"
+            "• Or download weights: uv run --no-sync vaila/vaila_sam.py --download-weights\n"
             "  into vaila/models/sam3/sam3.pt\n\n"
             "Quick test (terminal):\n"
-            "  uv run vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person\n\n"
+            "  uv run --no-sync vaila/vaila_sam.py -i tests/SAM/test1000.mp4 -o tests/SAM/ -t person\n\n"
             "Yes = open the Hugging Face model page in your browser\n"
             "No = continue to the SAM window\n"
             "Cancel = stop",
@@ -3767,7 +3781,7 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("Launching: vaila.vaila_sam")
-        print(">> Equivalent launch CLI: uv run python -u vaila/vaila_sam.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/vaila_sam.py")
         print("Features: SAM 3 video masks (CUDA + Hugging Face auth)")
         print(
             "A separate SAM window opens; if you do not see it, check the task bar / other workspace."
@@ -3794,7 +3808,7 @@ class Vaila(tk.Tk):
             "  (clones .local/third_party/sapiens2/ + downloads pose + DETR weights)\n"
             "• Optional: uv sync --extra sapiens\n\n"
             "Quick test (terminal):\n"
-            "  uv run vaila/vaila_sapiens.py \\\n"
+            "  uv run --no-sync vaila/vaila_sapiens.py \\\n"
             "    -i tests/markerless_2d_analysis/ -o /tmp/sapiens_out --model 1b\n\n"
             "Yes = open the Hugging Face model collection in your browser\n"
             "No = continue to the Sapiens2 window\n"
@@ -3808,7 +3822,7 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("Launching: vaila.vaila_sapiens")
-        print(">> Equivalent launch CLI: uv run python -u vaila/vaila_sapiens.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/vaila_sapiens.py")
         print("Features: Sapiens2 308-keypoint pose (CUDA + HF weights)")
         print(
             "A separate Sapiens2 window opens; if you do not see it, check the task bar / other workspace."
@@ -3850,7 +3864,7 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("Launching: vaila.sam3sapiens2")
-        print(">> Equivalent launch CLI: uv run python -u vaila/sam3sapiens2.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/sam3sapiens2.py")
         print("Features: SAM3 bbox/contour/ID -> DETR-free Sapiens2 308-keypoint pose")
         print("SAM3 remains the identity authority; Sapiens2 does not reassign IDs.")
         print("=" * 60 + "\n")
@@ -3872,7 +3886,7 @@ class Vaila(tk.Tk):
         if not (weights_dir / "model.ckpt").is_file():
             missing.append(
                 "Weights: accept https://huggingface.co/facebook/sam-3d-body-dinov3, "
-                "then uv run hf download facebook/sam-3d-body-dinov3 "
+                "then uv run --no-sync hf download facebook/sam-3d-body-dinov3 "
                 f"--local-dir {weights_dir}"
             )
         if missing:
@@ -3895,7 +3909,7 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("Launching: vaila.sam3dinov3")
-        print(">> Equivalent launch CLI: uv run python -u vaila/sam3dinov3.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/sam3dinov3.py")
         print("Features: SAM3 bbox/contour/ID -> SAM 3D Body (DINOv3) markerless 3D")
         print("Outputs: MHR70 3D keypoints (m), 2D reprojection (px), camera, optional mesh")
         print("SAM3 remains the identity authority; SAM 3D Body does not reassign IDs.")
@@ -3930,7 +3944,7 @@ class Vaila(tk.Tk):
         if not (weights_dir / "model.ckpt").is_file():
             missing.append(
                 "Weights: accept https://huggingface.co/facebook/sam-3d-body-dinov3, "
-                "then uv run hf download facebook/sam-3d-body-dinov3 "
+                "then uv run --no-sync hf download facebook/sam-3d-body-dinov3 "
                 f"--local-dir {weights_dir}"
             )
         if missing:
@@ -3959,7 +3973,7 @@ class Vaila(tk.Tk):
 
         print("\n" + "=" * 60)
         print("Launching: vaila.sapiens2_3d")
-        print(">> Equivalent launch CLI: uv run python -u vaila/sapiens2_3d.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/sapiens2_3d.py")
         print("Features: Sapiens2 308-kp guided bbox tightening -> SAM 3D Body (DINOv3) mesh")
         print("Needs an existing sam3sapiens2.py run (or a raw SAM3 run to build one from).")
         print("SAM3 remains the identity authority; Sapiens2 only tightens the person bbox.")
@@ -3974,7 +3988,9 @@ class Vaila(tk.Tk):
         """Rerender one existing SAM3+Sapiens2 identity without model inference."""
         print("\n" + "=" * 60)
         print("Launching: vaila.sam3sapiens2_visualize")
-        print(">> Equivalent launch CLI: uv run python -u vaila/sam3sapiens2_visualize.py")
+        print(
+            ">> Equivalent launch CLI: uv run --no-sync python -u vaila/sam3sapiens2_visualize.py"
+        )
         print("Features: select one SAM ID; draw contour, bbox, ID, and Sapiens2 pose")
         print("Runtime: CPU/OpenCV rerender; SAM3/Sapiens2 weights are not loaded.")
         print("=" * 60 + "\n")
@@ -3988,7 +4004,7 @@ class Vaila(tk.Tk):
         """Rerender one existing SAM3+DINOv3 3D identity without model inference."""
         print("\n" + "=" * 60)
         print("Launching: vaila.sam3dinov3_visualize")
-        print(">> Equivalent launch CLI: uv run python -u vaila/sam3dinov3_visualize.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/sam3dinov3_visualize.py")
         print("Features: select one person ID; draw SAM contour, bbox, ID, and MHR skeleton")
         print("Runtime: CPU/OpenCV rerender; SAM3/SAM 3D Body weights are not loaded.")
         print("=" * 60 + "\n")
@@ -4002,7 +4018,7 @@ class Vaila(tk.Tk):
         """Place a single-camera monocular 3D run into the DLT-calibrated lab frame."""
         print("\n" + "=" * 60)
         print("Launching: vaila.monocular_dlt_align")
-        print(">> Equivalent launch CLI: uv run python -m vaila.monocular_dlt_align")
+        print(">> Equivalent launch CLI: uv run --no-sync python -m vaila.monocular_dlt_align")
         print("Features: camera-frame -> lab-frame change of basis from a .dlt3d,")
         print("          placement solved by reprojection through the real camera,")
         print("          writes CSV/.3d/C3D/BVH + a Blender companion script.")
@@ -4018,7 +4034,7 @@ class Vaila(tk.Tk):
         """Place a single-camera monocular 3D run onto a Planar Geo floor frame."""
         print("\n" + "=" * 60)
         print("Launching: vaila.monocular_planar_align")
-        print(">> Equivalent launch CLI: uv run python -m vaila.monocular_planar_align")
+        print(">> Equivalent launch CLI: uv run --no-sync python -m vaila.monocular_planar_align")
         print("Features: camera-frame -> tatame/floor frame via homographies.npz,")
         print("          similarity (s, R, T) from foot pixels through H_inv,")
         print("          writes CSV/.3d/C3D/BVH + optional aligned mesh.")
@@ -4034,7 +4050,7 @@ class Vaila(tk.Tk):
         """Repeat the proven Sapiens2 -> Visualize ID -> DLT3D mesh chain on other files."""
         print("\n" + "=" * 60)
         print("Launching: vaila.rec3d_mesh_pipeline")
-        print(">> Equivalent launch CLI: uv run python -u vaila/rec3d_mesh_pipeline.py")
+        print(">> Equivalent launch CLI: uv run --no-sync python -u vaila/rec3d_mesh_pipeline.py")
         print("Features: N-camera TOML manifest chains sapiens2_3d.py -> sam3dinov3_visualize.py")
         print("          -> rec3d_one_dlt3d.py --mesh-source-dir into one Blender-ready mesh.")
         print("Runtime: GPU per camera (Sapiens2 stage); NVRTC env fix applied automatically.")
@@ -4245,7 +4261,118 @@ class Vaila(tk.Tk):
         )
 
 
+def _ensure_cuda_torch() -> None:
+    """Detect NVIDIA GPU with CPU-only PyTorch and auto-fix.
+
+    A bare ``uv run`` re-syncs the default groups (dev + cpu) and silently
+    replaces CUDA wheels with CPU ones.  This guard detects the mismatch at
+    startup and re-runs ``uv sync --no-group cpu --group cuda`` to restore
+    the correct wheels, then re-execs ``vaila.py`` so the user never has to
+    run the full reinstall manually.
+    """
+    # Allow user opt-out if they explicitly want CPU execution on a GPU machine
+    if os.environ.get("VAILA_FORCE_CPU", "").lower() in ("1", "true", "yes"):
+        return
+
+    # Quick exit: no GPU driver → nothing to protect (CPU laptops, macOS, etc.)
+    if shutil.which("nvidia-smi") is None:
+        return
+
+    try:
+        nv = subprocess.run(
+            ["nvidia-smi", "-L"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if nv.returncode != 0 or "GPU" not in nv.stdout:
+            return  # driver present but no GPU enumerated
+    except Exception:
+        return
+
+    # Check the installed torch build tag
+    try:
+        import torch  # noqa: E402 — intentionally lazy
+    except ImportError:
+        return  # torch not installed at all; nothing to guard
+
+    version = getattr(torch, "__version__", "")
+    if "+cpu" not in version:
+        # Already a CUDA build (e.g. 2.11.0+cu128) → all good.
+        # Also set UV_NO_SYNC to prevent future downgrades in this process tree.
+        os.environ.setdefault("UV_NO_SYNC", "1")
+        return
+
+    # ---- Mismatch detected: NVIDIA GPU present but CPU-only torch ----
+    print(
+        "\n[bold yellow]⚠  CUDA wheel mismatch detected[/bold yellow]\n"
+        f"   torch {version} is a CPU-only build, but NVIDIA GPU is present.\n"
+        "   This usually happens when a bare [cyan]uv run[/cyan] re-synced the\n"
+        "   default groups and silently replaced the CUDA wheels.\n"
+    )
+    print("[bold cyan]>> Auto-fixing: restoring CUDA wheels...[/bold cyan]\n")
+
+    # Determine which extras are currently installed so we don't lose them
+    extras_flags: list[str] = []
+    _extra_probes = {
+        "sam": "sam3",
+        "sapiens": "sapiens",
+        "fifa": "pytorch_lightning",
+        "upscaler": "diffusers",
+        "dev": "pytest",
+    }
+    for extra_name, probe_mod in _extra_probes.items():
+        try:
+            if importlib.util.find_spec(probe_mod) is not None:
+                extras_flags.extend(["--extra", extra_name])
+        except Exception:
+            pass
+
+    uv_exe = shutil.which("uv") or "uv"
+    sync_cmd = [
+        uv_exe,
+        "sync",
+        "--no-group",
+        "cpu",
+        "--group",
+        "cuda",
+        *extras_flags,
+    ]
+    print(f">> Running: {' '.join(sync_cmd)}\n")
+
+    project_root = Path(__file__).resolve().parent
+    result = subprocess.run(sync_cmd, cwd=project_root)
+    if result.returncode != 0:
+        print(f"\n[bold red]✗ Auto-fix failed.[/bold red]  Run manually:\n  {' '.join(sync_cmd)}\n")
+        sys.exit(1)
+
+    # Persist UV_NO_SYNC so this process tree won't re-sync again
+    os.environ["UV_NO_SYNC"] = "1"
+
+    # Re-register sapiens editable install if checkout exists (uv sync drops it)
+    sapiens_dir = project_root / ".local" / "third_party" / "sapiens2"
+    if sapiens_dir.is_dir():
+        subprocess.run(
+            [uv_exe, "pip", "install", "-e", str(sapiens_dir)],
+            cwd=project_root,
+            check=False,
+        )
+
+    # Re-exec vaila.py so the fresh CUDA torch is loaded
+    print("\n[bold green]✓ CUDA wheels restored.[/bold green]  Re-launching vailá...\n")
+    if sys.platform == "win32":
+        code = subprocess.call([sys.executable, *sys.argv])
+        sys.exit(code)
+    else:
+        os.execv(
+            sys.executable,
+            [sys.executable, *sys.argv],
+        )
+
+
 if __name__ == "__main__":
+    _ensure_cuda_torch()
+
     parser = argparse.ArgumentParser(
         description="vailá — multimodal biomechanical analysis toolbox",
     )

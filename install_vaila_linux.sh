@@ -657,6 +657,23 @@ echo "Dependencies installed successfully."
 # just installed with the CPU ones. UV_NO_SYNC makes `uv run` use the venv
 # as-is; explicit `uv sync` calls below are unaffected.
 export UV_NO_SYNC=1
+# Persist UV_NO_SYNC=1 in the user's shell RC so future terminal sessions are
+# also protected (only for GPU installs — cpu is the default group anyway).
+if [[ "$USE_GPU" == true ]]; then
+    _persist_rc=""
+    case "${SHELL:-}" in
+        */zsh)  _persist_rc="$HOME/.zshrc"  ;;
+        */bash) _persist_rc="$HOME/.bashrc" ;;
+    esac
+    if [[ -z "$_persist_rc" ]]; then
+        [[ -f "$HOME/.bashrc" ]] && _persist_rc="$HOME/.bashrc" || \
+        [[ -f "$HOME/.zshrc"  ]] && _persist_rc="$HOME/.zshrc"
+    fi
+    if [[ -n "$_persist_rc" ]] && ! grep -q 'export UV_NO_SYNC=1' "$_persist_rc" 2>/dev/null; then
+        printf '\n# vailá / uv: prevent bare `uv run` from re-syncing (would replace CUDA wheels with CPU)\nexport UV_NO_SYNC=1\n' >> "$_persist_rc"
+        echo "Added 'export UV_NO_SYNC=1' to $_persist_rc (protects future sessions)."
+    fi
+fi
 echo ""
 echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
 

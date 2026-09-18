@@ -41,8 +41,8 @@ echo ">> [2/4] Installing sapiens2 (editable) into the uv environment..."
 
 echo ">> [3/4] Downloading pose + detector weights to ${WEIGHTS_DIR}..."
 mkdir -p "${WEIGHTS_DIR}/pose" "${WEIGHTS_DIR}/detector"
-# Use vaila_sapiens (huggingface_hub API). ``uv run hf download`` can exit 1 via click.Exit(0).
-(cd "${REPO_ROOT}" && uv run vaila/vaila_sapiens.py --download-weights --model 1b)
+# Use vaila_sapiens (huggingface_hub API). ``uv run --no-sync hf download`` can exit 1 via click.Exit(0).
+(cd "${REPO_ROOT}" && uv run --no-sync vaila/vaila_sapiens.py --download-weights --model 1b)
 
 echo ">> [4/4] Validating layout..."
 missing=0
@@ -59,7 +59,7 @@ done
 
 if [[ "${missing}" -eq 0 ]]; then
   echo ">> [4/4] Validating python import of sapiens..."
-  (cd "${REPO_ROOT}" && uv run python -c "
+  (cd "${REPO_ROOT}" && uv run --no-sync python -c "
 import sapiens
 print('   OK:      sapiens imports cleanly')
 ") || {
@@ -71,17 +71,17 @@ print('   OK:      sapiens imports cleanly')
   echo ">> Done. Sapiens2 Pose is ready."
   echo "   Optional: uv sync --extra sapiens"
   echo "   Quick test:"
-  echo "     uv run vaila/vaila_sapiens.py \\"
+  echo "     uv run --no-sync vaila/vaila_sapiens.py \\"
   echo "       -i tests/markerless_2d_analysis/ \\"
   echo "       -o /tmp/sapiens_out --model 1b --dry-run"
   echo "   Full run:"
-  echo "     uv run vaila/vaila_sapiens.py \\"
+  echo "     uv run --no-sync vaila/vaila_sapiens.py \\"
   echo "       -i tests/markerless_2d_analysis/ \\"
   echo "       -o /tmp/sapiens_out --model 1b"
   exit 0
 else
   echo ""
   echo ">> Some weights are missing. Check Hugging Face access and retry:"
-  echo "   uv run hf auth login"
+  echo "   uv run --no-sync hf auth login"
   exit 1
 fi

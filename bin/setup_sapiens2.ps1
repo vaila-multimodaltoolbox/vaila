@@ -44,7 +44,7 @@ New-Item -ItemType Directory -Path (Join-Path $WeightsDir "detector") -Force | O
 Push-Location $RepoRoot
 try {
   # huggingface_hub API via vaila_sapiens (hf CLI can spuriously exit 1 via click.Exit(0))
-  uv run vaila/vaila_sapiens.py --download-weights --model 1b
+  uv run --no-sync vaila/vaila_sapiens.py --download-weights --model 1b
 } finally {
   Pop-Location
 }
@@ -65,7 +65,7 @@ $missing = 0
 
 if ($missing -eq 0) {
   Write-Host ">> [4/4] Validating python import of sapiens..."
-  & uv run python -c @"
+  & uv run --no-sync python -c @"
 import sapiens
 print('   OK:      sapiens imports cleanly')
 "@
@@ -76,10 +76,10 @@ print('   OK:      sapiens imports cleanly')
 
   Write-Host ""
   Write-Host ">> Done. Sapiens2 Pose is ready."
-  Write-Host "   uv run vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o C:\temp\sapiens_out --model 1b"
+  Write-Host "   uv run --no-sync vaila/vaila_sapiens.py -i tests/markerless_2d_analysis/ -o C:\temp\sapiens_out --model 1b"
   exit 0
 } else {
   Write-Host ""
-  Write-Host ">> Some weights are missing. Run: uv run hf auth login"
+  Write-Host ">> Some weights are missing. Run: uv run --no-sync hf auth login"
   exit 1
 }

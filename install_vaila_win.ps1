@@ -899,6 +899,15 @@ Try {
     # just installed with the CPU ones. UV_NO_SYNC makes `uv run` use the venv
     # as-is; explicit `uv sync` calls below are unaffected.
     $env:UV_NO_SYNC = "1"
+    # Persist UV_NO_SYNC=1 as a user-level environment variable so future
+    # sessions are also protected (only for GPU installs — cpu is the default anyway).
+    if ($useGPU) {
+        $currentVal = [Environment]::GetEnvironmentVariable('UV_NO_SYNC', 'User')
+        if ($currentVal -ne '1') {
+            [Environment]::SetEnvironmentVariable('UV_NO_SYNC', '1', 'User')
+            Write-Host "Persisted UV_NO_SYNC=1 as a user-level environment variable (protects future sessions)." -ForegroundColor Green
+        }
+    }
 
     # Verify + repair CUDA wheel integrity (GPU template only).
     # Real bug hit in production (Linux): uv sync can report "nothing to do" for

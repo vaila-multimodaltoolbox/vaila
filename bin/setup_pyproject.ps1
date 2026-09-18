@@ -248,9 +248,19 @@ if (-not $NoSync) {
     foreach ($e in $ExtrasList) { $argList += @('--extra', $e) }
     Write-Host "Running: uv $($argList -join ' ')" -ForegroundColor Cyan
     & uv @argList
+
+    # ---- persist UV_NO_SYNC=1 as a user-level environment variable (CUDA) ----
+    if ($Target -eq 'cuda') {
+        $currentVal = [Environment]::GetEnvironmentVariable('UV_NO_SYNC', 'User')
+        if ($currentVal -ne '1') {
+            [Environment]::SetEnvironmentVariable('UV_NO_SYNC', '1', 'User')
+            Write-Host "Persisted UV_NO_SYNC=1 as a user-level environment variable." -ForegroundColor Green
+        }
+    }
+
     Write-Host ''
     Write-Host "Done. vailá ready for target='$Target' with extras=[$($ExtrasList -join ' ')]." -ForegroundColor Green
-    Write-Host 'Run the GUI:   uv run --no-sync vaila.py'
+    Write-Host 'Run the GUI:   uv run vaila.py'
 } else {
     Write-Host "Skipping 'uv sync' (-NoSync)" -ForegroundColor Cyan
     Write-Host ''

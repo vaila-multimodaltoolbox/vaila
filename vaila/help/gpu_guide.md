@@ -13,11 +13,11 @@ vailá includes a built-in diagnostic test suite to verify whether PyTorch, CUDA
 1. **GUI**: Click the **GPU Test** button in the footer of `vaila.py` (next to **Help** and **Check for Updates**).
 2. **CLI**: Run in terminal:
    ```bash
-   uv run python vaila/gputest.py
+   uv run --no-sync python vaila/gputest.py
    ```
 3. **GUI Mode from Terminal**:
    ```bash
-   uv run python vaila/gputest.py --gui
+   uv run --no-sync python vaila/gputest.py --gui
    ```
 
 ### Tested Scripts & AI Models
@@ -82,16 +82,45 @@ bash bin/setup_sapiens2.sh
 bash bin/setup_fifa_sam3d.sh
 ```
 
+### 3b. Never use a bare `uv run` on a CUDA machine
+
+`uv run` **auto-syncs the project with the default dependency groups (`dev` + `cpu`)**
+before it runs anything. On a CUDA machine that silently does two destructive things:
+
+1.  it replaces the `torch`/`torchvision`/`torchaudio` **cu128** wheels with the **CPU**
+    ones, so `torch.cuda.is_available()` starts returning `False`; and
+2.  it uninstalls the `sapiens` editable install, because `uv pip install -e` registers
+    it outside `uv.lock` — after which `import sapiens` fails.
+
+The visible symptoms are exactly the two most-reported SAM3+Sapiens2 failures:
+`SAM3 stage failed with subprocess exit=2` (SAM 3 refuses to run without CUDA) and
+`ImportError: Failed to load PyTorch C extensions` while validating `import sapiens`.
+
+Always use one of:
+
+```bash
+uv run --no-sync vaila.py        # per command
+export UV_NO_SYNC=1              # per shell
+bash bin/run_vaila.sh            # wrapper that already sets it
+```
+
+Explicit `uv sync --no-group cpu --group cuda ...` is unaffected, but note that every
+`uv sync` still drops the `sapiens` editable install, so re-run
+`bash bin/setup_sapiens2.sh` (or `uv pip install -e .local/third_party/sapiens2`) after
+any sync. `bin/setup_pyproject.sh` does this automatically.
+
+---
+
 ### 4. Gated Hugging Face Weights Authentication
 
 Full per-PC steps (licenses, hub version, lock cleanup): **[docs/huggingface_setup.md](../../docs/huggingface_setup.md)**.
 
 ```bash
-uv run hf auth login
-uv run hf auth whoami   # must exit 0 (need huggingface-hub >= 1.22)
-uv run vaila/vaila_sam.py --download-weights
+uv run --no-sync hf auth login
+uv run --no-sync hf auth whoami   # must exit 0 (need huggingface-hub >= 1.22)
+uv run --no-sync vaila/vaila_sam.py --download-weights
 bash bin/setup_fifa_sam3d.sh   # SAM 3D Body → vaila/models/sam-3d-dinov3/
-uv run vaila/vaila_sapiens.py --download-weights --model 1b
+uv run --no-sync vaila/vaila_sapiens.py --download-weights --model 1b
 ```
 
 ---
@@ -150,7 +179,7 @@ If you dual-boot the same machine, *vailá* will detect the OS change and genera
 
 ### "GPU Not Detected"
 If your report shows `Mode: LITE` or `CUDA Available: False` but you have an NVIDIA GPU:
-1.  Run the **GPU Test** button in the `vaila.py` footer or run `uv run python vaila/gputest.py`.
+1.  Run the **GPU Test** button in the `vaila.py` footer or run `uv run --no-sync python vaila/gputest.py`.
 2.  Ensure you have the latest **NVIDIA Drivers** installed (`nvidia-smi`).
 3.  Ensure you activated the CUDA template (`bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes`).
 

@@ -8,7 +8,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 17 September 2026
-Version: 0.4.3
+Version: 0.4.4
 
 Description:
 ------------
@@ -29,10 +29,10 @@ Provides:
 Usage:
 ------
 # Run via CLI:
-uv run python vaila/gputest.py
+uv run --no-sync python vaila/gputest.py
 
 # Run with GUI window:
-uv run python vaila/gputest.py --gui
+uv run --no-sync python vaila/gputest.py --gui
 
 License:
 --------
@@ -186,24 +186,56 @@ def check_pytorch_and_cuda() -> DiagnosticResult:
     else:
         if nvidia_smi_info:
             status = "FAIL"
-            summary = "NVIDIA GPU found by OS, but PyTorch CUDA failed to initialize"
-            details.append(
-                "Diagnosis: PyTorch is CPU-only, or driver mismatch / uninitialized CUDA."
-            )
+            cpu_wheel = getattr(torch.version, "cuda", None) is None
+            if cpu_wheel:
+                summary = (
+                    f"NVIDIA GPU present, but the CPU-only PyTorch wheel is installed ({torch_ver})"
+                )
+                details.append(
+                    "Diagnosis: the installed wheel has no CUDA runtime at all "
+                    f"({torch_ver}), so CUDA can never initialize. This is an "
+                    "environment problem, not a driver problem."
+                )
+                details.append(
+                    "Most common cause: a bare `uv run ...` re-resolved the project with "
+                    "the default dependency groups (dev + cpu) and replaced the cu128 "
+                    "wheels with the CPU ones. Always use `uv run --no-sync ...`, "
+                    "`export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh` on a CUDA machine."
+                )
+            else:
+                summary = "NVIDIA GPU found by OS, but PyTorch CUDA failed to initialize"
+                details.append(
+                    f"Diagnosis: CUDA-enabled wheel is installed ({torch_ver}, compiled "
+                    f"with CUDA {cuda_compiled}) but initialization failed — driver "
+                    "mismatch, stale kernel module, or no permission on the device nodes."
+                )
             if os_sys == "Linux":
                 remediation.extend(
                     [
                         "# Switch to Linux CUDA template and synchronize environment:",
                         "bash bin/setup_pyproject.sh --target=cuda --extras=sam,fifa,sapiens --yes",
-                        "# If you recently updated NVIDIA drivers, reboot or reload the nvidia kernel module:",
-                        "sudo modprobe nvidia",
                     ]
                 )
+                if not cpu_wheel:
+                    remediation.extend(
+                        [
+                            "# If you recently updated NVIDIA drivers, reboot or reload the nvidia kernel module:",
+                            "sudo modprobe nvidia",
+                        ]
+                    )
             elif os_sys == "Windows":
                 remediation.extend(
                     [
                         "# Switch to Windows CUDA template and synchronize environment:",
                         "pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam,fifa,sapiens -Yes",
+                    ]
+                )
+            if cpu_wheel:
+                remediation.extend(
+                    [
+                        "# Then keep every later `uv run` from downgrading CUDA back to CPU",
+                        "# (a bare `uv run` re-syncs the default dev+cpu groups):",
+                        "export UV_NO_SYNC=1" if os_sys != "Windows" else '$env:UV_NO_SYNC = "1"',
                     ]
                 )
         elif os_sys == "Darwin":
@@ -220,9 +252,7 @@ def check_pytorch_and_cuda() -> DiagnosticResult:
             summary = "No NVIDIA GPU detected (CPU mode active)"
             details.append("Running on CPU. Biomechanical analysis & 2D YOLO work on CPU.")
             if os_sys == "Linux":
-                remediation.append(
-                    "bash bin/setup_pyproject.sh --target=cuda --extras= --yes"
-                )
+                remediation.append("bash bin/setup_pyproject.sh --target=cuda --extras= --yes")
             elif os_sys == "Windows":
                 remediation.append("pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu -Yes")
 
@@ -308,7 +338,7 @@ def check_markerless2d_yolo26() -> DiagnosticResult:
         remediation.extend(
             [
                 "# Test or initialize YOLO pose weights:",
-                "uv run python vaila/markerless2d_yolo26.py",
+                "uv run --no-sync python vaila/markerless2d_yolo26.py",
             ]
         )
 
@@ -400,7 +430,7 @@ def check_yolov26track() -> DiagnosticResult:
         remediation.extend(
             [
                 "# Test yolov26track CLI help:",
-                "uv run python -u -m vaila.yolov26track --help",
+                "uv run --no-sync python -u -m vaila.yolov26track --help",
             ]
         )
 
@@ -461,6 +491,45 @@ def check_sam3sapiens2() -> DiagnosticResult:
         )
         missing_items.append("SAM 3 weights (facebook/sam3)")
 
+    # Check the sapiens2 editable install itself. ``uv pip install -e`` registers it
+    # outside ``uv.lock``, so every ``uv sync`` -- including the implicit sync of a
+    # bare ``uv run`` -- uninstalls it again. A missing or half-installed ``sapiens``
+    # is the single most common cause of a failed SAM3+Sapiens2 run.
+    sapiens_spec = None
+    try:
+        sapiens_spec = importlib.util.find_spec("sapiens")
+    except Exception as exc:
+        details.append(f"sapiens package: [FAIL] Import machinery error: {exc}")
+    if sapiens_spec is None:
+        status = "FAIL"
+        missing_items.append("sapiens editable install (bash bin/setup_sapiens2.sh)")
+        details.append(
+            "sapiens package: [FAIL] Not importable. `uv sync` removes the editable "
+            "install because it is not in uv.lock; re-register it after every sync."
+        )
+    else:
+        # ``find_spec`` only proves the path is registered. The failure the user
+        # actually hits is a *registered but broken* install (e.g. torch's C
+        # extensions half-swapped by a concurrent sync), so import it for real --
+        # in a subprocess, because sapiens pulls torch, transformers and timm.
+        probe = subprocess.run(
+            [sys.executable, "-c", "import sapiens"],
+            capture_output=True,
+            text=True,
+            timeout=180,
+            check=False,
+        )
+        if probe.returncode == 0:
+            details.append("sapiens package: [OK] Imports cleanly")
+        else:
+            status = "FAIL"
+            missing_items.append("sapiens import is broken (bash bin/setup_sapiens2.sh)")
+            last_line = next(
+                (ln for ln in reversed(probe.stderr.strip().splitlines()) if ln.strip()),
+                "unknown error",
+            )
+            details.append(f"sapiens package: [FAIL] Registered but not importable: {last_line}")
+
     # Check Sapiens2 package & config & weights
     try:
         try:
@@ -499,9 +568,9 @@ def check_sam3sapiens2() -> DiagnosticResult:
             [
                 "# Sapiens2 Setup & Weights:",
                 "bash bin/setup_sapiens2.sh",
-                "uv run hf auth login",
-                "uv run vaila/vaila_sam.py --download-weights",
-                "uv run vaila/vaila_sapiens.py --download-weights --model 1b",
+                "uv run --no-sync hf auth login",
+                "uv run --no-sync vaila/vaila_sam.py --download-weights",
+                "uv run --no-sync vaila/vaila_sapiens.py --download-weights --model 1b",
             ]
         )
     else:
@@ -596,7 +665,7 @@ def check_sam3dinov3() -> DiagnosticResult:
             [
                 "# SAM 3D Body (DINOv3) Setup & Weights:",
                 "bash bin/setup_fifa_sam3d.sh",
-                "uv run hf auth login",
+                "uv run --no-sync hf auth login",
             ]
         )
     else:

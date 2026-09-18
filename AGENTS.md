@@ -43,12 +43,19 @@ Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`
 | CPU laptop | `uv sync` |
 | macOS (Metal/MPS) | `uv sync` |
 
-> **On a CUDA machine, never run a bare `uv run`.** It auto-syncs with the default
-> groups (`dev` + `cpu`) and silently replaces the cu128 wheels with the CPU ones
-> (`torch.cuda.is_available()` becomes `False`). Use `uv run --no-sync ...`,
-> `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`. Explicit `uv sync --no-group cpu
-> --group cuda` is unaffected; the installers and `bin/setup_*` scripts already export
-> `UV_NO_SYNC=1` after their sync.
+> **CUDA protection (automatic).** A bare `uv run` would re-sync the default
+> groups (`dev` + `cpu`) and replace the cu128 wheels with CPU ones. Three
+> layers now prevent this:
+> 1. `bin/setup_pyproject.sh --target=cuda` **persists** `export UV_NO_SYNC=1`
+>    in the user's shell RC (`.bashrc`/`.zshrc`), so every future shell session
+>    is protected.
+> 2. `vaila.py` has a **startup guard** (`_ensure_cuda_torch()`) that detects
+>    CPU-only torch on an NVIDIA machine and auto-runs
+>    `uv sync --no-group cpu --group cuda` + re-launches.
+> 3. `bin/run_vaila.sh` always passes `--no-sync`.
+>
+> If you still hit the issue (e.g. fresh machine), run:
+> `bash bin/setup_pyproject.sh --target=cuda --yes`
 
 **Recommended multi-machine sync (avoiding Git conflicts across Linux / macOS / Windows):**
 Whenever switching between workstations, use the automated sync runner to pull changes and auto-adapt the local environment without merge conflicts:
