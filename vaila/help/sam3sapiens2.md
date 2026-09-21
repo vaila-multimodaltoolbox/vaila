@@ -3,11 +3,12 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.4.3
-- **Updated:** 2026-09-17
+- **Version:** 0.4.4
+- **Updated:** 2026-09-20
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3sapiens2_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
+- **Batch recursivo:** `--recursive/-r` com `--depth/-d N` percorre `-i` procurando subpastas com vídeos crus, pulando pastas já processadas e nunca descendo em uma saída `processed_sam3sapiens2_*`/`*_visualized_id_N` já gerada.
 - **Selected-ID rerender:** after a run, use [sam3sapiens2_visualize](sam3sapiens2_visualize.md) (GUI **SAM3+Sapiens2 Visualize ID**, or CLI `--id` / interactive prompt). Overlay matches SAM3 contour + Sapiens2 left/right skeleton colors.
 
 ## What this pipeline changes
@@ -132,6 +133,24 @@ Resume: 3/8 videos already completed, 5 remaining
 
 Pass `--fresh` to ignore any match and start a brand-new timestamped output
 directory instead. `--fresh` and `--resume` are mutually exclusive.
+
+### Recursive batch across subdirectories
+
+```bash
+uv run python -u vaila/sam3sapiens2.py -i /path/to/root --recursive --depth -1
+```
+
+`--recursive`/`-r` walks `-i` for every subdirectory holding raw videos,
+running the same auto-resume batch logic on each one — no need to `cd` into
+each leaf directory manually. `--depth`/`-d N` bounds how deep the walk goes
+below `-i` (`-1` unlimited — default, `0` root only, `1-99` levels). A
+directory already fully processed (matching `processed_sam3sapiens2_*` output
+present) is skipped, and the walk never descends into a prior
+`processed_sam3sapiens2_*` or `*_visualized_id_N` output directory, so reruns
+and generated outputs can never be picked up as new input (no infinite-loop
+risk). `--recursive` requires `-i` to be a directory and is mutually exclusive
+with `--resume` (ambiguous target). GUI: checkbox + depth field in the same
+dialog.
 
 ### Reuse a completed SAM3 batch
 

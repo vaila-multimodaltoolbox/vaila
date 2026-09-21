@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 16 September 2026
-Version: 0.4.3
+Update Date: 20 September 2026
+Version: 0.4.4
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -113,6 +113,7 @@ try:
         _pose_bbox_from_sam,
         _prepare_gui_root,
         _video_frame_count,
+        find_batch_directories,
         find_local_sam_dir,
         load_sam_guidance,
         prepare_sam_rerun_dir,
@@ -151,6 +152,7 @@ except ImportError:  # standalone execution
         _pose_bbox_from_sam,
         _prepare_gui_root,
         _video_frame_count,
+        find_batch_directories,
         find_local_sam_dir,
         load_sam_guidance,
         prepare_sam_rerun_dir,
@@ -328,6 +330,8 @@ class Sam3dGuiSettings:
     save_mesh: bool
     focal_px: float | None
     weights_dir: Path | None
+    recursive: bool = False
+    depth: int = -1
 
 
 # --------------------------------------------------------------------------- #
@@ -450,7 +454,7 @@ def _sam3d_import_error(exc: Exception) -> RuntimeError:
         return RuntimeError(
             f"Missing runtime dependency for '{SAM3D_PACKAGE}': {exc}\n\n"
             "Install all SAM 3D Body runtime dependencies with:\n"
-            "  uv pip install --no-deps mhr yacs omegaconf \"antlr4-python3-runtime==4.9.3\" roma trimesh braceexpand pytorch-lightning torchmetrics lightning-utilities termcolor\n\n"
+            '  uv pip install --no-deps mhr yacs omegaconf "antlr4-python3-runtime==4.9.3" roma trimesh braceexpand pytorch-lightning torchmetrics lightning-utilities termcolor\n\n'
             "Or run the complete setup script:\n"
             "  bash bin/setup_fifa_sam3d.sh (Linux/macOS) or pwsh bin/setup_fifa_sam3d.ps1 (Windows)"
         )
@@ -1641,9 +1645,11 @@ def _format_gui_cli(settings: Sam3dGuiSettings) -> list[str]:
     ]
     if settings.resume is not None:
         cmd.extend(["--resume", str(settings.resume)])
-    else:
-        assert settings.output_parent is not None
+    elif settings.output_parent is not None:
         cmd.extend(["-o", str(settings.output_parent)])
+    if settings.recursive:
+        cmd.append("--recursive")
+        cmd.extend(["--depth", str(settings.depth)])
     cmd.extend(
         [
             "-t",
@@ -1708,6 +1714,8 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             self.mask_var = tk.BooleanVar(value=True)
             self.overlay_var = tk.BooleanVar(value=True)
             self.mesh_var = tk.BooleanVar(value=False)
+            self.recursive_var = tk.BooleanVar(value=False)
+            self.depth_var = tk.StringVar(value="-1")
 
             frame = ttk.Frame(self, padding=12)
             frame.grid(row=0, column=0, sticky="nsew")
@@ -1796,6 +1804,19 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             ).grid(row=row, column=0, columnspan=3, sticky="w", pady=2)
             row += 1
 
+            ttk.Checkbutton(
+                frame,
+                text="Recursive (batch every subfolder under Input)",
+                variable=self.recursive_var,
+            ).grid(row=row, column=0, columnspan=2, sticky="w", pady=2)
+            ttk.Label(frame, text="Depth (-1=all, 0=root)").grid(
+                row=row, column=2, sticky="e", pady=2
+            )
+            ttk.Entry(frame, textvariable=self.depth_var, width=6).grid(
+                row=row, column=3, sticky="w", pady=2
+            )
+            row += 1
+
             buttons = ttk.Frame(frame)
             buttons.grid(row=row, column=0, columnspan=4, sticky="e", pady=(12, 0))
             ttk.Button(buttons, text="Help", command=self._open_help).pack(side="left", padx=4)
@@ -1846,12 +1867,29 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                 input_path = Path(self.input_var.get().strip()).expanduser()
                 if not self.input_var.get().strip() or not input_path.exists():
                     raise ValueError("Select an existing input video or folder (Dir… / File…).")
-                videos = _find_videos(input_path)
-                if not videos:
-                    raise ValueError(f"No supported videos found under: {input_path}")
+                recursive = bool(self.recursive_var.get())
+                try:
+                    depth = int(self.depth_var.get().strip() or "-1")
+                except ValueError as exc:
+                    raise ValueError("Depth must be an integer (-1, 0, 1-99).") from exc
+                if depth < -1 or depth > 99:
+                    raise ValueError("Depth must be -1 (unlimited), 0 (root only), or 1-99.")
+                if recursive:
+                    if not input_path.is_dir():
+                        raise ValueError("Recursive mode requires Input to be a folder.")
+                    directories = find_batch_directories(input_path, depth)
+                    if not directories:
+                        raise ValueError(
+                            f"No directories with supported videos found under: {input_path}"
+                        )
+                    videos = directories
+                else:
+                    videos = _find_videos(input_path)
+                    if not videos:
+                        raise ValueError(f"No supported videos found under: {input_path}")
                 output_raw = self.output_var.get().strip()
                 output_parent = Path(output_raw).expanduser() if output_raw else None
-                if output_parent is None:
+                if output_parent is None and not recursive:
                     raise ValueError("Select an output parent folder.")
                 sam_raw = self.sam_var.get().strip()
                 sam_results = Path(sam_raw).expanduser() if sam_raw else None
@@ -1868,6 +1906,8 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                     input_path=input_path,
                     output_parent=output_parent,
                     resume=None,
+                    recursive=recursive,
+                    depth=depth,
                     sam_results=sam_results,
                     prompt=self.prompt_var.get().strip() or "person",
                     device=max(0, int(self.device_var.get())),
@@ -1885,11 +1925,18 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             except (ValueError, RuntimeError) as exc:
                 messagebox.showerror("SAM3+DINOv3 3D", str(exc), parent=self)
                 return
-            _log(
-                f"Queued {len(videos)} video(s): "
-                + ", ".join(v.name for v in videos[:8])
-                + ("…" if len(videos) > 8 else "")
-            )
+            if recursive:
+                _log(
+                    f"Queued {len(videos)} director{'y' if len(videos) == 1 else 'ies'}: "
+                    + ", ".join(v.name for v in videos[:8])
+                    + ("…" if len(videos) > 8 else "")
+                )
+            else:
+                _log(
+                    f"Queued {len(videos)} video(s): "
+                    + ", ".join(v.name for v in videos[:8])
+                    + ("…" if len(videos) > 8 else "")
+                )
             self.result = result
             self.destroy()
 
@@ -1920,6 +1967,27 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("-i", "--input", type=Path, help="Input video or non-recursive folder")
     parser.add_argument("-o", "--output", type=Path, help="Output parent directory")
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help=(
+            "Batch across every subdirectory under --input that still has raw "
+            "videos, instead of just --input itself. Never descends into or "
+            "reprocesses a processed_sam3sapiens2_*/processed_sam3dinov3_*/"
+            "*_visualized_id_N output directory. If --output is omitted, each "
+            "discovered directory gets its own colocated output (same "
+            "auto-resume behavior as running that directory alone)."
+        ),
+    )
+    parser.add_argument(
+        "-d",
+        "--depth",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="With --recursive: -1 unlimited (default), 0 root only, 1-99 levels below --input.",
+    )
     parser.add_argument(
         "--resume",
         type=Path,
@@ -2017,42 +2085,23 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> None:
-    parser = _build_parser()
-    args = parser.parse_args()
+def _run_directory_batch(
+    input_path: Path,
+    output_parent: Path,
+    resume_path: Path | None,
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> tuple[int, int, Path] | None:
+    """Run the full SAM3+DINOv3 batch pipeline over every video in one
+    directory. Extracted from ``main()`` so ``--recursive`` can call this
+    once per discovered directory while a plain single-directory invocation
+    behaves exactly as before.
 
-    if args.open_help:
-        if _help_path().is_file():
-            webbrowser.open_new_tab(_help_path().as_uri())
-        else:
-            webbrowser.open_new_tab(f"https://huggingface.co/{DEFAULT_HF_REPO_ID}")
-        return
-    if args.input is None and args.output is None and args.resume is None:
-        run_sam3dinov3()
-        return
-    if args.input is None or (args.output is None and args.resume is None):
-        parser.error("--input and either --output or --resume must be supplied")
-    if not 0.0 <= args.min_sam_score <= 1.0:
-        parser.error("--min-sam-score must be in [0,1]")
-    if args.bbox_padding < 0:
-        parser.error("--bbox-padding must be >= 0")
-    if args.focal_px is not None and args.focal_px <= 0:
-        parser.error("--focal-px must be > 0")
-    if args.stride < 1:
-        parser.error("--stride must be >= 1")
-    if args.fresh and args.resume is not None:
-        parser.error("--fresh and --resume are mutually exclusive")
-
-    if not args.dry_run:
-        # Preflight: verify SAM 3D Body weights AND importability before running SAM 3
-        ensure_sam3d_ready(args.weights_dir)
-
-    input_path = args.input.expanduser().resolve()
-    output_parent = (
-        args.output.expanduser().resolve()
-        if args.output is not None
-        else args.resume.expanduser().resolve().parent
-    )
+    Returns ``(succeeded, failed_count, output_base)``, or ``None`` when this
+    call only performed a dry-run report or internal worker dispatch (nothing
+    to tally). Raises via ``parser.error`` for the same fatal conditions
+    ``main()`` always raised (no videos, bad --resume dir).
+    """
     videos = _find_videos(input_path)
     if not videos:
         parser.error(f"no supported video found under {input_path}")
@@ -2066,10 +2115,10 @@ def main() -> None:
             args,
             single_video=True,
         )
-        return
+        return None
 
-    if args.resume is not None:
-        output_base = args.resume.expanduser().resolve()
+    if resume_path is not None:
+        output_base = resume_path.expanduser().resolve()
         if not output_base.is_dir():
             parser.error(f"resume directory does not exist: {output_base}")
         is_resume = True
@@ -2080,7 +2129,7 @@ def main() -> None:
         )
         if is_resume:
             _log(f"Auto-resume: found matching run, reusing {output_base}")
-    resume_flag = args.resume is not None or is_resume
+    resume_flag = resume_path is not None or is_resume
     output_base.mkdir(parents=True, exist_ok=True)
     write_batch_input_marker(output_base, input_path, "sam3dinov3")
 
@@ -2090,7 +2139,7 @@ def main() -> None:
         report.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print("\n".join(lines), flush=True)
         print(f"Dry-run report: {report}", flush=True)
-        return
+        return None
 
     completed_count = sum(
         1 for video in videos if load_completed_summary(output_base / video.stem) is not None
@@ -2184,8 +2233,98 @@ def main() -> None:
         encoding="utf-8",
     )
     _log(f"Batch done: {len(summaries)}/{len(videos)} succeeded -> {output_base}")
-    if failed:
-        raise SystemExit(1)
+    return len(summaries), len(failed), output_base
+
+
+def main() -> None:
+    parser = _build_parser()
+    args = parser.parse_args()
+
+    if args.open_help:
+        if _help_path().is_file():
+            webbrowser.open_new_tab(_help_path().as_uri())
+        else:
+            webbrowser.open_new_tab(f"https://huggingface.co/{DEFAULT_HF_REPO_ID}")
+        return
+    if args.input is None and args.output is None and args.resume is None:
+        run_sam3dinov3()
+        return
+    if args.input is None:
+        parser.error("--input is required")
+    if not args.recursive and args.output is None and args.resume is None:
+        parser.error("--input and either --output or --resume must be supplied")
+    if not 0.0 <= args.min_sam_score <= 1.0:
+        parser.error("--min-sam-score must be in [0,1]")
+    if args.bbox_padding < 0:
+        parser.error("--bbox-padding must be >= 0")
+    if args.focal_px is not None and args.focal_px <= 0:
+        parser.error("--focal-px must be > 0")
+    if args.stride < 1:
+        parser.error("--stride must be >= 1")
+    if args.fresh and args.resume is not None:
+        parser.error("--fresh and --resume are mutually exclusive")
+    if args.recursive:
+        if args.resume is not None:
+            parser.error("--recursive and --resume are mutually exclusive")
+        if args.depth < -1 or args.depth > 99:
+            parser.error("--depth must be -1 (unlimited), 0 (root only), or 1-99.")
+
+    if not args.dry_run:
+        # Preflight: verify SAM 3D Body weights AND importability before running SAM 3
+        ensure_sam3d_ready(args.weights_dir)
+
+    input_path = args.input.expanduser().resolve()
+
+    if args.recursive:
+        if not input_path.is_dir():
+            parser.error("--recursive requires --input to be a directory")
+        directories = find_batch_directories(input_path, args.depth)
+        if not directories:
+            parser.error(
+                f"no directories with supported videos found under {input_path} "
+                f"(--recursive --depth {args.depth})"
+            )
+        explicit_output_parent = (
+            args.output.expanduser().resolve() if args.output is not None else None
+        )
+        total_succeeded = 0
+        total_failed = 0
+        failed_dirs: list[str] = []
+        for dir_index, directory in enumerate(directories, start=1):
+            dir_output_parent = (
+                explicit_output_parent if explicit_output_parent is not None else directory
+            )
+            _log(f"[Dir {dir_index}/{len(directories)}] {directory}")
+            try:
+                result = _run_directory_batch(directory, dir_output_parent, None, args, parser)
+            except Exception as exc:
+                failed_dirs.append(f"{directory}: {exc}")
+                _log(f"ERROR: directory batch failed for {directory}: {exc}")
+                continue
+            if result is None:
+                continue
+            succeeded, failed_count, _output_base = result
+            total_succeeded += succeeded
+            total_failed += failed_count
+        _log(
+            f"Recursive batch done: {total_succeeded} videos succeeded, "
+            f"{total_failed} videos failed across {len(directories)} directories, "
+            f"{len(failed_dirs)} directories errored"
+        )
+        if failed_dirs or total_failed:
+            raise SystemExit(1)
+        return
+
+    output_parent = (
+        args.output.expanduser().resolve()
+        if args.output is not None
+        else args.resume.expanduser().resolve().parent
+    )
+    result = _run_directory_batch(input_path, output_parent, args.resume, args, parser)
+    if result is not None:
+        _succeeded, failed_count, _output_base = result
+        if failed_count:
+            raise SystemExit(1)
 
 
 if __name__ == "__main__":

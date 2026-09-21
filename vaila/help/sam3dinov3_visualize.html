@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+DINOv3 3D — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.3.137 &nbsp; <strong>Updated:</strong> 2026-09-11</p>
+<p><strong>Version:</strong> 0.4.4 &nbsp; <strong>Updated:</strong> 2026-09-20</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one person, draw its SAM contour, bounding box, ID and reprojected MHR70 skeleton, and write filtered keypoint/camera/contour/predictions artifacts plus an overlay video (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
@@ -48,6 +48,11 @@
 # &gt;&gt; Available person IDs: [0, 1, 2, 4]
 # &gt;&gt; Enter SAM/person ID to visualize: 4</pre>
 <p>Use <code>--list-ids</code> to discover IDs and exit without rendering. <code>--dry-run</code> validates paths and the source video's frame count/dimensions against the run. <code>--overwrite</code> allows a non-empty output directory. <code>--export-mesh {obj,ply}</code> writes the Blender mesh sequence described above (default <code>none</code>).</p>
+<h3>Recursive batch across subdirectories (CLI-only)</h3>
+<pre><code>uv run python -u vaila/sam3dinov3_visualize.py \
+  --sam3d-results /path/to/root -r -d -1
+</code></pre>
+<p><code>--recursive</code>/<code>-r</code> walks <code>--sam3d-results</code> for every completed <code>processed_sam3dinov3_*</code> run directory found below it, instead of a single run — <code>--video</code> is not used in this mode, each run's source video is auto-discovered. <code>--depth</code>/<code>-d N</code> bounds the walk (<code>-1</code> unlimited — default, <code>0</code> root only, <code>1-99</code> levels). If <code>--id</code> is omitted, <strong>every</strong> available ID is rendered per video (no "best ID" heuristic); if given, it is applied to every discovered video, skipped with a warning where that ID is unavailable. An ID already rendered is never re-rendered. This mode is CLI-only — the GUI stays single-run/single-ID.</p>
 <h2>GUI</h2>
 <p>Frame B → <strong>Markerless 3D</strong> → <strong>SAM3+DINOv3 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3dinov3_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID from the combobox. Check <strong>"Export mesh sequence (.obj, for Blender)"</strong> to also write the OBJ sequence (needs <code>--save-mesh</code> in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
 <h2>Outputs</h2>

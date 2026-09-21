@@ -3,8 +3,8 @@ Project: vailá
 Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 20 September 2026
+Version: 0.4.4
 
 Description:
     CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
@@ -18,6 +18,12 @@ Usage:
 
     # Omit --id to be prompted interactively with the available SAM IDs.
     # GUI: omit all arguments, or use Frame B -> YOLO + FB -> SAM3+Sapiens2 Visualize ID
+
+    Recursive batch over every processed_sam3sapiens2_* run directory found under
+    a root (never re-visualizes an id that already has an output, CLI-only, no
+    GUI change): omitting --id renders every available id per video.
+    uv run python -u vaila/sam3sapiens2_visualize.py \
+        --sam-results /path/to/root -r -d -1
 """
 
 from __future__ import annotations
@@ -27,7 +33,10 @@ import contextlib
 import csv
 import datetime as dt
 import json
+import os
+import re
 import shutil
+import sys
 import threading
 import tkinter as tk
 from pathlib import Path
@@ -234,6 +243,53 @@ def resolve_run_dir(path: Path, video_path: Path | None = None) -> Path:
         f"Could not resolve a per-video SAM3+Sapiens2 directory from {path}. "
         f"Candidates: {names or 'none'}"
     )
+
+
+_RUN_DIR_RE = re.compile(r"^processed_sam3sapiens2_\d{8}_\d{6}$", re.IGNORECASE)
+_SKIP_DESCEND_RE = re.compile(r"_sam3sapiens2_visualized_id_\d+$", re.IGNORECASE)
+
+
+def find_run_directories(root: Path, max_depth: int) -> list[Path]:
+    """Walk ``root`` and return every completed ``processed_sam3sapiens2_*``
+    run directory, for ``--recursive`` batch visualization across many runs.
+
+    A matched run directory is never descended into further (no nested runs
+    are ever written), and neither is a prior ``*_visualized_id_N`` output --
+    the two rules that keep this from ever re-visiting its own output.
+    ``max_depth`` matches ``compress_videos_h264.py``'s convention: -1 is
+    unlimited, 0 is root only, 1..99 is that many levels below root.
+    """
+    root = root.expanduser().resolve()
+    found: list[Path] = []
+    for dirpath, dirnames, _filenames in os.walk(root):
+        current = Path(dirpath)
+        rel = current.relative_to(root)
+        depth = 0 if rel == Path(".") else len(rel.parts)
+        if _RUN_DIR_RE.match(current.name):
+            found.append(current)
+            dirnames[:] = []
+            continue
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if not _SKIP_DESCEND_RE.search(name.lower()) and (max_depth < 0 or depth < max_depth)
+        )
+    return sorted(found, key=lambda p: str(p).lower())
+
+
+def _iter_video_run_dirs(run_dir: Path) -> list[Path]:
+    """Per-video subdirectories of a processed_sam3sapiens2_* run that have
+    completed predictions (skips anything that failed or is unrelated)."""
+    video_dirs = []
+    for child in sorted(run_dir.iterdir()):
+        if not child.is_dir():
+            continue
+        try:
+            _prediction_path(child)
+        except FileNotFoundError:
+            continue
+        video_dirs.append(child)
+    return video_dirs
 
 
 def load_predictions(run_dir: Path) -> dict[str, Any]:
@@ -1134,12 +1190,109 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Validate inputs and print the plan without writing a video.",
     )
+    parser.add_argument(
+        "--recursive",
+        "-r",
+        action="store_true",
+        help=(
+            "Batch-visualize every processed_sam3sapiens2_* run directory found "
+            "under --sam-results, instead of a single run. --video is not used "
+            "in this mode (each run's source video is auto-discovered). If "
+            "--id is omitted, every available id is rendered per video. Never "
+            "re-renders an id that already has a visualized_id output. CLI-only."
+        ),
+    )
+    parser.add_argument(
+        "--depth",
+        "-d",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="With --recursive: -1 unlimited (default), 0 root only, 1-99 levels below --sam-results.",
+    )
     return parser
+
+
+def _run_recursive_batch(args: argparse.Namespace) -> int:
+    root = args.sam_results.expanduser().resolve()
+    run_dirs = find_run_directories(root, args.depth)
+    if not run_dirs:
+        print(
+            f"Error: no processed_sam3sapiens2_* run directories found under {root} "
+            f"(--recursive --depth {args.depth})",
+            file=sys.stderr,
+        )
+        return 2
+    explicit_output_parent = args.output.expanduser().resolve() if args.output is not None else None
+    total_rendered = 0
+    total_skipped = 0
+    total_failed = 0
+    for run_index, run_dir in enumerate(run_dirs, start=1):
+        print(f"\n[Run {run_index}/{len(run_dirs)}] {run_dir}")
+        for video_dir in _iter_video_run_dirs(run_dir):
+            try:
+                payload = load_predictions(video_dir)
+                source_video = discover_source_video(video_dir, payload)
+                if source_video is None:
+                    raise FileNotFoundError("could not locate source video")
+                available_ids = discover_ids(video_dir, payload)
+            except Exception as exc:
+                print(f"[WARN] {video_dir}: {exc}", file=sys.stderr)
+                total_failed += 1
+                continue
+            target_ids = [args.selected_id] if args.selected_id is not None else available_ids
+            output_parent = (
+                explicit_output_parent if explicit_output_parent is not None else video_dir.parent
+            )
+            for target_id in target_ids:
+                if target_id not in available_ids:
+                    print(
+                        f"[WARN] {source_video.name}: ID {target_id} unavailable "
+                        f"(has {available_ids}), skipping",
+                        file=sys.stderr,
+                    )
+                    total_failed += 1
+                    continue
+                existing = sorted(
+                    output_parent.glob(
+                        f"{source_video.stem}_sam3sapiens2_visualized_id_{target_id:02d}*"
+                    )
+                )
+                if existing:
+                    print(f"[SKIP] Already visualized: {source_video.name} id {target_id}")
+                    total_skipped += 1
+                    continue
+                output_dir = _unique_gui_output_dir(output_parent, source_video, target_id)
+                try:
+                    visualize_selected_id(
+                        video_dir,
+                        source_video,
+                        target_id,
+                        output_dir,
+                        kpt_thr=args.kpt_thr,
+                        draw_all_keypoints=not args.no_all_keypoints,
+                        overwrite=args.overwrite,
+                    )
+                    total_rendered += 1
+                except Exception as exc:
+                    print(f"[ERROR] {source_video.name} id {target_id}: {exc}", file=sys.stderr)
+                    total_failed += 1
+    print(
+        f"\nRecursive batch done: {total_rendered} rendered, {total_skipped} skipped, "
+        f"{total_failed} failed across {len(run_dirs)} run directories"
+    )
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if args.recursive:
+        if args.sam_results is None:
+            parser.error("--recursive requires --sam-results/--input-dir as the root to walk")
+        if args.depth < -1 or args.depth > 99:
+            parser.error("--depth must be -1 (unlimited), 0 (root only), or 1-99.")
+        return _run_recursive_batch(args)
     if not any((args.sam_results, args.video, args.selected_id is not None, args.output)):
         run_visualizer_gui()
         return 0

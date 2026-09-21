@@ -3,12 +3,13 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.4.3
-- **Updated:** 2026-09-17
+- **Version:** 0.4.4
+- **Updated:** 2026-09-20
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
 - **Retomada:** `--resume /caminho/processed_sam3dinov3_...` pula vídeos já concluídos e reaproveita `sam3/sam_tracks.csv`; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3dinov3_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
+- **Batch recursivo:** `--recursive/-r` com `--depth/-d N` percorre `-i` procurando subpastas com vídeos crus, pulando pastas já processadas e nunca descendo em uma saída `processed_sam3dinov3_*`/`*_visualized_id_N` já gerada.
 
 ## What this pipeline does
 
@@ -121,6 +122,8 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run
 | `--dry-run`              | off       | Validate and print the plan, no GPU inference                   |
 | `--resume RUN_DIR`       | –         | Continue an interrupted batch (explicit pin)                    |
 | `--fresh`                | off       | Ignore any matching prior run under `-o`; force a new output dir |
+| `--recursive, -r`        | off       | Walk `-i` for subdirectories with raw videos, batch each one     |
+| `--depth, -d N`          | `-1`      | With `--recursive`: `-1` unlimited, `0` root only, `1-99` levels |
 
 ### Automatic resume (default, no flag needed)
 
