@@ -1,7 +1,7 @@
 # SAM3+Sapiens2 — Visualize selected ID
 
-**Version:** 0.3.120  
-**Updated:** 2026-09-03
+**Version:** 0.4.4  
+**Updated:** 2026-09-20
 
 This CPU-only tool rerenders an existing `processed_sam3sapiens2_*` result. It does not load SAM3 or Sapiens2 weights, so it is safe for visualization after an inference run and does not repeat GPU allocation.
 
@@ -37,6 +37,23 @@ uv run python -u vaila/sam3sapiens2_visualize.py \
 ```
 
 Use `--list-ids` to discover IDs and exit without rendering. `--dry-run` validates paths. `--overwrite` allows a non-empty output directory. `--kpt-thr` changes the keypoint confidence threshold; `--no-all-keypoints` draws only the 21 principal body points.
+
+### Recursive batch across subdirectories (CLI-only)
+
+```bash
+uv run python -u vaila/sam3sapiens2_visualize.py \
+  --sam-results /path/to/root -r -d -1
+```
+
+`--recursive`/`-r` walks `--sam-results` for every completed
+`processed_sam3sapiens2_*` run directory found below it, instead of a single
+run — `--video` is not used in this mode, each run's source video is
+auto-discovered. `--depth`/`-d N` bounds the walk (`-1` unlimited — default,
+`0` root only, `1-99` levels). If `--id` is omitted, **every** available ID is
+rendered per video (no "best ID" heuristic); if given, it is applied to every
+discovered video, skipped with a warning where that ID is unavailable. An ID
+already rendered (`<video>_sam3sapiens2_visualized_id_NN` exists) is never
+re-rendered. This mode is CLI-only — the GUI stays single-run/single-ID.
 
 ## GUI
 

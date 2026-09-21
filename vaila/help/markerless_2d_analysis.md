@@ -4,9 +4,9 @@
 
 - **Category:** Analysis
 - **File:** `vaila/markerless_2d_analysis.py`
-- **Lines:** 6152
-- **Version:** 0.4.0
-- **Updated:** 14 September 2026
+- **Lines:** 6372
+- **Version:** 0.4.4
+- **Updated:** 20 September 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -216,6 +216,29 @@ process_video(
     config
 )
 ```
+
+### CLI batch mode
+
+```bash
+uv run python -u vaila/markerless_2d_analysis.py -i /path/to/videos -o /path/to/output
+```
+
+### Recursive batch across subdirectories
+
+```bash
+uv run python -u vaila/markerless_2d_analysis.py -i /path/to/root --recursive --depth -1
+```
+
+`--recursive`/`-r` batches across every subdirectory under `-i` that still has
+raw videos, instead of only `-i` itself — no need to `cd` into each leaf
+directory manually. `--depth`/`-d N` bounds the walk (`-1` unlimited —
+default, `0` root only, `1-99` levels). A directory whose videos are already
+processed is skipped (per-video `markerless_summary.json` completion marker),
+and the walk never descends into or reprocesses a
+`mediapipe*_YYYYMMDD_HHMMSS` output directory (no infinite-loop risk). If
+`-o` is omitted with `--recursive`, each discovered directory gets its own
+colocated `mediapipe_cli_*` output folder; the GUI has the equivalent
+checkbox + depth field.
 
 ## 💻 Requirements
 

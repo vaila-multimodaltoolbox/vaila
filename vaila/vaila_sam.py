@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 20 September 2026
+Version: 0.4.4
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -2067,8 +2067,12 @@ def _maybe_downscale_video_long_edge(
         return video_path.resolve(), None, w0, h0, n0
 
     scale = max_long_edge / m0
-    new_w = max(1, int(round(w0 * scale)))
-    new_h = max(1, int(round(h0 * scale)))
+    new_w = max(2, int(round(w0 * scale)))
+    new_h = max(2, int(round(h0 * scale)))
+    # libx264/yuv420p requires even width and height, or the encoder refuses
+    # to open ("height not divisible by 2") and the whole pipe write fails.
+    new_w -= new_w % 2
+    new_h -= new_h % 2
     print(
         f"[SAM3] Downscaling input for VRAM: {w0}x{h0} -> {new_w}x{new_h} "
         f"(max long edge {max_long_edge}px; set SAM3_MAX_INPUT_LONG_EDGE=0 to disable)"
@@ -3767,8 +3771,10 @@ def run_sam3_on_video(
                 max_dim = 640
                 if max(w_sess, h_sess) > max_dim:
                     scale = max_dim / max(w_sess, h_sess)
-                    new_w = max(1, int(round(w_sess * scale)))
-                    new_h = max(1, int(round(h_sess * scale)))
+                    new_w = max(2, int(round(w_sess * scale)))
+                    new_h = max(2, int(round(h_sess * scale)))
+                    new_w -= new_w % 2
+                    new_h -= new_h % 2
                     bgr_small = cv2.resize(bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
                 else:
                     new_w, new_h = w_sess, h_sess

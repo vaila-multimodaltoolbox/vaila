@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 20 September 2026
+Version: 0.4.4
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -17,6 +17,13 @@ Headless batch (NVIDIA GPU + TOML from GUI export):
 
 Optional: ``--nvenc`` (GPU encode annotated MP4; uses VRAM) or ``--libx264-encode`` (CPU, often faster end-to-end).
 ``--no-sleep-between-videos`` skips the 2s pause between files.
+
+Recursive batch across a whole tree of subdirectories (skips already-processed
+leaves and never descends into a prior run's own output directory):
+``uv run python vaila/markerless_2d_analysis.py batch -i /path/to/root -r -d -1 --device nvidia``
+``-o`` is optional with ``-r``/``--recursive``: omit it to write each leaf's output
+colocated inside that leaf (matches the non-recursive default), or pass it to
+collect every leaf's output under one shared parent instead.
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -100,8 +107,10 @@ import contextlib
 import datetime
 import functools
 import gc
+import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -5719,6 +5728,68 @@ def process_video(video_path, output_dir, pose_config, use_gpu=False, gpu_backen
     print(f"\nProcessing complete! Duration: {processing_time:.2f}s")
 
 
+_DERIVED_MARKERLESS_DIR_RE = re.compile(r"^mediapipe(_[\w-]+)*_\d{8}_\d{6}$", re.IGNORECASE)
+_MARKERLESS_VIDEO_EXTS = {".mp4", ".avi", ".mov"}
+
+
+def _write_markerless_completion(output_dir: Path, video: Path) -> None:
+    """Write output_dir/markerless_summary.json marking video's run complete.
+
+    Read back by _load_markerless_completion() to skip a video on a later
+    --recursive rerun instead of reprocessing it.
+    """
+    marker = {
+        "status": "complete",
+        "video": str(video),
+        "completed_at": datetime.datetime.now().isoformat(),
+    }
+    try:
+        (output_dir / "markerless_summary.json").write_text(
+            json.dumps(marker, indent=2) + "\n", encoding="utf-8"
+        )
+    except OSError as exc:
+        print(f"[WARN] could not write completion marker in {output_dir}: {exc}")
+
+
+def _load_markerless_completion(output_dir: Path) -> dict | None:
+    """Return the completion marker dict for output_dir, or None if absent/invalid."""
+    marker_path = output_dir / "markerless_summary.json"
+    if not marker_path.is_file():
+        return None
+    try:
+        data = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if data.get("status") == "complete" else None
+
+
+def find_markerless_batch_directories(root: Path, max_depth: int) -> list[Path]:
+    """Walk root and return every directory that still has raw videos to process.
+
+    Used by --recursive to batch across many leaf directories in one run.
+    Prunes descent into (and never returns) any directory whose name matches
+    _DERIVED_MARKERLESS_DIR_RE — a prior mediapipe*_YYYYMMDD_HHMMSS output
+    directory — so a recursive run can never reprocess or walk into its own
+    output (the infinite-loop case the batch mode must avoid).
+
+    max_depth: -1 unlimited, 0 root only, 1..99 that many levels below root.
+    """
+    root = root.expanduser().resolve()
+    found: list[Path] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        current = Path(dirpath)
+        rel = current.relative_to(root)
+        depth = 0 if rel == Path(".") else len(rel.parts)
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if not _DERIVED_MARKERLESS_DIR_RE.match(name) and (max_depth < 0 or depth < max_depth)
+        )
+        if any(Path(name).suffix.lower() in _MARKERLESS_VIDEO_EXTS for name in filenames):
+            found.append(current)
+    return sorted(found, key=lambda p: str(p).lower())
+
+
 def process_videos_in_directory(existing_root=None):
     """
     Process all video files in the selected directory for markerless 2D analysis.
@@ -5790,22 +5861,73 @@ def process_videos_in_directory(existing_root=None):
     if not input_dir:
         messagebox.showerror("Error", "No input directory selected.")
         return
+    input_dir = Path(input_dir)
 
-    # Select output base directory
+    # Batch recursively across subdirectories? (skips already-processed leaves
+    # and never descends into a prior run's own output directory)
     prepare_root_for_dialog()
-    output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
+    recursive = messagebox.askyesno(
+        "Recursive batch",
+        "Batch across every subdirectory under the input folder that still "
+        "has raw videos, instead of just this folder?\n\n"
+        "Already-processed leaves are skipped; prior output folders are "
+        "never re-entered.",
+        parent=root,
+    )
+    depth = -1
+    directories: list[Path]
+    if recursive:
+        depth_str = simpledialog.askstring(
+            "Recursion depth",
+            "How many levels below the input folder to search?\n"
+            "-1 = unlimited (default), 0 = input folder only, 1-99 = N levels.",
+            initialvalue="-1",
+            parent=root,
+        )
+        try:
+            depth = int((depth_str or "-1").strip())
+        except ValueError:
+            messagebox.showerror("Error", "Depth must be an integer (-1, 0, 1-99).")
+            return
+        if depth < -1 or depth > 99:
+            messagebox.showerror("Error", "Depth must be -1 (unlimited), 0, or 1-99.")
+            return
+        directories = find_markerless_batch_directories(input_dir, depth)
+        if not directories:
+            messagebox.showerror(
+                "Error", f"No directories with supported videos found under: {input_dir}"
+            )
+            return
+    else:
+        directories = [input_dir]
+
+    # Select output base directory (optional with recursive: leave blank for
+    # colocated per-directory output, matching each leaf's own auto-resume-style
+    # default; required otherwise, same as before)
+    prepare_root_for_dialog()
+    output_prompt_title = (
+        "Select a shared output folder (Cancel for colocated per-directory output)"
+        if recursive
+        else "Select the base output directory"
+    )
+    output_base_selected = filedialog.askdirectory(parent=root, title=output_prompt_title)
     if platform.system() == "Darwin" and existing_root is None:
         root.withdraw()  # Hide root window again after dialog closes
-    if not output_base:
-        messagebox.showerror("Error", "No output directory selected.")
-        return
+    if not output_base_selected:
+        if not recursive:
+            messagebox.showerror("Error", "No output directory selected.")
+            return
+        shared_output_root: Path | None = None
+    else:
+        shared_output_root = Path(output_base_selected)
 
     # Pose configuration (GUI or TOML via dialog)
-    pose_config = get_pose_config(root, input_dir=input_dir)
+    pose_config = get_pose_config(root, input_dir=str(input_dir))
     if not pose_config:
         return
 
-    # Timestamped output folder with descriptive suffix (as before)
+    # Timestamped output folder with descriptive suffix (as before, shared
+    # across every directory in this batch run)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     suffix_parts = []
     if pose_config.get("enable_resize", False):
@@ -5821,20 +5943,8 @@ def process_videos_in_directory(existing_root=None):
         else:
             suffix_parts.append(f"filter_{interp_method}_{smooth_method}")
     suffix = ("_" + "_".join(suffix_parts)) if suffix_parts else ""
-    output_base = Path(output_base) / f"mediapipe{suffix}_{timestamp}"
-    output_base.mkdir(parents=True, exist_ok=True)
+    folder_name = f"mediapipe{suffix}_{timestamp}"
 
-    # Gather video files
-    input_dir = Path(input_dir)
-    video_files = [f for f in input_dir.glob("*.*") if f.suffix.lower() in [".mp4", ".avi", ".mov"]]
-
-    if not video_files:
-        messagebox.showerror(
-            "Error", "No video files (.mp4, .avi, .mov) found in the selected folder."
-        )
-        return
-
-    print(f"\nFound {len(video_files)} videos to process")
     if pose_config.get("enable_resize", False):
         print(f"Video resize enabled: {pose_config.get('resize_scale', 2)}x scaling")
     if pose_config.get("enable_advanced_filtering", False):
@@ -5860,43 +5970,85 @@ def process_videos_in_directory(existing_root=None):
         if pose_config.get("save_segmentation_mask", False)
         else " --no-save-segmentation-mask"
     )
+    recursive_flag = f" --recursive --depth {depth}" if recursive else ""
 
     import shlex
 
     input_quoted = shlex.quote(str(input_dir))
-    output_quoted = shlex.quote(str(output_base.parent))
+    output_arg = (
+        f"-o {shlex.quote(str(shared_output_root))} " if shared_output_root is not None else ""
+    )
 
     print_gui_cli_mirror(
         "vaila/markerless_2d_analysis",
         f"uv run python vaila/markerless_2d_analysis.py batch -i {input_quoted} "
-        f"-o {output_quoted} --device {selected_device}{nvenc_flag}{world_flag}{seg_flag}{mask_flag}",
+        f"{output_arg}--device {selected_device}{nvenc_flag}{world_flag}{seg_flag}{mask_flag}"
+        f"{recursive_flag}",
     )
-    print(f">> (GUI output saved under: {output_base})\n", flush=True)
 
-    # Process each video
-    for i, video_file in enumerate(video_files, 1):
-        print(f"\nProcessing video {i}/{len(video_files)}: {video_file.name}")
-        output_dir = output_base / video_file.stem
-        output_dir.mkdir(parents=True, exist_ok=True)
+    total_videos = 0
+    total_skipped = 0
+    for dir_index, directory in enumerate(directories, start=1):
+        video_files = [
+            f for f in directory.glob("*.*") if f.suffix.lower() in [".mp4", ".avi", ".mov"]
+        ]
+        if not video_files:
+            if not recursive:
+                messagebox.showerror(
+                    "Error", "No video files (.mp4, .avi, .mov) found in the selected folder."
+                )
+                return
+            continue
 
-        try:
-            process_video(
-                video_file, output_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend
+        output_base = (shared_output_root if shared_output_root is not None else directory) / (
+            folder_name
+        )
+        output_base.mkdir(parents=True, exist_ok=True)
+
+        if recursive:
+            print(
+                f"\n[Dir {dir_index}/{len(directories)}] {directory} ({len(video_files)} video(s))"
             )
-        except Exception as e:
-            print(f"Error processing {video_file.name}: {e}")
-        finally:
-            # Release memory between videos (as before)
+        else:
+            print(f"\nFound {len(video_files)} videos to process")
+        print(f">> (output saved under: {output_base})\n", flush=True)
+
+        # Process each video
+        for i, video_file in enumerate(video_files, 1):
+            output_dir = output_base / video_file.stem
+            if _load_markerless_completion(output_dir) is not None:
+                print(f"[SKIP] Already processed: {video_file.name}")
+                total_skipped += 1
+                continue
+            print(f"\nProcessing video {i}/{len(video_files)}: {video_file.name}")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
             try:
-                import gc as _gc
+                process_video(
+                    video_file, output_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend
+                )
+                _write_markerless_completion(output_dir, video_file)
+                total_videos += 1
+            except Exception as e:
+                print(f"Error processing {video_file.name}: {e}")
+            finally:
+                # Release memory between videos (as before)
+                try:
+                    import gc as _gc
 
-                _gc.collect()
-            except Exception:
-                pass
-            time.sleep(2)
-            print("Memory released")
+                    _gc.collect()
+                except Exception:
+                    pass
+                time.sleep(2)
+                print("Memory released")
 
-    print("\nAll videos processed!")
+    if recursive:
+        print(
+            f"\nAll videos processed! {total_videos} succeeded, {total_skipped} already-done "
+            f"skipped, across {len(directories)} directories."
+        )
+    else:
+        print("\nAll videos processed!")
 
 
 def run_markerless_cli_batch(argv: list[str]) -> int:
@@ -5909,12 +6061,39 @@ def run_markerless_cli_batch(argv: list[str]) -> int:
         description="Markerless 2D: MediaPipe pose on all videos in a folder (efficient GPU path).",
     )
     p.add_argument("-i", "--input", type=Path, required=True, help="Input folder (.mp4/.avi/.mov)")
-    p.add_argument("-o", "--output", type=Path, required=True, help="Base output folder")
+    p.add_argument(
+        "-o",
+        "--output",
+        type=Path,
+        required=False,
+        help="Base output folder. Required unless --recursive (with --recursive, "
+        "omit for colocated per-directory output).",
+    )
     p.add_argument(
         "-c",
         "--config",
         type=Path,
         help="TOML from GUI (Load/Save); merges with defaults when keys missing",
+    )
+    p.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help=(
+            "Batch across every subdirectory under --input that still has raw "
+            "videos, instead of just --input itself. Never descends into or "
+            "reprocesses a mediapipe*_YYYYMMDD_HHMMSS output directory. If "
+            "--output is omitted, each discovered directory gets its own "
+            "colocated mediapipe_cli_* output folder."
+        ),
+    )
+    p.add_argument(
+        "-d",
+        "--depth",
+        type=int,
+        default=-1,
+        metavar="N",
+        help="With --recursive: -1 unlimited (default), 0 root only, 1-99 levels below --input.",
     )
     p.add_argument(
         "--device",
@@ -5962,6 +6141,13 @@ def run_markerless_cli_batch(argv: list[str]) -> int:
         print("Error: use at most one of --nvenc / --libx264-encode", file=sys.stderr)
         return 2
 
+    if not args.recursive and args.output is None:
+        print("Error: --output is required unless --recursive", file=sys.stderr)
+        return 2
+    if args.recursive and (args.depth < -1 or args.depth > 99):
+        print("Error: --depth must be -1 (unlimited), 0 (root only), or 1-99.", file=sys.stderr)
+        return 2
+
     available = probe_markerless_gpu_backends()
     use_gpu, gpu_backend = pick_markerless_device(args.device, available)
     if args.device not in ("cpu", "auto") and not use_gpu:
@@ -5990,41 +6176,75 @@ def run_markerless_cli_batch(argv: list[str]) -> int:
 
     pose_config = apply_batch_cli_world_seg_overrides(pose_config, args)
 
-    input_dir = args.input.expanduser().resolve()
-    if not input_dir.is_dir():
-        print(f"Error: not a directory: {input_dir}", file=sys.stderr)
+    input_path = args.input.expanduser().resolve()
+    if not input_path.is_dir():
+        print(f"Error: not a directory: {input_path}", file=sys.stderr)
         return 2
 
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_base = (args.output.expanduser().resolve()) / f"mediapipe_cli_{timestamp}"
-    output_base.mkdir(parents=True, exist_ok=True)
+    def _process_directory(directory: Path, output_root: Path) -> int:
+        """Batch one directory's raw videos; returns count of videos processed (incl. skipped)."""
+        video_files = sorted(
+            f for f in directory.glob("*.*") if f.suffix.lower() in {".mp4", ".avi", ".mov"}
+        )
+        if not video_files:
+            print(f"Error: no videos in {directory}", file=sys.stderr)
+            return 0
 
-    video_files = sorted(
-        f for f in input_dir.glob("*.*") if f.suffix.lower() in {".mp4", ".avi", ".mov"}
-    )
-    if not video_files:
-        print(f"Error: no videos in {input_dir}", file=sys.stderr)
-        return 2
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_base = output_root / f"mediapipe_cli_{timestamp}"
+        output_base.mkdir(parents=True, exist_ok=True)
 
-    print(f"\nCLI batch: {len(video_files)} video(s) → {output_base}")
-    for i, video_file in enumerate(video_files, 1):
-        print(f"\n[{i}/{len(video_files)}] {video_file.name}")
-        out_dir = output_base / video_file.stem
-        out_dir.mkdir(parents=True, exist_ok=True)
-        try:
-            process_video(
-                video_file, out_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend
+        print(f"\nCLI batch: {len(video_files)} video(s) -> {output_base}")
+        for i, video_file in enumerate(video_files, 1):
+            out_dir = output_base / video_file.stem
+            if _load_markerless_completion(out_dir) is not None:
+                print(f"[SKIP] Already processed: {video_file.name}")
+                continue
+            print(f"\n[{i}/{len(video_files)}] {video_file.name}")
+            out_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                process_video(
+                    video_file, out_dir, pose_config, use_gpu=use_gpu, gpu_backend=gpu_backend
+                )
+                _write_markerless_completion(out_dir, video_file)
+            except Exception as e:
+                print(f"Error: {video_file.name}: {e}", file=sys.stderr)
+            finally:
+                with contextlib.suppress(Exception):
+                    gc.collect()
+                if not args.no_sleep_between_videos:
+                    time.sleep(2)
+                print("Memory released")
+
+        print(f"\nDone. Outputs under: {output_base}")
+        return len(video_files)
+
+    if args.recursive:
+        directories = find_markerless_batch_directories(input_path, args.depth)
+        if not directories:
+            print(
+                f"Error: no directories with supported videos found under {input_path} "
+                f"(--recursive --depth {args.depth})",
+                file=sys.stderr,
             )
-        except Exception as e:
-            print(f"Error: {video_file.name}: {e}", file=sys.stderr)
-        finally:
-            with contextlib.suppress(Exception):
-                gc.collect()
-            if not args.no_sleep_between_videos:
-                time.sleep(2)
-            print("Memory released")
+            return 2
+        explicit_output_root = (
+            args.output.expanduser().resolve() if args.output is not None else None
+        )
+        total_videos = 0
+        for dir_index, directory in enumerate(directories, start=1):
+            print(f"\n[Dir {dir_index}/{len(directories)}] {directory}")
+            output_root = explicit_output_root if explicit_output_root is not None else directory
+            total_videos += _process_directory(directory, output_root)
+        print(
+            f"\nRecursive batch done: {total_videos} video(s) processed across "
+            f"{len(directories)} directories"
+        )
+        return 0
 
-    print(f"\nDone. Outputs under: {output_base}")
+    output_root = args.output.expanduser().resolve()
+    if _process_directory(input_path, output_root) == 0:
+        return 2
     return 0
 
 

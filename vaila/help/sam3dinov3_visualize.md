@@ -1,7 +1,7 @@
 # SAM3+DINOv3 3D — Visualize selected ID
 
-**Version:** 0.3.137
-**Updated:** 2026-09-11
+**Version:** 0.4.4
+**Updated:** 2026-09-20
 
 This CPU-only tool rerenders an existing `processed_sam3dinov3_*` (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is safe to run right after a GPU inference run to isolate one person, and does not repeat GPU allocation.
 
@@ -83,6 +83,23 @@ uv run python -u vaila/sam3dinov3_visualize.py \
 ```
 
 Use `--list-ids` to discover IDs and exit without rendering. `--dry-run` validates paths and the video's frame count/dimensions against the run. `--overwrite` allows a non-empty output directory. `--export-mesh {obj,ply}` writes the Blender mesh sequence described above (default `none`).
+
+### Recursive batch across subdirectories (CLI-only)
+
+```bash
+uv run python -u vaila/sam3dinov3_visualize.py \
+  --sam3d-results /path/to/root -r -d -1
+```
+
+`--recursive`/`-r` walks `--sam3d-results` for every completed
+`processed_sam3dinov3_*` run directory found below it, instead of a single
+run — `--video` is not used in this mode, each run's source video is
+auto-discovered. `--depth`/`-d N` bounds the walk (`-1` unlimited — default,
+`0` root only, `1-99` levels). If `--id` is omitted, **every** available ID is
+rendered per video (no "best ID" heuristic); if given, it is applied to every
+discovered video, skipped with a warning where that ID is unavailable. An ID
+already rendered (`<video>_sam3dinov3_visualized_id_NN` exists) is never
+re-rendered. This mode is CLI-only — the GUI stays single-run/single-ID.
 
 ## GUI
 

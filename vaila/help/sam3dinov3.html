@@ -23,11 +23,12 @@
 <body><div class="container">
   <h1>SAM3+DINOv3 3D (<code>sam3dinov3.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.4.3 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-17<br>
+    <strong>Version:</strong> 0.4.4 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-20<br>
     <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
     <strong>GUI:</strong> Frame B → Markerless 3D → <strong>SAM3+DINOv3 3D</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA required; SAM 3 and SAM 3D Body optional stacks.
     <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; vídeos já concluídos são pulados. Sem <code>--resume</code>, repetir o mesmo <code>-i</code>/<code>-o</code> já retoma sozinho (auto-resume); use <code>--fresh</code> para forçar pasta nova.</p>
+    <p><strong>Batch recursivo:</strong> <code>--recursive/-r</code> com <code>--depth/-d N</code> percorre <code>-i</code> procurando subpastas com vídeos crus, pulando pastas já processadas e nunca descendo em uma saída <code>processed_sam3dinov3_*</code>/<code>*_visualized_id_N</code> já gerada.</p>
   </div>
 
   <h2>What this pipeline does</h2>
@@ -128,6 +129,8 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
     <tr><td><code>--dry-run</code></td><td>off</td><td>Validate and print the plan, no GPU inference</td></tr>
     <tr><td><code>--resume RUN_DIR</code></td><td>–</td><td>Continue an interrupted batch (explicit pin)</td></tr>
     <tr><td><code>--fresh</code></td><td>off</td><td>Ignore any matching prior run under <code>-o</code>; force a new output dir</td></tr>
+    <tr><td><code>--recursive, -r</code></td><td>off</td><td>Walk <code>-i</code> for subdirectories with raw videos, batch each one</td></tr>
+    <tr><td><code>--depth, -d N</code></td><td><code>-1</code></td><td>With <code>--recursive</code>: <code>-1</code> unlimited, <code>0</code> root only, <code>1-99</code> levels</td></tr>
   </table>
 
   <h3>Automatic resume (default, no flag needed)</h3>
