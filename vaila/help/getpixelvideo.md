@@ -6,7 +6,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.4.4
 **Date:** 22 July 2025  
-**Updated:** 21 September 2026
+**Updated:** 22 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -697,10 +697,11 @@ Built-in backup system for data safety:
 
 ## Version History
 
-### Version 0.4.4 (18 September 2026, patched 21 September 2026) — AI Track weights under `vaila/models/ai_tracker/`; Lock selection fix
+### Version 0.4.4 (18 September 2026, patched 22 September 2026) — AI Track weights under `vaila/models/ai_tracker/`; Lock selection fix
 
 - Backbone weights no longer silent-download into `~/.cache/torch/hub/checkpoints/`. Canonical home is `vaila/models/ai_tracker/{variant}_imagenet.pth`. Missing weights prompt **browse** or **download clean official ImageNet** into that folder; hub-cache hits are migrated once into `ai_tracker/`.
 - **Bug fix (21 September 2026):** right-click delete no longer bumps the selected marker off an unmeasured, out-of-range index while **Lock (B)** is active. A locked selection now stays pinned to the marker you locked, even if that marker has no point yet in the current frame.
+- **Bug fix (22 September 2026):** the lock invariant is now re-asserted once per frame tick in the main loop, not only inside the right-click delete handler — plain frame navigation (e.g. jumping back to a frame where the locked marker has no data yet) can no longer desync the selection away from the locked marker.
 
 ### Version 0.4.3 (16 September 2026) — Geo Homog wizard + topology/DLT impute + CALIB dialog layout + Tpl catalog
 
