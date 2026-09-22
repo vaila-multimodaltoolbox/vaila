@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 18 September 2026
+Update: 21 September 2026
 Version: 0.4.4
 Python Version: 3.12.14
 
@@ -260,7 +260,7 @@ VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
 GETPIXELVIDEO_VERSION = "0.4.4"
-GETPIXELVIDEO_UPDATE_DATE = "18 September 2026"
+GETPIXELVIDEO_UPDATE_DATE = "21 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -313,6 +313,27 @@ def pop_marker_undo(stack: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not stack:
         return None
     return stack.pop()
+
+
+def clamp_selected_marker_index(
+    selected_marker_idx: int,
+    marker_selection_locked: bool,
+    n_markers: int,
+) -> int:
+    """Clamp an out-of-range marker selection after a delete attempt.
+
+    A locked selection (Lock / B) must stay pinned to whatever marker was
+    selected when it was locked, even if that marker has no slot yet in
+    the current frame's coordinate list — it must never be silently
+    reassigned to a different, already-measured marker.
+    """
+    if marker_selection_locked:
+        return selected_marker_idx
+    if n_markers <= 0:
+        return -1
+    if selected_marker_idx >= n_markers:
+        return n_markers - 1
+    return selected_marker_idx
 
 
 def template_button_caption(
@@ -13250,27 +13271,30 @@ def play_video_with_controls(
                     elif event.button == 3:  # Right click
                         # Remove currently selected marker (not the last one).
                         remove_marker()
-                        # Reset selection if we removed the selected marker
+                        # Reset selection if we removed the selected marker.
+                        # clamp_selected_marker_index() keeps a locked
+                        # selection pinned regardless of the current
+                        # frame's marker count.
                         if one_line_mode:
                             markers_in_frame = [
                                 i for i, m in enumerate(one_line_markers) if m[0] == frame_count
                             ]
-                            if not markers_in_frame:
-                                selected_marker_idx = -1
-                            elif selected_marker_idx >= len(markers_in_frame):
-                                selected_marker_idx = len(markers_in_frame) - 1
+                            selected_marker_idx = clamp_selected_marker_index(
+                                selected_marker_idx,
+                                marker_selection_locked,
+                                len(markers_in_frame),
+                            )
                         else:
-                            coords = coordinates
-                            if isinstance(coords, dict):
-                                cur_list = coords.get(frame_count)
-                                if isinstance(cur_list, list) and cur_list:
-                                    n_markers = len(cur_list)
-                                    if selected_marker_idx >= n_markers:
-                                        selected_marker_idx = n_markers - 1
-                                else:
-                                    selected_marker_idx = -1
-                            else:
-                                selected_marker_idx = -1
+                            cur_list = (
+                                coordinates.get(frame_count)
+                                if isinstance(coordinates, dict)
+                                else None
+                            )
+                            selected_marker_idx = clamp_selected_marker_index(
+                                selected_marker_idx,
+                                marker_selection_locked,
+                                len(cur_list) if isinstance(cur_list, list) else 0,
+                            )
 
                     elif event.button == 2:  # Middle click for panning
                         scrolling = True
