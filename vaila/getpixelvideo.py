@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 21 September 2026
+Update: 22 September 2026
 Version: 0.4.4
 Python Version: 3.12.14
 
@@ -10949,6 +10949,26 @@ def play_video_with_controls(
                 continue
         else:
             last_valid_frame = frame
+
+        # Re-assert the lock invariant every tick: a locked marker index
+        # must stay pinned regardless of frame navigation, even if the
+        # current frame has no data yet for that marker. No-op when
+        # marker_selection_locked is True (clamp_selected_marker_index's
+        # own contract); guards against any future mutation site.
+        if one_line_mode:
+            markers_in_frame = [i for i, m in enumerate(one_line_markers) if m[0] == frame_count]
+            selected_marker_idx = clamp_selected_marker_index(
+                selected_marker_idx,
+                marker_selection_locked,
+                len(markers_in_frame),
+            )
+        else:
+            cur_list = coordinates.get(frame_count) if isinstance(coordinates, dict) else None
+            selected_marker_idx = clamp_selected_marker_index(
+                selected_marker_idx,
+                marker_selection_locked,
+                len(cur_list) if isinstance(cur_list, list) else 0,
+            )
 
         # Perform live AI tracking during playback or frame advance
         if track_ai_active and ret and frame is not None:
