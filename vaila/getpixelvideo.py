@@ -336,6 +336,30 @@ def clamp_selected_marker_index(
     return selected_marker_idx
 
 
+def clamp_selected_marker_index_sparse(
+    selected_marker_idx: int,
+    marker_selection_locked: bool,
+    marker_indices: list[int],
+) -> int:
+    """Clamp an out-of-range marker selection for sparse (one_line_mode) indexing.
+
+    one_line_mode's ``selected_marker_idx`` is a global position in
+    ``one_line_markers`` (append-order), not a dense 0..N-1 per-frame slot
+    count — a just-created marker's index can legitimately exceed the
+    number of markers present in its own frame. Membership, not count,
+    is the correct bound: keep the selection if it still names a marker
+    present in the current frame, otherwise fall back to the last marker
+    present there. A locked selection stays pinned unconditionally.
+    """
+    if marker_selection_locked:
+        return selected_marker_idx
+    if not marker_indices:
+        return -1
+    if selected_marker_idx in marker_indices:
+        return selected_marker_idx
+    return marker_indices[-1]
+
+
 def template_button_caption(
     template_mode: str,
     labels: dict[str, str] | None = None,
@@ -10957,10 +10981,10 @@ def play_video_with_controls(
         # own contract); guards against any future mutation site.
         if one_line_mode:
             markers_in_frame = [i for i, m in enumerate(one_line_markers) if m[0] == frame_count]
-            selected_marker_idx = clamp_selected_marker_index(
+            selected_marker_idx = clamp_selected_marker_index_sparse(
                 selected_marker_idx,
                 marker_selection_locked,
-                len(markers_in_frame),
+                markers_in_frame,
             )
         else:
             cur_list = coordinates.get(frame_count) if isinstance(coordinates, dict) else None
@@ -13299,10 +13323,10 @@ def play_video_with_controls(
                             markers_in_frame = [
                                 i for i, m in enumerate(one_line_markers) if m[0] == frame_count
                             ]
-                            selected_marker_idx = clamp_selected_marker_index(
+                            selected_marker_idx = clamp_selected_marker_index_sparse(
                                 selected_marker_idx,
                                 marker_selection_locked,
-                                len(markers_in_frame),
+                                markers_in_frame,
                             )
                         else:
                             cur_list = (

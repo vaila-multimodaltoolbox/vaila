@@ -702,6 +702,7 @@ Built-in backup system for data safety:
 - Backbone weights no longer silent-download into `~/.cache/torch/hub/checkpoints/`. Canonical home is `vaila/models/ai_tracker/{variant}_imagenet.pth`. Missing weights prompt **browse** or **download clean official ImageNet** into that folder; hub-cache hits are migrated once into `ai_tracker/`.
 - **Bug fix (21 September 2026):** right-click delete no longer bumps the selected marker off an unmeasured, out-of-range index while **Lock (B)** is active. A locked selection now stays pinned to the marker you locked, even if that marker has no point yet in the current frame.
 - **Bug fix (22 September 2026):** the lock invariant is now re-asserted once per frame tick in the main loop, not only inside the right-click delete handler — plain frame navigation (e.g. jumping back to a frame where the locked marker has no data yet) can no longer desync the selection away from the locked marker.
+- **Bug fix (22 September 2026):** in one-line marker mode, adding a new marker (`a` key) could get silently reverted to an earlier marker on the very next frame tick — even before Lock was clicked — because the lock-invariant clamp compared the new marker's global list index against the *count* of markers in the current frame instead of checking whether that marker was actually present there. Fixed with a dedicated membership-based clamp (`clamp_selected_marker_index_sparse`) for one-line mode.
 
 ### Version 0.4.3 (16 September 2026) — Geo Homog wizard + topology/DLT impute + CALIB dialog layout + Tpl catalog
 
