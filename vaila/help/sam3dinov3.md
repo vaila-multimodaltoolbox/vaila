@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.4.4
-- **Updated:** 2026-09-20
+- **Version:** 0.4.5
+- **Updated:** 2026-09-23
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -154,7 +154,7 @@ Each video gets its own subdirectory inside `processed_sam3dinov3_<timestamp>/`.
 | `<video>_sam3dinov3_camera.csv`         | Per-frame focal length, `cam_t`, bbox                         |
 | `<video>_sam3dinov3_joint_angles.csv`   | Long table: local (parent-relative) joint angles for the model's own 127-joint MHR rig — Euler XYZ degrees + scalar-first quaternion, from the model's own regressed rotations — v0.3.99, see [joint_kinematics](joint_kinematics.md) |
 | `<video>_id_NN_mhr70_3d.csv`            | Wide, named columns (`nose_x,nose_y,nose_z,…`)                |
-| `<video>_id_NN_mhr70_rec3d.csv`         | Wide, vailá `rec3d` convention (`p1_x,p1_y,p1_z,…`)           |
+| `<video>_id_NN_mhr70_rec3d.csv`         | Wide, vailá `rec3d` convention (`p0_x,p0_y,p0_z,…`)           |
 | `<video>_id_NN_markers.csv`             | Wide 2D for REC2D / `getpixelvideo.py`                        |
 | `<video>_sam3dinov3_predictions.json.gz`| Full provenance + per-instance predictions                    |
 | `meshes/frame_NNNNNN.npz`               | Only with `--save-mesh`: vertices, `obj_ids`, `cam_t`         |

@@ -23,7 +23,7 @@
 <body><div class="container">
   <h1>SAM3+DINOv3 3D (<code>sam3dinov3.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.4.4 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-20<br>
+    <strong>Version:</strong> 0.4.5 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-23<br>
     <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
     <strong>GUI:</strong> Frame B → Markerless 3D → <strong>SAM3+DINOv3 3D</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA required; SAM 3 and SAM 3D Body optional stacks.
@@ -147,7 +147,7 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
     <tr><td><code>&lt;video&gt;_sam3dinov3_camera.csv</code></td><td>Per-frame focal length, <code>cam_t</code>, bbox</td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_joint_angles.csv</code></td><td>Long table: local (parent-relative) joint angles for the model's own 127-joint MHR rig — Euler XYZ degrees + scalar-first quaternion, from the model's own regressed rotations — v0.3.99, see <a href="joint_kinematics.html">joint_kinematics</a></td></tr>
     <tr><td><code>&lt;video&gt;_id_NN_mhr70_3d.csv</code></td><td>Wide, named columns (<code>nose_x,nose_y,nose_z,…</code>)</td></tr>
-    <tr><td><code>&lt;video&gt;_id_NN_mhr70_rec3d.csv</code></td><td>Wide, vailá <code>rec3d</code> convention (<code>p1_x,p1_y,p1_z,…</code>)</td></tr>
+    <tr><td><code>&lt;video&gt;_id_NN_mhr70_rec3d.csv</code></td><td>Wide, vailá <code>rec3d</code> convention (<code>p0_x,p0_y,p0_z,…</code>)</td></tr>
     <tr><td><code>&lt;video&gt;_id_NN_markers.csv</code></td><td>Wide 2D for REC2D / <code>getpixelvideo.py</code></td></tr>
     <tr><td><code>&lt;video&gt;_sam3dinov3_predictions.json.gz</code></td><td>Full provenance + per-instance predictions</td></tr>
     <tr><td><code>meshes/frame_NNNNNN.npz</code></td><td>Only with <code>--save-mesh</code>: vertices, <code>obj_ids</code>, <code>cam_t</code></td></tr>

@@ -4,8 +4,8 @@
 
 - **Category:** Ml
 - **File:** `vaila/yolov26track.py`
-- **Version:** 0.3.108
-- **Updated:** 20 August 2026
+- **Version:** 0.4.5
+- **Updated:** 23 September 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -105,7 +105,7 @@ uv run python -m vaila.yolov26track track \
 Outputs (in `<video_dir>/processed_yolotrack_<stem>_<timestamp>/` by default,
 or `--output DIR`):
 
-- `<stem>_markers.csv` — **getpixelvideo point format** `frame,p1_x,p1_y,...,pN_x,pN_y` (one anchor point per player). **This is the file you feed into REC2D (`rec2d.py`) / REC3D (`rec3d.py`)** with your DLT parameters.
+- `<stem>_markers.csv` — **getpixelvideo point format** `frame,p0_x,p0_y,...,pN_x,pN_y` (one anchor point per player). **This is the file you feed into REC2D (`rec2d.py`) / REC3D (`rec3d.py`)** with your DLT parameters.
 - `yolo_vaila_center.csv`, `yolo_vaila_bottom.csv`, `yolo_vaila_top.csv`, `yolo_vaila_left.csv`, `yolo_vaila_right.csv` — five bbox keypoint tables generated automatically in the SAM3/Sapiens2-compatible `frame,x1,y1,...,xN,yN` schema. With `--max-ids`/offline ReID they use the stable identity table.
 - `{label}_id_NN.csv` — one per tracked ID (`Frame, Tracker ID, Label, X_min, Y_min, X_max, Y_max, Confidence, Color_R/G/B`)
 - `all_id_detection.csv` — raw wide bbox table before the bounded ReID merge
@@ -163,7 +163,7 @@ estimation is desired without setting `--max-ids`.
 2. `track` each camera video with the same `--anchor`; use the stable
    `all_id_detection_reid_maxidsN.csv` identity table when correcting or
    aligning the resulting point tracks across cameras.
-3. Run **REC2D** (single camera, planar) or **REC3D** (multi-camera) with your DLT2D/DLT3D parameters; the markers CSV is the direct pixel-coordinate input (`frame,p1_x,p1_y,...`).
+3. Run **REC2D** (single camera, planar) or **REC3D** (multi-camera) with your DLT2D/DLT3D parameters; the markers CSV is the direct pixel-coordinate input (`frame,p0_x,p0_y,...`).
 4. Need manual correction? Open the video in **getpixelvideo** and load
    `all_id_detection_reid_maxidsN.csv` when present (otherwise
    `all_id_detection.csv`).

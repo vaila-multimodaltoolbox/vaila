@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 20 August 2026
-Version: 0.3.108
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     This script performs object detection and tracking on video files using the YOLO model v26.
@@ -52,14 +52,14 @@ Change History:
                Unlike Ultralytics ``yolo track`` (video only), it writes the biomechanics
                CSVs vailá's reconstruction pipeline needs:
                  * ``<stem>_markers.csv`` — getpixelvideo point format
-                   ``frame,p1_x,p1_y,...,pN_x,pN_y`` (one ``--anchor`` point per player) →
+                   ``frame,p0_x,p0_y,...,pN_x,pN_y`` (one ``--anchor`` point per player) →
                    direct input to REC2D (``rec2d.py``) / REC3D (``rec3d.py``);
                  * per-ID bbox CSVs (``{label}_id_NN.csv``) + wide ``all_id_detection.csv``
                    (loads straight into getpixelvideo);
                  * H.264 ``<stem>_track_overlay.mp4`` — always ``.mp4`` now (temp ``.avi``
                    is encoded then deleted; OpenCV ``mp4v`` fallback if FFmpeg missing), no
                    bulky AVI left on disk.
-               Flags: ``--anchor``, ``--max-ids`` (global ID-cap rerank → stable ``p1..pN``),
+               Flags: ``--anchor``, ``--max-ids`` (global ID-cap rerank → stable ``p0..pN``),
                ``--classes``, ``--vid-stride``, ``--conf/--iou/--imgsz``. Vectorised per-ID
                and markers CSV writers (NumPy pre-fill, one ``to_csv`` each).
     - v0.3.61: ID-cap phase-1 buffer no longer retains full Ultralytics ``Results``
@@ -6315,7 +6315,7 @@ def _write_markers_csv_from_buffer(
 ) -> tuple[str, int]:
     """Write a getpixelvideo-style ``<stem>_markers.csv`` for REC2D/REC3D.
 
-    Format: ``frame,p1_x,p1_y,p2_x,p2_y,...,pN_x,pN_y`` — exactly the vailá
+    Format: ``frame,p0_x,p0_y,p1_x,p1_y,...,pN_x,pN_y`` — exactly the vailá
     pixel-coordinate header that ``rec2d.py`` / ``rec3d.py`` consume. Each
     tracked ID becomes one stable marker slot (sorted by ID); empty cells are
     blank (NaN) so missing detections do not corrupt the reconstruction.
@@ -6336,8 +6336,8 @@ def _write_markers_csv_from_buffer(
 
     columns: list[str] = []
     for i in range(n_slots):
-        columns.append(f"p{i + 1}_x")
-        columns.append(f"p{i + 1}_y")
+        columns.append(f"p{i}_x")
+        columns.append(f"p{i}_y")
     df = pd.DataFrame(arr, columns=pd.Index(columns))
     df.insert(0, "frame", np.arange(total_frames, dtype=np.int64))
 
@@ -6896,7 +6896,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
       * ``{label}_id_NN.csv`` + ``all_id_detection.csv`` — per-ID bbox tracks,
         loadable in ``getpixelvideo`` (same schema as the GUI tracker).
       * ``<stem>_markers.csv`` — getpixelvideo point format
-        ``frame,p1_x,p1_y,...,pN_x,pN_y`` (one anchor point per player); feeds
+        ``frame,p0_x,p0_y,...,pN_x,pN_y`` (one anchor point per player); feeds
         ``rec2d.py`` / ``rec3d.py`` directly.
       * ``yolo_vaila_{center,bottom,top,left,right}.csv`` — five automatic
         SAM/Sapiens-style bbox keypoint tables (``frame,x1,y1,...``).
@@ -6911,7 +6911,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         prog="python -m vaila.yolov26track track",
         description=(
             "Run YOLO tracking and export per-ID bbox CSVs + a getpixelvideo "
-            "markers CSV (frame,p1_x,p1_y,... for REC2D/REC3D) + an H.264 .mp4."
+            "markers CSV (frame,p0_x,p0_y,... for REC2D/REC3D) + an H.264 .mp4."
         ),
     )
     parser.add_argument(
@@ -7274,7 +7274,7 @@ def run_track_cli(argv: list[str] | None = None) -> int:
         )
     if anchor_csvs:
         print(f"[yolov26track] YOLO vailá anchor CSVs: {', '.join(p.name for p in anchor_csvs)}")
-    print(f"[yolov26track] REC2D/REC3D markers CSV (frame,p1_x,p1_y,...): {markers_csv}")
+    print(f"[yolov26track] REC2D/REC3D markers CSV (frame,p0_x,p0_y,...): {markers_csv}")
     if overlay:
         print(f"[yolov26track] overlay video (.mp4): {overlay}")
     if pose_outputs.get("all_id_pose"):

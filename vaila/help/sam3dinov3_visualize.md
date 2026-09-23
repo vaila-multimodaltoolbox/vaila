@@ -1,7 +1,7 @@
 # SAM3+DINOv3 3D — Visualize selected ID
 
-**Version:** 0.4.4
-**Updated:** 2026-09-20
+**Version:** 0.4.5
+**Updated:** 2026-09-23
 
 This CPU-only tool rerenders an existing `processed_sam3dinov3_*` (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is safe to run right after a GPU inference run to isolate one person, and does not repeat GPU allocation.
 
@@ -27,15 +27,15 @@ Palette (RGB) from `sam3dinov3.COLOR_*_RGB` — same live overlay and this reren
 | **Right** (`right-*`) | orange | `(255, 128, 0)` |
 | Center / spine (`nose`, `neck`, …) | blue | `(51, 153, 255)` |
 
-C3D / `*_mhr70_rec3d.csv` markers are **`p1`…`p70`** (1-based index into `MHR70_NAMES`). C3D `POINT:LABELS` usually stay as `pN` (no `left_`/`right_` string); use this map (or load `vaila/skeletons/sam3dinov3_mhr70.json`):
+C3D / `*_mhr70_rec3d.csv` and `*_markers.csv` markers are **`p0`…`p69`** (0-based index into `MHR70_NAMES`). A legacy file that still starts at `p1` is shifted down to `p0` when this tool copies it. C3D `POINT:LABELS` usually stay as `pN` (no `left_`/`right_` string); use this map (or load `vaila/skeletons/sam3dinov3_mhr70.json`):
 
 | Side | Key `pN` (body) |
 | --- | --- |
-| Left | `p2` eye, `p4` ear, `p6` shoulder, `p8` elbow, `p10` hip, `p12` knee, `p14` ankle, `p16–p18` foot, `p43–p63` hand/wrist, `p64` olecranon, `p66` cubital fossa, `p68` acromion |
-| Right | `p3` eye, `p5` ear, `p7` shoulder, `p9` elbow, `p11` hip, `p13` knee, `p15` ankle, `p19–p21` foot, `p22–p42` hand/wrist, `p65` olecranon, `p67` cubital fossa, `p69` acromion |
-| Center | `p1` nose, `p70` neck |
+| Left | `p1` eye, `p3` ear, `p5` shoulder, `p7` elbow, `p9` hip, `p11` knee, `p13` ankle, `p15–p17` foot, `p42–p62` hand/wrist, `p63` olecranon, `p65` cubital fossa, `p67` acromion |
+| Right | `p2` eye, `p4` ear, `p6` shoulder, `p8` elbow, `p10` hip, `p12` knee, `p14` ankle, `p18–p20` foot, `p21–p41` hand/wrist, `p64` olecranon, `p66` cubital fossa, `p68` acromion |
+| Center | `p0` nose, `p69` neck |
 
-Full order: `vaila/sam3dinov3.py` → `MHR70_NAMES` (`p1=nose` … `p70=neck`).
+Full order: `vaila/sam3dinov3.py` → `MHR70_NAMES` (`p0=nose` … `p69=neck`).
 
 ### Monocular 3D without DLT3D (not a left/right swap)
 

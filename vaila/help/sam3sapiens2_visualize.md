@@ -1,11 +1,11 @@
 # SAM3+Sapiens2 — Visualize selected ID
 
-**Version:** 0.4.4  
-**Updated:** 2026-09-20
+**Version:** 0.4.5  
+**Updated:** 2026-09-23
 
 This CPU-only tool rerenders an existing `processed_sam3sapiens2_*` result. It does not load SAM3 or Sapiens2 weights, so it is safe for visualization after an inference run and does not repeat GPU allocation.
 
-It draws the selected SAM identity, contour, bounding box, and Sapiens2 keypoints on the original video, then writes a new ID-specific directory. The root includes filtered tracking, pose, contour, audit, and overlay-video outputs; `source_artifacts/` preserves the original run for provenance.
+It draws the selected SAM identity, contour, bounding box, and Sapiens2 keypoints on the original video, then writes a new ID-specific directory. The root includes filtered tracking, pose, contour, audit, and overlay-video outputs; `source_artifacts/` preserves the original run for provenance. Wide marker CSVs for the selected person are rewritten so the first point column is `p0_x`.
 
 **Source-video check (v0.3.120):** before rendering, the frame count and image size of the selected video are compared against the predictions. The frame count is the **decodable** one, not the container's `nb_frames` — a mux that over-reports (`frames=393, expected 339`) no longer rejects the correct video. A genuinely different video still fails the check.
 

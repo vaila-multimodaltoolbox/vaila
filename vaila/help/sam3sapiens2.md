@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 2D / Meta (Facebook)
-- **Version:** 0.4.4
-- **Updated:** 2026-09-20
+- **Version:** 0.4.5
+- **Updated:** 2026-09-23
 - **GUI:** Frame B → **Markerless 2D** → **SAM3+Sapiens2**
 - **CLI:** Yes
 - **Retomada:** `--resume /caminho/processed_sam3sapiens2_...` reaproveita somente vídeos e resultados SAM com cobertura completa comprovada; informe também `-i` com a pasta original. Sem `--resume`, uma execução repetida com o mesmo `-i`/`-o` já retoma sozinha o `processed_sam3sapiens2_*` correspondente (auto-resume); use `--fresh` para forçar uma pasta nova.
@@ -199,7 +199,7 @@ Each run creates `processed_sam3sapiens2_<timestamp>/<video_stem>/`:
 - `<video>_sam3sapiens2_predictions.json` — 308 keypoints, SAM provenance, both SAM and pose boxes, contour checks, and `detr_loaded: false`.
 - `<video>_sam3sapiens2_vaila.csv` — long frame/person/keypoint table.
 - `sam3sapiens2_id_audit.csv` — per-frame evidence that `sam_obj_id == stable_id`.
-- `<video>_markers.csv`, `sapiens_vaila_*.csv`, `sapiens_points.csv` — getpixelvideo and REC2D/REC3D formats.
+- `<video>_markers.csv` (`frame,p0_x,p0_y,...`), `sapiens_vaila_*.csv`, `sapiens_points.csv` — getpixelvideo and REC2D/REC3D formats. The first marker column is `p0`.
 - `sapiens_id_map.csv`, `sapiens_bbox_tracks.csv` — stable slots and SAM-compatible bbox tracks.
 - `<video>_id_NN_sapiens_pose.csv` — wide 308-keypoint file for each SAM identity.
 - `sam3sapiens2_summary.json` and batch summary JSON.

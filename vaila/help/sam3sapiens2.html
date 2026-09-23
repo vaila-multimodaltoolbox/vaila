@@ -21,7 +21,7 @@
 <body><div class="container">
   <h1>SAM3+Sapiens2 (<code>sam3sapiens2.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.4.4 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-20<br>
+    <strong>Version:</strong> 0.4.5 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-09-23<br>
     <strong>GUI:</strong> Frame B → Markerless 2D → <strong>SAM3+Sapiens2</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA; SAM3 and Sapiens2 optional stacks.
     <p><strong>Retomada:</strong> use <code>--resume RUN_DIR -i INPUT_DIR</code>; somente resultados com cobertura completa comprovada são reutilizados. Sem <code>--resume</code>, repetir o mesmo <code>-i</code>/<code>-o</code> já retoma sozinho (auto-resume); use <code>--fresh</code> para forçar pasta nova.</p>
@@ -83,7 +83,7 @@
     <li><code>&lt;video&gt;_sam3sapiens2_overlay.mp4</code>: contour, bbox, SAM ID, and Sapiens skeleton.</li>
     <li><code>&lt;video&gt;_sam3sapiens2_predictions.json</code>: 308 keypoints and full provenance, including <code>detr_loaded: false</code>.</li>
     <li><code>sam3sapiens2_id_audit.csv</code>: frame-by-frame proof of SAM ID inheritance.</li>
-    <li><code>&lt;video&gt;_markers.csv</code>, <code>sapiens_vaila_*.csv</code>, <code>sapiens_points.csv</code>: getpixelvideo / REC2D / REC3D.</li>
+    <li><code>&lt;video&gt;_markers.csv</code> (<code>frame,p0_x,p0_y,...</code>), <code>sapiens_vaila_*.csv</code>, <code>sapiens_points.csv</code>: getpixelvideo / REC2D / REC3D. The first marker column is <code>p0</code>.</li>
     <li>Wide per-ID Sapiens pose CSVs, summary JSON, and <code>README_sam3sapiens2.txt</code>.</li>
   </ul>
   <p>When SAM is run automatically, raw SAM artifacts live in <code>&lt;video&gt;/sam3/</code>. Reused SAM results are referenced rather than copied.</p>

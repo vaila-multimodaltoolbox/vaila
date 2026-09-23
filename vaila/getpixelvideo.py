@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 22 September 2026
-Version: 0.4.4
+Update: 23 September 2026
+Version: 0.4.5
 Python Version: 3.12.14
 
 Description:
@@ -3551,7 +3551,7 @@ def play_video_with_controls(
         Recognised formats:
           * SAM3 ``sam_tracks.csv``       (frame, obj_id, x_px, y_px, w_px, h_px)
           * SAM3 ``sam_frames_meta.csv``  (normalised box_x_<oid> / box_y_<oid> / ...)
-          * SAM3 ``sam_points.csv``       (frame, p1_x, p1_y, p2_x, p2_y, ...)
+          * SAM3 ``sam_points.csv``       (frame, p0_x, p0_y, p1_x, p1_y, ...; legacy files may start at p1_x)
           * Sapiens2 ``*_sapiens_vaila.csv`` (long pose: frame,person_id,kpt_idx,x,y,score)
           * Sapiens2 ``sapiens_bbox_tracks.csv`` (SAM-compatible bbox tracks)
           * vailá YOLO ``all_id_detection.csv``  (Frame, X_min_<label>, ...)

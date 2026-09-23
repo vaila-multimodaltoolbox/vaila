@@ -34,10 +34,44 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.4.5: Fixed ColumnReorderGUI silently discarding edits made after an
+      earlier save: `on_window_close`/`close_without_saving` gated the
+      unsaved-changes confirmation on `has_unsaved_changes and not self.saved`,
+      but `self.saved` is a sticky "saved at least once this session" flag
+      that a later edit (e.g. bulk rename) never resets, so closing the
+      window skipped the save prompt entirely. Guard now fires on
+      `has_unsaved_changes` alone.
     - v0.4.5: Added bulk column rename/renumber to ColumnReorderGUI's Edit
       menu (single ad-hoc rename + regex-based renumbering, e.g. p1_x..p70_x
       -> p0_x..p69_x in one operation), applied via a new `rename_map` param
       threaded through `reshapedata()`.
+    - v0.4.5: Relabeled "Reset Index Col 0" -> "Reset Frame Index (Col 0)"
+      (button + Edit menu) and appended a hint to the "Rename Column(s)..."
+      menu label. Users were clicking the index-reset button expecting it to
+      renumber marker headers (p1_x -> p0_x); it only resets column 0's row
+      values to 0..N-1 and never touches column names. No behavior change.
+    - v0.4.5: Fixed reset_index_column_0() writing the reset column as
+      float64 (pandas keeps a pre-existing column's dtype when a plain
+      range() is assigned into it). Column 0 is now forced to int64 unless
+      its header name contains "time" (case-insensitive), which stays
+      float64 - frame/point/index columns are integers, time columns may be
+      fractional.
+    - v0.4.5: Fixed save_intermediate()/save_and_exit() writing a float
+      frame column even after the reset_index_column_0() fix above. Both
+      methods built column_precision as
+      `dict.fromkeys(range(len(current_order)), max_decimal_places)` - the
+      single global decimal-places value the user enters in the "Decimal
+      Places" prompt, applied uniformly to EVERY column including column 0,
+      overriding correct per-column precision. New
+      `_build_uniform_precision_map()` helper forces column 0 back to
+      precision 0 (integer) unless its header contains "time", same rule as
+      reset_index_column_0(). This path fires on every save/save-and-exit,
+      not just after using the reset button, so it covers plain
+      rename-and-save runs too.
+    - v0.4.5: Added "Rename Column(s)..." as a button in the Columns
+      LabelFrame (next to "Reset Frame Index (Col 0)"), not just an Edit
+      menu entry - users were not finding the feature because it had no
+      visible button, only a menu-only command.
     - v0.3.112: Regrouped ColumnReorderGUI's 13 flat tk.Button widgets into
       4 ttk.LabelFrame sections (Columns / Combine Files / Import to vailá /
       Advanced) with a consistent ttk style, matching readc3d_export.py's
@@ -204,6 +238,19 @@ def detect_column_precision_detailed(file_path):
         return {}
 
 
+def _build_uniform_precision_map(current_order, max_decimal_places):
+    """dict.fromkeys(range(len(current_order)), max_decimal_places) applies
+    the user's single global decimal-places choice to EVERY column,
+    including column 0 (frame/point index). Column 0 must stay an integer
+    (precision 0) unless its header names it a "time" column, in which case
+    fractional values are legitimate. Every other column (markers, X/Y/Z,
+    etc.) keeps the requested uniform precision unchanged."""
+    precision = dict.fromkeys(range(len(current_order)), max_decimal_places)
+    if current_order and "time" not in str(current_order[0]).strip().lower():
+        precision[0] = 0
+    return precision
+
+
 def save_dataframe_with_precision(df, file_path, column_precision):
     """
     Save DataFrame with specific precision for each column.
@@ -325,7 +372,10 @@ def reshapedata(
             reordered_precision[new_idx] = column_precision.get(old_idx, 6)
 
         if rename_map:
+            print(f"Applying {len(rename_map)} column rename(s): {rename_map}")
             df_reordered = df_reordered.rename(columns=rename_map)
+        else:
+            print("No column renames pending for this save.")
 
         save_dataframe_with_precision(df_reordered, new_file_path, reordered_precision)
 
@@ -693,7 +743,8 @@ class ColumnReorderGUI(tk.Tk):
         self.modify_labref_button = add_button(
             columns_section, "Modify Lab Ref System", self.modify_labref
         )
-        add_button(columns_section, "Reset Index Col 0", self.reset_index_column_0)
+        add_button(columns_section, "Reset Frame Index (Col 0)", self.reset_index_column_0)
+        add_button(columns_section, "Rename Column(s)...", self.rename_columns)
 
         combine_section = add_section("Combine Files")
         add_button(combine_section, "Merge CSV", self.merge_csv)
@@ -775,8 +826,11 @@ class ColumnReorderGUI(tk.Tk):
             label="Edit Rows", command=lambda: self.edit_rows(None), accelerator="l"
         )
         edit_menu.add_separator()
-        edit_menu.add_command(label="Reset Index Col 0", command=self.reset_index_column_0)
-        edit_menu.add_command(label="Rename Column(s)...", command=self.rename_columns)
+        edit_menu.add_command(label="Reset Frame Index (Col 0)", command=self.reset_index_column_0)
+        edit_menu.add_command(
+            label="Rename Column(s)... (renumber markers, e.g. p1_x -> p0_x)",
+            command=self.rename_columns,
+        )
 
         # Tools menu
         tools_menu = tk.Menu(menubar, tearoff=0)
@@ -866,7 +920,7 @@ class ColumnReorderGUI(tk.Tk):
         self.on_window_close()
 
     def on_window_close(self):
-        if self.has_unsaved_changes and not self.saved:
+        if self.has_unsaved_changes:
             resp = messagebox.askyesnocancel(
                 "Unsaved Changes",
                 "You have unsaved changes.\n\n"
@@ -884,7 +938,7 @@ class ColumnReorderGUI(tk.Tk):
             self.destroy()
 
     def close_without_saving(self):
-        if self.has_unsaved_changes and not self.saved:
+        if self.has_unsaved_changes:
             if messagebox.askyesno(
                 "Discard Changes", "Discard unsaved changes and close without saving?"
             ):
@@ -1159,7 +1213,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "",
-                    dict.fromkeys(range(len(self.current_order)), max_decimal_places),
+                    _build_uniform_precision_map(self.current_order, max_decimal_places),
                     rename_map=self.rename_map,
                 )
             self.saved = True
@@ -1201,7 +1255,7 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "_final",
-                    dict.fromkeys(range(len(self.current_order)), max_decimal_places),
+                    _build_uniform_precision_map(self.current_order, max_decimal_places),
                     rename_map=self.rename_map,
                 )
             self.saved = True
@@ -1660,7 +1714,15 @@ class ColumnReorderGUI(tk.Tk):
             # Reset the first column
             if len(df.columns) > 0:
                 first_col = df.columns[0]
-                df[first_col] = range(len(df))
+                # Pandas keeps a pre-existing column's dtype when assigning a
+                # plain range() into it (e.g. frame col read as float64 stays
+                # float64). Force int64 for frame/point/index-style columns;
+                # only a "time" column is allowed to stay float.
+                col_name_lower = str(first_col).strip().lower()
+                if "time" in col_name_lower:
+                    df[first_col] = pd.Series(range(len(df)), dtype="float64")
+                else:
+                    df[first_col] = pd.Series(range(len(df)), dtype="int64")
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base = os.path.splitext(file_name)[0]
             new_name = f"{base}_{timestamp}_resetidx.csv"

@@ -57,6 +57,13 @@ intermediate save) as usual. After the editor closes:
 - Files that started as `.c3d` are converted back and written to
   `<output>/<rel_dir>/<stem>.c3d`.
 
+The internal `_staging/` working directory (staged copies, intermediate
+`Ctrl+S` saves, the `data_rearranged/` scratch tree) is always removed
+automatically once the run finishes — after the final file(s) are written on
+a successful edit, or immediately if the editor closed without saving. A
+successful run leaves only the `<stem>_final.csv`/`.c3d` result(s) in the
+output folder.
+
 Clicking **Run** prints the equivalent CLI command inside a highlighted
 banner in the terminal — copy/paste it to repeat this run headlessly (the
 printed command always mirrors depth `0`; pass `-r`/`-d` yourself for a

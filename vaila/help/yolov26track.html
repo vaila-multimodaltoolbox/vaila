@@ -104,8 +104,8 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Ml</p>
             <p><strong>File:</strong> vaila/yolov26track.py</p>
-            <p><strong>Version:</strong> 0.3.108</p>
-            <p><strong>Updated:</strong> 20 August 2026</p>
+            <p><strong>Version:</strong> 0.4.5</p>
+            <p><strong>Updated:</strong> 23 September 2026</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -172,7 +172,7 @@
   --tracker botsort.yaml --max-ids 26 --anchor bottom</code></pre>
             <p>Outputs in <code>&lt;video_dir&gt;/processed_yolotrack_&lt;stem&gt;_&lt;timestamp&gt;/</code> (or <code>--output DIR</code>):</p>
             <ul>
-                <li><code>&lt;stem&gt;_markers.csv</code> — getpixelvideo point format <code>frame,p1_x,p1_y,...,pN_x,pN_y</code> (one anchor point per player). <strong>Feed this into REC2D (<code>rec2d.py</code>) / REC3D (<code>rec3d.py</code>)</strong> with your DLT parameters.</li>
+                <li><code>&lt;stem&gt;_markers.csv</code> — getpixelvideo point format <code>frame,p0_x,p0_y,...,pN_x,pN_y</code> (one anchor point per player). <strong>Feed this into REC2D (<code>rec2d.py</code>) / REC3D (<code>rec3d.py</code>)</strong> with your DLT parameters.</li>
                 <li><code>yolo_vaila_center.csv</code>, <code>yolo_vaila_bottom.csv</code>, <code>yolo_vaila_top.csv</code>, <code>yolo_vaila_left.csv</code>, <code>yolo_vaila_right.csv</code> — five bbox keypoint tables generated automatically with the SAM3/Sapiens2-compatible <code>frame,x1,y1,...,xN,yN</code> schema. Offline ReID identities are used when enabled.</li>
                 <li><code>{label}_id_NN.csv</code> + <code>all_id_detection.csv</code> — raw per-ID bbox tracks.</li>
                 <li><code>all_id_detection_reid_maxidsN.csv</code> — class-aware stable bbox table written automatically with <code>--max-ids N</code>; this is the recommended getpixelvideo/downstream input.</li>
@@ -184,7 +184,7 @@
         </div>
 
         <div class="footer">
-            <p>📅 Last Updated: August 20, 2026 (v0.3.108)</p>
+            <p>📅 Last Updated: 23 September 2026 (v0.4.5)</p>
             <p>🔗 Part of vailá - Multimodal Toolbox</p>
             <p>🌐 <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>

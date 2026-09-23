@@ -203,9 +203,17 @@ def _stage_inputs(input_dir: str, staging_dir: str, rel_paths: list[str]) -> dic
 
 
 def _newest_edited_csv(rearranged_dir: str, stem: str) -> str | None:
-    """Most recently written `data_rearranged/{stem}_*.csv`, if any."""
+    """Most recently written `data_rearranged/{stem}_*.csv`, if any.
+
+    An explicit Save & Exit (`ColumnReorderGUI.save_and_exit`, suffix
+    `_final`) always wins over a plain intermediate Ctrl+S save when both
+    exist, since it is the user's deliberate end state."""
     if not os.path.isdir(rearranged_dir):
         return None
+    final_candidates = glob.glob(os.path.join(rearranged_dir, f"{stem}_*_final.csv"))
+    if final_candidates:
+        final_candidates.sort(key=os.path.getmtime, reverse=True)
+        return final_candidates[0]
     candidates = glob.glob(os.path.join(rearranged_dir, f"{stem}_*.csv"))
     if not candidates:
         return None
@@ -364,7 +372,15 @@ def _prompt_file_selection(parent: tk.Tk, input_dir: str) -> list[str] | None:
     )
     tk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.RIGHT)
 
-    window.transient(parent)
+    # No `.transient(parent)`: `parent` is a withdrawn `tk.Tk()` root (only
+    # used to host `filedialog.askdirectory`), and on X11 a Toplevel made
+    # transient for a withdrawn master gets forced back into the withdrawn
+    # state itself (even after an explicit `deiconify()`) whenever no window
+    # manager remaps it — the dialog would never become visible, and
+    # `wait_window()` would then block forever on an invisible window.
+    window.deiconify()
+    window.lift()
+    window.focus_force()
     window.grab_set()
     parent.wait_window(window)
     return result
@@ -443,6 +459,8 @@ def run_edit_csv_c3d(
         print(f"Edit CSV/C3D: wrote {len(written)} file(s) to {output_dir}")
         for path in written:
             print(f"  - {path}")
+        if os.path.isdir(staging_dir):
+            shutil.rmtree(staging_dir, ignore_errors=True)
     else:
         print("Edit CSV/C3D: closed without saving. No files written.")
         if os.path.isdir(staging_dir):

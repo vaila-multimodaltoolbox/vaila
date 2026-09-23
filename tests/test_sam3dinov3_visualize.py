@@ -91,10 +91,10 @@ def _fixture_run(tmp_path: Path) -> tuple[Path, Path]:
             "frame,nose_x,nose_y,nose_z\n0,0,0,1.5\n1,0,0,1.5\n", encoding="utf-8"
         )
         (run / f"clip_id_{pid:02d}_mhr70_rec3d.csv").write_text(
-            "frame,p1_x,p1_y,p1_z\n0,0,0,1.5\n1,0,0,1.5\n", encoding="utf-8"
+            "frame,p0_x,p0_y,p0_z\n0,0,0,1.5\n1,0,0,1.5\n", encoding="utf-8"
         )
         (run / f"clip_id_{pid:02d}_markers.csv").write_text(
-            "frame,p1_x,p1_y\n0,10,10\n1,11,10\n", encoding="utf-8"
+            "frame,p0_x,p0_y\n0,10,10\n1,11,10\n", encoding="utf-8"
         )
 
     with (run / "clip_sam3dinov3_keypoints3d.csv").open("w", newline="", encoding="utf-8") as fh:
@@ -226,6 +226,10 @@ def test_selected_artifacts_filter_json_csv_and_mesh(tmp_path: Path) -> None:
 
     assert (output / "clip_id_02_mhr70_3d.csv").exists()
     assert not (output / "clip_id_09_mhr70_3d.csv").exists()
+    rec_header = (output / "clip_id_02_mhr70_rec3d.csv").read_text(encoding="utf-8").splitlines()[0]
+    markers_header = (output / "clip_id_02_markers.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert rec_header.startswith("frame,p0_x,p0_y,p0_z")
+    assert markers_header.startswith("frame,p0_x,p0_y")
 
     with np.load(output / "meshes" / "frame_000000.npz") as mesh:
         assert list(mesh["obj_ids"]) == [2]
@@ -316,3 +320,15 @@ def test_visualize_selected_id_exports_mesh_when_requested(tmp_path: Path) -> No
     ]
     readme = (output / "README_sam3dinov3_selected_id.txt").read_text(encoding="utf-8")
     assert "Stop Motion OBJ" in readme
+
+
+def test_legacy_p1_marker_header_rebases_to_p0(tmp_path: Path) -> None:
+    path = tmp_path / "clip_id_02_markers.csv"
+    path.write_text("frame,p1_x,p1_y,p2_x,p2_y\n0,1,2,3,4\n", encoding="utf-8")
+    viz._rebase_wide_markers_to_p0(path)
+    assert path.read_text(encoding="utf-8").splitlines()[0] == "frame,p0_x,p0_y,p1_x,p1_y"
+
+    already = tmp_path / "keep.csv"
+    already.write_text("frame,p0_x,p0_y\n0,9,8\n", encoding="utf-8")
+    viz._rebase_wide_markers_to_p0(already)
+    assert already.read_text(encoding="utf-8").splitlines()[1].startswith("0,9,8")

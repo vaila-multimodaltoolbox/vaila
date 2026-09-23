@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.4.3
-- **Updated:** 2026-09-17
+- **Version:** 0.4.5
+- **Updated:** 23 September 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -509,25 +509,25 @@ Empty cells indicate the object was not detected in that frame.
 #### `sam_points.csv` schema
 
 - **Always** starts with `frame`
-- Then one block per tracked object in the video: `p1_*`, `p2_*`, … (where `pN` is assigned from
-  the **sorted SAM `obj_id` list**; see `sam_id_map.csv`)
+- Then one block per tracked object in the video: `p0_*`, `p1_*`, … (where `pN` is assigned from
+  the **sorted SAM `obj_id` list**, starting at 0; see `sam_id_map.csv`)
 
 Modes:
 
 - `--postprocess-points foot`:
-  - Columns: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+  - Columns: `frame, p0_x, p0_y, p1_x, p1_y, ...`
   - Meaning: `pN_x/pN_y` = **bottom-center of bbox** (pixels)
 - `--postprocess-points center`:
-  - Columns: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+  - Columns: `frame, p0_x, p0_y, p1_x, p1_y, ...`
   - Meaning: `pN_x/pN_y` = **bbox center** (pixels)
 - `--postprocess-points mask`:
-  - Columns: `frame, p1_x, p1_y, p2_x, p2_y, ...`
+  - Columns: `frame, p0_x, p0_y, p1_x, p1_y, ...`
   - Meaning: `pN_x/pN_y` = **mask centroid** from `masks/frame_*.png` (pixels)
 - `--postprocess-points all`:
   - Columns: canonical `pN_x/pN_y` (default canonical is **foot**) plus extras:
     `pN_cx, pN_cy` (bbox center) and `pN_mx, pN_my` (mask centroid)
   - Example header:
-    `frame,p1_x,p1_y,p1_cx,p1_cy,p1_mx,p1_my,p2_x,p2_y,...`
+    `frame,p0_x,p0_y,p0_cx,p0_cy,p0_mx,p0_my,p1_x,p1_y,...`
 
 Notes:
 
@@ -975,7 +975,7 @@ Use this when the **camera moves** (typical broadcast). You need **one row of DL
 
 5. **2D reconstruction:**  
    `uv run python vaila/rec2d.py --dlt-file dlt_out/<SEQ>.dlt2d --input-dir sam_csv_folder/ --output-dir rec2d_out/ --rate 30`  
-   Pixel CSVs must use the header `frame,p1_x,p1_y,...` and frame indices must match rows in the `.dlt2d` file.
+   Pixel CSVs must use the header `frame,p0_x,p0_y,...` and frame indices must match rows in the `.dlt2d` file.
 
 6. **3D reconstruction (multi-camera):**  
    `uv run python vaila/rec3d.py --dlt-files dlt_out/camA.dlt3d dlt_out/camB.dlt3d --input-dir merged_pixels/ --output-dir rec3d_out/ --rate 30`  

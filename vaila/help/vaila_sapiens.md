@@ -4,8 +4,8 @@
 
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
-- **Version:** 0.3.120
-- **Updated:** 2026-09-03
+- **Version:** 0.4.5
+- **Updated:** 2026-09-23
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 
@@ -376,7 +376,7 @@ Under `processed_sapiens_YYYYMMDD_HHMMSS/<video_stem>/`:
 | `<stem>_sapiens_overlay.mp4` | Skeleton overlay + per-person `#N` tag (see `sapiens_id_map.csv`) |
 | `<stem>_predictions.json` | Per-frame instances (bbox + 308 kp) |
 | `<stem>_sapiens_vaila.csv` | Long CSV: `frame,person_id,kpt_idx,x,y,score` (all keypoints) |
-| **`<stem>_markers.csv`** | **REC2D/REC3D** — `frame,p1_x,p1_y,...,pN_x,pN_y` (foot anchor) |
+| **`<stem>_markers.csv`** | **REC2D/REC3D** — `frame,p0_x,p0_y,...,pN_x,pN_y` (foot anchor) |
 | `sapiens_vaila_center.csv` | Same schema as `sam_vaila_center.csv` (bbox center) |
 | `sapiens_vaila_bottom.csv` | Bbox bottom-center (foot proxy) |
 | `sapiens_vaila_top/left/right.csv` | Other bbox anchors |

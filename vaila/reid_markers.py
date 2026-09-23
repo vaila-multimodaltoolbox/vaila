@@ -3,8 +3,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 20 August 2026
-Version: 0.3.108
+Update Date: 23 September 2026
+Version: 0.4.5
 Python Version: 3.12.9
 
 Description:
@@ -112,7 +112,7 @@ def sam_tracks_to_marker_points(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     """Convert SAM long tracks to vailá wide marker columns.
 
     ``reid_markers`` edits marker trajectories in the classic vailá layout:
-    ``frame,p1_x,p1_y,p2_x,p2_y,...``. SAM writes ``sam_tracks.csv`` as one
+    ``frame,p0_x,p0_y,p1_x,p1_y,...``. SAM writes ``sam_tracks.csv`` as one
     row per object per frame. This adapter maps sorted SAM ``obj_id`` values to
     stable ``pN`` columns and uses bbox bottom-center as ``pN_x/pN_y``. Extra
     center/mask-centroid columns are kept for inspection.
@@ -139,7 +139,7 @@ def sam_tracks_to_marker_points(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Data
     out = pd.DataFrame({"frame": frames.to_numpy(dtype=int)})
     id_rows: list[dict[str, int]] = []
 
-    for pn, obj_id in enumerate(obj_ids, start=1):
+    for pn, obj_id in enumerate(obj_ids, start=0):
         one = tracks.loc[tracks["obj_id"] == obj_id].copy()
         one = one.sort_values(["frame", "score"], ascending=[True, False])
         one = one.drop_duplicates(subset=["frame"], keep="first").set_index("frame")

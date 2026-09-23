@@ -4,8 +4,8 @@
 
 - **Category:** Processing
 - **File:** `vaila/reid_markers.py`
-- **Version:** 0.3.108
-- **Updated:** 20 August 2026
+- **Version:** 0.4.5
+- **Updated:** 23 September 2026
 - **Author:** Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 - **CLI Interface:** ✅ Yes (new, v0.3.102) — `uv run python -u -m vaila.reid_markers --input ...`
@@ -17,8 +17,8 @@
 Marker Re-identification Tool - reid_markers.py
 ================================================================================
 Author: Adapted from getpixelvideo.py by Prof. Dr. Paulo R. P. Santiago
-Update Date: 20 August 2026
-Version: 0.3.108
+Update Date: 23 September 2026
+Version: 0.4.5
 Python Version: 3.12.9
 
 Description:
@@ -138,6 +138,6 @@ cleanly re-consolidated 17 → 16 with zero dropped rows.
 
 ---
 
-📅 **Last Updated:** 20 August 2026 (v0.3.108)
+📅 **Last Updated:** 23 September 2026 (v0.4.5)
 🔗 **Part of vailá - Multimodal Toolbox**
 🌐 [GitHub Repository](https://github.com/vaila-multimodaltoolbox/vaila)

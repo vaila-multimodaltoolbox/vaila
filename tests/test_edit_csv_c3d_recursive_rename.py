@@ -7,18 +7,28 @@ Update Date: 23 September 2026
 Version: 0.4.5
 """
 
+import os
+
 import pandas as pd
 import pytest
 
 try:
-    from vaila.edit_csv_c3d import _headless_process, find_edit_csv_c3d_files
-    from vaila.rearrange_data import _build_renumber_map, _validate_rename_map
+    from vaila.edit_csv_c3d import (
+        _headless_process,
+        _newest_edited_csv,
+        _prompt_file_selection,
+        find_edit_csv_c3d_files,
+    )
+    from vaila.rearrange_data import ColumnReorderGUI, _build_renumber_map, _validate_rename_map
 except ImportError:  # standalone execution
     from edit_csv_c3d import (  # ty: ignore[unresolved-import]
         _headless_process,
+        _newest_edited_csv,
+        _prompt_file_selection,
         find_edit_csv_c3d_files,
     )
     from rearrange_data import (  # ty: ignore[unresolved-import]
+        ColumnReorderGUI,
         _build_renumber_map,
         _validate_rename_map,
     )
@@ -131,3 +141,111 @@ def test_validate_rename_map_accepts_full_triple_rename():
     rename_map = {"p1_x": "p0_x", "p1_y": "p0_y", "p1_z": "p0_z"}
 
     assert _validate_rename_map(rename_map, headers) == []
+
+
+def test_prompt_file_selection_dialog_becomes_visible(tmp_path):
+    """Regression for the "button does nothing" bug: `_prompt_file_selection`'s
+    Toplevel used to inherit the withdrawn state of its `tk.Tk()` parent
+    whenever `.transient(parent)` was set on that withdrawn parent (X11
+    quirk), leaving the dialog invisible while `wait_window()` blocked
+    forever. Skipped when no display is available (matches the guard used
+    by `tests/test_extractpng.py::test_extractpng_gui_builds`)."""
+    import tkinter as tk
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError:
+        pytest.skip("No display available for Tkinter GUI test")
+
+    _touch_csv(tmp_path / "a.csv")
+    state: dict = {}
+
+    def inspect_and_cancel():
+        for child in root.winfo_children():
+            if isinstance(child, tk.Toplevel):
+                state["viewable"] = child.winfo_viewable()
+                state["wm_state"] = child.wm_state()
+                child.destroy()
+
+    root.after(200, inspect_and_cancel)
+    try:
+        _prompt_file_selection(root, str(tmp_path))
+    finally:
+        root.destroy()
+
+    assert state.get("wm_state") == "normal"
+    assert state.get("viewable") == 1
+
+
+def test_newest_edited_csv_prefers_final_suffix_over_newer_plain_save(tmp_path):
+    """Regression: a bulk rename applied AFTER an earlier Ctrl+S save must not
+    be discarded by picking the plain (non-final) file just because it has a
+    newer mtime than a `_final` save written earlier in the same run."""
+    rearranged_dir = tmp_path / "data_rearranged"
+    rearranged_dir.mkdir()
+    stem = "s10_markers"
+
+    final_path = rearranged_dir / f"{stem}_20260923_110300_final.csv"
+    final_path.write_text("frame,p0_x\n0,1.0\n")
+    older_time = final_path.stat().st_mtime - 100
+    os.utime(final_path, (older_time, older_time))
+
+    plain_path = rearranged_dir / f"{stem}_20260923_110306.csv"
+    plain_path.write_text("frame,p1_x\n0,1.0\n")
+
+    result = _newest_edited_csv(str(rearranged_dir), stem)
+
+    assert result == str(final_path)
+
+
+def test_newest_edited_csv_excludes_final_from_fallback_only_when_absent(tmp_path):
+    """No `_final` file exists yet -> fall back to newest match, same as before."""
+    rearranged_dir = tmp_path / "data_rearranged"
+    rearranged_dir.mkdir()
+    stem = "s10_markers"
+
+    resetidx_path = rearranged_dir / f"{stem}_20260923_110253_resetidx.csv"
+    resetidx_path.write_text("frame,p1_x\n0,1.0\n")
+
+    plain_path = rearranged_dir / f"{stem}_20260923_110306.csv"
+    plain_path.write_text("frame,p1_x\n0,1.0\n")
+
+    result = _newest_edited_csv(str(rearranged_dir), stem)
+
+    assert result == str(plain_path)
+
+
+def test_on_window_close_prompts_even_after_a_prior_save(tmp_path):
+    """Regression for the sticky `self.saved` flag bug: once `self.saved`
+    becomes True (any prior Ctrl+S / Save & Exit this session), a LATER edit
+    (e.g. bulk column rename) must still trigger the unsaved-changes
+    confirmation on window close instead of silently discarding it because
+    the old guard was `has_unsaved_changes and not self.saved`."""
+    import tkinter as tk
+    from tkinter import messagebox
+    from unittest.mock import patch
+
+    try:
+        probe = tk.Tk()
+        probe.withdraw()
+        probe.destroy()
+    except tk.TclError:
+        pytest.skip("No display available for Tkinter GUI test")
+
+    csv_path = tmp_path / "a.csv"
+    _touch_csv(csv_path)
+
+    app = ColumnReorderGUI(["frame", "a"], ["a.csv"], str(tmp_path))
+    try:
+        app.saved = True  # a prior save already happened this session
+        app.has_unsaved_changes = True  # a later edit (e.g. rename) followed it
+
+        with patch.object(messagebox, "askyesnocancel", return_value=None) as mock_ask:
+            app.on_window_close()
+
+        mock_ask.assert_called_once()
+        assert app.winfo_exists()  # Cancel path: window must stay open
+    finally:
+        if app.winfo_exists():
+            app.destroy()

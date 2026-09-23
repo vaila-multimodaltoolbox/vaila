@@ -78,6 +78,13 @@
     <li>Files that started as <code>.c3d</code> are converted back and written
       to <code>&lt;output&gt;/&lt;rel_dir&gt;/&lt;stem&gt;.c3d</code>.</li>
   </ul>
+  <p>The internal <code>_staging/</code> working directory (staged copies,
+  intermediate <code>Ctrl+S</code> saves, the <code>data_rearranged/</code>
+  scratch tree) is always removed automatically once the run finishes —
+  after the final file(s) are written on a successful edit, or immediately
+  if the editor closed without saving. A successful run leaves only the
+  <code>&lt;stem&gt;_final.csv</code>/<code>.c3d</code> result(s) in the
+  output folder.</p>
   <p>Clicking <strong>Run</strong> prints the equivalent CLI command inside a
   highlighted banner in the terminal — copy/paste it to repeat this run
   headlessly (the printed command always mirrors depth <code>0</code>; pass

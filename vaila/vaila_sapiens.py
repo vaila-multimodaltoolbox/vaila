@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     Sapiens2 Pose video inference for vailá (Meta 308-keypoint top-down pose).
@@ -224,7 +224,7 @@ Biomechanics / vailá downstream CSVs (written after every run)
 
   <stem>_markers.csv
       getpixelvideo + REC2D/REC3D point format:
-      frame,p1_x,p1_y,...,pN_x,pN_y  (bbox bottom-center anchor, stable pN slots)
+      frame,p0_x,p0_y,...,pN_x,pN_y  (bbox bottom-center anchor, stable pN slots)
 
   sapiens_vaila_center.csv   frame,x1,y1,...,xN,yN — bbox center (same schema as sam_vaila_*)
   sapiens_vaila_bottom.csv   bbox bottom-center (foot proxy)
@@ -233,7 +233,7 @@ Biomechanics / vailá downstream CSVs (written after every run)
   sapiens_vaila_right.csv    bbox right-center
 
   sapiens_points.csv
-      frame,p1_x,p1_y,p1_cx,p1_cy,p1_hx,p1_hy,...  — canonical foot + bbox center + mid-hip
+      frame,p0_x,p0_y,p0_cx,p0_cy,p0_hx,p0_hy,...  — canonical foot + bbox center + mid-hip
 
   sapiens_id_map.csv         pN,stable_id,n_frames,first_frame,last_frame
   sapiens_reid_links.csv     frame,raw_id,stable_id (geometric Re-ID audit, like sam_reid_links.csv)
@@ -1836,7 +1836,7 @@ def _expand_pose_timeline(
 def _collect_stable_slots(
     timeline: dict[int, list[dict[str, Any]]],
 ) -> tuple[list[int], dict[int, int]]:
-    """Return sorted stable IDs and stable_id -> pN slot (1-based)."""
+    """Return sorted stable IDs and stable_id -> pN slot (0-based)."""
     stable_ids = sorted(
         {
             int(inst["stable_id"])
@@ -1845,7 +1845,7 @@ def _collect_stable_slots(
             if "stable_id" in inst
         }
     )
-    slot_by_id = {sid: pn for pn, sid in enumerate(stable_ids, start=1)}
+    slot_by_id = {sid: pn for pn, sid in enumerate(stable_ids, start=0)}
     return stable_ids, slot_by_id
 
 
@@ -1910,7 +1910,7 @@ def write_sapiens_biomechanics_csvs(
         written.append(out_path)
 
     pts_header = ["frame"]
-    for pn in range(1, n_slots + 1):
+    for pn in range(n_slots):
         pts_header.extend(
             [f"p{pn}_x", f"p{pn}_y", f"p{pn}_cx", f"p{pn}_cy", f"p{pn}_hx", f"p{pn}_hy"]
         )
@@ -1985,7 +1985,7 @@ def write_sapiens_biomechanics_csvs(
     with markers_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
         m_header = ["frame"]
-        for pn in range(1, n_slots + 1):
+        for pn in range(n_slots):
             m_header.extend([f"p{pn}_x", f"p{pn}_y"])
         writer.writerow(m_header)
         for frame_idx in range(n_frames):
