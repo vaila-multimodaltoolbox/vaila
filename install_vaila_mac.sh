@@ -22,8 +22,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                            #
-# Update: 17 September 2026
-# Version: 0.4.3
+# Update: 23 September 2026
+# Version: 0.4.5
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -558,6 +558,16 @@ elif [[ "$INSTALL_LOC_OPTION" != "2" ]]; then
     echo "Using current directory as VAILA_HOME."
 else
     echo ""
+    # AI-Track checkpoints live inside vaila/models/ai_tracker/ (repo-relative,
+    # gitignored). The wipe below is a top-level `-maxdepth 1` sweep that can't
+    # exclude a nested path by name, so save/restore it around the wipe+copy —
+    # same intent as the .venv exclusion, one level deeper.
+    AI_TRACKER_BACKUP=""
+    if [ -d "$VAILA_HOME/vaila/models/ai_tracker" ]; then
+        AI_TRACKER_BACKUP="$(mktemp -d)/ai_tracker"
+        mv "$VAILA_HOME/vaila/models/ai_tracker" "$AI_TRACKER_BACKUP"
+    fi
+
     if [ -d "$VAILA_HOME" ]; then
         echo "Updating existing vaila installation in $VAILA_HOME..."
         echo "Removing old files (keeping .venv to be recreated)..."
@@ -569,6 +579,14 @@ else
 
     echo "Copying files..."
     rsync -av --exclude='.venv' --exclude='__pycache__' --exclude='*.pyc' --exclude='.git' --exclude='uv.lock' --exclude='.python-version' "$PROJECT_DIR/" "$VAILA_HOME/"
+
+    if [ -n "$AI_TRACKER_BACKUP" ] && [ -d "$AI_TRACKER_BACKUP" ]; then
+        echo "Restoring AI-Track checkpoints (vaila/models/ai_tracker)..."
+        mkdir -p "$VAILA_HOME/vaila/models"
+        rm -rf "$VAILA_HOME/vaila/models/ai_tracker"
+        mv "$AI_TRACKER_BACKUP" "$VAILA_HOME/vaila/models/ai_tracker"
+        rmdir "$(dirname "$AI_TRACKER_BACKUP")" 2>/dev/null || true
+    fi
 fi
 
 # Portable install into a git clone: keep committed uv.lock so `git pull` works.

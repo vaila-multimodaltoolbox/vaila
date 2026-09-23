@@ -28,8 +28,8 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 16 September 2026
-    Version: 0.4.3
+    Updated: 23 September 2026
+    Version: 0.4.5
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:
@@ -648,6 +648,18 @@ If ($isAlreadyInstalled -or ($installLocOption -ne "2")) {
     Write-Host "Skipping file copy step." -ForegroundColor Green
 } Else {
     Write-Host ""
+
+    # AI-Track checkpoints live inside vaila\models\ai_tracker\ (repo-relative,
+    # gitignored). The wipe below excludes by top-level name only, so save/
+    # restore this nested dir around it — same intent as the .venv exclusion,
+    # two levels deeper.
+    $aiTrackerSrc = Join-Path $vailaProgramPath "vaila\models\ai_tracker"
+    $aiTrackerBackup = $null
+    If (Test-Path $aiTrackerSrc) {
+        $aiTrackerBackup = Join-Path $env:TEMP ("vaila_ai_tracker_backup_" + [guid]::NewGuid())
+        Move-Item -Path $aiTrackerSrc -Destination $aiTrackerBackup -Force
+    }
+
     If (Test-Path $vailaProgramPath) {
         Write-Host "Updating existing vaila installation in $vailaProgramPath..." -ForegroundColor Yellow
         Write-Host "Removing old files (keeping .venv to be recreated)..." -ForegroundColor Yellow
@@ -676,6 +688,15 @@ If ($isAlreadyInstalled -or ($installLocOption -ne "2")) {
         } Else {
             Copy-Item -Path $_.FullName -Destination $targetPath -Force
         }
+    }
+
+    If ($aiTrackerBackup -and (Test-Path $aiTrackerBackup)) {
+        Write-Host "Restoring AI-Track checkpoints (vaila\models\ai_tracker)..." -ForegroundColor Yellow
+        $aiTrackerModelsDir = Join-Path $vailaProgramPath "vaila\models"
+        New-Item -ItemType Directory -Force -Path $aiTrackerModelsDir | Out-Null
+        $aiTrackerFinal = Join-Path $aiTrackerModelsDir "ai_tracker"
+        If (Test-Path $aiTrackerFinal) { Remove-Item -Path $aiTrackerFinal -Recurse -Force }
+        Move-Item -Path $aiTrackerBackup -Destination $aiTrackerFinal -Force
     }
 }
 

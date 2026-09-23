@@ -1802,6 +1802,12 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
       <section id="version-history">
         <h2>11. Version History</h2>
 
+        <h3>Version 0.4.5 (23 September 2026) &mdash; AI Track occlusion fallback; AI-Track checkpoints survive reinstall</h3>
+        <ul>
+          <li><strong>Occlusion ride-through:</strong> when a passing occluder, motion blur, or a fast background change makes AI Track reject a frame's candidate match, the tracker now reports a Kalman-predicted position instead of leaving a gap &mdash; but only through a short streak (&le;5 consecutive rejects) and only while the prediction's covariance stays tight (trace &le; 400 px&sup2;). Past that, tracking freezes and falls back to the existing &ldquo;AI Track lost &mdash; click marker to re-anchor&rdquo; flow. The fallback point is never blended into the adaptive template and never counts as a confident match.</li>
+          <li><strong>Installer fix:</strong> <code>vaila/models/ai_tracker/</code> (trained backbone weights and any retrained discriminator state) now survives a profile-mode reinstall on Linux, macOS, and Windows &mdash; backed up before the wipe, restored after the copy, the same protective intent as the existing <code>.venv</code> exclusion.</li>
+        </ul>
+
         <h3>Version 0.4.4 (18 September 2026, patched 22 September 2026) &mdash; AI Track weights under <code>vaila/models/ai_tracker/</code>; Lock selection fix</h3>
         <ul>
           <li>Backbone weights no longer silent-download into <code>~/.cache/torch/hub/checkpoints/</code>. Canonical home is <code>vaila/models/ai_tracker/{variant}_imagenet.pth</code>. Missing weights prompt browse or download clean official ImageNet into that folder; hub-cache hits are migrated once into <code>ai_tracker/</code>.</li>

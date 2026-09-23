@@ -1,8 +1,15 @@
 """AI soccer-field keypoints (pixels) for vailá.
 
 Project: vailá — vaila/soccerfield_keypoints_ai.py
-Update Date: 14 May 2026
-Version: 0.3.44
+Update Date: 23 September 2026
+Version: 0.4.5
+
+Change History
+--------------
+- v0.4.5: Fixed field_keypoints_getpixelvideo.csv / field_keypoints_overlay_markers.csv
+  writing 1-indexed marker columns (p1_x..p32_x). vailá's standard is
+  0-indexed (p0_x..p31_x); both the single-frame and video paths now start
+  at p0.
 
 Goal
 ----
@@ -290,11 +297,11 @@ def detect_field_keypoints(
     gv_path = out_dir / "field_keypoints_getpixelvideo.csv"
     max_points = len(kps)
     cols = ["frame"]
-    for i in range(1, max_points + 1):
+    for i in range(max_points):
         cols += [f"p{i}_x", f"p{i}_y"]
     df_gv = pd.DataFrame(np.nan, index=[int(frame_index)], columns=cols)
     df_gv["frame"] = int(frame_index)
-    for i, kp in enumerate(kps, start=1):
+    for i, kp in enumerate(kps):
         if float(kp.conf) >= float(draw_min_conf):
             df_gv.at[int(frame_index), f"p{i}_x"] = float(kp.x)
             df_gv.at[int(frame_index), f"p{i}_y"] = float(kp.y)
@@ -382,10 +389,8 @@ def detect_field_keypoints_video(
             writer = cv2.VideoWriter(str(overlay_path), fourcc, float(fps / stride_i), (w, h))
 
     rows: list[dict[str, object]] = []
-    # getpixelvideo format: one row per frame, columns p1_x/p1_y..pK_x/pK_y
-    gv_cols = ["frame"] + [f"p{i}_x" for i in range(1, 33)] + [f"p{i}_y" for i in range(1, 33)]
-    # Fix ordering to p1_x,p1_y,p2_x,p2_y...
-    gv_cols = ["frame"] + [c for i in range(1, 33) for c in (f"p{i}_x", f"p{i}_y")]
+    # getpixelvideo format: one row per frame, columns p0_x/p0_y..pK_x/pK_y
+    gv_cols = ["frame"] + [c for i in range(32) for c in (f"p{i}_x", f"p{i}_y")]
     total_frames = n_frames if n_frames is not None else (start_i + stride_i * (max_frames_i or 0))
     df_gv = pd.DataFrame(np.nan, index=range(int(total_frames)), columns=gv_cols)
     df_gv["frame"] = df_gv.index
@@ -452,8 +457,8 @@ def detect_field_keypoints_video(
 
             # Fill getpixelvideo row (blank for low-confidence points)
             if 0 <= int(frame_index) < len(df_gv):
-                for i, kp in enumerate(kps, start=1):
-                    if i > 32:
+                for i, kp in enumerate(kps):
+                    if i >= 32:
                         break
                     if float(kp.conf) >= float(draw_min_conf):
                         df_gv.at[int(frame_index), f"p{i}_x"] = float(kp.x)

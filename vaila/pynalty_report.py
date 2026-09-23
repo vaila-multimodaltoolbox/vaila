@@ -6,8 +6,13 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 September 2026
-Update Date: 07 September 2026
-Version: 0.3.129
+Update Date: 23 September 2026
+Version: 0.4.5
+
+Change History:
+    - v0.4.5: Fixed write_pose_csv() appending 1-indexed generic marker
+      columns (p1_x..pN_x) after the named-landmark columns. vailá's
+      standard is 0-indexed (p0_x..p(N-1)_x); now starts at p0.
 
 Description:
     Reporting layer for the Pynalty penalty analysis.
@@ -659,7 +664,7 @@ def write_pose_csv(out_dir: str, sequence, filename: str) -> str | None:
     header = ["frame"]
     for name in LANDMARK_NAMES:
         header += [f"{name}_x", f"{name}_y", f"{name}_vis"]
-    header += [f"p{i + 1}_{ax}" for i in range(n) for ax in ("x", "y")]
+    header += [f"p{i}_{ax}" for i in range(n) for ax in ("x", "y")]
 
     with open(path, "w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)

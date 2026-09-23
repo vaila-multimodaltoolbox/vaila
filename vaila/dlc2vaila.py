@@ -1,8 +1,13 @@
 """
 Script: dlc2vaila.py
 Author: Prof. Dr. Paulo Santiago
-Version: 1.0.0
-Last Updated: December 9, 2024
+Version: 0.4.5
+Last Updated: September 23, 2026
+
+Change History:
+    - v0.4.5: Fixed process_csv_files_with_numpy() emitting 1-indexed marker
+      columns (p1_x, p1_y, p2_x, ...). vailá's standard is 0-indexed
+      (p0_x, p0_y, p1_x, ...); headers now start at p0.
 
 Description:
     This script converts DLC (DeepLabCut) CSV files into a format compatible with
@@ -14,7 +19,7 @@ Description:
     - Retaining only the third header line from the original DLC file.
     - Removing the first column temporarily, processing the remaining data, and re-adding the first column.
     - Excluding every third column from the data.
-    - Generating a new header with the format: 'frame, p1_x, p1_y, p2_x, p2_y, ...'.
+    - Generating a new header with the format: 'frame, p0_x, p0_y, p1_x, p1_y, ...'.
     - Saving the processed files in a dedicated output directory with a timestamp.
 
 Usage:
@@ -86,7 +91,7 @@ def process_csv_files_with_numpy(directory, save_directory):
     - Retain only the third header line.
     - Remove the first column, process the remaining data, and add the first column back as integers.
     - Remove every third column starting from the second one.
-    - Generate a header in the format: 'frame, p1_x, p1_y, p2_x, p2_y, ...'.
+    - Generate a header in the format: 'frame, p0_x, p0_y, p1_x, p1_y, ...'.
     - Save the processed files in the specified save directory with a timestamp suffix.
     """
     # List all CSV files in the directory
@@ -118,12 +123,10 @@ def process_csv_files_with_numpy(directory, save_directory):
         # Add the first column back to the processed data
         final_data = np.hstack((col0, processed_data))
 
-        # Generate a header in the format: 'frame, p1_x, p1_y, p2_x, p2_y, ...'
+        # Generate a header in the format: 'frame, p0_x, p0_y, p1_x, p1_y, ...'
         num_points = (final_data.shape[1] - 1) // 2  # Exclude the 'frame' column
         headers = ["frame"] + [
-            f"p{i + 1}_x" if j % 2 == 0 else f"p{i + 1}_y"
-            for i in range(num_points)
-            for j in range(2)
+            f"p{i}_x" if j % 2 == 0 else f"p{i}_y" for i in range(num_points) for j in range(2)
         ]
 
         # Convert the final data into a DataFrame for saving

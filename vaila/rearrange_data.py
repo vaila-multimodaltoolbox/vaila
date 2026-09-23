@@ -72,6 +72,15 @@ Change History:
       LabelFrame (next to "Reset Frame Index (Col 0)"), not just an Edit
       menu entry - users were not finding the feature because it had no
       visible button, only a menu-only command.
+    - v0.4.5: Project-wide p1-vs-p0 audit found two more 1-indexed marker
+      converters in this file: convert_kinovea_to_vaila() emitted
+      p1_x..pN_x (now p0_x..p(N-1)_x, and its frame column is cast to int
+      before to_csv so float_format="%.1f" no longer touches it), and
+      convert_yolo_tracker_to_pixel_format()'s plain-wide-format branch
+      (no "Tracker ID" column) emitted p{idx+1}_x via enumerate() (now
+      p{idx}_x). The long/wide-format branches that key columns by the
+      tracker's own numeric Tracker ID (f"p{t_id}_x") are unchanged -
+      t_id is an external identity, not a fresh 0-based enumeration.
     - v0.3.112: Regrouped ColumnReorderGUI's 13 flat tk.Button widgets into
       4 ttk.LabelFrame sections (Columns / Combine Files / Import to vailá /
       Advanced) with a consistent ttk style, matching readc3d_export.py's
@@ -458,16 +467,17 @@ def convert_kinovea_to_vaila(file_path, save_directory):
         num_columns = len(df.columns) - 1  # Exclude the first column (frame/time)
         num_points = num_columns // 2  # Each point has X and Y
         correct_header = ["frame"] + [
-            f"p{i + 1}_{coord}" for i in range(num_points) for coord in ["x", "y"]
+            f"p{i}_{coord}" for i in range(num_points) for coord in ["x", "y"]
         ]
 
         # Assign the correct header to the DataFrame
         df.columns = correct_header[: len(df.columns)]
 
-        # Format the columns with adjusted decimal precision
+        # Format the columns with adjusted decimal precision (frame stays int)
         float_format = "%.1f"
         if "frame" in df.columns:
             df.iloc[:, 1:] = df.iloc[:, 1:].astype(float).round(1)
+            df["frame"] = df["frame"].astype(int)
         else:
             df = df.astype(float).round(1)
 
@@ -2415,11 +2425,11 @@ def convert_yolo_tracker_to_pixel_format(
                     x_col = f"X_{t_id}"
                     y_col = f"Y_{t_id}"
                     if x_col in chunk.columns and y_col in chunk.columns:
-                        new_chunk[f"p{idx + 1}_x"] = chunk[x_col]
-                        new_chunk[f"p{idx + 1}_y"] = chunk[y_col]
+                        new_chunk[f"p{idx}_x"] = chunk[x_col]
+                        new_chunk[f"p{idx}_y"] = chunk[y_col]
                     else:
-                        new_chunk[f"p{idx + 1}_x"] = np.nan
-                        new_chunk[f"p{idx + 1}_y"] = np.nan
+                        new_chunk[f"p{idx}_x"] = np.nan
+                        new_chunk[f"p{idx}_y"] = np.nan
 
             mode = "w" if first_chunk else "a"
             header = first_chunk

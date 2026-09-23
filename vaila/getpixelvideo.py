@@ -259,8 +259,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.4"
-GETPIXELVIDEO_UPDATE_DATE = "21 September 2026"
+GETPIXELVIDEO_VERSION = "0.4.5"
+GETPIXELVIDEO_UPDATE_DATE = "23 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -5528,6 +5528,29 @@ def play_video_with_controls(
                             save_message_text = "AI Track lost — click marker to re-anchor"
                             showing_save_message = True
                             save_message_timer = 120
+                        # Brief-occlusion ride-through: ai_tracker.py flags a rejected
+                        # candidate as kf_fallback only when a short, low-uncertainty
+                        # Kalman prediction is trustworthy (see _occlusion_fallback_location).
+                        # Write that predicted point so the marker keeps moving plausibly
+                        # through the occlusion instead of leaving a gap -- template
+                        # blending stays untouched since template_updated is always False
+                        # on this path.
+                        if not getattr(res, "kf_fallback", False):
+                            return
+                        if curr_frame_idx not in coordinates:
+                            coordinates[curr_frame_idx] = []
+                        while len(coordinates[curr_frame_idx]) <= target_m:
+                            coordinates[curr_frame_idx].append((None, None))
+                        coordinates[curr_frame_idx][target_m] = (
+                            float(res.location[0]),
+                            float(res.location[1]),
+                        )
+                        if (
+                            curr_frame_idx in deleted_positions
+                            and target_m in deleted_positions[curr_frame_idx]
+                        ):
+                            deleted_positions[curr_frame_idx].remove(target_m)
+                        live_track_last_frame = curr_frame_idx
                         return
                     track_ai_lost_streak = 0
                     if curr_frame_idx not in coordinates:

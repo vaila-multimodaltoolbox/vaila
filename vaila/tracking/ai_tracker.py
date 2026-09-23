@@ -9,8 +9,8 @@ into the retrained online discriminator's feature vector. Integrates bidirection
 keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 18 September 2026
-Version: 0.4.4
+Update Date: 23 September 2026
+Version: 0.4.5
 """
 
 from __future__ import annotations
@@ -71,6 +71,13 @@ _KF_MAHALANOBIS_GATE = 9.21  # chi-square, 2 DOF, 99% confidence -- outlier reje
 # frame is treated as a rejection -- a confidently-scored match is never second-guessed.
 _SCENE_CHANGE_GATE = 0.35  # score above this = "large global scene change" this frame
 _SCENE_CHANGE_MARGIN = 0.08  # combined_score within this margin of threshold = "marginal"
+# Live occlusion fallback: when a candidate is rejected, ride out a brief occlusion by
+# reporting the Kalman-predicted position instead of freezing at last_point -- like a
+# human tracker keeping the marker moving under a passing occluder instead of stalling.
+# `accepted` still reports False (lost-streak bookkeeping / re-anchor UI is unaffected);
+# only the *reported location* changes. Two independent trust bounds, both must hold:
+_KF_FALLBACK_MAX_STREAK = 5  # only trust the prediction through this many consecutive rejects
+_KF_FALLBACK_MAX_POS_VAR = 400.0  # trace(P_pos) bound (px^2) -- prediction too uncertain past this
 _FEATURE_DIM = 808  # extract_patch_feature() output length (768 color-grid + 40 region-stats)
 _CHECKPOINT_BLEND_MAX_N = 4000.0  # Cap prior-session weight so a fresh session can still adapt
 
@@ -336,6 +343,7 @@ class TemplateMatchResult:
     template_updated: bool = False  # Whether the tracking template was updated this frame
     accepted: bool = True  # False when below similarity_threshold (do not advance lock)
     active_variant: str = ""  # Backbone that produced this frame's deep_score (primary or fallback)
+    kf_fallback: bool = False  # location is a Kalman-predicted occlusion fallback, not a real match
 
 
 @dataclass
@@ -1236,6 +1244,26 @@ class AITracker:
         """Apply a manual correction without wiping online learning."""
         self.set_reference(frame, point, frame_idx=frame_idx, reset_online=False)
 
+    def _occlusion_fallback_location(
+        self,
+        pred_x: float,
+        pred_y: float,
+        kf_p_pred: np.ndarray,
+        last_point: tuple[float, float],
+    ) -> tuple[tuple[float, float], bool]:
+        """On a rejected candidate, decide between the frozen last_point and the
+        Kalman-predicted position for this frame's reported `location`.
+
+        Trusts the prediction only through a short, low-uncertainty occlusion --
+        both the consecutive-reject streak and the predicted-position covariance
+        must stay bounded, otherwise a genuinely lost track would keep drifting
+        along a stale velocity estimate instead of freezing/re-anchoring.
+        """
+        pos_var = float(kf_p_pred[0, 0] + kf_p_pred[1, 1])
+        if self._lost_streak < _KF_FALLBACK_MAX_STREAK and pos_var <= _KF_FALLBACK_MAX_POS_VAR:
+            return (pred_x, pred_y), True
+        return last_point, False
+
     def track_frame(
         self,
         frame: np.ndarray,
@@ -1314,6 +1342,9 @@ class AITracker:
 
         roi = frame[crop_sy1:crop_sy2, crop_sx1:crop_sx2]
         if roi.size == 0:
+            fallback_loc, is_fallback = self._occlusion_fallback_location(
+                pred_x, pred_y, kf_p_pred, last_point
+            )
             self._kf_x = kf_x_pred
             self._kf_P = kf_p_pred
             self._lost_streak += 1
@@ -1321,10 +1352,11 @@ class AITracker:
                 similarity=0.0,
                 ncc_score=0.0,
                 deep_score=0.0,
-                location=last_point,
+                location=fallback_loc,
                 raw_location=(int(round(last_point[0])), int(round(last_point[1]))),
                 template_updated=False,
                 accepted=False,
+                kf_fallback=is_fallback,
             )
         if pad_left > 0 or pad_top > 0 or pad_right > 0 or pad_bottom > 0:
             roi = cv2.copyMakeBorder(
@@ -1338,6 +1370,9 @@ class AITracker:
 
         # Prefer live template shape over params.block_window (can drift after shape drag).
         if roi.shape[0] < th or roi.shape[1] < tw:
+            fallback_loc, is_fallback = self._occlusion_fallback_location(
+                pred_x, pred_y, kf_p_pred, last_point
+            )
             self._kf_x = kf_x_pred
             self._kf_P = kf_p_pred
             self._lost_streak += 1
@@ -1345,10 +1380,11 @@ class AITracker:
                 similarity=0.0,
                 ncc_score=0.0,
                 deep_score=0.0,
-                location=last_point,
+                location=fallback_loc,
                 raw_location=(int(round(last_point[0])), int(round(last_point[1]))),
                 template_updated=False,
                 accepted=False,
+                kf_fallback=is_fallback,
             )
 
         # Match template using NCC (cv2.TM_CCOEFF_NORMED). Mask path needs img >= templ
@@ -1375,6 +1411,9 @@ class AITracker:
             except Exception:
                 smap = None
         if smap is None or smap.size == 0:
+            fallback_loc, is_fallback = self._occlusion_fallback_location(
+                pred_x, pred_y, kf_p_pred, last_point
+            )
             self._kf_x = kf_x_pred
             self._kf_P = kf_p_pred
             self._lost_streak += 1
@@ -1382,10 +1421,11 @@ class AITracker:
                 similarity=0.0,
                 ncc_score=0.0,
                 deep_score=0.0,
-                location=last_point,
+                location=fallback_loc,
                 raw_location=(int(round(last_point[0])), int(round(last_point[1]))),
                 template_updated=False,
                 accepted=False,
+                kf_fallback=is_fallback,
             )
 
         # Handle NaNs or Infs
@@ -1547,6 +1587,9 @@ class AITracker:
             # Q and next frame's gate widens automatically -- exactly the behavior
             # needed to ride out an acceleration/blur event without drifting onto a
             # spurious match.
+            fallback_loc, is_fallback = self._occlusion_fallback_location(
+                pred_x, pred_y, kf_p_pred, last_point
+            )
             self._kf_x = kf_x_pred
             self._kf_P = kf_p_pred
             self._lost_streak += 1
@@ -1554,11 +1597,12 @@ class AITracker:
                 similarity=float(combined_score),
                 ncc_score=ncc_score,
                 deep_score=deep_score,
-                location=last_point,
+                location=fallback_loc,
                 raw_location=raw_loc,
                 template_updated=False,
                 accepted=False,
                 active_variant=active_variant,
+                kf_fallback=is_fallback,
             )
 
         self._lost_streak = 0

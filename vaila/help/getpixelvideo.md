@@ -697,6 +697,11 @@ Built-in backup system for data safety:
 
 ## Version History
 
+### Version 0.4.5 (23 September 2026) — AI Track occlusion fallback; AI-Track checkpoints survive reinstall
+
+- **Occlusion ride-through:** when a passing occluder, motion blur, or a fast background change makes AI Track reject a frame's candidate match, the tracker now reports a Kalman-predicted position instead of leaving a gap — but only through a short streak (≤5 consecutive rejects) and only while the prediction's covariance stays tight (trace ≤ 400 px²). Past that, tracking freezes and falls back to the existing "AI Track lost — click marker to re-anchor" flow. The fallback point is never blended into the adaptive template and never counts as a confident match.
+- **Installer fix:** `vaila/models/ai_tracker/` (trained backbone weights and any retrained discriminator state) now survives a profile-mode reinstall on Linux, macOS, and Windows — backed up before the wipe, restored after the copy, the same protective intent as the existing `.venv` exclusion.
+
 ### Version 0.4.4 (18 September 2026, patched 22 September 2026) — AI Track weights under `vaila/models/ai_tracker/`; Lock selection fix
 
 - Backbone weights no longer silent-download into `~/.cache/torch/hub/checkpoints/`. Canonical home is `vaila/models/ai_tracker/{variant}_imagenet.pth`. Missing weights prompt **browse** or **download clean official ImageNet** into that folder; hub-cache hits are migrated once into `ai_tracker/`.
