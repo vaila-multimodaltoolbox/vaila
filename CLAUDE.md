@@ -212,7 +212,7 @@ Two dispatch patterns:
 | Area | Buttons |
 | --- | --- |
 | Frame A (r1) | Rename · Import · Export · Copy · Move · Remove · Tree · Find · Transfer |
-| Frame B (r1) | IMU · MoCap Cluster · MoCap Full Body · **Markerless 2D** (coringa: Standard/Advanced/YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3 video, Sapiens2 Pose, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live) · **Markerless 3D** (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID]) |
+| Frame B (r1) | IMU · MoCap Cluster · MoCap Full Body · **Markerless 2D** (coringa: MediaPipe (CPU/GPU), Advanced, YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3 video, Sapiens2 Pose, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live) · **Markerless 3D** (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID]) |
 | Frame B (r2) | Vector Coding · EMG · Force Plate · GNSS/GPS · MEG/EEG |
 | Frame B (r3) | HR/ECG · Vertical Jump · Cube2D · Animal Open Field |
 | Frame B (r4) | ML Walkway |

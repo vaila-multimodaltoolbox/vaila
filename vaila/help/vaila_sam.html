@@ -48,8 +48,8 @@
             <h3>Module Information</h3>
             <p><strong>Category:</strong> Multimodal Analysis / Video Segmentation</p>
             <p><strong>File:</strong> vaila/vaila_sam.py</p>
-            <p><strong>Version:</strong> 0.4.3</p>
-            <p><strong>Updated:</strong> 17 September 2026</p>
+            <p><strong>Version:</strong> 0.4.5</p>
+            <p><strong>Updated:</strong> 23 September 2026</p>
             <p><strong>Authors:</strong> Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão</p>
             <p><strong>GUI Interface:</strong> Yes (Tkinter batch dialog when no CLI args)</p>
             <p><strong>CLI Interface:</strong> Yes (<code>-i</code>, <code>-o</code>, <code>-t</code>, ...)</p>
@@ -681,20 +681,20 @@ uv run vaila/sam_postprocess.py out_parent/processed_sam_…/video_stem --mode a
         <h4><code>sam_points.csv</code> schema</h4>
         <ul>
             <li>Always starts with <code>frame</code></li>
-            <li>Then one block per tracked object in the video: <code>p1_*</code>, <code>p2_*</code>, …</li>
+            <li>Then one block per tracked object in the video: <code>p0_*</code>, <code>p1_*</code>, …</li>
             <li><code>pN</code> is assigned from the <strong>sorted SAM <code>obj_id</code> list</strong> (see <code>sam_id_map.csv</code>)</li>
         </ul>
         <p><strong>Modes:</strong></p>
         <ul>
-            <li><code>--postprocess-points foot</code>: columns <code>frame,p1_x,p1_y,p2_x,p2_y,...</code> where <code>pN_x/pN_y</code> is the
+            <li><code>--postprocess-points foot</code>: columns <code>frame,p0_x,p0_y,p1_x,p1_y,...</code> where <code>pN_x/pN_y</code> is the
               <strong>bottom-center of the bbox</strong> (pixels)</li>
-            <li><code>--postprocess-points center</code>: columns <code>frame,p1_x,p1_y,p2_x,p2_y,...</code> where <code>pN_x/pN_y</code> is the
+            <li><code>--postprocess-points center</code>: columns <code>frame,p0_x,p0_y,p1_x,p1_y,...</code> where <code>pN_x/pN_y</code> is the
               <strong>bbox center</strong> (pixels)</li>
-            <li><code>--postprocess-points mask</code>: columns <code>frame,p1_x,p1_y,p2_x,p2_y,...</code> where <code>pN_x/pN_y</code> is the
+            <li><code>--postprocess-points mask</code>: columns <code>frame,p0_x,p0_y,p1_x,p1_y,...</code> where <code>pN_x/pN_y</code> is the
               <strong>mask centroid</strong> computed from <code>masks/frame_*.png</code> (pixels)</li>
             <li><code>--postprocess-points all</code>: canonical <code>pN_x/pN_y</code> (default canonical is <strong>foot</strong>) plus extras
               <code>pN_cx,pN_cy</code> (bbox center) and <code>pN_mx,pN_my</code> (mask centroid). Example header:
-              <code>frame,p1_x,p1_y,p1_cx,p1_cy,p1_mx,p1_my,p2_x,p2_y,...</code></li>
+              <code>frame,p0_x,p0_y,p0_cx,p0_cy,p0_mx,p0_my,p1_x,p1_y,...</code></li>
         </ul>
         <p><strong>Notes:</strong> missing detections are written as empty cells (CSV blanks). Coordinates are computed in the original video
           pixel space using the overlay MP4 (or masks) to recover frame width/height.</p>

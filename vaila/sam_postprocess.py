@@ -1,5 +1,8 @@
 """Post-process SAM 3 batch output to produce vailá-format pixel CSVs.
 
+Update Date: 23 September 2026
+Version: 0.4.5
+
 Reads the artifacts written by :mod:`vaila.vaila_sam` for each video:
 
     {sam_dir}/sam_frames_meta.csv      # wide table with normalized bbox + prob per obj_id
@@ -9,7 +12,7 @@ Reads the artifacts written by :mod:`vaila.vaila_sam` for each video:
 
 and writes:
 
-    {sam_dir}/sam_points.csv   # 'frame, p1_x, p1_y, p1_cx, p1_cy, p1_mx, p1_my, ...'
+    {sam_dir}/sam_points.csv   # 'frame, p0_x, p0_y, p0_cx, p0_cy, p0_mx, p0_my, ...'
                                # where pN follows the sorted list of obj_ids that
                                # appeared in the video. The canonical (x, y) pair is
                                # the **bottom-center** of the bbox in PIXELS so it
@@ -334,10 +337,10 @@ def extract_points_from_sam_run(
     out_id_map = out_id_map or (art.sam_dir / "sam_id_map.csv")
 
     n_frames = len(df)
-    id_to_pn = {oid: pn for pn, oid in enumerate(oids, start=1)}
+    id_to_pn = {oid: pn for pn, oid in enumerate(oids, start=0)}
 
     header = ["frame"]
-    for pn in range(1, len(oids) + 1):
+    for pn in range(len(oids)):
         header.extend([f"p{pn}_x", f"p{pn}_y"])
         if mode == "all":
             header.extend([f"p{pn}_cx", f"p{pn}_cy", f"p{pn}_mx", f"p{pn}_my"])

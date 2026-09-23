@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -34,6 +34,44 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.4.5: Fixed ColumnReorderGUI silently discarding edits made after an
+      earlier save: `on_window_close`/`close_without_saving` gated the
+      unsaved-changes confirmation on `has_unsaved_changes and not self.saved`,
+      but `self.saved` is a sticky "saved at least once this session" flag
+      that a later edit (e.g. bulk rename) never resets, so closing the
+      window skipped the save prompt entirely. Guard now fires on
+      `has_unsaved_changes` alone.
+    - v0.4.5: Added bulk column rename/renumber to ColumnReorderGUI's Edit
+      menu (single ad-hoc rename + regex-based renumbering, e.g. p1_x..p70_x
+      -> p0_x..p69_x in one operation), applied via a new `rename_map` param
+      threaded through `reshapedata()`.
+    - v0.4.5: Relabeled "Reset Index Col 0" -> "Reset Frame Index (Col 0)"
+      (button + Edit menu) and appended a hint to the "Rename Column(s)..."
+      menu label. Users were clicking the index-reset button expecting it to
+      renumber marker headers (p1_x -> p0_x); it only resets column 0's row
+      values to 0..N-1 and never touches column names. No behavior change.
+    - v0.4.5: Fixed reset_index_column_0() writing the reset column as
+      float64 (pandas keeps a pre-existing column's dtype when a plain
+      range() is assigned into it). Column 0 is now forced to int64 unless
+      its header name contains "time" (case-insensitive), which stays
+      float64 - frame/point/index columns are integers, time columns may be
+      fractional.
+    - v0.4.5: Fixed save_intermediate()/save_and_exit() writing a float
+      frame column even after the reset_index_column_0() fix above. Both
+      methods built column_precision as
+      `dict.fromkeys(range(len(current_order)), max_decimal_places)` - the
+      single global decimal-places value the user enters in the "Decimal
+      Places" prompt, applied uniformly to EVERY column including column 0,
+      overriding correct per-column precision. New
+      `_build_uniform_precision_map()` helper forces column 0 back to
+      precision 0 (integer) unless its header contains "time", same rule as
+      reset_index_column_0(). This path fires on every save/save-and-exit,
+      not just after using the reset button, so it covers plain
+      rename-and-save runs too.
+    - v0.4.5: Added "Rename Column(s)..." as a button in the Columns
+      LabelFrame (next to "Reset Frame Index (Col 0)"), not just an Edit
+      menu entry - users were not finding the feature because it had no
+      visible button, only a menu-only command.
     - v0.3.112: Regrouped ColumnReorderGUI's 13 flat tk.Button widgets into
       4 ttk.LabelFrame sections (Columns / Combine Files / Import to vailá /
       Advanced) with a consistent ttk style, matching readc3d_export.py's
@@ -49,6 +87,7 @@ Change History:
 import gc
 import os
 import pathlib
+import re
 import tkinter as tk
 from datetime import datetime
 from tkinter import Scrollbar, filedialog, messagebox, simpledialog, ttk
@@ -94,6 +133,79 @@ CONVERSIONS = {
 }
 
 
+def _build_renumber_map(pattern: str, offset: int, headers: list[str]) -> dict[str, str]:
+    """Build a rename map by shifting the single numeric group `pattern`
+    captures in every matching header by `offset`.
+
+    Example: `_build_renumber_map(r"p(\\d+)_", -1, ["p1_x", "p1_y", "p70_y"])`
+    -> `{"p1_x": "p0_x", "p1_y": "p0_y", "p70_y": "p69_y"}`.
+    Headers that don't match `pattern` are left out of the result untouched.
+    """
+    try:
+        compiled = re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"Invalid regex pattern: {exc}") from exc
+    if compiled.groups != 1:
+        raise ValueError("Pattern must have exactly one numeric capture group, e.g. r'p(\\d+)_'")
+
+    rename_map: dict[str, str] = {}
+    for header in headers:
+        match = compiled.search(header)
+        if not match:
+            continue
+        captured = match.group(1)
+        try:
+            new_number = int(captured) + offset
+        except ValueError:
+            raise ValueError(f"Captured group is not an integer: {captured!r}") from None
+        if new_number < 0:
+            raise ValueError(
+                f"Renumbering '{header}' would produce a negative index ({new_number})."
+            )
+        start, end = match.span(1)
+        new_header = f"{header[:start]}{new_number}{header[end:]}"
+        if new_header != header:
+            rename_map[header] = new_header
+    return rename_map
+
+
+def _validate_rename_map(rename_map: dict[str, str], headers: list[str]) -> list[str]:
+    """Return human-readable problems with `rename_map` applied to `headers`;
+    empty list means the map is safe to apply. Rejects duplicate resulting
+    headers and renames that split an `_x/_y/_z` marker triple (needed so
+    `auto_create_c3d_from_csv`'s LABEL_X/Y/Z triple grouping stays intact).
+    """
+    problems: list[str] = []
+
+    resulting = [rename_map.get(h, h) for h in headers]
+    counts: dict[str, int] = {}
+    for name in resulting:
+        counts[name] = counts.get(name, 0) + 1
+    duplicates = sorted({name for name, count in counts.items() if count > 1})
+    if duplicates:
+        problems.append(f"Duplicate resulting header(s): {', '.join(duplicates)}")
+
+    axis_suffixes = ("_x", "_y", "_z")
+    bases: dict[str, dict[str, str]] = {}
+    for header in headers:
+        for suffix in axis_suffixes:
+            if header.endswith(suffix):
+                bases.setdefault(header[: -len(suffix)], {})[suffix] = header
+                break
+    for axes in bases.values():
+        if len(axes) < 2:
+            continue
+        renamed_flags = {suffix: (h in rename_map) for suffix, h in axes.items()}
+        if any(renamed_flags.values()) and not all(renamed_flags.values()):
+            renamed = [axes[s] for s, flag in renamed_flags.items() if flag]
+            kept = [axes[s] for s, flag in renamed_flags.items() if not flag]
+            problems.append(
+                f"Marker triple split: {', '.join(renamed)} renamed but "
+                f"{', '.join(kept)} left as-is"
+            )
+    return problems
+
+
 def detect_column_precision_detailed(file_path):
     """
     Detect precision for each column individually.
@@ -124,6 +236,19 @@ def detect_column_precision_detailed(file_path):
     except Exception as e:
         print(f"Error detecting precision: {e}")
         return {}
+
+
+def _build_uniform_precision_map(current_order, max_decimal_places):
+    """dict.fromkeys(range(len(current_order)), max_decimal_places) applies
+    the user's single global decimal-places choice to EVERY column,
+    including column 0 (frame/point index). Column 0 must stay an integer
+    (precision 0) unless its header names it a "time" column, in which case
+    fractional values are legitimate. Every other column (markers, X/Y/Z,
+    etc.) keeps the requested uniform precision unchanged."""
+    precision = dict.fromkeys(range(len(current_order)), max_decimal_places)
+    if current_order and "time" not in str(current_order[0]).strip().lower():
+        precision[0] = 0
+    return precision
 
 
 def save_dataframe_with_precision(df, file_path, column_precision):
@@ -205,7 +330,9 @@ def get_headers(file_path):
 
 
 # Function to reshape data
-def reshapedata(file_path, new_order, save_directory, suffix, column_precision=None):
+def reshapedata(
+    file_path, new_order, save_directory, suffix, column_precision=None, rename_map=None
+):
     try:
         print(f"Starting reshapedata for {file_path}")
         headers = get_headers(file_path)
@@ -243,6 +370,12 @@ def reshapedata(file_path, new_order, save_directory, suffix, column_precision=N
         for new_idx, col in enumerate(existing_cols):
             old_idx = headers.index(col)
             reordered_precision[new_idx] = column_precision.get(old_idx, 6)
+
+        if rename_map:
+            print(f"Applying {len(rename_map)} column rename(s): {rename_map}")
+            df_reordered = df_reordered.rename(columns=rename_map)
+        else:
+            print("No column renames pending for this save.")
 
         save_dataframe_with_precision(df_reordered, new_file_path, reordered_precision)
 
@@ -419,6 +552,7 @@ class ColumnReorderGUI(tk.Tk):
         self.saved = False
         self.has_unsaved_changes = False
         self.original_input_dir: str | None = None
+        self.rename_map: dict[str, str] = {}
 
         # Verificar o tamanho do arquivo antes de carregar
         if self.file_names == ["Empty"]:
@@ -609,7 +743,8 @@ class ColumnReorderGUI(tk.Tk):
         self.modify_labref_button = add_button(
             columns_section, "Modify Lab Ref System", self.modify_labref
         )
-        add_button(columns_section, "Reset Index Col 0", self.reset_index_column_0)
+        add_button(columns_section, "Reset Frame Index (Col 0)", self.reset_index_column_0)
+        add_button(columns_section, "Rename Column(s)...", self.rename_columns)
 
         combine_section = add_section("Combine Files")
         add_button(combine_section, "Merge CSV", self.merge_csv)
@@ -691,7 +826,11 @@ class ColumnReorderGUI(tk.Tk):
             label="Edit Rows", command=lambda: self.edit_rows(None), accelerator="l"
         )
         edit_menu.add_separator()
-        edit_menu.add_command(label="Reset Index Col 0", command=self.reset_index_column_0)
+        edit_menu.add_command(label="Reset Frame Index (Col 0)", command=self.reset_index_column_0)
+        edit_menu.add_command(
+            label="Rename Column(s)... (renumber markers, e.g. p1_x -> p0_x)",
+            command=self.rename_columns,
+        )
 
         # Tools menu
         tools_menu = tk.Menu(menubar, tearoff=0)
@@ -781,7 +920,7 @@ class ColumnReorderGUI(tk.Tk):
         self.on_window_close()
 
     def on_window_close(self):
-        if self.has_unsaved_changes and not self.saved:
+        if self.has_unsaved_changes:
             resp = messagebox.askyesnocancel(
                 "Unsaved Changes",
                 "You have unsaved changes.\n\n"
@@ -799,7 +938,7 @@ class ColumnReorderGUI(tk.Tk):
             self.destroy()
 
     def close_without_saving(self):
-        if self.has_unsaved_changes and not self.saved:
+        if self.has_unsaved_changes:
             if messagebox.askyesno(
                 "Discard Changes", "Discard unsaved changes and close without saving?"
             ):
@@ -827,7 +966,11 @@ class ColumnReorderGUI(tk.Tk):
         else:
             for i, header in enumerate(self.current_order):
                 self.order_listbox.insert(tk.END, i + 1)
-                self.header_listbox.insert(tk.END, f"{i + 1}: {header}")
+                display_name = self.rename_map.get(header, header)
+                if display_name != header:
+                    self.header_listbox.insert(tk.END, f"{i + 1}: {header} -> {display_name}")
+                else:
+                    self.header_listbox.insert(tk.END, f"{i + 1}: {header}")
 
     def update_shape_label(self):
         shape = (self.df.shape[0], len(self.current_order))
@@ -1070,7 +1213,8 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "",
-                    dict.fromkeys(range(len(self.current_order)), max_decimal_places),
+                    _build_uniform_precision_map(self.current_order, max_decimal_places),
+                    rename_map=self.rename_map,
                 )
             self.saved = True
             self.has_unsaved_changes = False
@@ -1111,7 +1255,8 @@ class ColumnReorderGUI(tk.Tk):
                     self.current_order,
                     self.rearranged_path,
                     "_final",
-                    dict.fromkeys(range(len(self.current_order)), max_decimal_places),
+                    _build_uniform_precision_map(self.current_order, max_decimal_places),
+                    rename_map=self.rename_map,
                 )
             self.saved = True
             self.has_unsaved_changes = False
@@ -1569,7 +1714,15 @@ class ColumnReorderGUI(tk.Tk):
             # Reset the first column
             if len(df.columns) > 0:
                 first_col = df.columns[0]
-                df[first_col] = range(len(df))
+                # Pandas keeps a pre-existing column's dtype when assigning a
+                # plain range() into it (e.g. frame col read as float64 stays
+                # float64). Force int64 for frame/point/index-style columns;
+                # only a "time" column is allowed to stay float.
+                col_name_lower = str(first_col).strip().lower()
+                if "time" in col_name_lower:
+                    df[first_col] = pd.Series(range(len(df)), dtype="float64")
+                else:
+                    df[first_col] = pd.Series(range(len(df)), dtype="int64")
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             base = os.path.splitext(file_name)[0]
             new_name = f"{base}_{timestamp}_resetidx.csv"
@@ -1578,6 +1731,143 @@ class ColumnReorderGUI(tk.Tk):
         messagebox.showinfo(
             "Success", f"Index of column 0 reset and saved in: {self.rearranged_path}"
         )
+
+    def _apply_rename_map(self, new_entries):
+        """Validate new_entries (dict header -> new_header) merged on top of
+        self.rename_map, and apply it on success. Shows an error dialog and
+        returns False on failure; applies + updates the listbox and returns
+        True on success."""
+        candidate = dict(self.rename_map)
+        candidate.update(new_entries)
+        problems = _validate_rename_map(candidate, self.current_order)
+        if problems:
+            messagebox.showerror("Rename Rejected", "\n".join(problems))
+            return False
+        self.rename_map = candidate
+        self.has_unsaved_changes = True
+        self.update_listbox()
+        return True
+
+    def rename_columns(self):
+        """Dialog to rename/renumber column headers. Renaming never mutates
+        self.current_order (which drives column selection against the
+        on-disk original headers) - it only populates self.rename_map,
+        applied by reshapedata() at save time."""
+        rename_window = tk.Toplevel(self)
+        rename_window.title("Rename Column(s)")
+        rename_window.geometry("480x560")
+
+        tk.Label(
+            rename_window,
+            text="Double-click a header below to rename it individually:",
+        ).pack(pady=(10, 2), padx=10, anchor="w")
+
+        list_frame = tk.Frame(rename_window)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        scrollbar = tk.Scrollbar(list_frame)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        header_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, exportselection=False)
+        header_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.config(command=header_list.yview)
+
+        def refresh_header_list():
+            header_list.delete(0, tk.END)
+            for header in self.current_order:
+                display_name = self.rename_map.get(header, header)
+                if display_name != header:
+                    header_list.insert(tk.END, f"{header} -> {display_name}")
+                else:
+                    header_list.insert(tk.END, header)
+
+        refresh_header_list()
+
+        def on_double_click(_event=None):
+            selection = header_list.curselection()
+            if not selection:
+                return
+            header = self.current_order[selection[0]]
+            current_value = self.rename_map.get(header, header)
+            new_name = simpledialog.askstring(
+                "Rename Column",
+                f"New name for '{header}':",
+                initialvalue=current_value,
+                parent=rename_window,
+            )
+            if new_name is None or new_name == header:
+                return
+            if self._apply_rename_map({header: new_name}):
+                refresh_header_list()
+
+        header_list.bind("<Double-Button-1>", on_double_click)
+
+        bulk_frame = tk.LabelFrame(rename_window, text="Bulk Renumber (regex)")
+        bulk_frame.pack(fill=tk.X, padx=10, pady=10)
+
+        tk.Label(bulk_frame, text="Pattern (one numeric capture group):").grid(
+            row=0, column=0, sticky="w", padx=5, pady=5
+        )
+        pattern_var = tk.StringVar(value=r"p(\d+)_")
+        tk.Entry(bulk_frame, textvariable=pattern_var, width=30).grid(
+            row=0, column=1, padx=5, pady=5
+        )
+
+        tk.Label(bulk_frame, text="Offset:").grid(row=1, column=0, sticky="w", padx=5, pady=5)
+        offset_var = tk.StringVar(value="-1")
+        tk.Entry(bulk_frame, textvariable=offset_var, width=10).grid(
+            row=1, column=1, sticky="w", padx=5, pady=5
+        )
+
+        def apply_bulk_renumber():
+            pattern = pattern_var.get().strip()
+            try:
+                offset = int(offset_var.get().strip())
+            except ValueError:
+                messagebox.showerror("Invalid Offset", "Offset must be an integer.")
+                return
+            try:
+                new_entries = _build_renumber_map(pattern, offset, self.current_order)
+            except ValueError as exc:
+                messagebox.showerror("Invalid Pattern", str(exc))
+                return
+            if not new_entries:
+                messagebox.showinfo("No Matches", "Pattern matched no headers.")
+                return
+            preview_lines = [f"{old} -> {new}" for old, new in list(new_entries.items())[:20]]
+            preview = "\n".join(preview_lines)
+            if len(new_entries) > 20:
+                preview += f"\n... and {len(new_entries) - 20} more"
+            confirmed = messagebox.askyesno(
+                "Confirm Bulk Renumber",
+                f"Apply {len(new_entries)} rename(s)?\n\n{preview}",
+            )
+            if not confirmed:
+                return
+            if self._apply_rename_map(new_entries):
+                refresh_header_list()
+
+        tk.Button(bulk_frame, text="Apply Bulk Renumber", command=apply_bulk_renumber).grid(
+            row=2, column=0, columnspan=2, pady=8
+        )
+
+        def clear_all_renames():
+            if not self.rename_map:
+                return
+            if messagebox.askyesno("Clear All Renames", "Remove every pending rename?"):
+                self.rename_map = {}
+                self.has_unsaved_changes = True
+                self.update_listbox()
+                refresh_header_list()
+
+        button_frame = tk.Frame(rename_window)
+        button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
+        tk.Button(button_frame, text="Clear All Renames", command=clear_all_renames).pack(
+            side=tk.LEFT
+        )
+        tk.Button(button_frame, text="Close", command=rename_window.destroy).pack(side=tk.RIGHT)
+
+        rename_window.transient(self)
+        rename_window.grab_set()
+        self.wait_window(rename_window)
 
     def custom_math_operation(self):
         """
@@ -1940,9 +2230,7 @@ def convert_dvideo_to_vaila(file_path, save_directory):
 
         # Create headers in the format: frame, p0_x, p0_y, p1_x, p1_y, ..., pN_x, pN_y
         headers = ["frame"] + [
-            f"p{i}_x" if j % 2 == 0 else f"p{i}_y"
-            for i in range(num_points)
-            for j in range(2)
+            f"p{i}_x" if j % 2 == 0 else f"p{i}_y" for i in range(num_points) for j in range(2)
         ]
         df.columns = headers
 

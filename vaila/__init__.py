@@ -1,10 +1,13 @@
 """Public vailá entry points, imported only when requested.
 
-Version: 0.4.3
-Update Date: 15 September 2026
+Version: 0.4.5
+Update Date: 23 September 2026
 """
 
+import subprocess
+import sys
 from importlib import import_module
+from pathlib import Path
 
 _EXPORTS = {
     "cluster_analysis": ("cluster_analysis", None),
@@ -98,6 +101,8 @@ __all__ = [
     "stack_csv_files",
     "process_videos_gui",
     "get_median_brightness",
+    "main",
+    "main_cli",
 ]
 
 
@@ -113,3 +118,28 @@ def __getattr__(name):
 
 def __dir__():
     return sorted(set(globals()) | set(_EXPORTS))
+
+
+def _root_vaila_py() -> Path:
+    return Path(__file__).resolve().parent.parent / "vaila.py"
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Launch the vailá GUI (or CLI menu with --cli). Console-script entry point."""
+    root = _root_vaila_py()
+    if not root.is_file():
+        print(
+            "vaila: could not find vaila.py next to the installed package — "
+            "the `vaila`/`vaila-cli` commands only work from a cloned repo "
+            "checkout (`uv sync`), not a standalone package install.",
+            file=sys.stderr,
+        )
+        return 1
+    args = sys.argv[1:] if argv is None else argv
+    return subprocess.run([sys.executable, str(root), *args]).returncode
+
+
+def main_cli(argv: list[str] | None = None) -> int:
+    """Launch the vailá terminal/CLI menu. Console-script entry point for `vaila-cli`."""
+    args = sys.argv[1:] if argv is None else argv
+    return main(["--cli", *args])

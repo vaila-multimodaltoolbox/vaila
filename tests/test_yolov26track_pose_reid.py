@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -174,3 +176,23 @@ def test_format_track_cli_command_maps_config() -> None:
         do_pose=False,
     )
     assert "--no-pose" in cmd_no_pose
+
+
+def test_markers_csv_header_starts_at_p0(tmp_path) -> None:
+    from vaila.yolov26track import _BufferedFrame, _write_markers_csv_from_buffer
+
+    buffer = [
+        _BufferedFrame(
+            frame_idx=0,
+            detections=[
+                {"raw_id": 7, "xyxy": (10.0, 20.0, 30.0, 80.0)},
+                {"raw_id": 3, "xyxy": (40.0, 10.0, 60.0, 50.0)},
+            ],
+            annotated_frame=None,
+            raw_result=None,
+        )
+    ]
+    path, n_slots = _write_markers_csv_from_buffer(buffer, str(tmp_path), "clip", anchor="bottom")
+    header = Path(path).read_text(encoding="utf-8").splitlines()[0]
+    assert n_slots == 2
+    assert header.startswith("frame,p0_x,p0_y,p1_x,p1_y")

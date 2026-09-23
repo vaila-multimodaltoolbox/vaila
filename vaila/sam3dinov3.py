@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 20 September 2026
-Version: 0.4.4
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -986,9 +986,10 @@ def write_wide_person_csvs(
 ) -> list[Path]:
     """Per-identity wide tables: named 3D, ``rec3d``-style 3D, and 2D markers.
 
-    ``*_rec3d.csv`` uses vailá's ``frame,p1_x,p1_y,p1_z,...`` convention so the
+    ``*_rec3d.csv`` uses vailá's ``frame,p0_x,p0_y,p0_z,...`` convention so the
     output drops straight into ``rec3d.py`` / ``viewc3d.py``; ``*_markers.csv``
-    uses ``frame,p1_x,p1_y,...`` for REC2D and ``getpixelvideo.py``.
+    uses ``frame,p0_x,p0_y,...`` for REC2D and ``getpixelvideo.py``. Point
+    ``pN`` is the 0-based index into ``names`` (nose is ``p0``).
     """
     written: list[Path] = []
     person_ids = _collect_person_ids(timeline)
@@ -1000,7 +1001,7 @@ def write_wide_person_csvs(
         named_header.extend([f"{safe}_x", f"{safe}_y", f"{safe}_z"])
     rec3d_header = ["frame"]
     markers_header = ["frame"]
-    for i in range(1, n_kpts + 1):
+    for i in range(n_kpts):
         rec3d_header.extend([f"p{i}_x", f"p{i}_y", f"p{i}_z"])
         markers_header.extend([f"p{i}_x", f"p{i}_y"])
 
@@ -1154,7 +1155,7 @@ Main outputs
                                          the model's own regressed rotations (not a
                                          position-only heuristic) -- see joint_kinematics.py.
 <video>_id_NN_mhr70_3d.csv              Wide, named columns (nose_x, nose_y, nose_z, ...).
-<video>_id_NN_mhr70_rec3d.csv           Wide, vailá rec3d convention (p1_x,p1_y,p1_z, ...).
+<video>_id_NN_mhr70_rec3d.csv           Wide, vailá rec3d convention (p0_x,p0_y,p0_z, ...).
 <video>_id_NN_markers.csv               Wide 2D for REC2D / getpixelvideo.
 <video>_sam3dinov3_predictions.json.gz  Full provenance and per-instance predictions.
 meshes/frame_NNNNNN.npz                 Only with --save-mesh (vertices + obj_ids).

@@ -179,34 +179,34 @@ class TestExtractPointsAll:
 
         expected = [
             "frame",
+            "p0_x",
+            "p0_y",
+            "p0_cx",
+            "p0_cy",
+            "p0_mx",
+            "p0_my",
             "p1_x",
             "p1_y",
             "p1_cx",
             "p1_cy",
             "p1_mx",
             "p1_my",
-            "p2_x",
-            "p2_y",
-            "p2_cx",
-            "p2_cy",
-            "p2_mx",
-            "p2_my",
         ]
         assert list(df.columns) == expected
 
         row0 = df.loc[0]
-        assert row0["p1_x"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
-        assert row0["p1_y"] == pytest.approx(0.10 * H + 0.10 * H, abs=1e-3)
-        assert row0["p1_cx"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
-        assert row0["p1_cy"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
+        assert row0["p0_x"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["p0_y"] == pytest.approx(0.10 * H + 0.10 * H, abs=1e-3)
+        assert row0["p0_cx"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["p0_cy"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
         cx0 = int(round(0.10 * W + 0.10 * W * 0.5))
         cy0 = int(round(0.10 * H + 0.10 * H * 0.5))
-        assert row0["p1_mx"] == pytest.approx(cx0, abs=1.0)
-        assert row0["p1_my"] == pytest.approx(cy0, abs=1.0)
+        assert row0["p0_mx"] == pytest.approx(cx0, abs=1.0)
+        assert row0["p0_my"] == pytest.approx(cy0, abs=1.0)
 
         row1 = df.loc[1]
-        assert pd.isna(row1["p2_x"])
-        assert pd.isna(row1["p2_mx"])
+        assert pd.isna(row1["p1_x"])
+        assert pd.isna(row1["p1_mx"])
 
         row2 = df.loc[2]
         for col in expected[1:]:
@@ -217,12 +217,12 @@ class TestExtractPointsAll:
         extract_points_from_sam_run(sam_dir, mode="all")
         id_map = pd.read_csv(sam_dir / "sam_id_map.csv")
         assert list(id_map.columns) == ["pN", "obj_id", "n_frames", "first_frame", "last_frame"]
-        row = id_map.set_index("pN").loc[1]
+        row = id_map.set_index("pN").loc[0]
         assert row["obj_id"] == 0
         assert row["n_frames"] == 2
         assert row["first_frame"] == 0
         assert row["last_frame"] == 1
-        row2 = id_map.set_index("pN").loc[2]
+        row2 = id_map.set_index("pN").loc[1]
         assert row2["n_frames"] == 1
 
     def test_georeid_aliases_when_reid_links_exist(self, tmp_path: Path) -> None:
@@ -246,7 +246,7 @@ class TestExtractPointsFootOnly:
         sam_dir = _build_synthetic_run(tmp_path)
         out = extract_points_from_sam_run(sam_dir, mode="foot")
         df = pd.read_csv(out)
-        assert list(df.columns) == ["frame", "p1_x", "p1_y", "p2_x", "p2_y"]
+        assert list(df.columns) == ["frame", "p0_x", "p0_y", "p1_x", "p1_y"]
 
     def test_center_mode_writes_center_as_canonical(self, tmp_path: Path) -> None:
         sam_dir = _build_synthetic_run(tmp_path)
@@ -254,8 +254,8 @@ class TestExtractPointsFootOnly:
         df = pd.read_csv(out)
         row0 = df.loc[0]
         # bbox center for id0 f0: x = 0.10W + 0.10W/2, y = 0.10H + 0.10H/2
-        assert row0["p1_x"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
-        assert row0["p1_y"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
+        assert row0["p0_x"] == pytest.approx(0.10 * W + 0.10 * W * 0.5, abs=1e-3)
+        assert row0["p0_y"] == pytest.approx(0.10 * H + 0.10 * H * 0.5, abs=1e-3)
 
     def test_mask_mode_writes_mask_centroid_as_canonical(self, tmp_path: Path) -> None:
         sam_dir = _build_synthetic_run(tmp_path)
@@ -264,8 +264,8 @@ class TestExtractPointsFootOnly:
         row0 = df.loc[0]
         cx0 = int(round(0.10 * W + 0.10 * W * 0.5))
         cy0 = int(round(0.10 * H + 0.10 * H * 0.5))
-        assert row0["p1_x"] == pytest.approx(cx0, abs=1.0)
-        assert row0["p1_y"] == pytest.approx(cy0, abs=1.0)
+        assert row0["p0_x"] == pytest.approx(cx0, abs=1.0)
+        assert row0["p0_y"] == pytest.approx(cy0, abs=1.0)
 
     def test_mask_mode_uses_tracks_centroid_without_png_masks(self, tmp_path: Path) -> None:
         src = tmp_path / "source.mp4"
@@ -287,8 +287,8 @@ class TestExtractPointsFootOnly:
         out = extract_points_from_sam_run(sam_dir, mode="mask")
         df = pd.read_csv(out)
         row0 = df.loc[0]
-        assert row0["p1_x"] == pytest.approx(222.5, abs=1e-3)
-        assert row0["p1_y"] == pytest.approx(333.5, abs=1e-3)
+        assert row0["p0_x"] == pytest.approx(222.5, abs=1e-3)
+        assert row0["p0_y"] == pytest.approx(333.5, abs=1e-3)
 
 
 class TestVailaAnchorCsvs:

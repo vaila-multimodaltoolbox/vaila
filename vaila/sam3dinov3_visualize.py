@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 20 September 2026
-Version: 0.4.4
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -754,6 +754,35 @@ def export_mesh_sequence(
     return written
 
 
+_P_COL_RE = re.compile(r"^p(\d+)_(.+)$")
+
+
+def _rebase_wide_markers_to_p0(path: Path) -> None:
+    """Shift a legacy wide marker CSV that starts at ``p1`` down to ``p0``.
+
+    Files that already contain ``p0`` are unchanged. Named columns such as
+    ``nose_x`` are unchanged.
+    """
+    with path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        fields = list(reader.fieldnames or [])
+        rows = list(reader)
+    indexes = [int(match.group(1)) for field in fields if (match := _P_COL_RE.match(field))]
+    if not indexes or 0 in indexes or min(indexes) != 1:
+        return
+    renamed = [
+        f"p{int(match.group(1)) - 1}_{match.group(2)}"
+        if (match := _P_COL_RE.match(field))
+        else field
+        for field in fields
+    ]
+    with path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=renamed)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({renamed[i]: row.get(fields[i], "") for i in range(len(fields))})
+
+
 def write_selected_artifacts(
     run_dir: Path, output_dir: Path, selected_id: int, payload: dict[str, Any]
 ) -> list[str]:
@@ -799,6 +828,8 @@ def write_selected_artifacts(
         if source.is_file():
             target = output_dir / source.name
             shutil.copy2(source, target)
+            if suffix in ("mhr70_rec3d", "markers"):
+                _rebase_wide_markers_to_p0(target)
             written.append(target.name)
 
     if _write_filtered_predictions(
@@ -937,6 +968,7 @@ def visualize_selected_id(
         "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
         "Overlay style: SAM3 contour fill/outline + MHR70 skeleton "
         "(left=green RGB 0,255,0; right=orange RGB 255,128,0; center=blue) + depth label.\n"
+        "Wide marker CSVs start at p0 (a legacy p1..pN header is shifted down on copy).\n"
         "C3D/rec3d pN map (0-based MHR70): p5/p7/p9/p11/p13=left shoulder/elbow/hip/knee/ankle; "
         "p6/p8/p10/p12/p14=right; p0=nose; p69=neck. Camera-frame mono (+Y down) is not L/R swapped — "
         "use monocular_dlt_align for lab C3D; bare Y/Z swap mirrors in Blender.\n"

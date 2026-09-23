@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 22 September 2026
-Version: 0.4.4
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Example of usage:
 uv run --no-sync vaila.py
@@ -358,7 +358,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 22.Sep.2026 v0.4.4 (Python 3.12.14)
+    vailá - 23.Sep.2026 v0.4.5 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -386,7 +386,7 @@ A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 ========================== Multimodal Analysis (Frame B) ===================
 B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
 B1_r1_c3 - Motion Capture Full Body
-B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
+B1_r1_c4 - Markerless 2D (coringa: MediaPipe (CPU/GPU), Advanced, YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
             Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live)
 B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
@@ -477,7 +477,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 22.Sep.2026 v0.4.4 (Python 3.12.14)")
+        self.title("vailá - 23.Sep.2026 v0.4.5 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -2030,7 +2030,7 @@ class Vaila(tk.Tk):
             dialog.destroy()
             _print_chooser_launch(
                 "Markerless 2D",
-                "Standard (CPU/GPU)",
+                "MediaPipe (CPU/GPU)",
                 "uv run --no-sync vaila/markerless_2d_analysis.py",
             )
             try:
@@ -2222,7 +2222,7 @@ class Vaila(tk.Tk):
             self.markerless_live()
 
         place_section("Native pipelines")
-        place_button("Standard (CPU/GPU)", use_standard)
+        place_button("MediaPipe (CPU/GPU)", use_standard)
         place_button("Advanced (YOLO + MediaPipe)", use_advanced)
         place_button("YOLOv26 Pose Only", use_yolo_pose_only)
         place_button("Yolo + Markerless_MP", use_mpyolo)
@@ -4383,7 +4383,10 @@ def _ensure_cuda_torch() -> None:
         )
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
+    """Entry point for `uv run vaila.py` and the packaged console scripts."""
+    args = sys.argv[1:] if argv is None else argv
+
     _ensure_cuda_torch()
 
     parser = argparse.ArgumentParser(
@@ -4411,25 +4414,25 @@ if __name__ == "__main__":
         nargs="?",
         help="Optional action code for one-shot CLI launch (e.g. A_r1_c1, B1_r1_c4)",
     )
-    if "--env-info" in sys.argv or "--env" in sys.argv:
+    if "--env-info" in args or "--env" in args:
         try:
             from vaila.vaila_env import format_env_summary
         except ImportError:
             from vaila_env import format_env_summary  # ty: ignore[unresolved-import]
 
         print(format_env_summary())
-        sys.exit(0)
+        return 0
 
-    if "--metadata" in sys.argv or "--c3d-metadata" in sys.argv:
+    if "--metadata" in args or "--c3d-metadata" in args:
         try:
             from vaila.c3d_metadata import main as c3d_meta_main
         except ImportError:
             from c3d_metadata import main as c3d_meta_main  # ty: ignore[unresolved-import]
 
-        sub_args = [a for a in sys.argv[1:] if a not in ("--metadata", "--c3d-metadata")]
-        sys.exit(c3d_meta_main(sub_args))
+        sub_args = [a for a in args if a not in ("--metadata", "--c3d-metadata")]
+        return c3d_meta_main(sub_args)
 
-    cli_args = parser.parse_args()
+    cli_args = parser.parse_args(args)
 
     if cli_args.cli or cli_args.action:
         try:
@@ -4442,3 +4445,8 @@ if __name__ == "__main__":
     else:
         app = Vaila()
         app.mainloop()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

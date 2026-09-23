@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.4.3"
+version = "0.4.5"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -163,6 +163,7 @@ bpy = [
 
 [project.scripts]
 vaila = "vaila:main"
+vaila-cli = "vaila:main_cli"
 
 [build-system]
 requires = ["hatchling"]

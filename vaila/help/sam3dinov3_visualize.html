@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+DINOv3 3D — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.4.4 &nbsp; <strong>Updated:</strong> 2026-09-20</p>
+<p><strong>Version:</strong> 0.4.5 &nbsp; <strong>Updated:</strong> 2026-09-23</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one person, draw its SAM contour, bounding box, ID and reprojected MHR70 skeleton, and write filtered keypoint/camera/contour/predictions artifacts plus an overlay video (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
@@ -20,7 +20,7 @@
 <tr><td><strong>Right</strong> (<code>right-*</code>)</td><td>orange</td><td><code>(255, 128, 0)</code></td></tr>
 <tr><td>Center / spine</td><td>blue</td><td><code>(51, 153, 255)</code></td></tr>
 </table>
-<p>C3D / <code>*_mhr70_rec3d.csv</code> markers are <code>p1</code>…<code>p70</code> (1-based into <code>MHR70_NAMES</code>). Typical body landmarks: left <code>p6</code> shoulder / <code>p8</code> elbow / <code>p10</code> hip / <code>p12</code> knee / <code>p14</code> ankle; right <code>p7</code> / <code>p9</code> / <code>p11</code> / <code>p13</code> / <code>p15</code>; center <code>p1</code> nose, <code>p70</code> neck. Full list: <code>vaila/skeletons/sam3dinov3_mhr70.json</code>.</p>
+<p>C3D / <code>*_mhr70_rec3d.csv</code> markers are <code>p0</code>…<code>p69</code> (0-based into <code>MHR70_NAMES</code>). A legacy file that still starts at <code>p1</code> is shifted down to <code>p0</code> on copy. Typical body landmarks: left <code>p5</code> shoulder / <code>p7</code> elbow / <code>p9</code> hip / <code>p11</code> knee / <code>p13</code> ankle; right <code>p6</code> / <code>p8</code> / <code>p10</code> / <code>p12</code> / <code>p14</code>; center <code>p0</code> nose, <code>p69</code> neck. Full list: <code>vaila/skeletons/sam3dinov3_mhr70.json</code>.</p>
 <p><strong>Monocular without DLT3D:</strong> camera-frame OpenCV axes (+Y down). Anatomical left/right labels match the overlay; upside-down viewing or a bare Y/Z swap can <em>look</em> mirrored — use <code>monocular_dlt_align</code> / BVH <code>(x,z,−y)</code> for lab/Blender.</p>
 <h2>Mesh export for Blender (v0.3.96)</h2>
 <p>When the source <code>sam3dinov3.py</code> run used <code>--save-mesh</code>, this tool can export the selected person's per-frame body mesh (MHR vertices + shared faces, with <code>cam_t</code> translation applied) as a sequence Blender can play back as an animation:</p>

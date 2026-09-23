@@ -79,11 +79,15 @@ def _fixture_run(tmp_path: Path) -> tuple[Path, Path]:
         writer.writerow([0, 2, 10, 10, 30, 40])
         writer.writerow([0, 9, 40, 40, 50, 50])
     (run / "sapiens_id_map.csv").write_text(
-        "pN,stable_id,n_frames,first_frame,last_frame\n1,2,2,0,1\n2,9,2,0,1\n",
+        "pN,stable_id,n_frames,first_frame,last_frame\n0,2,2,0,1\n1,9,2,0,1\n",
         encoding="utf-8",
     )
     (run / "sapiens_points.csv").write_text(
-        "frame,p1_x,p1_y,p2_x,p2_y\n0,12,12,50,50\n1,13,12,51,50\n",
+        "frame,p0_x,p0_y,p1_x,p1_y\n0,12,12,50,50\n1,13,12,51,50\n",
+        encoding="utf-8",
+    )
+    (run / "clip_markers.csv").write_text(
+        "frame,p0_x,p0_y,p1_x,p1_y\n0,12,12,50,50\n1,13,12,51,50\n",
         encoding="utf-8",
     )
     video = tmp_path / "clip.mp4"
@@ -213,6 +217,13 @@ def test_selected_artifacts_filter_json_and_csv(tmp_path: Path) -> None:
     assert all(obj["obj_id"] == 2 for frame in selected["frames"] for obj in frame["objects"])
     assert (output / "source_artifacts" / "sam3" / "sam_contours.json").exists()
     assert (output / "sam3sapiens2_selected_id_manifest.json").exists()
+    points = (output / "sapiens_points.csv").read_text(encoding="utf-8").splitlines()
+    assert points[0] == "frame,p0_x,p0_y"
+    assert points[1].startswith("0,12,12")
+    markers = (output / "clip_markers.csv").read_text(encoding="utf-8").splitlines()
+    assert markers[0] == "frame,p0_x,p0_y"
+    id_map = (output / "sapiens_id_map.csv").read_text(encoding="utf-8").splitlines()
+    assert id_map[1].startswith("0,2,")
 
 
 def test_render_selected_video_draws_only_selected_instance(tmp_path: Path) -> None:
@@ -270,3 +281,29 @@ def test_sapiens_overlay_style_loads_left_right_palette_when_available() -> None
     link_colors = np.asarray(style["link_color"])
     assert any(np.array_equal(row, viz.COLOR_LEFT_RGB) for row in link_colors)
     assert any(np.array_equal(row, viz.COLOR_RIGHT_RGB) for row in link_colors)
+
+
+def test_selected_slot_rebases_to_p0(tmp_path: Path) -> None:
+    run, _video = _fixture_run(tmp_path)
+    assert viz._id_slot(run, 9) == 1
+    second = tmp_path / "id9_points.csv"
+    assert viz._write_wide_selected(run / "sapiens_points.csv", second, 1)
+    lines = second.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "frame,p0_x,p0_y"
+    assert lines[1].startswith("0,50,50")
+
+    legacy = tmp_path / "legacy.csv"
+    legacy.write_text("frame,p1_x,p1_y,p2_x,p2_y\n0,7,8,9,10\n", encoding="utf-8")
+    legacy_out = tmp_path / "legacy_out.csv"
+    assert viz._write_wide_selected(legacy, legacy_out, 1)
+    legacy_lines = legacy_out.read_text(encoding="utf-8").splitlines()
+    assert legacy_lines[0] == "frame,p0_x,p0_y"
+    assert legacy_lines[1].startswith("0,7,8")
+
+    anchor = tmp_path / "sapiens_vaila_bottom.csv"
+    anchor.write_text("frame,x1,y1,x2,y2\n0,1,2,3,4\n", encoding="utf-8")
+    anchor_out = tmp_path / "anchor_out.csv"
+    assert viz._write_wide_selected(anchor, anchor_out, 1)
+    anchor_lines = anchor_out.read_text(encoding="utf-8").splitlines()
+    assert anchor_lines[0] == "frame,x1,y1"
+    assert anchor_lines[1].startswith("0,3,4")

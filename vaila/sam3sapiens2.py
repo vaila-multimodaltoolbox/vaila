@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 20 September 2026
-Version: 0.4.4
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -1072,7 +1072,7 @@ Main outputs
 <video>_sam3sapiens2_predictions.json  Full provenance and 308-keypoint instances.
 <video>_sam3sapiens2_vaila.csv  Long frame/person/keypoint table.
 sam3sapiens2_id_audit.csv  Per-frame proof that sam_obj_id == stable_id.
-<video>_markers.csv and sapiens_vaila_*.csv  REC2D/REC3D/getpixelvideo outputs.
+<video>_markers.csv (frame,p0_x,p0_y,...) and sapiens_vaila_*.csv  REC2D/REC3D/getpixelvideo outputs.
 sapiens_points.csv, sapiens_id_map.csv, sapiens_bbox_tracks.csv  Stable SAM-ID tables.
 <video>_id_NN_sapiens_pose.csv  Wide 308-keypoint file per SAM identity.
 README_sam3sapiens2.txt  This file.

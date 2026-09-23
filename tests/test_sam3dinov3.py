@@ -454,11 +454,11 @@ def test_wide_person_csvs_follow_vaila_conventions(tmp_path: Path):
         assert named_lines[-1].split(",")[1] == ""
 
         rec_header = rec3d.read_text(encoding="utf-8").splitlines()[0].split(",")
-        assert rec_header[:4] == ["frame", "p1_x", "p1_y", "p1_z"]
-        assert rec_header[-1] == f"p{N_KPTS}_z"
+        assert rec_header[:4] == ["frame", "p0_x", "p0_y", "p0_z"]
+        assert rec_header[-1] == f"p{N_KPTS - 1}_z"
 
         mk_header = markers.read_text(encoding="utf-8").splitlines()[0].split(",")
-        assert mk_header[:3] == ["frame", "p1_x", "p1_y"]
+        assert mk_header[:3] == ["frame", "p0_x", "p0_y"]
         assert len(mk_header) == 1 + 2 * N_KPTS
 
 

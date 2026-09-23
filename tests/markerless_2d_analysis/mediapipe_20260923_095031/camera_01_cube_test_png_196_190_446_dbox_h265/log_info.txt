@@ -1,0 +1,32 @@
+vailá Markerless 2D Analysis Log
+================================
+
+Video: camera_01_cube_test_png_196_190_446_dbox_h265.mp4
+Processing Date: 2026-09-23 09:50:40
+Processing Time: 9.26 seconds
+
+Video Info:
+  - Original Resolution: 1920x1080
+  - Processing Resolution: 1920x1080
+  - Total Frames: 257 (original)
+  - FPS: 30.00
+
+Configuration:
+  - Model Complexity: 2
+  - Detection Confidence: 0.1
+  - Tracking Confidence: 0.1
+  - Enable Resize: False
+  - Reverse-Prepend %: 0
+  - Enable Median Filter: False
+  - Enable Crop/ROI: False
+
+Output Files:
+  - Annotated Video: camera_01_cube_test_png_196_190_446_dbox_h265_mp.mp4
+  - Normalized CSV: camera_01_cube_test_png_196_190_446_dbox_h265_mp_norm.csv
+  - Pixel CSV: camera_01_cube_test_png_196_190_446_dbox_h265_mp_pixel.csv
+  - World Landmarks CSV: camera_01_cube_test_png_196_190_446_dbox_h265_mp_world.csv
+  - vailá Format CSV: camera_01_cube_test_png_196_190_446_dbox_h265_pixel_vaila.csv
+  - Configuration: configuration_used.toml
+  - export_world_landmarks: True
+  - enable_segmentation: False
+  - save_segmentation_mask: False

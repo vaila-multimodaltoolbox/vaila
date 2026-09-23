@@ -3,8 +3,8 @@ Project: vailá
 Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
-Update Date: 20 September 2026
-Version: 0.4.4
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
     CPU-only rerenderer for an existing SAM3+Sapiens2 run. It selects one
@@ -813,19 +813,42 @@ def _id_slot(run_dir: Path, selected_id: int) -> int | None:
     return None
 
 
+def _selected_point_pairs(fields: list[str], slot: int) -> list[tuple[str, str]]:
+    """Map source columns of one person slot onto a file that starts at ``p0``.
+
+    ``p{slot}_*`` is rewritten as ``p0_*``. Anchor tables use ``x1,y1`` for the
+    first person, so ``x{slot+1}`` / ``y{slot+1}`` become ``x1`` / ``y1``.
+    """
+    pairs: list[tuple[str, str]] = [("frame", "frame")] if "frame" in fields else []
+    p_prefix = f"p{slot}_"
+    x_name = f"x{slot + 1}"
+    y_name = f"y{slot + 1}"
+    for field in fields:
+        if field.startswith(p_prefix):
+            pairs.append((field, "p0_" + field[len(p_prefix) :]))
+        elif field == x_name:
+            pairs.append((field, "x1"))
+        elif field == y_name:
+            pairs.append((field, "y1"))
+    if len(pairs) <= (1 if pairs and pairs[0][0] == "frame" else 0):
+        return []
+    return pairs
+
+
 def _write_wide_selected(path: Path, output: Path, slot: int | None) -> bool:
     if not path.exists() or slot is None:
         return False
     with path.open(newline="", encoding="utf-8") as fh:
         reader = csv.DictReader(fh)
-        fields = reader.fieldnames or []
-        keep = [field for field in fields if field == "frame" or field.startswith(f"p{slot}_")]
-        if not keep:
+        fields = list(reader.fieldnames or [])
+        pairs = _selected_point_pairs(fields, slot)
+        if not pairs:
             return False
-        rows = [{field: row.get(field, "") for field in keep} for row in reader]
+        out_fields = [dst for _src, dst in pairs]
+        rows = [{dst: row.get(src, "") for src, dst in pairs} for row in reader]
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=keep)
+        writer = csv.DictWriter(fh, fieldnames=out_fields)
         writer.writeheader()
         writer.writerows(rows)
     return True
@@ -880,10 +903,11 @@ def write_selected_artifacts(
         with (output_dir / "sapiens_id_map.csv").open("w", newline="", encoding="utf-8") as fh:
             writer = csv.writer(fh)
             writer.writerow(["pN", "stable_id", "selected"])
-            writer.writerow([slot, selected_id, True])
+            writer.writerow([0, selected_id, True])
         written.append("sapiens_id_map.csv")
         for source_name in (
             "sapiens_points.csv",
+            f"{stem}_markers.csv",
             "sapiens_vaila_center.csv",
             "sapiens_vaila_bottom.csv",
             "sapiens_vaila_top.csv",
@@ -975,6 +999,7 @@ def visualize_selected_id(
         "identity_authority=SAM3 obj_id / stable_id\n"
         "coordinate_units=full-frame pixels; frame_index=zero-based\n"
         "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
+        "Selected wide marker CSVs start at p0_x (the chosen person is rebased to p0).\n"
         "Overlay style: Sapiens2 left/right skeleton colors + SAM3 contour fill/outline.\n",
         encoding="utf-8",
     )

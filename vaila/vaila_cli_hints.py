@@ -1,15 +1,15 @@
 """CLI run hints for vailá menu entries (headless ``--cli`` mode).
 
-Version: 0.4.3
-Update Date: 15 September 2026
+Version: 0.4.5
+Update Date: 23 September 2026
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
-__version__ = "0.4.3"
-__updated__ = "15 September 2026"
+__version__ = "0.4.5"
+__updated__ = "23 September 2026"
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,7 +60,7 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
             "uv run vaila/mp_facemesh.py",
             "uv run vaila/markerless_live.py",
         ),
-        "Markerless 2D chooser (coringa) — Standard/Advanced/YOLOv26 MediaPipe, "
+        "Markerless 2D chooser (coringa) — MediaPipe (CPU/GPU), Advanced, YOLOv26 MediaPipe, "
         "Yolo + Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, "
         "SAM3+Sapiens2 and its Visualize ID, Markerless Hands, MP Angles, Face Mesh, "
         "Markerless Live. Each tool prints its own Run CLI after dialogs.",

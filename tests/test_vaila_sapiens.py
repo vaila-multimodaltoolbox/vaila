@@ -733,6 +733,12 @@ def test_write_sapiens_biomechanics_csvs(tmp_path: Path) -> None:
     written = vs.write_sapiens_biomechanics_csvs(tmp_path, "clip", timeline, kpt_thr=0.3)
     assert len(written) >= 9
     assert (tmp_path / "clip_markers.csv").is_file()
+    markers_header = (tmp_path / "clip_markers.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert markers_header.startswith("frame,p0_x,p0_y")
+    points_header = (tmp_path / "sapiens_points.csv").read_text(encoding="utf-8").splitlines()[0]
+    assert points_header.startswith("frame,p0_x,p0_y,p0_cx,p0_cy,p0_hx,p0_hy")
+    id_map_row = (tmp_path / "sapiens_id_map.csv").read_text(encoding="utf-8").splitlines()[1]
+    assert id_map_row.startswith("0,")
     center = (tmp_path / "sapiens_vaila_center.csv").read_text(encoding="utf-8")
     assert "frame,x1,y1" in center
     assert "0,30.0000,60.0000" in center or "0,30.0000" in center

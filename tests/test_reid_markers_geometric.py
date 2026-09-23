@@ -74,15 +74,15 @@ def test_sam_tracks_to_marker_points_uses_sorted_obj_ids_and_foot_point() -> Non
 
     points, id_map = sam_tracks_to_marker_points(tracks)
 
-    assert list(points.columns[:5]) == ["frame", "p1_x", "p1_y", "p1_cx", "p1_cy"]
+    assert list(points.columns[:5]) == ["frame", "p0_x", "p0_y", "p0_cx", "p0_cy"]
     assert id_map.to_dict("records") == [
-        {"pN": 1, "obj_id": 3, "n_frames": 1, "first_frame": 0, "last_frame": 0},
-        {"pN": 2, "obj_id": 7, "n_frames": 2, "first_frame": 0, "last_frame": 1},
+        {"pN": 0, "obj_id": 3, "n_frames": 1, "first_frame": 0, "last_frame": 0},
+        {"pN": 1, "obj_id": 7, "n_frames": 2, "first_frame": 0, "last_frame": 1},
     ]
-    assert points.loc[0, "p1_x"] == 110.0
-    assert points.loc[0, "p1_y"] == 80.0
-    assert points.loc[0, "p2_x"] == 12.0
-    assert points.loc[0, "p2_y"] == 13.0
+    assert points.loc[0, "p0_x"] == 110.0
+    assert points.loc[0, "p0_y"] == 80.0
+    assert points.loc[0, "p1_x"] == 12.0
+    assert points.loc[0, "p1_y"] == 13.0
 
 
 def test_normalize_marker_input_prefers_sibling_sam_points(tmp_path) -> None:
