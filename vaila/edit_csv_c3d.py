@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 August 2026
-Update Date: 09 September 2026
-Version: 0.3.131
+Update Date: 23 September 2026
+Version: 0.4.5
 
 Description:
 Edit CSV/C3D (Frame C button `C_A_r1_c1`). Opens a directory that holds
@@ -39,6 +39,8 @@ Usage:
     Headless (no Tk, used by tests and scripting):
         uv run vaila/edit_csv_c3d.py -i INPUT_DIR -o OUTPUT_DIR --identity
         uv run vaila/edit_csv_c3d.py -i INPUT_DIR -o OUTPUT_DIR --columns COL1,COL2,...
+        uv run vaila/edit_csv_c3d.py -i INPUT_DIR -o OUTPUT_DIR --identity -r
+        uv run vaila/edit_csv_c3d.py -i INPUT_DIR -o OUTPUT_DIR --identity -d 2
 
 Notes:
 - `--columns` keeps/reorders headers by exact name (mirrors `rearrange_data.
@@ -46,12 +48,21 @@ Notes:
   derives marker labels from complete `LABEL_X/Y/Z` triples in column order,
   so a `--columns` list touching C3D markers must keep whole X/Y/Z triples
   together and in order or the round-tripped C3D will be malformed.
+- `-r/--recursive` (equivalent to `-d -1`) and `-d/--depth N` scan
+  subdirectories headlessly: `-1` unlimited, `0` `INPUT_DIR` only (default),
+  `N` levels down. Output mirrors each file's original subdirectory.
+- Interactively (GUI), after picking a directory a "Select Files to Edit"
+  dialog lets you set the same depth, scan, then choose "Process All" or
+  "Process Selected File" to edit just one file.
+- Bulk column rename/renumber (e.g. `p1_x..p70_y` -> `p0_x..p69_y`) is
+  GUI-only: `ColumnReorderGUI`'s Edit menu -> "Rename Column(s)...".
 """
 
 import argparse
 import contextlib
 import glob
 import os
+import re
 import shutil
 import tkinter as tk
 from datetime import datetime
@@ -80,18 +91,57 @@ def _default_output_dir(input_dir: str) -> str:
     return os.path.join(input_dir, f"processed_edit_csv_c3d_{_timestamp()}")
 
 
+_PROCESSED_OUTPUT_DIR_RE = re.compile(r"^processed_edit_csv_c3d_\d{8}_\d{6}$")
+_SKIP_STAGING_DIR_NAMES = frozenset({"_staging", "data_rearranged"})
+
+
+def _should_prune_dir(name: str) -> bool:
+    """True for directories a recursive scan must never descend into: hidden
+    dirs, this module's own `processed_edit_csv_c3d_*` output dirs, and the
+    `_staging`/`data_rearranged` working dirs a prior run left behind."""
+    return (
+        name.startswith(".")
+        or name in _SKIP_STAGING_DIR_NAMES
+        or bool(_PROCESSED_OUTPUT_DIR_RE.match(name))
+    )
+
+
+def find_edit_csv_c3d_files(input_dir: str, max_depth: int = 0) -> list[str]:
+    """Depth-limited recursive scan for `.csv`/`.c3d` files under `input_dir`.
+
+    Same pruning idiom as `find_markerless_batch_directories`
+    (markerless_2d_analysis.py) and `find_videos_recursive`
+    (compress_videos_h264.py): `os.walk` with in-place `dirnames[:]`
+    pruning so a rerun never walks into its own prior output.
+
+    max_depth: -1 unlimited, 0 `input_dir` only (legacy top-level-only
+    behavior), N = N levels below `input_dir`.
+
+    Returns sorted POSIX-relative paths from `input_dir`, e.g.
+    `"sub/dir/file.csv"` (or bare `"file.csv"` for a root-level file).
+    """
+    root = os.path.abspath(input_dir)
+    found: list[str] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = os.path.relpath(dirpath, root)
+        depth = 0 if rel_dir == "." else len(rel_dir.split(os.sep))
+        dirnames[:] = sorted(
+            name
+            for name in dirnames
+            if not _should_prune_dir(name) and (max_depth < 0 or depth < max_depth)
+        )
+        for name in sorted(filenames):
+            if name.startswith("."):
+                continue
+            if name.lower().endswith((".csv", ".c3d")):
+                rel_path = name if rel_dir == "." else f"{rel_dir}/{name}"
+                found.append(rel_path.replace(os.sep, "/"))
+    return sorted(found)
+
+
 def _list_input_files(input_dir: str) -> list[str]:
-    """Sorted `.csv`/`.c3d` file names in `input_dir`, hidden files ignored."""
-    names = []
-    for name in sorted(os.listdir(input_dir)):
-        if name.startswith("."):
-            continue
-        full = os.path.join(input_dir, name)
-        if not os.path.isfile(full):
-            continue
-        if name.lower().endswith((".csv", ".c3d")):
-            names.append(name)
-    return names
+    """Back-compat thin wrapper: top-level-only scan (`max_depth=0`)."""
+    return find_edit_csv_c3d_files(input_dir, max_depth=0)
 
 
 def _select_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
@@ -100,32 +150,53 @@ def _select_columns(df: pd.DataFrame, columns: list[str]) -> pd.DataFrame:
     return df[existing]
 
 
-def _stage_inputs(input_dir: str, staging_dir: str) -> dict:
+def _flatten_staged_name(rel_stem: str) -> str:
+    """Collision-safe flat staged CSV name for a POSIX-relative stem (no
+    extension), e.g. `"sub/dir/file"` -> `"sub__dir__file.csv"`.
+    `ColumnReorderGUI` stages every file into one flat directory (it has no
+    subdirectory awareness), so files with the same basename in different
+    subdirectories must not collide once staged."""
+    return f"{rel_stem.replace('/', '__')}.csv"
+
+
+def _stage_inputs(input_dir: str, staging_dir: str, rel_paths: list[str]) -> dict:
     """Convert every `.c3d` to a staged marker CSV, copy every `.csv` as-is.
 
-    Returns `{stem: entry}` where `entry["kind"]` is "csv" or "c3d",
-    `entry["staged_name"]` is the file name inside `staging_dir`, and (for
-    "c3d") `entry["meta"]` carries the round-trip metadata from
-    `c3d_markers_to_dataframe`.
+    `rel_paths` are POSIX-relative paths (as returned by
+    `find_edit_csv_c3d_files`) naming exactly which files to stage — a
+    single-element list is how "process just this one file" is expressed.
+
+    Returns `{rel_stem: entry}` where `entry["kind"]` is "csv" or "c3d",
+    `entry["staged_name"]` is the flattened file name inside `staging_dir`,
+    `entry["rel_dir"]` is the file's original subdirectory (POSIX, `""` for
+    `input_dir`'s root), and (for "c3d") `entry["meta"]` carries the
+    round-trip metadata from `c3d_markers_to_dataframe`.
     """
     os.makedirs(staging_dir, exist_ok=True)
     entries: dict = {}
-    for name in _list_input_files(input_dir):
-        source = os.path.join(input_dir, name)
-        stem, ext = os.path.splitext(name)
+    for rel_path in rel_paths:
+        source = os.path.join(input_dir, *rel_path.split("/"))
+        rel_stem, ext = os.path.splitext(rel_path)
         ext = ext.lower()
-        staged_name = f"{stem}.csv"
+        rel_dir = os.path.dirname(rel_stem)
+        staged_name = _flatten_staged_name(rel_stem)
         dest = os.path.join(staging_dir, staged_name)
         if ext == ".csv":
             shutil.copyfile(source, dest)
-            entries[stem] = {"kind": "csv", "staged_name": staged_name, "source": source}
+            entries[rel_stem] = {
+                "kind": "csv",
+                "staged_name": staged_name,
+                "source": source,
+                "rel_dir": rel_dir,
+            }
         elif ext == ".c3d":
             markers_df, meta = c3d_markers_to_dataframe(source)
             markers_df.to_csv(dest, index=False)
-            entries[stem] = {
+            entries[rel_stem] = {
                 "kind": "c3d",
                 "staged_name": staged_name,
                 "source": source,
+                "rel_dir": rel_dir,
                 "meta": meta,
             }
     return entries
@@ -142,15 +213,21 @@ def _newest_edited_csv(rearranged_dir: str, stem: str) -> str | None:
     return candidates[0]
 
 
-def _write_output(stem: str, entry: dict, df: pd.DataFrame, output_dir: str) -> str:
-    """Write one entry's (possibly edited) DataFrame to `output_dir`."""
+def _write_output(rel_stem: str, entry: dict, df: pd.DataFrame, output_dir: str) -> str:
+    """Write one entry's (possibly edited) DataFrame to `output_dir`, mirroring
+    the file's original subdirectory (`entry["rel_dir"]`)."""
+    rel_dir = entry.get("rel_dir", "")
+    dest_dir = os.path.join(output_dir, *rel_dir.split("/")) if rel_dir else output_dir
+    os.makedirs(dest_dir, exist_ok=True)
+    base = os.path.basename(rel_stem)
+
     if entry["kind"] == "csv":
-        out_path = os.path.join(output_dir, f"{stem}_final.csv")
+        out_path = os.path.join(dest_dir, f"{base}_final.csv")
         df.to_csv(out_path, index=False)
         return out_path
 
     meta = entry["meta"]
-    out_path = os.path.join(output_dir, f"{stem}.c3d")
+    out_path = os.path.join(dest_dir, f"{base}.c3d")
     auto_create_c3d_from_csv(
         df,
         out_path,
@@ -163,36 +240,134 @@ def _write_output(stem: str, entry: dict, df: pd.DataFrame, output_dir: str) -> 
 
 
 def _finalize_from_staging(entries: dict, staging_dir: str, output_dir: str) -> list[str]:
-    """After the GUI editor closes: pick each stem's edited CSV and write it out."""
+    """After the GUI editor closes: pick each entry's edited CSV and write it out."""
     os.makedirs(output_dir, exist_ok=True)
     rearranged_dir = os.path.join(staging_dir, "data_rearranged")
     written = []
-    for stem, entry in entries.items():
-        edited = _newest_edited_csv(rearranged_dir, stem)
+    for rel_stem, entry in entries.items():
+        staged_stem = os.path.splitext(entry["staged_name"])[0]
+        edited = _newest_edited_csv(rearranged_dir, staged_stem)
         source_csv = edited or os.path.join(staging_dir, entry["staged_name"])
         df = pd.read_csv(source_csv)
-        written.append(_write_output(stem, entry, df, output_dir))
+        written.append(_write_output(rel_stem, entry, df, output_dir))
     return written
 
 
-def _headless_process(input_dir: str, output_dir: str, columns: list[str] | None) -> list[str]:
-    """No Tk, no GUI editor: read, optionally filter/reorder columns, write."""
+def _headless_process(
+    input_dir: str,
+    output_dir: str,
+    columns: list[str] | None,
+    max_depth: int = 0,
+) -> list[str]:
+    """No Tk, no GUI editor: read, optionally filter/reorder columns, write.
+
+    max_depth: -1 unlimited, 0 `input_dir` only (legacy default), N = N
+    levels below `input_dir`. Output mirrors each file's original
+    subdirectory under `output_dir`.
+    """
     os.makedirs(output_dir, exist_ok=True)
     written = []
-    for name in _list_input_files(input_dir):
-        source = os.path.join(input_dir, name)
-        stem, ext = os.path.splitext(name)
+    for rel_path in find_edit_csv_c3d_files(input_dir, max_depth):
+        source = os.path.join(input_dir, *rel_path.split("/"))
+        rel_stem, ext = os.path.splitext(rel_path)
         ext = ext.lower()
+        rel_dir = os.path.dirname(rel_stem)
         if ext == ".csv":
             df = pd.read_csv(source)
-            entry = {"kind": "csv"}
+            entry = {"kind": "csv", "rel_dir": rel_dir}
         else:
             df, meta = c3d_markers_to_dataframe(source)
-            entry = {"kind": "c3d", "meta": meta}
+            entry = {"kind": "c3d", "meta": meta, "rel_dir": rel_dir}
         if columns:
             df = _select_columns(df, columns)
-        written.append(_write_output(stem, entry, df, output_dir))
+        written.append(_write_output(rel_stem, entry, df, output_dir))
     return written
+
+
+def _prompt_file_selection(parent: tk.Tk, input_dir: str) -> list[str] | None:
+    """Modal: pick a scan depth, list matching files, then either process all
+    of them or just the one selected in the listbox.
+
+    Returns the chosen list of POSIX-relative paths (as from
+    `find_edit_csv_c3d_files`), or `None` if the user cancelled.
+    """
+    result: list[str] | None = None
+    rel_paths: list[str] = []
+
+    window = tk.Toplevel(parent)
+    window.title("Select Files to Edit")
+    window.geometry("520x480")
+
+    depth_frame = tk.Frame(window)
+    depth_frame.pack(fill=tk.X, padx=10, pady=10)
+    tk.Label(depth_frame, text="Depth (0=this dir, N=N levels, -1=unlimited):").pack(side=tk.LEFT)
+    depth_var = tk.StringVar(value="0")
+    tk.Entry(depth_frame, textvariable=depth_var, width=6).pack(side=tk.LEFT, padx=5)
+
+    list_frame = tk.Frame(window)
+    list_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+    scrollbar = tk.Scrollbar(list_frame)
+    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+    file_list = tk.Listbox(list_frame, yscrollcommand=scrollbar.set, exportselection=False)
+    file_list.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+    scrollbar.config(command=file_list.yview)
+
+    status_var = tk.StringVar(value="Click Scan to list files.")
+    tk.Label(window, textvariable=status_var, anchor="w").pack(fill=tk.X, padx=10)
+
+    def do_scan():
+        nonlocal rel_paths
+        try:
+            depth = int(depth_var.get().strip())
+        except ValueError:
+            messagebox.showerror("Invalid Depth", "Depth must be an integer.", parent=window)
+            return
+        if depth < -1 or depth > 99:
+            messagebox.showerror(
+                "Invalid Depth", "Depth must be -1 (unlimited) or between 0 and 99.", parent=window
+            )
+            return
+        rel_paths = find_edit_csv_c3d_files(input_dir, depth)
+        file_list.delete(0, tk.END)
+        for rel_path in rel_paths:
+            file_list.insert(tk.END, rel_path)
+        status_var.set(f"{len(rel_paths)} file(s) found.")
+
+    def process_all():
+        nonlocal result
+        if not rel_paths:
+            messagebox.showinfo("Edit CSV/C3D", "No files to process. Scan first.", parent=window)
+            return
+        result = list(rel_paths)
+        window.destroy()
+
+    def process_selected():
+        nonlocal result
+        selection = file_list.curselection()
+        if not selection:
+            messagebox.showinfo("Edit CSV/C3D", "Select one file first.", parent=window)
+            return
+        result = [rel_paths[selection[0]]]
+        window.destroy()
+
+    def cancel():
+        window.destroy()
+
+    do_scan()
+
+    button_frame = tk.Frame(window)
+    button_frame.pack(fill=tk.X, padx=10, pady=10)
+    tk.Button(depth_frame, text="Scan", command=do_scan).pack(side=tk.LEFT)
+    tk.Button(button_frame, text="Process All", command=process_all).pack(side=tk.LEFT)
+    tk.Button(button_frame, text="Process Selected File", command=process_selected).pack(
+        side=tk.LEFT, padx=5
+    )
+    tk.Button(button_frame, text="Cancel", command=cancel).pack(side=tk.RIGHT)
+
+    window.transient(parent)
+    window.grab_set()
+    parent.wait_window(window)
+    return result
 
 
 def run_edit_csv_c3d(
@@ -219,8 +394,17 @@ def run_edit_csv_c3d(
             dialog_root.destroy()
         return
 
-    file_names = _list_input_files(input_dir)
-    if not file_names:
+    if preset_input_dir is not None:
+        rel_paths = find_edit_csv_c3d_files(input_dir, max_depth=0)
+    else:
+        rel_paths = _prompt_file_selection(dialog_root, input_dir)
+        if rel_paths is None:
+            print("Edit CSV/C3D: cancelled.")
+            if owns_root:
+                dialog_root.destroy()
+            return
+
+    if not rel_paths:
         messagebox.showinfo("Edit CSV/C3D", "No .csv or .c3d files found in that directory.")
         print("No .csv or .c3d files found.")
         if owns_root:
@@ -236,7 +420,7 @@ def run_edit_csv_c3d(
         dialog_root.destroy()
 
     staging_dir = os.path.join(output_dir, "_staging")
-    entries = _stage_inputs(input_dir, staging_dir)
+    entries = _stage_inputs(input_dir, staging_dir, rel_paths)
 
     staged_names = sorted(entry["staged_name"] for entry in entries.values())
     original_headers = get_headers(os.path.join(staging_dir, staged_names[0]))
@@ -287,16 +471,38 @@ def main() -> None:
         "--columns",
         help="Headless: comma-separated header names to keep/reorder (CSV and C3D markers).",
     )
+    parser.add_argument(
+        "-r",
+        "--recursive",
+        action="store_true",
+        help="Headless: scan subdirectories too (equivalent to --depth -1 unless --depth is set).",
+    )
+    parser.add_argument(
+        "-d",
+        "--depth",
+        type=int,
+        default=None,
+        help="Headless: recursion depth. -1 unlimited, 0 input dir only (default), N levels down.",
+    )
     args = parser.parse_args()
 
     if not args.input_dir:
         run_edit_csv_c3d()
         return
 
+    if args.depth is not None:
+        max_depth = args.depth
+    elif args.recursive:
+        max_depth = -1
+    else:
+        max_depth = 0
+    if max_depth < -1 or max_depth > 99:
+        parser.error("--depth must be -1 (unlimited) or between 0 and 99")
+
     if args.identity or args.columns:
         output_dir = args.output_dir or _default_output_dir(args.input_dir)
         columns = [c.strip() for c in args.columns.split(",")] if args.columns else None
-        written = _headless_process(args.input_dir, output_dir, columns)
+        written = _headless_process(args.input_dir, output_dir, columns, max_depth)
         print(f"Edit CSV/C3D: wrote {len(written)} file(s) to {output_dir}")
         for path in written:
             print(f"  - {path}")

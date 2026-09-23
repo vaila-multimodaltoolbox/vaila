@@ -1,8 +1,8 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.4 (see `vaila.py`). **Package version:** 0.4.3 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.5 (see `vaila.py`). **Package version:** 0.4.5 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-22
+**Last updated:** 2026-09-23
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
 momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
@@ -190,7 +190,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 17.Sep.2026 v0.4.4 (Python 3.12.14)
+vailá - 23.Sep.2026 v0.4.5 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -218,7 +218,7 @@ A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 ========================== Multimodal Analysis (Frame B) ===================
 B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
 B1_r1_c3 - Motion Capture Full Body
-B1_r1_c4 - Markerless 2D (coringa: Standard/Advanced/YOLOv26, Yolo+Markerless_MP,
+B1_r1_c4 - Markerless 2D (coringa: MediaPipe (CPU/GPU), Advanced, YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
             Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live)
 B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
@@ -716,6 +716,21 @@ cd path/to/vaila
 uv run vaila.py
 ```
 
+Or, shorter, from a repo checkout (portable — works via `uv` regardless of `PATH`):
+
+```bash
+uv run vaila           # GUI, same as `uv run vaila.py`
+uv run vaila-cli        # terminal/CLI menu, same as `uv run vaila.py --cli`
+```
+
+These are `[project.scripts]` console-script entry points, not shell aliases — they
+work the same on Linux/macOS/Windows because `uv`/hatchling compile them into
+`.venv/bin/` (`.venv/Scripts/` on Windows) at `uv sync` time. Typing bare `vaila` /
+`vaila-cli` without the `uv run` prefix only works once that `.venv/bin` (or
+`.venv/Scripts`) directory is itself on your shell's `PATH` — not automatic after
+`uv sync`. Either way, they only work from a cloned repo checkout (they locate and
+launch the sibling `vaila.py`), never from a standalone package install elsewhere.
+
 Or, without typing that:
 
 - **Desktop / Start Menu / Applications** shortcut created by the installer (with icon)
@@ -953,7 +968,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). As of milestone **`0.4.3`**, the checked-in package line and the **GUI/CLI banner** in `vaila.py` are aligned at **`0.4.3`**. Between milestones the banner may still be bumped on every script change per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). As of milestone **`0.4.5`**, the checked-in package line and the **GUI/CLI banner** in `vaila.py` are aligned at **`0.4.5`**. Between milestones the banner may still be bumped on every script change per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

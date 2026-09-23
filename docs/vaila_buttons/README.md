@@ -24,7 +24,7 @@ Each button in the vailá GUI has its own documentation file:
 | B_r1_c1 | IMU | `imu_analysis` | [imu-analysis.md](imu-analysis.md) |
 | B_r1_c2 | Motion Capture Cluster | `cluster_analysis` | [cluster-analysis.md](cluster-analysis.md) |
 | B_r1_c3 | Motion Capture Full Body | `mocap_analysis` | [mocap-analysis.md](mocap-analysis.md) |
-| B_r1_c4 | Markerless 2D | `markerless_2d_analysis` | [markerless-2d-analysis.md](markerless-2d-analysis.md) (coringa: Standard/Advanced/YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live) |
+| B_r1_c4 | Markerless 2D | `markerless_2d_analysis` | [markerless-2d-analysis.md](markerless-2d-analysis.md) (coringa: MediaPipe (CPU/GPU), Advanced, YOLOv26 MediaPipe, Yolo+Markerless_MP, YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID], Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live) |
 | B_r1_c5 | Markerless 3D | `markerless_3d_analysis` | [markerless-3d-analysis.md](markerless-3d-analysis.md) (coringa: Standard/Advanced YOLO lift, SAM3+DINOv3 3D [+Visualize ID]) |
 | B_r2_c1 | Vector Coding | `vector_coding` | [vector-coding.md](vector-coding.md) |
 | B_r2_c2 | EMG | `emg_analysis` | [emg-analysis.md](emg-analysis.md) |
