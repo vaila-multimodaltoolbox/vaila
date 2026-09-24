@@ -1,7 +1,7 @@
 """Fixed-scene video stabilization from getpixelvideo marker coordinates.
 
-Version: 0.4.3
-Update Date: 15 September 2026
+Version: 0.4.5
+Update Date: 23 September 2026
 Author: Paulo R. P. Santiago
 License: AGPL-3.0-or-later
 
@@ -795,9 +795,16 @@ def motion_diagnostics(
     )
     rows = []
     groups = [(f"p{i}", [i]) for i in table.ids]
-    groups += [("all", stabilization_ids), ("anchors", anchor_ids), ("floor", metric_ids)]
+    held_out = [pid for pid in table.ids if pid not in set(stabilization_ids)]
+    groups += [
+        ("all", stabilization_ids),
+        ("held_out", held_out),
+        ("anchors", anchor_ids),
+        ("floor", metric_ids),
+    ]
     if frame_height is not None:
-        selected = set(stabilization_ids)
+        # Regions validate the whole frame: markers left out of the fit still count,
+        # so a marker subset cannot look better by ignoring off-plane points.
         canonical_y = canonical[:, 1]
         thirds = (
             ("region_top", 0.0, frame_height / 3.0, False),
@@ -808,8 +815,7 @@ def motion_diagnostics(
             region_ids = [
                 pid
                 for col, pid in enumerate(table.ids)
-                if pid in selected
-                and np.isfinite(canonical_y[col])
+                if np.isfinite(canonical_y[col])
                 and lower <= canonical_y[col]
                 and (canonical_y[col] <= upper if include_upper else canonical_y[col] < upper)
             ]
@@ -1065,7 +1071,7 @@ def _overlay(frame, source_frame, table, frame_id, matrix, target, method, floor
 
 
 def _write_report(path, summary, diagnostics):
-    plotted = diagnostics[diagnostics.marker.isin(["all", "anchors", "floor"])].dropna()
+    plotted = diagnostics[diagnostics.marker.isin(["all", "held_out", "anchors", "floor"])].dropna()
     maximum = (
         max(plotted.rms_before_px.max(), plotted.rms_after_px.max(), 1.0) if len(plotted) else 1.0
     )
@@ -1584,8 +1590,10 @@ def run_video_stabilizer(
     for region in ("top", "middle", "bottom"):
         item = region_rows[region_rows.marker.eq(f"region_{region}")].iloc[0]
         summary[f"rms_after_region_{region}_px"] = float(item.rms_after_px)
+    # Regions without markers carry no evidence; rank on the covered ones only.
     finite_regions = region_rows[np.isfinite(region_rows.rms_after_px)]
-    if len(finite_regions) == 3:
+    summary["regions_covered"] = int(len(finite_regions))
+    if len(finite_regions):
         worst = finite_regions.loc[finite_regions.rms_after_px.idxmax()]
         summary["worst_region"] = str(worst.marker).removeprefix("region_")
         summary["rms_after_worst_region_px"] = float(worst.rms_after_px)
@@ -1605,6 +1613,7 @@ def run_video_stabilizer(
     outputs["summary"].write_text(json.dumps(summary, indent=2), encoding="utf-8")
     for group in (
         "all",
+        "held_out",
         "anchors",
         "floor",
         "region_top",
@@ -1698,19 +1707,20 @@ def _method_slug(
 
 
 def _next_available_output_dir(output_dir, slug):
-    """Choose `<dir>_<slug>`, then `_v2`, `_v3`, ... without overwriting.
+    """Choose `<output_dir>/<slug>`, then `_v2`, `_v3`, ... without overwriting.
 
     CLI/GUI entry points call this before `run_video_stabilizer` so reruns with the
     same --output-dir don't require the user to pick a fresh empty folder each time.
+    The result always nests inside the requested `output_dir`, never beside it.
     Direct callers of `run_video_stabilizer` keep the strict FileExistsError contract.
     """
     requested = Path(output_dir).expanduser()
-    candidate = requested.parent / f"{requested.name}_{slug}"
+    candidate = requested / slug
     if not candidate.exists() or not any(candidate.iterdir()):
         return str(candidate)
     version = 2
     while True:
-        versioned = candidate.parent / f"{candidate.name}_v{version}"
+        versioned = requested / f"{slug}_v{version}"
         if not versioned.exists() or not any(versioned.iterdir()):
             return str(versioned)
         version += 1

@@ -1,7 +1,7 @@
 """Two-phase method sweep for fixed-scene video stabilization.
 
-Version: 0.4.3
-Update Date: 15 September 2026
+Version: 0.4.5
+Update Date: 23 September 2026
 Author: Paulo R. P. Santiago
 License: AGPL-3.0-or-later
 
@@ -35,6 +35,8 @@ if __package__:
         _next_available_output_dir,
         build_parser,
         encode_frames_h264,
+        load_marker_csv,
+        parse_id_spec,
         print_gui_cli_mirror,
         run_video_stabilizer,
     )
@@ -45,12 +47,14 @@ else:
         _next_available_output_dir,
         build_parser,
         encode_frames_h264,
+        load_marker_csv,
+        parse_id_spec,
         print_gui_cli_mirror,
         run_video_stabilizer,
     )
 
 
-VERSION = "0.4.3"
+VERSION = "0.4.5"
 
 DEFAULT_GRID = {
     "modes": ["visual", "hybrid", "floor-lock"],
@@ -176,6 +180,28 @@ def build_sweep_combinations(args, grid):
             unique.append(options)
             seen.add(key)
     return unique
+
+
+def _applicable_combinations(combinations, available_ids, callback=None):
+    """Drop candidates whose marker/anchor subsets name IDs absent from the CSV."""
+    kept, skipped = [], set()
+    for options in combinations:
+        specs = [options["stabilization_markers"], options["anchor_markers"]]
+        try:
+            for spec in specs:
+                if spec is not None:
+                    parse_id_spec(spec, available_ids)
+        except ValueError:
+            skipped.add(tuple(str(spec) for spec in specs))
+            continue
+        kept.append(options)
+    if skipped:
+        _log(
+            f"Skipped {len(combinations) - len(kept)} combinations whose marker/anchor IDs "
+            f"are not in the CSV (available: {available_ids}).",
+            callback,
+        )
+    return kept
 
 
 def _command_argv(args, options):
@@ -456,8 +482,13 @@ def _render_count(value, available):
 
 def run_stabilizer_sweep(args, progress_callback=None, cancel_event=None):
     """Triage the configured grid, render its winners, and write comparison artifacts."""
+    _render_count(args.sweep_render_top, 1)
     grid = _read_grid(args.sweep_grid)
-    combinations = build_sweep_combinations(args, grid)
+    combinations = _applicable_combinations(
+        build_sweep_combinations(args, grid),
+        load_marker_csv(args.markers).ids,
+        progress_callback,
+    )
     if not combinations:
         raise ValueError("The sweep grid has no applicable modes for the supplied inputs.")
     root = (
@@ -500,7 +531,7 @@ def run_stabilizer_sweep(args, progress_callback=None, cancel_event=None):
                 rms_after_region_middle_px=regions[1],
                 rms_after_region_bottom_px=regions[2],
                 rms_after_region_mean_px=(
-                    float(np.mean(regions)) if np.isfinite(regions).all() else float("nan")
+                    float(np.nanmean(regions)) if np.isfinite(regions).any() else float("nan")
                 ),
                 worst_region=str(summary.get("worst_region", "unavailable")),
                 rms_after_worst_region_px=_finite_float(summary.get("rms_after_worst_region_px")),

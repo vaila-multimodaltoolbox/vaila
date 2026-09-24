@@ -1,8 +1,8 @@
 # video_stabilizer
 
 **Category:** Tools → Video and Image
-**Version:** 0.4.3
-**Updated:** 16 September 2026
+**Version:** 0.4.5
+**Updated:** 23 September 2026
 **Author:** Paulo R. P. Santiago
 **GUI:** Yes — Video Stabilizer, between Compress Video and Make Sync file
 **CLI:** `uv run vaila/video_stabilizer.py` (from repo root) or `python -m vaila.video_stabilizer`
@@ -244,11 +244,15 @@ with nearest-fit propagation, is unsmoothed, and is always explicitly labeled.
 
 Region diagnostics split canonical marker Y coordinates into equal top, middle
 and bottom thirds of the source frame. They measure whether digitized fixed
-points hold still. A region with no selected marker is unmeasured, and the
-metric cannot see pixel motion between markers or parallax from non-coplanar
-content. A candidate missing any region has no finite worst-region score and
-ranks after fully covered candidates. The remaining runs rank by the largest
-regional marker RMS, then the regional mean and scale deviation. Visual
+points hold still. Every marker in the CSV counts, including markers left out of
+`--stabilization-markers`; those also appear as the `held_out` row, so a subset
+fit cannot look better by ignoring off-plane points (a floor-only homography
+can move a wall 30 px). A region without any marker is unmeasured and is
+skipped: the worst-region score uses the covered regions only. The metric cannot
+see pixel motion between markers. Runs rank by the largest regional marker
+RMS, then the regional mean and scale deviation. The sweep skips grid values
+whose marker or anchor IDs are absent from the CSV and validates
+`--sweep-render-top` before triage. Visual
 inspection of the montage remains the final selection step.
 
 ## Outputs

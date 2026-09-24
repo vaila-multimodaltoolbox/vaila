@@ -1,7 +1,7 @@
 """Fixed-scene stabilization regression tests (no external downloads).
 
-Version: 0.4.3
-Update Date: 15 September 2026
+Version: 0.4.5
+Update Date: 23 September 2026
 """
 
 import json
@@ -310,7 +310,7 @@ def test_cli_headless_and_quoted_command(tmp_path):
         shlex.split(command), env=env, capture_output=True, text=True, timeout=40
     )
     assert result.returncode == 0, result.stdout + result.stderr
-    cli_output = tmp_path / f"CLI output_{vs._method_slug()}"
+    cli_output = tmp_path / "CLI output" / vs._method_slug()
     assert (cli_output / "stabilization_report.html").is_file()
     result = subprocess.run(
         [sys.executable, "-m", "vaila.video_stabilizer", "--video", str(source)],
@@ -396,17 +396,41 @@ floor_estimators = ["robust-all"]
     )
     outputs = vs._run_args(args)
     ranking = pd.read_csv(outputs["ranking"])
-    assert len(ranking) == 4
+    # The 99@2.0 anchor names an ID absent from the CSV, so it is skipped before triage.
+    assert len(ranking) == 2
     successful = ranking[ranking.status.eq("ok")]
-    failed = ranking[ranking.status.eq("error")]
-    assert len(successful) == len(failed) == 2
+    assert len(successful) == 2
     assert successful.rms_after_worst_region_px.is_monotonic_increasing
     assert sorted(successful["rank"].astype(int)) == [1, 2]
-    assert failed["triage_report"].isna().all()
     assert len(list(outputs["videos"].glob("*.mp4"))) == 2
     assert not list((outputs["output_dir"] / "triage").rglob("*.mp4"))
     assert outputs["montage"].is_file()
     assert outputs["report"].is_file()
+
+
+def test_sweep_rejects_bad_render_top_before_triage(tmp_path):
+    source, csv = _sample(tmp_path)
+    args = vs.build_parser().parse_args(
+        ["--video", str(source), "--markers", str(csv), "--output-dir", str(tmp_path / "o")]
+        + ["--sweep", "--sweep-render-top", "0", "--no-audio"]
+    )
+    with pytest.raises(ValueError, match="sweep-render-top"):
+        vs._run_args(args)
+    assert not (tmp_path / "o").exists()
+
+
+def test_regions_count_held_out_markers_and_skip_empty_regions():
+    # Marker 2 is left out of the fit and drifts 30 px; it must surface in held_out and in
+    # its region, and an empty region must not hide the covered ones.
+    xy = np.array([[[10.0, 90], [50, 95], [30, 50]], [[10.0, 90], [50, 95], [60, 50]]])
+    table = vs.MarkerTable(np.arange(2), [0, 1, 2], xy)
+    metrics = vs.motion_diagnostics(
+        table, xy, 0, vs.params_to_matrix([0, 0, 0, 0]), [0, 1], [], [], frame_height=100
+    ).set_index("marker")
+    assert metrics.loc["held_out", "n_observations"] == 2
+    assert metrics.loc["region_middle", "rms_after_px"] == pytest.approx(np.sqrt(450))
+    assert metrics.loc["region_bottom", "rms_after_px"] == 0
+    assert metrics.loc["region_top", "n_observations"] == 0
 
 
 @pytest.mark.skipif(

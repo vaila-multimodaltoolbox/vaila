@@ -15,7 +15,7 @@ pre{background:#eee;padding:16px;overflow:auto}code{background:#eee;padding:2px}
 <body><main>
 <h1>Video Stabilizer</h1>
 <p class="info"><strong>Category:</strong> Tools → Video and Image<br>
-<strong>Version:</strong> 0.4.3 · <strong>Updated:</strong> 16 September 2026<br>
+<strong>Version:</strong> 0.4.5 · <strong>Updated:</strong> 23 September 2026<br>
 <strong>Author:</strong> Paulo R. P. Santiago<br>
 <strong>GUI:</strong> C_B_r2_c2, between Compress Video and Make Sync file<br>
 <strong>CLI:</strong> <code>uv run vaila/video_stabilizer.py</code> (from repo root) or <code>python -m vaila.video_stabilizer</code></p>
@@ -209,11 +209,14 @@ floor homographies and can distort people, walls and columns. Missing fits use
 nearest-fit propagation. It is unsmoothed and never auto-selected.</p>
 <p>Region diagnostics split canonical marker Y coordinates into equal top,
 middle and bottom thirds. They measure only whether digitized fixed points hold
-still. A region without a selected marker is unmeasured; the metric cannot see
-motion between markers or non-coplanar parallax. Candidates missing a region
-rank after fully covered candidates. The others rank by largest regional marker
-RMS, then regional mean and scale deviation. Inspect the montage before
-selecting a method.</p>
+still. Every CSV marker counts, including markers left out of
+--stabilization-markers (also reported as the held_out row), so a subset fit
+cannot hide off-plane drift. Regions without any marker are skipped; the
+worst-region score uses covered regions only. The metric cannot see motion
+between markers. Runs rank by largest regional marker RMS, then regional mean
+and scale deviation. The sweep skips grid values whose marker/anchor IDs are not
+in the CSV and validates --sweep-render-top before triage. Inspect the montage
+before selecting a method.</p>
 <h2>Outputs</h2>
 <table><tr><th>File</th><th>Contents</th></tr>
 <tr><td>stem_stabilized.mp4</td><td>Production video, source frame order/FPS/orientation, fixed canvas, source audio when present.</td></tr>
