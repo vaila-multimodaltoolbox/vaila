@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.5
 Created: 05 August 2026
-Last Updated: 16 September 2026
+Last Updated: 24 September 2026
 
 ================================================================================
 Description
@@ -348,7 +348,58 @@ def validate_against_ref3d(
             err = np.linalg.norm(dlt_project(camera.L, ref) - meas, axis=1)
             report["calibration_reprojection_px_mean"] = float(err.mean())
             report["calibration_reprojection_px_max"] = float(err.max())
+            report["calibration_reprojection_px_per_point"] = err.tolist()
     return report
+
+
+# A physical pinhole camera has square pixels (fx ~= fy) and ~zero skew. The
+# 11-parameter DLT does not enforce that, so a calibration built from wrong
+# correspondences (points on a moving athlete, a ref3d that does not match
+# where the points were clicked, collinear points) still "fits" by bending the
+# intrinsics -- with exactly 6 control points it even reprojects 3 of them
+# perfectly. Placing a body through such a camera is worse than not using the
+# DLT at all, so these limits reject it up front.
+MAX_CALIBRATION_REPROJECTION_PX = 10.0
+MAX_FOCAL_ASPECT_DEVIATION = 0.25  # |fy/fx - 1|
+MAX_SKEW_RATIO = 0.15  # |K[0,1]| / focal
+MIN_REDUNDANT_CONTROL_POINTS = 7  # DLT3D has 11 unknowns; 6 points = no redundancy
+
+
+def assess_dlt_camera(camera: DltCamera, validation: dict | None = None) -> tuple[list, list]:
+    """Physical-plausibility check of a DLT camera and its calibration.
+
+    Returns:
+        (problems, warnings): problems make the placement untrustworthy;
+        warnings are weaknesses that do not by themselves invalidate it.
+    """
+    validation = validation or {}
+    problems: list[str] = []
+    warnings: list[str] = []
+    fx, fy, skew = float(camera.K[0, 0]), float(camera.K[1, 1]), float(camera.K[0, 1])
+    aspect = fy / fx if fx > 0 else float("inf")
+    if not np.isfinite(aspect) or abs(aspect - 1.0) > MAX_FOCAL_ASPECT_DEVIATION:
+        problems.append(
+            f"non-square pixels: fx {fx:.1f} px vs fy {fy:.1f} px (fy/fx {aspect:.2f}); "
+            "a real camera gives ~1.0"
+        )
+    if abs(skew) / max(camera.focal_px, 1e-9) > MAX_SKEW_RATIO:
+        problems.append(f"large skew {skew:.1f} px for a {camera.focal_px:.1f} px focal")
+    mean_err = validation.get("calibration_reprojection_px_mean")
+    if mean_err is not None and mean_err > MAX_CALIBRATION_REPROJECTION_PX:
+        per_point = validation.get("calibration_reprojection_px_per_point") or []
+        detail = ", ".join(f"p{i} {e:.1f}" for i, e in enumerate(per_point))
+        problems.append(
+            f"control points reproject with mean {mean_err:.1f} px "
+            f"(limit {MAX_CALIBRATION_REPROJECTION_PX:.0f} px): {detail}"
+        )
+    n_points = validation.get("n_control_points")
+    if n_points is not None and n_points < MIN_REDUNDANT_CONTROL_POINTS:
+        warnings.append(
+            f"only {n_points} control points: the 11-parameter DLT3D has no redundancy, so "
+            "correspondence errors are absorbed into the camera instead of showing as residual. "
+            f"Use >= {MIN_REDUNDANT_CONTROL_POINTS} (ideally 8-12) well-spread static points."
+        )
+    return problems, warnings
 
 
 # --------------------------------------------------------------------------- #
@@ -681,6 +732,7 @@ def align_monocular_to_world(
     mesh_source_dir=None,
     export_mesh=DEFAULT_EXPORT_MESH,
     gui=False,
+    allow_bad_calibration=False,
 ):
     """Align a monocular camera-frame reconstruction into the DLT lab frame.
 
@@ -751,6 +803,25 @@ def align_monocular_to_world(
             f"Y {validation['volume_min_m'][1]:.2f}..{validation['volume_max_m'][1]:.2f}  "
             f"Z {validation['volume_min_m'][2]:.2f}..{validation['volume_max_m'][2]:.2f}"
         )
+
+    problems, warnings = assess_dlt_camera(camera, validation)
+    for warning in warnings:
+        print(f"Calibration warning: {warning}")
+    if problems:
+        message = (
+            "The DLT3D calibration is not a physical camera, so placing the body through it "
+            "would be worse than the monocular result alone:\n  - "
+            + "\n  - ".join(problems)
+            + "\nFix the calibration: every .ref3d point must be the SAME static landmark "
+            "that was clicked in the 2D markers file (not a point on the athlete), with its "
+            "true coordinates, non-coplanar and well spread; then rebuild the .dlt3d. "
+            "Pass --allow-bad-calibration to run anyway."
+        )
+        if not allow_bad_calibration:
+            return _fail(message, gui)
+        print(f"[yellow]Warning (--allow-bad-calibration): {message}[/yellow]")
+    validation["camera_problems"] = problems
+    validation["camera_warnings"] = warnings
 
     dlt_by_frame = {int(f): dlt_coeffs[i] for i, f in enumerate(dlt_frames)}
 
@@ -1078,6 +1149,10 @@ def _write_outputs(
             f"mean {validation['calibration_reprojection_px_mean']:.2f} px / "
             f"max {validation['calibration_reprojection_px_max']:.2f} px\n"
         )
+    for problem in validation.get("camera_problems", []):
+        calib += f"CALIBRATION PROBLEM (result unreliable): {problem}\n"
+    for warning in validation.get("camera_warnings", []):
+        calib += f"calibration warning: {warning}\n"
     (new_dir / "README_monocular_dlt_align.txt").write_text(
         "vaila monocular -> DLT world alignment\n"
         "======================================\n\n"
@@ -1353,6 +1428,14 @@ def build_parser() -> argparse.ArgumentParser:
             "silently skipped when no meshes/ source is found. 'none' disables."
         ),
     )
+    parser.add_argument(
+        "--allow-bad-calibration",
+        action="store_true",
+        help=(
+            "Run even when the DLT3D is not a physical camera (non-square pixels, skew, "
+            "control points reprojecting > 10 px); the result is then unreliable"
+        ),
+    )
     parser.add_argument("--gui", action="store_true", help="Force the GUI")
     return parser
 
@@ -1384,6 +1467,7 @@ def main(argv: list[str] | None = None) -> int:
         mesh_source_dir=args.mesh_source_dir,
         export_mesh=args.export_mesh,
         gui=False,
+        allow_bad_calibration=args.allow_bad_calibration,
     )
     return 0 if result else 1
 

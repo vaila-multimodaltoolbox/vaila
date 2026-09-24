@@ -1,7 +1,7 @@
 {
   "schema": "fifa_body_15",
   "num_keypoints": 15,
-  "note": "pN is 0-based index for FIFA Challenge 2026 Body-15 keypoint set: p-1=nose, p1=right_shoulder, p2=left_shoulder, p3=right_elbow, p4=left_elbow, p5=right_wrist, p6=left_wrist, p7=right_hip, p8=left_hip, p9=right_knee, p10=left_knee, p11=right_ankle, p12=left_ankle, p13=right_toe, p14=left_toe.",
+  "note": "pN is 0-based index for FIFA Challenge 2026 Body-15 keypoint set: p0=nose, p1=right_shoulder, p2=left_shoulder, p3=right_elbow, p4=left_elbow, p5=right_wrist, p6=left_wrist, p7=right_hip, p8=left_hip, p9=right_knee, p10=left_knee, p11=right_ankle, p12=left_ankle, p13=right_toe, p14=left_toe.",
   "keypoints": [
     "nose",
     "right_shoulder",

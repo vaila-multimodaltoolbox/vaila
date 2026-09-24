@@ -1,7 +1,7 @@
 {
   "schema": "halpe_26",
   "num_keypoints": 26,
-  "note": "pN is 0-based index for Halpe 26 (AlphaPose / YOLO-Pose Body+Feet): p0..p15=COCO-17, p17=head, p18=neck, p19=hip, p20..p21=left foot (big_toe, small_toe, heel), p23..p24=right foot (big_toe, small_toe, heel).",
+  "note": "pN is 0-based index for Halpe 26 (AlphaPose / YOLO-Pose Body+Feet): p0..p16=COCO-17, p17=head, p18=neck, p19=hip, p20..p22=left foot (big_toe, small_toe, heel), p23..p25=right foot (big_toe, small_toe, heel).",
   "keypoints": [
     "nose",
     "left_eye",

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation: 29 July 2024
-Update: 17 September 2026
-Version: 0.4.3
+Update: 24 September 2026
+Version: 0.4.5
 
 Description:
 This script performs batch processing of videos for 2D pose estimation using
@@ -2347,7 +2347,7 @@ def process_video(video_path, output_dir, pose_config, yolo_detector=None, yolo_
                     flat_landmarks_norm.extend([np.nan] * 4)
                     flat_landmarks_pixel.extend([np.nan] * 4)
 
-            # Format Vaila landmarks (p1_x, p1_y, ...)
+            # Format Vaila landmarks (p0_x, p0_y, ...)
             flat_landmarks_vaila = []
             for i in range(33):
                 if i < len(landmarks_pixel):

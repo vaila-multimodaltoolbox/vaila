@@ -22,6 +22,7 @@ try:
     from vaila.monocular_dlt_align import (
         DEFAULT_PLACEMENT_ORIGIN_MARKERS,
         _placement_origin,
+        assess_dlt_camera,
         decompose_dlt3d,
         dlt_project,
         dlt_projection_matrix,
@@ -36,6 +37,7 @@ except ImportError:
     from monocular_dlt_align import (  # ty: ignore[unresolved-import]
         DEFAULT_PLACEMENT_ORIGIN_MARKERS,
         _placement_origin,
+        assess_dlt_camera,
         decompose_dlt3d,
         dlt_project,
         dlt_projection_matrix,
@@ -453,3 +455,51 @@ def test_export_aligned_mesh_sequence_rejects_bad_format(tmp_path):
             [0],
             tmp_path / "out",
         )
+
+
+# A real bad .dlt3d (kabuto_test2, 2026-09-24): 6 control points, 3 of them
+# collinear in the .ref3d but an L-shape in the image, 2 clicked on the athlete.
+L_BAD = np.array(
+    [
+        1013.046227,
+        -1261.547010,
+        6816.934975,
+        160.321336,
+        -119.314917,
+        -711.942141,
+        12436.568811,
+        1931.022386,
+        -0.029468,
+        -0.252546,
+        8.647008,
+    ]
+)
+
+
+def test_assess_accepts_real_and_synthetic_cameras():
+    for L in (L_REAL, _synthetic_dlt()[0]):
+        problems, warnings = assess_dlt_camera(
+            decompose_dlt3d(L),
+            {"n_control_points": 12, "calibration_reprojection_px_mean": 2.35},
+        )
+        assert problems == []
+        assert warnings == []
+
+
+def test_assess_rejects_a_non_physical_camera():
+    problems, _ = assess_dlt_camera(decompose_dlt3d(L_BAD))
+    assert any("non-square pixels" in p for p in problems)
+    assert any("skew" in p for p in problems)
+
+
+def test_assess_rejects_large_calibration_residual_and_warns_on_six_points():
+    problems, warnings = assess_dlt_camera(
+        decompose_dlt3d(L_REAL),
+        {
+            "n_control_points": 6,
+            "calibration_reprojection_px_mean": 33.3,
+            "calibration_reprojection_px_per_point": [49.2, 99.8, 50.6, 0.0, 0.0, 0.0],
+        },
+    )
+    assert len(problems) == 1 and "p1 99.8" in problems[0]
+    assert len(warnings) == 1 and "6 control points" in warnings[0]

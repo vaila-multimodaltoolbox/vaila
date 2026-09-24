@@ -1,7 +1,7 @@
 {
   "schema": "coco_wholebody_133",
   "num_keypoints": 133,
-  "note": "pN is 0-based index for COCO WholeBody / Sapiens-133: p0..p15=body, p17..p21=feet, p23..p89=face (68), p91..p110=left hand (21), p112..p131=right hand (21).",
+  "note": "pN is 0-based index for COCO WholeBody / Sapiens-133: p0..p16=body, p17..p22=feet, p23..p90=face (68), p91..p111=left hand (21), p112..p132=right hand (21).",
   "keypoints": [
     "nose",
     "left_eye",

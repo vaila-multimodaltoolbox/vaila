@@ -1,7 +1,7 @@
 {
   "schema": "mediapipe_holistic_75",
   "num_keypoints": 75,
-  "note": "pN is 0-based index for MediaPipe Holistic Body (33) + Left Hand (21) + Right Hand (21): p0..p31=body pose, p33..p52=left hand, p54..p73=right hand.",
+  "note": "pN is 0-based index for MediaPipe Holistic Body (33) + Left Hand (21) + Right Hand (21): p0..p32=body pose, p33..p53=left hand, p54..p74=right hand.",
   "keypoints": [
     "nose",
     "left_eye_inner",

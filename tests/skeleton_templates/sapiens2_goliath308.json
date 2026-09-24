@@ -1,7 +1,7 @@
 {
   "schema": "sapiens2_goliath_308",
   "num_keypoints": 308,
-  "note": "pN is 0-based index into the 308-keypoint Sociopticon/Goliath order used by vaila_sapiens.py/sam3sapiens2.py (p-1=nose, p5=left_shoulder, p6=right_shoulder, p9=left_hip, p10=right_hip, ..., p307=last face point). Derived from sapiens/pose/configs/_base_/keypoints308.py.",
+  "note": "pN is 0-based index into the 308-keypoint Sociopticon/Goliath order used by vaila_sapiens.py/sam3sapiens2.py (p0=nose, p5=left_shoulder, p6=right_shoulder, p9=left_hip, p10=right_hip, ..., p307=last face point). Derived from sapiens/pose/configs/_base_/keypoints308.py.",
   "keypoints": [
     "nose",
     "left_eye",

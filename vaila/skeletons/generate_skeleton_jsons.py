@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.5
 Created: 04 August 2026
-Last Updated: 17 September 2026
+Last Updated: 24 September 2026
 
 Description:
     Maintenance/dev tool that regenerates all standard skeleton-connection
@@ -70,30 +70,13 @@ def _rebase_p_token(token: str) -> str:
 
 
 def _note_zero_based(note: str) -> str:
-    """Rewrite note prose from the old 1-based convention to 0-based."""
+    """Rewrite note prose from the old 1-based convention to 0-based.
+
+    Every ``pN`` token is shifted exactly once (single regex pass), so
+    ``p1=nose`` becomes ``p0=nose`` and ``p2..p5`` becomes ``p1..p4``.
+    """
     text = note.replace("1-based", "0-based")
-    text = re.sub(r"\bp1=(nose)", r"p0=\1", text)
-    text = re.sub(r"\bp1=(wrist)", r"p0=\1", text)
-    text = re.sub(
-        r"p(\d+)=([a-zA-Z][\w-]*)\((\d+)\)",
-        lambda m: (
-            f"p{int(m.group(1)) - 1}={m.group(2)}({m.group(3)})"
-            if int(m.group(1)) == int(m.group(3)) + 1
-            else m.group(0)
-        ),
-        text,
-    )
-    text = re.sub(
-        r"\bp(\d+)\.\.p(\d+)\b",
-        lambda m: f"p{int(m.group(1)) - 1}..p{int(m.group(2)) - 1}",
-        text,
-    )
-    text = re.sub(
-        r"\bp(\d+)=([a-zA-Z_]+)\b",
-        lambda m: f"p{int(m.group(1)) - 1}={m.group(2)}",
-        text,
-    )
-    return text
+    return re.sub(r"\bp(\d+)\b", lambda m: f"p{int(m.group(1)) - 1}", text)
 
 
 def _emit_zero_based(payload: dict) -> dict:

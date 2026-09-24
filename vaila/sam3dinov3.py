@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -107,11 +107,13 @@ try:
         SamGuidance,
         _color_for_id,
         _contour_mask,
+        _draw_box_label,
         _draw_sam_guidance,
         _find_videos,
         _guidance_for_frame,
         _pose_bbox_from_sam,
         _prepare_gui_root,
+        _track_xyxy,
         _video_frame_count,
         find_batch_directories,
         find_local_sam_dir,
@@ -146,11 +148,13 @@ except ImportError:  # standalone execution
         SamGuidance,
         _color_for_id,
         _contour_mask,
+        _draw_box_label,
         _draw_sam_guidance,
         _find_videos,
         _guidance_for_frame,
         _pose_bbox_from_sam,
         _prepare_gui_root,
+        _track_xyxy,
         _video_frame_count,
         find_batch_directories,
         find_local_sam_dir,
@@ -694,6 +698,7 @@ def _draw_pose_overlay(
     names: list[str],
     *,
     draw_ids: bool,
+    label_boxes: dict[int, tuple[float, float, float, float]] | None = None,
 ) -> np.ndarray:
     """Draw the reprojected MHR skeleton, colored by joint side.
 
@@ -701,6 +706,10 @@ def _draw_pose_overlay(
     the live overlay video readable the same way sam3sapiens2_visualize and
     sam3dinov3_visualize already are. ``_color_for_id`` is kept only for the
     ``ID nn`` text label, so multiple people stay distinguishable by that tag.
+
+    ``label_boxes`` maps SAM object id -> the SAM box drawn by
+    ``_draw_sam_guidance``; the ID tag is stacked right on top of that box's
+    own tag. Without it the tag falls back to the (padded) SAM 3D Body box.
     """
     out = image
     side_colors = [_side_color_bgr(name) for name in names]
@@ -742,17 +751,11 @@ def _draw_pose_overlay(
         if draw_ids:
             depth = float(inst["cam_t"][2])
             label = f"ID {int(inst['person_id'])}  z={depth:.2f} m"
-            x1, y1 = inst["bbox"][0], inst["bbox"][1]
-            cv2.putText(
-                out,
-                label,
-                (max(0, int(x1)), max(34, int(y1) - 22)),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.5,
-                id_color,
-                2,
-                cv2.LINE_AA,
-            )
+            sam_box = (label_boxes or {}).get(int(inst["sam_obj_id"]))
+            if sam_box is not None:
+                _draw_box_label(out, label, sam_box[0], sam_box[1], id_color, row=1)
+            else:
+                _draw_box_label(out, label, inst["bbox"][0], inst["bbox"][1], id_color)
     return out
 
 
@@ -1338,6 +1341,9 @@ def run_sam3d_from_sam(
                     edges,
                     names,
                     draw_ids=not args.no_draw_id,
+                    label_boxes={
+                        int(track["obj_id"]): _track_xyxy(track) for track, _ in frame_guidance
+                    },
                 )
                 writer.write(overlay)
 

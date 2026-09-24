@@ -1,7 +1,7 @@
 {
   "schema": "mediapipe_pose_33_pn",
   "num_keypoints": 33,
-  "note": "pN is 0-based index mapping to MediaPipe: p-1=nose(0), p10=left_shoulder(11), p11=right_shoulder(12), p22=left_hip(23), p23=right_hip(24), ..., p31=right_foot_index(32).",
+  "note": "pN is 0-based index mapping to MediaPipe: p0=nose(0), p11=left_shoulder(11), p12=right_shoulder(12), p23=left_hip(23), p24=right_hip(24), ..., p32=right_foot_index(32).",
   "keypoints": [
     "nose",
     "left_eye_inner",

@@ -5,7 +5,7 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -72,6 +72,7 @@ try:
     from .sam3dinov3 import (
         COLOR_CENTER_RGB,
         MHR70_NAMES,
+        _draw_box_label,
         _rgb_to_bgr,
         _side_color_bgr,
         keypoint_names,
@@ -81,6 +82,7 @@ except ImportError:  # standalone execution
     from sam3dinov3 import (  # ty: ignore[unresolved-import]
         COLOR_CENTER_RGB,
         MHR70_NAMES,
+        _draw_box_label,
         _rgb_to_bgr,
         _side_color_bgr,
         keypoint_names,
@@ -420,16 +422,7 @@ def _draw_sam_contour_outline_and_id(
         cam_t = instance.get("cam_t_m") or [0.0, 0.0, 0.0]
         depth = _safe_float(cam_t[2] if len(cam_t) > 2 else None)
         label = f"ID {selected_id}  z={depth:.2f} m"
-        cv2.putText(
-            out,
-            label,
-            (max(0, x1), max(18, y1 - 5)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.48,
-            color,
-            2,
-            cv2.LINE_AA,
-        )
+        _draw_box_label(out, label, x1, y1, color)
     return out
 
 

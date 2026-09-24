@@ -32,8 +32,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing / Markerless 3D</p>
             <p><strong>File:</strong> vaila/monocular_dlt_align.py</p>
-            <p><strong>Version:</strong> 0.4.3</p>
-            <p><strong>Updated:</strong> 16 September 2026</p>
+            <p><strong>Version:</strong> 0.4.5</p>
+            <p><strong>Updated:</strong> 24 September 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes — Frame B → Markerless 3D → Monocular → DLT world &nbsp; <strong>CLI:</strong> Yes</p>
             <p><strong>Runtime:</strong> CPU only; no model weights are loaded</p>
@@ -98,6 +98,7 @@
             <tr><td><code>--pixels</code></td><td>The <strong>same person's</strong> 2D keypoints in pixels, wide (col 0 = frame, then x,y): <code>*_id_NN_markers.csv</code>. Optional — falls back to the sibling <code>*_sam3dinov3_keypoints2d.csv</code>.</td></tr>
             <tr><td><code>--dlt3d</code></td><td>That camera's DLT3D coefficients (1 row = fixed camera, or one row per frame).</td></tr>
             <tr><td><code>--ref3d</code></td><td>Optional control points — used only to <strong>validate</strong> the calibration and report the working volume, never to fit anything.</td></tr>
+            <tr><td><code>--allow-bad-calibration</code></td><td>Run even when the calibration gate rejects the <code>.dlt3d</code> (see <em>Calibration gate</em>); the result is then unreliable.</td></tr>
             <tr><td><code>--fps</code></td><td>Point rate in Hz; fractional rates accepted (e.g. <code>119.88012001</code>).</td></tr>
             <tr><td><code>--smooth-hz</code> / <code>--no-smooth</code></td><td>Placement smoothing cutoff (default 6 Hz) / disable it.</td></tr>
             <tr><td><code>--origin-markers</code></td><td>0-based markers whose midpoint the placement rotates about (default <code>9 10</code>, the MHR70 hips; rebased from 1-based in 0.4.3).</td></tr>
@@ -105,6 +106,16 @@
             <tr><td><code>--mesh-source-dir</code></td><td>Directory with <code>meshes/frame_NNNNNN.npz</code> + <code>mesh_faces.npy</code> (needs <code>--save-mesh</code> in the source <code>sam3dinov3.py</code> run). Defaults to <code>--mono3d</code>'s own directory.</td></tr>
             <tr><td><code>--export-mesh {none,obj,ply}</code></td><td>Aligned per-frame mesh format for Blender (default <code>obj</code>); silently skipped when no <code>meshes/</code> source is found.</td></tr>
         </table>
+
+        <h2>Calibration gate</h2>
+        <p>Before placing anything the <code>.dlt3d</code> is checked as a <strong>physical camera</strong>, and the run stops with an actionable error when it is not:</p>
+        <ul>
+            <li>non-square pixels: <code>|fy/fx - 1| &gt; 0.25</code>;</li>
+            <li>skew larger than 15&nbsp;% of the focal;</li>
+            <li>with <code>--ref3d</code> (and the sibling <code>*_markers_1_line.csv</code>): control points reprojecting with mean &gt; 10&nbsp;px &mdash; the per-point residuals are listed so the wrong correspondence is obvious.</li>
+        </ul>
+        <p>Fewer than 7 control points only warns: DLT3D has 11 unknowns, so with 6 points there is <strong>no redundancy</strong> &mdash; a wrong correspondence is absorbed into the camera (3 points reproject at 0&nbsp;px) instead of showing as residual.</p>
+        <p>Why: the placement minimises reprojection <em>through that camera</em>, so a bent camera produces a result worse than the monocular reconstruction alone (real case, 2026-09-24: focal 92&nbsp;px, fy/fx 0.29, calibration residual 33&nbsp;px mean &rarr; body placement 360&nbsp;px mean, feet 0.5&nbsp;m below the floor). Typical causes: a <code>.ref3d</code> whose coordinates do not match the points actually clicked, control points clicked on the athlete instead of static landmarks, or coplanar/clustered points. Fix the correspondences and rebuild the <code>.dlt3d</code>; use 8&ndash;12 static, well-spread, non-coplanar points.</p>
 
         <h2>Outputs</h2>
         <table>

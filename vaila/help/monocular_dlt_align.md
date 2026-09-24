@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing / Markerless 3D |
 | **File** | `vaila/monocular_dlt_align.py` |
-| **Version** | 0.4.3 |
-| **Updated** | 16 September 2026 |
+| **Version** | 0.4.5 |
+| **Updated** | 24 September 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes — Frame B → **Markerless 3D** → **Monocular → DLT world** |
 | **CLI** | Yes |
@@ -84,12 +84,25 @@ When the `sam3dinov3.py` run that produced `--mono3d` was made with `--save-mesh
 | `--pixels` | The **same person's** 2D keypoints in pixels, wide (col 0 = frame, then x,y): `*_id_NN_markers.csv`. Optional — falls back to the sibling `*_sam3dinov3_keypoints2d.csv`. |
 | `--dlt3d` | That camera's DLT3D coefficients (1 row = fixed camera, or one row per frame). |
 | `--ref3d` | Optional control points — used only to **validate** the calibration and report the working volume, never to fit anything. |
+| `--allow-bad-calibration` | Run even when the calibration gate rejects the `.dlt3d` (see *Calibration gate*); the result is then unreliable. |
 | `--fps` | Point rate in Hz; fractional rates accepted (e.g. `119.88012001`). |
 | `--smooth-hz` / `--no-smooth` | Placement smoothing cutoff (default 6 Hz) / disable it. |
 | `--origin-markers` | 0-based markers whose midpoint the placement rotates about (default `9 10`, the MHR70 hips; rebased from 1-based in 0.4.3). |
 | `--skeleton` | Skeleton JSON for the generated Blender script. |
 | `--mesh-source-dir` | Directory with `meshes/frame_NNNNNN.npz` + `mesh_faces.npy` (needs `--save-mesh` in the source `sam3dinov3.py` run). Defaults to `--mono3d`'s own directory. |
 | `--export-mesh {none,obj,ply}` | Aligned per-frame mesh format for Blender (default `obj`); silently skipped when no `meshes/` source is found. |
+
+## Calibration gate
+
+Before placing anything the `.dlt3d` is checked as a **physical camera**, and the run stops with an actionable error when it is not:
+
+- non-square pixels: `|fy/fx - 1| > 0.25`;
+- skew larger than 15 % of the focal;
+- with `--ref3d` (and the sibling `*_markers_1_line.csv`): control points reprojecting with mean > 10 px — the per-point residuals are listed so the wrong correspondence is obvious.
+
+Fewer than 7 control points only warns: DLT3D has 11 unknowns, so with 6 points there is **no redundancy** — a wrong correspondence is absorbed into the camera (3 points reproject at 0 px) instead of showing as residual.
+
+Why: the placement minimises reprojection *through that camera*, so a bent camera produces a result worse than the monocular reconstruction alone (real case, 2026-09-24: focal 92 px, fy/fx 0.29, calibration residual 33 px mean → body placement 360 px mean, feet 0.5 m below the floor). Typical causes: a `.ref3d` whose coordinates do not match the points actually clicked (e.g. three points declared collinear but clicked on an L-shaped seam), control points clicked on the athlete instead of static landmarks, or coplanar/clustered points. Fix the correspondences and rebuild the `.dlt3d`; use 8–12 static, well-spread, non-coplanar points.
 
 ## Outputs
 

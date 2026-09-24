@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.5 (see `vaila.py`). **Package version:** 0.4.5 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-23
+**Last updated:** 2026-09-24
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
 momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.

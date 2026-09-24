@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 31 March 2025
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12.14
 
 Description:
@@ -280,7 +280,7 @@ def get_vector_landmark(data, landmark):
     data : numpy.ndarray or pandas.DataFrame
         The input data array with shape (n_frames, n_columns)
         0 to 32 are the landmark indices
-        First column is frame number, followed by p1_x,p1_y,p2_x,p2_y,...
+        First column is frame number, followed by p0_x,p0_y,p1_x,p1_y,... (0-based)
     landmark : str
         The name of the landmark to extract (e.g., "nose", "left_shoulder", etc.)
     0 - nose

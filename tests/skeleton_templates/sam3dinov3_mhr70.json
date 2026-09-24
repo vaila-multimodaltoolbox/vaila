@@ -1,7 +1,7 @@
 {
   "schema": "sam3dinov3_mhr70",
   "num_keypoints": 70,
-  "note": "pN is 0-based index into the 70-keypoint MHR order used by sam3dinov3.py/sam3dinov3_visualize.py (p-1=nose, p5=left-shoulder, p6=right-shoulder, p9=left-hip, p10=right-hip, ..., p69=neck). Derived programmatically from vaila/sam3dinov3.py.",
+  "note": "pN is 0-based index into the 70-keypoint MHR order used by sam3dinov3.py/sam3dinov3_visualize.py (p0=nose, p5=left-shoulder, p6=right-shoulder, p9=left-hip, p10=right-hip, ..., p69=neck). Derived programmatically from vaila/sam3dinov3.py.",
   "keypoints": [
     "nose",
     "left-eye",

@@ -1,7 +1,7 @@
 {
   "schema": "mediapipe_hands_42",
   "num_keypoints": 42,
-  "note": "pN is 0-based index for two-hand MediaPipe landmarks: p0..p19=left hand (wrist..pinky), p21..p40=right hand (wrist..pinky).",
+  "note": "pN is 0-based index for two-hand MediaPipe landmarks: p0..p20=left hand (wrist..pinky), p21..p41=right hand (wrist..pinky).",
   "keypoints": [
     "left_wrist",
     "left_thumb_cmc",

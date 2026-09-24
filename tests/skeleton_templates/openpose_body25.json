@@ -1,7 +1,7 @@
 {
   "schema": "openpose_body_25",
   "num_keypoints": 25,
-  "note": "pN is 0-based index for standard OpenPose Body-25 format: p-1=nose, p1=neck, p2=right_shoulder, p3=right_elbow, p4=right_wrist, p5=left_shoulder, p6=left_elbow, p7=left_wrist, p8=mid_hip, p9=right_hip, p10=right_knee, p11=right_ankle, p12=left_hip, p13=left_knee, p14=left_ankle, p15=right_eye, p16=left_eye, p17=right_ear, p18=left_ear, p19=left_big_toe, p20=left_small_toe, p21=left_heel, p22=right_big_toe, p23=right_small_toe, p24=right_heel.",
+  "note": "pN is 0-based index for standard OpenPose Body-25 format: p0=nose, p1=neck, p2=right_shoulder, p3=right_elbow, p4=right_wrist, p5=left_shoulder, p6=left_elbow, p7=left_wrist, p8=mid_hip, p9=right_hip, p10=right_knee, p11=right_ankle, p12=left_hip, p13=left_knee, p14=left_ankle, p15=right_eye, p16=left_eye, p17=right_ear, p18=left_ear, p19=left_big_toe, p20=left_small_toe, p21=left_heel, p22=right_big_toe, p23=right_small_toe, p24=right_heel.",
   "keypoints": [
     "nose",
     "neck",

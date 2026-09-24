@@ -5,7 +5,7 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -820,6 +820,42 @@ def _color_for_id(obj_id: int) -> tuple[int, int, int]:
     return int(bgr[0]), int(bgr[1]), int(bgr[2])
 
 
+def _draw_box_label(
+    image: np.ndarray,
+    text: str,
+    x1: float,
+    y1: float,
+    color: tuple[int, int, int],
+    *,
+    row: int = 0,
+) -> None:
+    """Draw a readable filled tag glued to a bbox's top-left corner (in place).
+
+    The font scales with the frame (a fixed 0.5 scale is unreadable on
+    1080p+ or portrait video). ``row`` stacks several tags upward from the box
+    top; when there is no room above the frame edge the tags go inside the box.
+    """
+    height, width = image.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = max(0.6, min(height, width) / 1000.0)
+    thickness = max(1, round(scale * 2))
+    (text_w, text_h), baseline = cv2.getTextSize(text, font, scale, thickness)
+    pad = max(3, round(4 * scale))
+    tag_w = text_w + 2 * pad
+    tag_h = text_h + baseline + 2 * pad
+    x = int(np.clip(round(x1), 0, max(0, width - tag_w)))
+    top = round(y1) - tag_h * (row + 1)
+    if top < 0:
+        top = round(y1) + tag_h * row
+    top = int(np.clip(top, 0, max(0, height - tag_h)))
+    cv2.rectangle(image, (x, top), (x + tag_w, top + tag_h), color, -1)
+    luminance = 0.114 * color[0] + 0.587 * color[1] + 0.299 * color[2]
+    text_color = (0, 0, 0) if luminance > 140 else (255, 255, 255)
+    cv2.putText(
+        image, text, (x + pad, top + pad + text_h), font, scale, text_color, thickness, cv2.LINE_AA
+    )
+
+
 def _draw_sam_guidance(
     image: np.ndarray,
     frame_guidance: list[tuple[dict[str, Any], dict[str, Any] | None]],
@@ -834,21 +870,11 @@ def _draw_sam_guidance(
         if polygons:
             cv2.polylines(out, polygons, True, color, 2, cv2.LINE_AA)
         x1, y1, x2, y2 = _track_xyxy(track)
-        cv2.rectangle(out, (round(x1), round(y1)), (round(x2), round(y2)), color, 2)
+        box_thickness = max(2, round(min(out.shape[:2]) / 500))
+        cv2.rectangle(out, (round(x1), round(y1)), (round(x2), round(y2)), color, box_thickness)
         if draw_ids:
             label = f"SAM #{obj_id} {float(track.get('score', 1.0)):.2f}"
-            tx = max(0, round(x1))
-            ty = max(18, round(y1) - 5)
-            cv2.putText(
-                out,
-                label,
-                (tx, ty),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.48,
-                color,
-                2,
-                cv2.LINE_AA,
-            )
+            _draw_box_label(out, label, x1, y1, color)
     return out
 
 

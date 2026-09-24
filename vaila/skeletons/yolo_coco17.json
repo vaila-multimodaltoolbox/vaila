@@ -1,7 +1,7 @@
 {
   "schema": "coco_17_keypoints",
   "num_keypoints": 17,
-  "note": "pN is 0-based index into standard COCO-17 order (p-1=nose, p1=left_eye, p2=right_eye, p3=left_ear, p4=right_ear, p5=left_shoulder, p6=right_shoulder, p7=left_elbow, p8=right_elbow, p9=left_wrist, p10=right_wrist, p11=left_hip, p12=right_hip, p13=left_knee, p14=right_knee, p15=left_ankle, p16=right_ankle).",
+  "note": "pN is 0-based index into standard COCO-17 order (p0=nose, p1=left_eye, p2=right_eye, p3=left_ear, p4=right_ear, p5=left_shoulder, p6=right_shoulder, p7=left_elbow, p8=right_elbow, p9=left_wrist, p10=right_wrist, p11=left_hip, p12=right_hip, p13=left_knee, p14=right_knee, p15=left_ankle, p16=right_ankle).",
   "keypoints": [
     "nose",
     "left_eye",

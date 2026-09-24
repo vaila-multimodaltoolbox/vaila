@@ -4,7 +4,7 @@
 
 - **Category:** Markerless 3D / Meta (Facebook)
 - **Version:** 0.4.5
-- **Updated:** 2026-09-23
+- **Updated:** 2026-09-24
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)

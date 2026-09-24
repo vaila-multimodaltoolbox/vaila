@@ -1,7 +1,7 @@
 {
   "schema": "mediapipe_hand_21",
   "num_keypoints": 21,
-  "note": "pN is 0-based index for single hand MediaPipe landmarks: p-1=wrist, p1..p3=thumb, p5..p7=index, p9..p11=middle, p13..p15=ring, p17..p19=pinky.",
+  "note": "pN is 0-based index for single hand MediaPipe landmarks: p0=wrist, p1..p4=thumb, p5..p8=index, p9..p12=middle, p13..p16=ring, p17..p20=pinky.",
   "keypoints": [
     "wrist",
     "thumb_cmc",
