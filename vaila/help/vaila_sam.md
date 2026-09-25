@@ -5,7 +5,7 @@
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
 - **Version:** 0.4.5
-- **Updated:** 23 September 2026
+- **Updated:** 24 September 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)

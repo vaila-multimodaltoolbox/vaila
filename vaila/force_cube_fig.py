@@ -4,7 +4,8 @@ Force Platform Data Analysis Toolkit - force_cube_fig.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago Ligia
 Date: 9 September 2024
-Version: 0.5
+Update Date: 24 September 2026
+Version: 0.4.5
 Python Version: 3.11
 
 Description:
@@ -130,6 +131,11 @@ from scipy.optimize import curve_fit
 from scipy.signal import butter, filtfilt, find_peaks
 from ydata_profiling import ProfileReport
 
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
 # Print the directory and name of the script being executed
 print(f"vailá - Running script: {os.path.basename(__file__)}")
 print(f"vailá - Script directory: {os.path.dirname(os.path.abspath(__file__))}")
@@ -146,13 +152,13 @@ def select_source_directory():
     return source_dir
 
 
-def select_output_directory():
+def select_output_directory(input_dir=None):
     """
     Opens a dialog to select the output directory for saving results.
     """
     root = Tk()
     root.withdraw()  # Hide the main Tkinter window
-    output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
+    output_dir = ask_output_directory(input_dir, title="Select Output Directory for Results")
     root.destroy()
     return output_dir
 
@@ -1833,7 +1839,7 @@ def run_force_cube_fig():
     selected_column = selected_headers[0]  # Example: Assume first column is selected for analysis
 
     # Prompt for output directory
-    output_dir = select_output_directory()
+    output_dir = select_output_directory(source_dir)
     if not output_dir:
         messagebox.showerror("Error", "No output directory selected.")
         return

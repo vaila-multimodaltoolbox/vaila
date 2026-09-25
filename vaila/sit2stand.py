@@ -4,8 +4,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 03 February 2026
-Version: 0.0.7
+Update: 24 September 2026
+Version: 0.4.5
 
 Description:
 ------------
@@ -167,6 +167,11 @@ try:
     ELLIPSE_SUPPORT = True
 except ImportError:
     ELLIPSE_SUPPORT = False
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def main(cli_args=None):
@@ -4474,7 +4479,7 @@ class SitToStandGUI:
 
     def browse_output_dir(self):
         """Opens directory dialog for output directory selection."""
-        dirname = filedialog.askdirectory(title="Select Output Directory")
+        dirname = ask_output_directory(self.input_entry.get(), title="Select Output Directory")
         if dirname:
             self.output_dir = dirname
             self.output_entry.delete(0, tk.END)

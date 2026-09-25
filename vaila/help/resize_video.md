@@ -6,7 +6,7 @@
 - **File:** `vaila\resize_video.py`
 - **Lines:** 1390+
 - **Size:** updated with CLI and batch workflow
-- **Version:** 0.4.0
+- **Version:** 0.4.5
 - **Author:** -------
 - **GUI Interface:** ✅ Yes
 
@@ -115,7 +115,7 @@ python -m vaila.resize_video -i ./videos -o ./resized --scale 2 --recursive
 ```
 
 **Version:** 0.4.0
-**Updated:** 14 September 2026
+**Updated:** 24 September 2026
 
 
 

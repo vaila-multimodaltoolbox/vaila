@@ -6,7 +6,8 @@
 - **File:** `vaila\cluster_analysis.py`
 - **Lines:** 515
 - **Size:** 18621 characters
-- **Version:** 1.0
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

@@ -6,7 +6,8 @@
 - **File:** `vaila\rearrange_data.py`
 - **Lines:** 1772
 - **Size:** 68536 characters
-- **Version:** 0.3.111
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 

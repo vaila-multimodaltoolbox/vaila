@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 18 February 2025
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -122,6 +122,11 @@ import pandas as pd
 import torch
 import yaml
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # Must set Ultralytics home before importing YOLO (avoids weights in repo root / CWD).
 VAILA_MODELS_DIR = Path(__file__).resolve().parent / "models"
@@ -3319,7 +3324,7 @@ def run_yolov26pose_video(parent: tk.Misc | None = None) -> None:
         return
 
     _console_hint("[pose] Open folder dialog: select output directory.")
-    output_base_dir = filedialog.askdirectory(parent=root, title="Select Output Directory")
+    output_base_dir = ask_output_directory(video_path, title="Select Output Directory", parent=root)
     if not output_base_dir:
         messagebox.showinfo("YOLOv26 Pose", "Pose run cancelled (no output directory).")
         if created_root and isinstance(root, tk.Tk):
@@ -4947,7 +4952,7 @@ def run_yolov26track():
     if not video_dir:
         return
 
-    output_base_dir = filedialog.askdirectory(title="Select Output Directory")
+    output_base_dir = ask_output_directory(video_dir, title="Select Output Directory")
     if not output_base_dir:
         return
 

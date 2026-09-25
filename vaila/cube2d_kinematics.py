@@ -4,8 +4,8 @@ cube2d_kinematics.py
 ===============================================================================
 Author: Prof. Dr. Paulo Roberto Pereira Santiago
 created: 2025-01-16
-updated: 2026-08-25
-version: 0.3.113
+updated: 24 September 2026
+version: 0.4.5
 python version: 3.12.9
 
 Description:
@@ -95,6 +95,11 @@ import pandas as pd
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from scipy.signal import butter, filtfilt
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # Define the default quadrants using numpy arrays
 quadrants = np.array(
@@ -594,7 +599,7 @@ def run_cube2d_kinematics():
     )
 
     # Select output directory
-    output_dir = filedialog.askdirectory(title="Select the Output Directory")
+    output_dir = ask_output_directory(data_dir, title="Select the Output Directory")
     if not output_dir:
         print("No output directory selected. Exiting.")
         return

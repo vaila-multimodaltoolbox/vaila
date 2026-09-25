@@ -5,8 +5,8 @@ Module to analyze ultrasound images with manual thickness measurements and
 smarter before/after batch comparison support.
 
 Updated by: Prof. Paulo R. P. Santiago
-Updated: 12 May 2026
-Version: 0.3.44
+Updated: 24 September 2026
+Version: 0.4.5
 
 - Separate BEFORE and AFTER directory selection for comparison workflows
 - Parent-folder batch mode for muscle/before and muscle/after structures
@@ -27,6 +27,11 @@ from tkinter import filedialog, messagebox, simpledialog
 import cv2
 import numpy as np
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 @dataclass(frozen=True)
@@ -1517,7 +1522,7 @@ def run_usound():
         if not parent_dir:
             return
 
-        outp = filedialog.askdirectory(title="Select output parent directory")
+        outp = ask_output_directory(parent_dir, title="Select output parent directory")
         if not outp:
             return
 
@@ -1539,7 +1544,7 @@ def run_usound():
             title="Select AFTER folder (Cancel to keep legacy single-folder workflow)"
         )
 
-        outp = filedialog.askdirectory(title="Select output parent directory")
+        outp = ask_output_directory(before_dir, title="Select output parent directory")
         if not outp:
             return
 

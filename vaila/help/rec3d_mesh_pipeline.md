@@ -6,7 +6,7 @@
 |-------|--------|
 | **Category** | Processing / Markerless 3D |
 | **File** | `vaila/rec3d_mesh_pipeline.py` |
-| **Version** | 0.3.116 |
+| **Version** | 0.4.5 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes — Frame B → **Markerless 3D** → **Multi-Camera Mesh Pipeline** |
 | **CLI** | Yes |

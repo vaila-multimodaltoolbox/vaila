@@ -5,6 +5,9 @@ Used after ``fifa baseline`` (or any ``cameras/<stem>.npz`` with the same keys)
 so that :mod:`vaila.rec2d` / :mod:`vaila.rec3d` can reconstruct with **per-frame**
 DLT parameters (broadcast / moving camera).
 
+Update Date: 24 September 2026
+Version: 0.4.5
+
 © vailá contributors — see repository AUTHORS.
 """
 
@@ -18,6 +21,11 @@ from typing import Any, cast
 import numpy as np
 import pandas as pd
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 _DIST_WARN_THRESHOLD = 1e-3
 
@@ -301,7 +309,7 @@ def run_gui_flow() -> None:
     if not cam_dir:
         root.destroy()
         return
-    out_dir = filedialog.askdirectory(title="Select output folder for .dlt2d / .dlt3d")
+    out_dir = ask_output_directory(cam_dir, title="Select output folder for .dlt2d / .dlt3d")
     if not out_dir:
         root.destroy()
         return

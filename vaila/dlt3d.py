@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Roberto Pereira Santiago
-Version: 0.4.3
+Version: 0.4.5
 Create: 24 February, 2025
-Last Updated: 16 September 2026
+Last Updated: 24 September 2026
 
 Description:
     This script calculates the Direct Linear Transformation (DLT) parameters for 3D coordinate transformations.
@@ -266,6 +266,21 @@ def read_ref3d_file(file_path):
     return df
 
 
+_COPLANAR_WARNED = False
+
+
+def ref3d_is_coplanar(ref_coords, rtol: float = 1e-6) -> bool:
+    """True when the 3D control points lie on one plane (e.g. all Z = 0).
+
+    Such points only determine a plane homography: the DLT3D solve returns
+    L3 = L7 = L11 = 0 and no camera centre/rotation can be recovered from it.
+    """
+    pts = np.asarray(ref_coords, dtype=float)
+    centred = pts - pts.mean(axis=0)
+    s = np.linalg.svd(centred, compute_uv=False)
+    return bool(s[0] == 0.0 or s[-1] / s[0] < rtol)
+
+
 def calculate_dlt3d_params(pixel_coords, ref_coords):
     """
     Computes the 11 DLT3d parameters using the following models:
@@ -277,6 +292,15 @@ def calculate_dlt3d_params(pixel_coords, ref_coords):
       X   Y   Z   1   0   0   0   0  -uX  -uY  -uZ = u
       0   0   0   0   X   Y   Z   1  -vX  -vY  -vZ = v
     """
+    global _COPLANAR_WARNED
+    if not _COPLANAR_WARNED and ref3d_is_coplanar(ref_coords):
+        _COPLANAR_WARNED = True
+        print(
+            "WARNING: DLT3D control points are coplanar (e.g. all Z = 0). The result is "
+            "only a plane homography (L3 = L7 = L11 = 0): 3D reconstruction and camera "
+            "decomposition are impossible. Add control points off the plane (Z != 0) "
+            "for a true DLT3D, or use DLT2D / planar alignment."
+        )
     n = pixel_coords.shape[0]
     A = np.zeros((2 * n, 11))
     B = np.zeros((2 * n,))

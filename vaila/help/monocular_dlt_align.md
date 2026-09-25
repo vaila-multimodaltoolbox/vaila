@@ -104,6 +104,8 @@ Fewer than 7 control points only warns: DLT3D has 11 unknowns, so with 6 points 
 
 Why: the placement minimises reprojection *through that camera*, so a bent camera produces a result worse than the monocular reconstruction alone (real case, 2026-09-24: focal 92 px, fy/fx 0.29, calibration residual 33 px mean → body placement 360 px mean, feet 0.5 m below the floor). Typical causes: a `.ref3d` whose coordinates do not match the points actually clicked (e.g. three points declared collinear but clicked on an L-shaped seam), control points clicked on the athlete instead of static landmarks, or coplanar/clustered points. Fix the correspondences and rebuild the `.dlt3d`; use 8–12 static, well-spread, non-coplanar points.
 
+**Planar (coplanar) calibration.** When every REF3D control point has the same Z (e.g. a floor/tatame target at Z = 0), the DLT3D solve leaves L3 = L7 = L11 = 0: it is only a floor homography, and camera decomposition used to fail with `numpy.linalg.LinAlgError: Singular matrix`. Since 0.4.5 this is detected and the run switches automatically to the planar alignment (`monocular_planar_align.py`): H = P[:, [0, 1, 3]] is saved as `planar_dlt3d_homographies.npz` in the output directory and the body is placed on the calibrated floor (output folder `processed_monocular_planar_*`). For a true camera placement add at least one control point off the plane (Z ≠ 0) and recalibrate.
+
 ## Outputs
 
 Timestamped subfolder, same conventions as `rec3d_one_dlt3d.py`:

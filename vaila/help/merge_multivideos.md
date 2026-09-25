@@ -6,7 +6,8 @@
 - **File:** `vaila\merge_multivideos.py`
 - **Lines:** 2172
 - **Size:** 89274 characters
-- **Version:** updated: 0.3.136
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

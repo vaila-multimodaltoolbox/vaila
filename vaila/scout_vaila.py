@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
@@ -88,6 +88,11 @@ try:
     import toml as _toml_writer  # writing
 except Exception:  # noqa: BLE001
     _toml_writer = None
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 DEFAULT_CFG_FILENAME = "vaila_scout_config.toml"
@@ -2023,8 +2028,8 @@ class ScoutApp(tk.Tk):
             input_path = Path(input_file)
 
             # Get output directory
-            output_dir = filedialog.askdirectory(
-                title="Select output directory for CSV and TOML files"
+            output_dir = ask_output_directory(
+                input_file, title="Select output directory for CSV and TOML files"
             )
 
             if not output_dir:

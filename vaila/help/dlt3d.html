@@ -31,8 +31,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/dlt3d.py</p>
-            <p><strong>Version:</strong> 0.4.3</p>
-            <p><strong>Updated:</strong> 16 September 2026</p>
+            <p><strong>Version:</strong> 0.4.5</p>
+            <p><strong>Updated:</strong> 24 September 2026</p>
             <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -67,6 +67,8 @@
             <li><strong>Single reference mode</strong>: the REF3D file has exactly 1 row — those 3D coordinates are used for every frame in the pixel file.</li>
             <li><strong>Per-frame mode</strong>: the REF3D file has multiple rows — matched by the frame column.</li>
         </ul>
+
+        <p><strong>Coplanar control points.</strong> If every REF3D point has the same Z (e.g. all Z&nbsp;=&nbsp;0 on a floor target) the 11-parameter solve is under-determined: the result has L3&nbsp;=&nbsp;L7&nbsp;=&nbsp;L11&nbsp;=&nbsp;0 and is only a plane homography (no 3D reconstruction, no camera decomposition). The module prints a warning and still saves the file; add points off the plane for a true DLT3D, or use DLT2D / planar alignment.</p>
 
         <h2>Output files</h2>
         <table>

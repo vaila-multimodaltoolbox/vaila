@@ -2,8 +2,8 @@
 cop_calculate.py
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 2026-02-03
-Update: 2026-02-03
-Version: 0.0.3
+Update: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12.9
 Description:
 ------------
@@ -43,6 +43,11 @@ from tkinter import (
 import ezc3d
 import numpy as np
 import pandas as pd
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def read_csv_full(filename):
@@ -521,7 +526,7 @@ def main():
         print("No input directory selected.")
         return
 
-    output_dir = filedialog.askdirectory(title="Select Output Directory")
+    output_dir = ask_output_directory(input_dir, title="Select Output Directory")
     if not output_dir:
         print("No output directory selected.")
         return

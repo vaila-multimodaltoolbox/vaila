@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 September 2026
-Update Date: 09 September 2026
-Version: 0.3.131
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 Module and CLI tool for inspecting, modifying, and creating C3D file metadata
@@ -659,6 +659,7 @@ class C3DMetadataGUI(tk.Toplevel):
             defaultextension=".c3d",
             filetypes=[("C3D Files", "*.c3d")],
             initialfile=f"{Path(self.current_c3d_path).stem}_meta.c3d",
+            initialdir=str(Path(self.current_c3d_path).parent),
             parent=self,
         )
         if not out_path:

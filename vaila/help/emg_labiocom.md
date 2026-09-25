@@ -8,8 +8,8 @@ EMG (Electromyography) analysis toolkit — part of the **vailá** Multimodal To
 |---|---|
 | Category | Analysis |
 | File | `vaila/emg_labiocom.py` |
-| Version | **0.3.50** |
-| Updated | **2026-06-09** |
+| Version | **0.4.5** |
+| Updated | **2026-09-24** |
 | Author | Prof. Dr. Paulo R. P. Santiago |
 | GUI | Yes |
 | CLI | Yes |

@@ -5,7 +5,7 @@
 - **Category:** Markerless 2D / Meta (Facebook)
 - **File:** `vaila/vaila_sapiens.py`
 - **Version:** 0.4.5
-- **Updated:** 2026-09-23
+- **Updated:** 2026-09-24
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 

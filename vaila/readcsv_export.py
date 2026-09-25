@@ -3,9 +3,9 @@
 readcsv_export.py
 ===============================================================================
 Author: Prof. Paulo R. P. Santiago
-Version: 0.3.131
+Version: 0.4.5
 Created: 25 September 2024
-Last Updated: 09 September 2026
+Last Updated: 24 September 2026
 Python Version: 3.12.14
 
 Description:
@@ -66,6 +66,11 @@ import ezc3d
 import numpy as np
 import pandas as pd
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -413,7 +418,7 @@ def batch_convert_csv_to_c3d():
 
     print("Step 2: Selecting output directory...")
     # Select output directory
-    output_directory = filedialog.askdirectory(title="Select Output Directory")
+    output_directory = ask_output_directory(input_directory, title="Select Output Directory")
     if not output_directory:
         print("No output directory selected. Exiting.")
         messagebox.showerror("Error", "No output directory selected.")

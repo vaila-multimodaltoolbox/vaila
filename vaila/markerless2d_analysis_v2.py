@@ -103,6 +103,11 @@ except ImportError:
 
 import warnings
 
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
 # Suppress protobuf deprecation warning from MediaPipe
 # This warning comes from MediaPipe using deprecated protobuf API
 # The warning is: "SymbolDatabase.GetPrototype() is deprecated. Please use message_factory.GetMessageClass() instead."
@@ -2898,7 +2903,9 @@ def process_videos_in_directory(existing_root=None):
         # Small delay to ensure window is ready (especially on Windows)
         root.after(50, lambda: None)
         root.update()
-        output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
+        output_base = ask_output_directory(
+            input_dir, title="Select the base output directory", parent=root
+        )
         root.update_idletasks()
         root.update()
     except Exception as e:

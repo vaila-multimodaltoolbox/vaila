@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -1642,6 +1642,7 @@ class ColumnReorderGUI(tk.Tk):
             )
             save_path = filedialog.asksaveasfilename(
                 title="Save Merged File As",
+                initialdir=os.path.dirname(base_file),
                 defaultextension=".csv",
                 filetypes=[("CSV files", "*.csv")],
             )
@@ -1665,6 +1666,7 @@ class ColumnReorderGUI(tk.Tk):
             )
             save_path = filedialog.asksaveasfilename(
                 title="Save Stacked File As",
+                initialdir=os.path.dirname(base_file),
                 defaultextension=".csv",
                 filetypes=[("CSV files", "*.csv")],
             )

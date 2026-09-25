@@ -167,6 +167,14 @@ except ImportError:  # standalone execution
     )
     from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
 
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
+    )
+
 # Fix a silent-failure environment bug before any torch.compile-triggering
 # call happens (direct CLI run; the GUI subprocess-dispatch path below gets
 # the same fix inside run_isolated_gpu_subprocess itself).
@@ -1708,6 +1716,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
 
             self.input_var = tk.StringVar()
             self.output_var = tk.StringVar()
+            link_output_to_input(self.input_var, self.output_var)
             self.sam_var = tk.StringVar()
             self.weights_var = tk.StringVar(value=str(default_weights_dir()))
             self.prompt_var = tk.StringVar(value="person")
@@ -1845,7 +1854,9 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                 self.input_var.set(path)
 
         def _browse_output(self) -> None:
-            path = filedialog.askdirectory(parent=self, title="Select output parent")
+            path = ask_output_directory(
+                self.input_var.get(), title="Select output parent", parent=self
+            )
             if path:
                 self.output_var.set(path)
 

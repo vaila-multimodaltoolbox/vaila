@@ -7,8 +7,8 @@ Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Update: 09 September 2026
-Version: 0.3.131
+Update: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12.14
 
 Description:
@@ -64,6 +64,14 @@ try:
     from .cli_highlight import print_gui_cli_mirror
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
+    )
 
 VIDEO_EXTENSIONS = (".avi", ".mp4", ".mov", ".mkv", ".webm", ".m4v")
 DEFAULT_PATTERN = "%09d.png"
@@ -717,6 +725,7 @@ class ExtractPngApp:
         self.mode = tk.StringVar(value="extract")
         self.input_var = tk.StringVar()
         self.output_var = tk.StringVar()
+        link_output_to_input(self.input_var, self.output_var)
         self.pattern_var = tk.StringVar(value=DEFAULT_PATTERN)
         self.fps_var = tk.StringVar(value="30")
         self.codec_var = tk.StringVar(value="264")
@@ -908,7 +917,9 @@ class ExtractPngApp:
             self.input_var.set(path)
 
     def _browse_output(self) -> None:
-        path = filedialog.askdirectory(parent=self.root, title="Select output directory (optional)")
+        path = ask_output_directory(
+            self.input_var.get(), title="Select output directory (optional)", parent=self.root
+        )
         if path:
             self.output_var.set(path)
 

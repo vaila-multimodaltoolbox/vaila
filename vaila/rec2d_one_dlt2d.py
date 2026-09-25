@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.5
 Created: August 9, 2024
-Last Updated: 16 September 2026
+Last Updated: 24 September 2026
 
 Description:
     Optimized batch processing of 2D coordinates reconstruction using ONE FIXED
@@ -45,6 +45,11 @@ import numpy as np
 import pandas as pd
 from numpy.linalg import inv
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def read_coordinates(file_path, usecols=None):
@@ -206,7 +211,9 @@ def run_rec2d_one_dlt2d(dlt_file=None, input_directory=None, output_directory=No
 
         # Step 3: Select output directory
         print("Step 3: Selecting output directory...")
-        output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
+        output_directory = ask_output_directory(
+            input_directory, title="Select Output Directory for Results"
+        )
         if not output_directory:
             print("Output directory selection cancelled.")
             return

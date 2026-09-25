@@ -24,10 +24,12 @@ try:
         _placement_origin,
         assess_dlt_camera,
         decompose_dlt3d,
+        dlt3d_is_planar,
         dlt_project,
         dlt_projection_matrix,
         export_aligned_mesh_sequence,
         load_mesh_frame_camera,
+        planar_homography_from_dlt3d,
         refine_placement,
         smooth_placement,
         solve_placement_translation,
@@ -39,10 +41,12 @@ except ImportError:
         _placement_origin,
         assess_dlt_camera,
         decompose_dlt3d,
+        dlt3d_is_planar,
         dlt_project,
         dlt_projection_matrix,
         export_aligned_mesh_sequence,
         load_mesh_frame_camera,
+        planar_homography_from_dlt3d,
         refine_placement,
         smooth_placement,
         solve_placement_translation,
@@ -503,3 +507,40 @@ def test_assess_rejects_large_calibration_residual_and_warns_on_six_points():
     )
     assert len(problems) == 1 and "p1 99.8" in problems[0]
     assert len(warnings) == 1 and "6 control points" in warnings[0]
+
+
+# The failing JJ_Kabuto calibration: all REF3D points at Z = 0 (floor target),
+# so L3 = L7 = L11 = 0 and the camera centre solve used to raise "Singular matrix".
+L_PLANAR = np.array(
+    [
+        -58.275802,
+        282.259224,
+        0.0,
+        269.315715,
+        -1496.449538,
+        431.130902,
+        -0.0,
+        1867.705220,
+        -0.841230,
+        0.422909,
+        0.0,
+    ]
+)
+
+
+def test_planar_dlt3d_is_detected_and_real_cameras_are_not():
+    assert dlt3d_is_planar(L_PLANAR)
+    assert not dlt3d_is_planar(L_REAL)
+    assert not dlt3d_is_planar(_synthetic_dlt()[0])
+
+
+def test_decompose_rejects_a_planar_dlt3d_with_a_clear_error():
+    with pytest.raises(ValueError, match="planar"):
+        decompose_dlt3d(L_PLANAR)
+
+
+def test_planar_homography_reproduces_the_dlt3d_on_the_floor():
+    H = planar_homography_from_dlt3d(L_PLANAR)
+    floor = np.array([[0.0, 0.0, 0.0], [0.48, 0.0, 0.0], [0.96, 0.96, 0.0], [0.0, 0.48, 0.0]])
+    hom = np.c_[floor[:, :2], np.ones(len(floor))] @ H.T
+    np.testing.assert_allclose(hom[:, :2] / hom[:, 2:], dlt_project(L_PLANAR, floor), atol=1e-9)

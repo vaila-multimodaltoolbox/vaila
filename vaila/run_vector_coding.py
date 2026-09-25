@@ -1,3 +1,7 @@
+# run_vector_coding.py - vailá GUI wrapper for vector coding
+# Update Date: 24 September 2026
+# Version: 0.4.5
+
 import os
 import tkinter as tk
 from datetime import datetime
@@ -7,6 +11,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import interpolate
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def get_coupling_angle(
@@ -102,7 +111,9 @@ def run_vector_coding():
         return
 
     # Solicitar ao usuário a pasta onde os resultados serão salvos
-    output_dir = filedialog.askdirectory(title="Selecione a pasta onde os resultados serão salvos")
+    output_dir = ask_output_directory(
+        input_dir, title="Selecione a pasta onde os resultados serão salvos"
+    )
     if not output_dir:
         return
 

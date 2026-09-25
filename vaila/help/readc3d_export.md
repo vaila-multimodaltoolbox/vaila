@@ -6,8 +6,8 @@
 - **File:** `vaila\readc3d_export.py`
 - **Lines:** 1986
 - **Size:** 82210 characters
-- **Version:** 0.3.114
-- **Updated:** 25 August 2026
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

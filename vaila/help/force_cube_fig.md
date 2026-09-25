@@ -6,7 +6,8 @@
 - **File:** `vaila\force_cube_fig.py`
 - **Lines:** 1930
 - **Size:** 65744 characters
-- **Version:** 0.5
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago Ligia
 - **GUI Interface:** ✅ Yes
 

@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.5
 Created: 02 August 2025
-Last Updated: 16 September 2026
+Last Updated: 24 September 2026
 
 ================================================================================
 Description
@@ -207,6 +207,11 @@ except ImportError:
         resolve_marker_labels,
         save_rec3d_as_bvh,
     )
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def _load_wide_xyz_csv(file_path):
@@ -1183,7 +1188,9 @@ def run_rec3d_one_dlt3d():
 
     # Step 3: Select output directory
     print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
+    output_directory = ask_output_directory(
+        pixel_files, title="Select Output Directory for Results"
+    )
     if not output_directory:
         messagebox.showerror("Error", "No output directory selected. Operation cancelled.")
         return

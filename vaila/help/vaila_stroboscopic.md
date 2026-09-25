@@ -1,8 +1,8 @@
 # Stroboscopic & Stromotion Generator
 
 **Script:** `vaila/vaila_stroboscopic.py`  
-**Version:** `0.3.105`  
-**Updated:** `15 August 2026`
+**Version:** `0.4.5`  
+**Updated:** `24 September 2026`
 
 ## Overview
 

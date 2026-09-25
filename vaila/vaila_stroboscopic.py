@@ -7,8 +7,8 @@ Author: Paulo R. P. Santiago & Antigravity (Google Deepmind)
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 April 2026
-Update Date: 15 August 2026
-Version: 0.3.105
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 ------------
@@ -46,6 +46,11 @@ try:
     from .cli_highlight import print_gui_cli_mirror
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 _SELFIE_SEGMENTER_MODELS: dict[int, tuple[str, list[str]]] = {
     0: (
@@ -926,7 +931,9 @@ class StroboscopicDialog(tk.Toplevel):
                 self.output_var.set(str(Path(fn).parent))
 
     def _browse_output(self) -> None:
-        dn = filedialog.askdirectory(title="Select Output Directory", parent=self)
+        dn = ask_output_directory(
+            self.video_var.get(), title="Select Output Directory", parent=self
+        )
         if dn:
             self.output_var.set(dn)
 

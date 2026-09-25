@@ -6,7 +6,8 @@
 - **File:** `vaila\mocap_analysis.py`
 - **Lines:** 403
 - **Size:** 14857 characters
-- **Version:** 0.5.1
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 

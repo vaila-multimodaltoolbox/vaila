@@ -6,7 +6,8 @@ Cluster Data Analysis Toolkit for Motion Capture
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 2024-07-19
-Version: 1.0
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Overview:
 
@@ -119,6 +120,11 @@ from vaila.filtering import apply_filter
 from vaila.plotting import plot_orthonormal_bases
 from vaila.readcsv import get_csv_headers, select_headers_gui
 from vaila.rotation import calcmatrot, createortbase, rotmat2euler
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # import ipdb
 
@@ -257,7 +263,7 @@ def analyze_cluster_data():
     filter_method = "butterworth"
     file_names = sorted([f for f in os.listdir(selected_path) if f.endswith(".csv")])
 
-    save_directory = filedialog.askdirectory(title="Choose Directory to Save Results")
+    save_directory = ask_output_directory(selected_path, title="Choose Directory to Save Results")
     if not save_directory:
         messagebox.showerror(
             "No Directory Selected",

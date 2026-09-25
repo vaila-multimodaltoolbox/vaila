@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.5
 Created: August 03, 2025
-Last Updated: 17 September 2026
+Last Updated: 24 September 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
@@ -65,6 +65,11 @@ try:
     from .cli_highlight import print_gui_cli_mirror
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def rec3d_multicam(dlt_list, pixel_list):
@@ -1246,7 +1251,9 @@ def run_rec3d(
 
         # Step 3: Select output directory
         print("Step 3: Selecting output directory...")
-        output_directory = filedialog.askdirectory(title="Select Output Directory for Results")
+        output_directory = ask_output_directory(
+            input_directory, title="Select Output Directory for Results"
+        )
         if not output_directory:
             print("Output directory selection cancelled.")
             return

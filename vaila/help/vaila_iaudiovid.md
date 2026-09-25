@@ -6,7 +6,8 @@
 - **File:** `vaila\vaila_iaudiovid.py`
 - **Lines:** 793
 - **Size:** 28868 characters
-- **Version:** 1.3.0
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

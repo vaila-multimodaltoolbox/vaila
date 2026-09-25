@@ -109,6 +109,14 @@ except ImportError:
         write_vaila_pose_csv,
     )
 
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
+    )
+
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 DEFAULT_BBOX_PADDING = 0.12
 DEFAULT_CONTOUR_MARGIN_PX = 8
@@ -1761,6 +1769,7 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
             frm.grid(sticky="nsew")
             self.input_var = tk.StringVar()
             self.output_var = tk.StringVar()
+            link_output_to_input(self.input_var, self.output_var)
             self.sam_var = tk.StringVar()
             self.prompt_var = tk.StringVar(value="person")
             self.model_var = tk.StringVar(value="1b")
@@ -1900,7 +1909,9 @@ def run_sam3sapiens2(existing_root: Any | None = None) -> None:
                 self.input_var.set(path)
 
         def _browse_output(self) -> None:
-            path = filedialog.askdirectory(parent=self, title="Select output parent")
+            path = ask_output_directory(
+                self.input_var.get(), title="Select output parent", parent=self
+            )
             if path:
                 self.output_var.set(path)
 

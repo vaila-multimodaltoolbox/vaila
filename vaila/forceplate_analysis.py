@@ -6,8 +6,8 @@ Author: Prof. Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 September 2024
-Update Date: 03 February 2026
-Version: 0.2.2
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 ------------
@@ -164,6 +164,11 @@ from scipy import stats
 from scipy.interpolate import griddata
 from scipy.signal import butter, find_peaks, savgol_filter, sosfiltfilt, welch
 from sklearn.decomposition import PCA
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # ============================================================================
 # FILTER UTILITIES (from filter_utils.py - integrated)
@@ -1829,13 +1834,6 @@ def main_cop_balance():
     print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
     print("Starting CoP analysis...")
 
-    output_dir = filedialog.askdirectory(title="Select Output Directory")
-    if not output_dir:
-        print("No output directory selected.")
-        return
-
-    print(f"Output Directory: {output_dir}")
-
     fs = simpledialog.askfloat(
         "Signal Frequency",
         "Enter the sampling frequency (Fs) in Hz:",
@@ -1889,17 +1887,25 @@ def main_cop_balance():
 
     print(f"Selected Headers: {selected_headers}")
 
-    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
-    main_output_dir = os.path.join(output_dir, f"cop_balance_{timestamp}")
-    os.makedirs(main_output_dir, exist_ok=True)
-
-    print(f"Main output directory created: {main_output_dir}")
-
     # Use improved input selection (files OR folder recursive)
     input_files = select_inputs()
     if not input_files:
         print("No input files selected.")
         return
+
+    # Output defaults to the inputs' folder (one click to accept)
+    output_dir = ask_output_directory(input_files, title="Select Output Directory")
+    if not output_dir:
+        print("No output directory selected.")
+        return
+
+    print(f"Output Directory: {output_dir}")
+
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    main_output_dir = os.path.join(output_dir, f"cop_balance_{timestamp}")
+    os.makedirs(main_output_dir, exist_ok=True)
+
+    print(f"Main output directory created: {main_output_dir}")
 
     # Process files
     all_data = []
@@ -2260,7 +2266,7 @@ def main_calculate_cop():
         print("No input directory selected.")
         return
 
-    output_dir = filedialog.askdirectory(title="Select Output Directory")
+    output_dir = ask_output_directory(input_dir, title="Select Output Directory")
     if not output_dir:
         print("No output directory selected.")
         return

@@ -4,7 +4,8 @@ Sample Rate and File Type Input Dialog
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 2024-07-29
-Version: 1.0
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Overview:
 
@@ -42,6 +43,17 @@ Usage Notes:
     - The sample rate is expected to be a floating-point number, and the file type is restricted to 'csv' or 'c3d' to ensure compatibility with common data formats in biomechanics and motion analysis.
     - The "Confirm" button collects and validates the inputs, closing the dialog upon successful submission.
 
+    default_output_dir(input_path) / ask_output_directory(input_path, ...) /
+    link_output_to_input(input_var, output_var):
+        - Shared "output defaults to the input folder" behaviour used by every
+          module: the output directory dialog opens pre-selected on the input
+          folder (one click to accept) and form GUIs auto-fill the output field
+          when the input is chosen; the user can still pick any other folder.
+
+Changelog for Version 0.4.5:
+
+    - Added default_output_dir, ask_output_directory and link_output_to_input.
+
 Changelog for Version 1.0:
 
     - Initial version with support for sample rate and file type input collection.
@@ -55,7 +67,61 @@ This script is distributed under the GPL3 License.
 
 import os
 import tkinter as tk
-from tkinter import ttk
+from pathlib import Path
+from tkinter import filedialog, ttk
+
+
+def default_output_dir(input_path) -> str:
+    """Folder that holds *input_path* (a file, a folder, or a list/tuple of paths).
+
+    Returns "" when nothing usable is given. A folder input is its own default
+    output; a file input defaults to the folder containing it.
+    """
+    if isinstance(input_path, (list, tuple)):
+        input_path = next((p for p in input_path if p), "")
+    if not input_path:
+        return ""
+    path = Path(str(input_path).strip()).expanduser()
+    if not str(path) or str(path) == ".":
+        return ""
+    folder = path if path.is_dir() else path.parent
+    return str(folder) if folder.is_dir() else ""
+
+
+def ask_output_directory(input_path=None, title="Select Output Directory", parent=None, **kwargs):
+    """Output-folder dialog pre-selected on the input's folder.
+
+    Pressing OK keeps the input folder (default output); the user may browse to
+    any other folder instead. Returns "" when cancelled, like askdirectory.
+    """
+    initial = default_output_dir(input_path)
+    if initial:
+        kwargs.setdefault("initialdir", initial)
+        title = f"{title} (default: input folder)"
+    if parent is not None:
+        kwargs["parent"] = parent
+    return filedialog.askdirectory(title=title, **kwargs) or ""
+
+
+def link_output_to_input(input_var, output_var) -> None:
+    """Keep a form's output field following its input field.
+
+    Whenever *input_var* changes, *output_var* is set to the input's folder
+    unless the user already typed/browsed a different output folder.
+    """
+    state = {"auto": output_var.get()}
+
+    def _sync(*_):
+        current = output_var.get()
+        if current and current != state["auto"]:
+            return  # user picked their own output folder: never override it
+        folder = default_output_dir(input_var.get())
+        if folder:
+            state["auto"] = folder
+            output_var.set(folder)
+
+    input_var.trace_add("write", _sync)
+    _sync()
 
 
 def get_user_inputs():

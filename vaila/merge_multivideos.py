@@ -8,8 +8,8 @@ Please see AUTHORS for contributors.
 Licensed under GNU Lesser General Public License v3.0
 
 Created: 25 February 2025
-Update: 11 September 2026
-Version updated: 0.3.136
+Update: 24 September 2026
+Version updated: 0.4.5
 
 Description:
 This script allows users to merge multiple video files into a single video in a specified order.
@@ -53,6 +53,14 @@ from datetime import datetime
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory, default_output_dir
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        default_output_dir,
+    )
 
 
 class VideoMergeApp:
@@ -380,7 +388,7 @@ class VideoMergeApp:
 
     def set_output_directory(self):
         """Set the output directory for the merged video"""
-        directory = filedialog.askdirectory(title="Select Output Directory")
+        directory = ask_output_directory(self.video_files, title="Select Output Directory")
         if directory:
             self.output_dir = directory
             self.output_dir_label.config(text=f"Output Directory: {directory}")
@@ -392,6 +400,11 @@ class VideoMergeApp:
 
     def update_video_list(self):
         """Update the display of the video list"""
+        # Output defaults to the first video's folder until the user picks another
+        if not self.output_dir and self.video_files:
+            self.output_dir = default_output_dir(self.video_files)
+            if self.output_dir:
+                self.output_dir_label.config(text=f"Output Directory: {self.output_dir}")
         # Clear previous frames
         for frame in self.video_frames:
             frame.destroy()

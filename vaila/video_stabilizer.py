@@ -1,7 +1,7 @@
 """Fixed-scene video stabilization from getpixelvideo marker coordinates.
 
 Version: 0.4.5
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Author: Paulo R. P. Santiago
 License: AGPL-3.0-or-later
 
@@ -81,6 +81,11 @@ try:
     from .cli_highlight import print_gui_cli_mirror
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 VERSION = "0.4.3"
@@ -1808,7 +1813,9 @@ class StabilizerGUI:
 
             def browse(k=key, v=var):
                 value = (
-                    filedialog.askdirectory(parent=self.root)
+                    ask_output_directory(
+                        self.vars["video"].get(), title="Output base directory", parent=self.root
+                    )
                     if k == "output-dir"
                     else filedialog.askopenfilename(parent=self.root)
                 )

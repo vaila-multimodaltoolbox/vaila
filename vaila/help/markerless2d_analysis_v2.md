@@ -5,12 +5,12 @@
 - **Category:** Machine Learning / Computer Vision / Biomechanics Analysis
 - **File:** `vaila/markerless2d_analysis_v2.py`
 - **Lines of Code:** 2,442
-- **Version:** 0.3.114
+- **Version:** 0.4.5
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
 - **Creation Date:** 29 July 2024
-- **Last Updated:** 25 August 2026
+- **Last Updated:** 24 September 2026
 - **GUI Interface:** ✅ Yes (Tkinter-based)
 - **CLI:** ✅ Yes (`-i` / `-o` / optional `-c`)
 - **License:** AGPL-3.0-or-later

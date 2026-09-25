@@ -6,7 +6,8 @@
 - **File:** `vaila\cube2d_kinematics.py`
 - **Lines:** 722
 - **Size:** 23935 characters
-- **Version:** 0.0.3
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Dr. Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 

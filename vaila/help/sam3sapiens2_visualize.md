@@ -1,7 +1,7 @@
 # SAM3+Sapiens2 — Visualize selected ID
 
 **Version:** 0.4.5  
-**Updated:** 2026-09-23
+**Updated:** 2026-09-24
 
 This CPU-only tool rerenders an existing `processed_sam3sapiens2_*` result. It does not load SAM3 or Sapiens2 weights, so it is safe for visualization after an inference run and does not repeat GPU allocation.
 

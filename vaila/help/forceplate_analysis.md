@@ -6,7 +6,8 @@
 - **File:** `vaila\forceplate_analysis.py`
 - **Lines:** 304
 - **Size:** 9471 characters
-- **Version:** 0.2.2
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 

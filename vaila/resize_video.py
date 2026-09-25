@@ -10,9 +10,9 @@ This script provides tools for improving pose detection in videos:
 
 Version:
 --------
-0.4.0
+0.4.5
 Create: 27 April 2025
-update: 14 September 2026
+update: 24 September 2026
 
 Author:
 -------
@@ -44,6 +44,14 @@ from tkinter import Button, Frame, Label, StringVar, filedialog, messagebox
 import cv2
 import pandas as pd
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
+    )
 
 
 def get_video_info(video_path):
@@ -758,6 +766,7 @@ def batch_resize_videos(parent=None):
     # Variables to store paths and settings
     input_dir_var = StringVar(value="No directory selected")
     output_dir_var = StringVar(value="No directory selected")
+    link_output_to_input(input_dir_var, output_dir_var)
     tk.IntVar(value=2)
 
     # Frame for directory selection
@@ -883,7 +892,7 @@ converting MediaPipe coordinates back to the original video dimensions."""
             var.set(directory)
 
     def select_output_dir(var):
-        directory = filedialog.askdirectory(title="Select Output Directory")
+        directory = ask_output_directory(input_dir_var.get(), title="Select Output Directory")
         if directory:
             var.set(directory)
 

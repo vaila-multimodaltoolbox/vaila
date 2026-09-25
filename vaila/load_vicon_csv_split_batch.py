@@ -4,8 +4,8 @@ VICON CSV Split Batch Processor
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Date: 2024-09-20
-Update Date: 11 September 2026
-Version: 0.3.137
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 ------------
@@ -52,6 +52,11 @@ from datetime import datetime
 from io import StringIO
 
 import pandas as pd
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def clean_header(header):
@@ -156,8 +161,8 @@ def select_directory():
     src_directory = filedialog.askdirectory(title="Select the Source Directory with CSV Files")
 
     # Prompt the user to select the output directory
-    output_directory = filedialog.askdirectory(
-        title="Select the Output Directory to Save Processed Files"
+    output_directory = ask_output_directory(
+        src_directory, title="Select the Output Directory to Save Processed Files"
     )
 
     return src_directory, output_directory

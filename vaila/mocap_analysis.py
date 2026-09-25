@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 27 July 2025
-Version: 0.5.1
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 This script performs batch processing of videos for 3D pose estimation using
@@ -72,6 +72,11 @@ from vaila.plotting import plot_orthonormal_bases
 from vaila.readcsv import get_csv_headers, select_headers_gui
 from vaila.rotation import calcmatrot, createortbase_4points, rotmat2euler
 
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
 
 def save_results_to_csv(base_dir, time, trunk_euler_angles, pelvis_euler_angles, file_name):
     results = {
@@ -131,7 +136,7 @@ def analyze_mocap_fullbody_data():
 
     file_names = sorted([f for f in os.listdir(directory_path) if f.endswith(".csv")])
 
-    save_directory = filedialog.askdirectory(title="Choose Directory to Save Results")
+    save_directory = ask_output_directory(directory_path, title="Choose Directory to Save Results")
     if not save_directory:
         messagebox.showerror(
             "No Directory Selected",

@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 06 August 2026
-Update Date: 26 August 2026
-Version: 0.3.116
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery, complementing
@@ -245,6 +245,14 @@ except ImportError:  # standalone execution
         load_sam_guidance,
         resolve_sam_results_dir,
         run_sapiens_from_sam,
+    )
+
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
     )
 
 # Fix a silent-failure environment bug before any torch.compile-triggering
@@ -1362,6 +1370,7 @@ def run_sapiens2_3d(existing_root: Any | None = None) -> None:
 
             self.input_var = tk.StringVar()
             self.output_var = tk.StringVar()
+            link_output_to_input(self.input_var, self.output_var)
             self.sapiens2_var = tk.StringVar()
             self.sam_var = tk.StringVar()
             self.weights_var = tk.StringVar(value=str(default_weights_dir()))
@@ -1501,7 +1510,9 @@ def run_sapiens2_3d(existing_root: Any | None = None) -> None:
                 self.input_var.set(path)
 
         def _browse_output(self) -> None:
-            path = filedialog.askdirectory(parent=self, title="Select output parent")
+            path = ask_output_directory(
+                self.input_var.get(), title="Select output parent", parent=self
+            )
             if path:
                 self.output_var.set(path)
 

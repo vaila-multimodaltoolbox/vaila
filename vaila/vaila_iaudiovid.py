@@ -4,8 +4,8 @@ Video Audio Processing Tool - vaila_iaudiovid.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Create: 01 March 2025
-Update: 18 February 2026
-Version: 0.1.4
+Update: 24 September 2026
+Version: 0.4.5
 
 Description:
 ------------
@@ -39,6 +39,11 @@ import threading
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox, scrolledtext, ttk
+
+try:
+    from .dialogsuser import link_output_to_input
+except ImportError:
+    from dialogsuser import link_output_to_input  # ty: ignore[unresolved-import]
 
 
 class AudioVideoProcessor:
@@ -536,6 +541,7 @@ class AudioVideoGUI:
         output_entry_frame.pack(fill=tk.X, pady=2)
 
         self.output_dir_var = tk.StringVar(value=os.path.expanduser("~/Processed_Videos"))
+        link_output_to_input(self.video_dir_var, self.output_dir_var)
         output_entry = ttk.Entry(output_entry_frame, textvariable=self.output_dir_var)
         output_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
 

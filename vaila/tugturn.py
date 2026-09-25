@@ -6,8 +6,8 @@ Authors:
     - Paulo R. P. Santiago
     - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 25 August 2026
-Version: 0.3.114
+Updated: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12.14
 
 Description:
@@ -67,6 +67,11 @@ except ModuleNotFoundError:
 
 import numpy as np
 import pandas as pd
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 DEBUG_SESSION_ID = f"tugturn-{int(datetime.datetime.now().timestamp() * 1000)}"
 DEBUG_LOG_PATH = Path(__file__).resolve().parent / "tugturn_debug.jsonl"
@@ -3713,8 +3718,8 @@ def main():
             "(If 'No', for each CSV a folder result_tugturn_<basename> will be created in the same directory as the CSV)",
         )
         if ans:
-            out_folder = filedialog.askdirectory(
-                title="Select the Output directory for TUGTURN results"
+            out_folder = ask_output_directory(
+                input_path, title="Select the Output directory for TUGTURN results"
             )
             if out_folder:
                 output_path = out_folder

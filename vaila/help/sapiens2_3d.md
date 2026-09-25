@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.4.3
-- **Updated:** 2026-09-17
+- **Version:** 0.4.5
+- **Updated:** 2026-09-24
 - **GUI:** Frame B → **Markerless 3D** → **Sapiens2 3D Pose**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (same SAM 3D Body estimator as `sam3dinov3.py`); the optional DLT3D auto-chain step itself is CPU-only

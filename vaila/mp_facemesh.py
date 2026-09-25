@@ -6,8 +6,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 January 2026
-Update Date: 02 August 2026
-Version: 0.3.98
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 This script performs batch processing of videos for 2D face mesh detection using
@@ -50,6 +50,11 @@ import mediapipe as mp
 import numpy as np
 import pandas as pd
 import psutil
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # #region agent log
 # Debug logging - uses script directory for portability across OS (Linux, macOS, Windows)
@@ -3038,7 +3043,9 @@ def process_videos_in_directory(existing_root=None):
         return
 
     prepare_root_for_dialog()
-    output_base = filedialog.askdirectory(parent=root, title="Select the base output directory")
+    output_base = ask_output_directory(
+        input_dir, title="Select the base output directory", parent=root
+    )
     if platform.system() == "Darwin" and existing_root is None:
         root.withdraw()
     if not output_base:

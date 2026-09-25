@@ -3,8 +3,8 @@
 - **Script:** `crop_faces_atletas.py`
 - **Category:** Multimodal Analysis / Markerless 2D
 - **Creator:** Abel Gonçalves Chinaglia
-- **Version:** 0.4.3
-- **Updated:** 15 September 2026
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Python:** 3.12
 
 ## Overview

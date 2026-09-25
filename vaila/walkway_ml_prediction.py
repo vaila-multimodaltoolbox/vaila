@@ -4,7 +4,8 @@
 # Author: Abel Gonçalves Chinaglia
 # Ph.D. Candidate in PPGRDF - FMRP - USP
 # Date: 05 Feb. 2025
-# Update: 11 Feb. 2025
+# Update: 24 September 2026
+# Version: 0.4.5
 # Python Version: 3.8+
 
 # Description:
@@ -78,6 +79,11 @@ import joblib
 import numpy as np
 import pandas as pd
 from rich import print
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # Function to load models and make predictions
 
@@ -249,7 +255,7 @@ def run_prediction(selected_metrics=None):
     print("Metrics selected for prediction:", selected_metrics)  # Print para depuração
 
     datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_dir = filedialog.askdirectory(title="Select Output Directory for Results")
+    output_dir = ask_output_directory(feature_file, title="Select Output Directory for Results")
     if not output_dir:
         messagebox.showwarning("Warning", "No output directory selected.")
         return

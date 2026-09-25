@@ -5,7 +5,7 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 July 2026
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -122,6 +122,14 @@ except ImportError:
     from vaila_sam import _open_sam3_video_writer  # ty: ignore[unresolved-import]
     from vaila_sam import (  # ty: ignore[unresolved-import]
         _video_frame_count as _sam_video_frame_count,
+    )
+
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
     )
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
@@ -3508,6 +3516,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                 row=2, column=0, sticky="w", pady=(8, 0)
             )
             self.out_var = tk.StringVar()
+            link_output_to_input(self.input_var, self.out_var)
             ttk.Entry(frm, textvariable=self.out_var, width=48).grid(row=3, column=0, columnspan=2)
             ttk.Button(frm, text="Browse…", command=self._browse_out).grid(row=3, column=2)
             ttk.Label(frm, text="Model (RTX 4090 default: 1b):").grid(
@@ -3696,7 +3705,7 @@ def run_sapiens_video(existing_root: Any | None = None) -> None:
                 self.input_var.set(p)
 
         def _browse_out(self) -> None:
-            d = filedialog.askdirectory(title="Output parent folder")
+            d = ask_output_directory(self.input_var.get(), title="Output parent folder")
             if d:
                 self.out_var.set(d)
 

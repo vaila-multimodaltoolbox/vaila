@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 26 August 2026
-Update Date: 26 August 2026
-Version: 0.3.116
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
     Repeats, on any N-camera dataset, the verified 3-step chain that turns
@@ -95,6 +95,11 @@ except ImportError:  # standalone execution
         visualize_selected_id,
     )
     from sam3sapiens2 import _prepare_gui_root  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 MIN_CAMERAS = 2
 MESH_EXPORT_FORMATS = ("obj", "ply")
@@ -535,7 +540,8 @@ class RecMeshPipelineDialog(tk.Toplevel):
         self._rows.append(row_vars)
 
     def _browse_output(self) -> None:
-        path = filedialog.askdirectory(title="Select output parent directory")
+        first_video = self._rows[0].video.get() if self._rows else ""
+        path = ask_output_directory(first_video, title="Select output parent directory")
         if path:
             self.output_var.set(path)
 

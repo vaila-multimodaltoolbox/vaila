@@ -89,6 +89,11 @@ except ImportError:  # standalone execution
         skeleton_edges,
     )
 
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 # Match SAM3 composite alpha (~0.45) for selected-ID contour fills.
 SAM_CONTOUR_FILL_ALPHA = 0.45
@@ -1047,7 +1052,9 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             vars_["video"].set(chosen)
 
     def browse_output() -> None:
-        chosen = filedialog.askdirectory(parent=dialog, title="Output parent directory")
+        chosen = ask_output_directory(
+            vars_["run"].get(), title="Output parent directory", parent=dialog
+        )
         if chosen:
             vars_["output"].set(chosen)
 

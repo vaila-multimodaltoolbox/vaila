@@ -2,7 +2,7 @@
 
 **Category:** Tools → Video and Image
 **Version:** 0.4.5
-**Updated:** 23 September 2026
+**Updated:** 24 September 2026
 **Author:** Paulo R. P. Santiago
 **GUI:** Yes — Video Stabilizer, between Compress Video and Make Sync file
 **CLI:** `uv run vaila/video_stabilizer.py` (from repo root) or `python -m vaila.video_stabilizer`

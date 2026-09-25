@@ -6,7 +6,8 @@
 - **File:** `vaila\sit2stand.py`
 - **Lines:** 1727
 - **Size:** 61021 characters
-- **Version:** 0.0.7
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 

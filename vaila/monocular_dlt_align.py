@@ -215,6 +215,11 @@ except ImportError:  # standalone execution
         save_rec3d_as_bvh,
     )
 
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
 DEFAULT_SMOOTH_HZ = 6.0
 DEFAULT_FPS = 100.0
 #: Output mesh format written by --export-mesh; "none" disables mesh export
@@ -295,6 +300,29 @@ def _rq3(M: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return upper @ signs, signs @ ortho
 
 
+# A DLT3D solved from coplanar control points (every REF3D point at Z = 0,
+# e.g. a floor/tatame target) leaves the Z column of P undetermined: the
+# least-squares solve returns L3 = L7 = L11 = 0 and M = P[:, :3] is singular.
+# Below this singular-value ratio the camera centre cannot be recovered.
+PLANAR_DLT3D_RCOND = 1e-9
+
+
+def dlt3d_is_planar(L: np.ndarray) -> bool:
+    """True when the DLT3D came from coplanar (Z = 0) control points.
+
+    Such a calibration is only a ground-plane homography: M = P[:, :3] is
+    rank-deficient, so no camera centre/rotation can be decomposed from it.
+    """
+    s = np.linalg.svd(dlt_projection_matrix(L)[:, :3], compute_uv=False)
+    return bool(s[0] == 0.0 or s[-1] / s[0] < PLANAR_DLT3D_RCOND)
+
+
+def planar_homography_from_dlt3d(L: np.ndarray) -> np.ndarray:
+    """World-plane (X, Y, Z=0) -> pixel homography H (3x3) of a planar DLT3D."""
+    P = dlt_projection_matrix(L)
+    return P[:, [0, 1, 3]].copy()
+
+
 def decompose_dlt3d(L: np.ndarray) -> DltCamera:
     """Decompose DLT3D coefficients into intrinsics, rotation and centre.
 
@@ -307,6 +335,13 @@ def decompose_dlt3d(L: np.ndarray) -> DltCamera:
     with no axis flip.
     """
     L = np.asarray(L, dtype=np.float64).reshape(11)
+    if dlt3d_is_planar(L):
+        raise ValueError(
+            "DLT3D is planar (singular): every calibration control point has the same Z, "
+            "so the camera centre cannot be recovered (L3 = L7 = L11 = 0). Add at least "
+            "one control point off the plane (Z != 0) and recalibrate, or use the planar "
+            "alignment (Monocular -> Planar world)."
+        )
     P = dlt_projection_matrix(L)
     M = P[:, :3]
     K, R = _rq3(M)
@@ -780,6 +815,23 @@ def align_monocular_to_world(
 
     # --- calibration -------------------------------------------------------
     dlt_frames, dlt_coeffs = load_dlt3d_file(dlt3d_path)
+    if any(dlt3d_is_planar(L) for L in dlt_coeffs):
+        return _align_planar_dlt3d(
+            mono3d_path,
+            frames_3d,
+            dlt_frames,
+            dlt_coeffs,
+            output_directory,
+            pixels_path=pixels_path,
+            ref3d_path=ref3d_path,
+            point_rate=point_rate,
+            smooth_hz=smooth_hz,
+            origin_markers=origin_markers,
+            skeleton_json_path=skeleton_json_path,
+            mesh_source_dir=mesh_source_dir,
+            export_mesh=export_mesh,
+            gui=gui,
+        )
     fixed_camera = len(dlt_coeffs) == 1
     camera = decompose_dlt3d(dlt_coeffs[0])
     print(
@@ -949,6 +1001,75 @@ def align_monocular_to_world(
         mesh_source_dir=Path(mesh_source_dir).expanduser().resolve()
         if mesh_source_dir
         else run_dir,
+        export_mesh=export_mesh,
+        gui=gui,
+    )
+
+
+def _align_planar_dlt3d(
+    mono3d_path: Path,
+    frames_3d: np.ndarray,
+    dlt_frames: np.ndarray,
+    dlt_coeffs: np.ndarray,
+    output_directory,
+    *,
+    pixels_path,
+    ref3d_path,
+    point_rate,
+    smooth_hz,
+    origin_markers,
+    skeleton_json_path,
+    mesh_source_dir,
+    export_mesh,
+    gui,
+):
+    """Route a coplanar (Z = 0) DLT3D to the ground-plane alignment.
+
+    A planar DLT3D cannot be decomposed into a camera, but it is exactly the
+    floor homography ``monocular_planar_align`` consumes. Its H is written to
+    ``<output>/planar_dlt3d_homographies.npz`` (one H per frame) and the
+    planar pipeline places the body on the calibrated floor instead.
+    """
+    if not all(dlt3d_is_planar(L) for L in dlt_coeffs):
+        return _fail(
+            "The .dlt3d mixes planar (coplanar Z = 0) and volumetric rows; recalibrate "
+            "every frame with the same control points.",
+            gui,
+        )
+    try:
+        from .monocular_planar_align import align_monocular_to_planar_world
+    except ImportError:
+        from monocular_planar_align import (  # ty: ignore[unresolved-import]
+            align_monocular_to_planar_world,
+        )
+
+    print(
+        "[yellow]DLT3D is planar: all control points share Z = 0, so no camera centre "
+        "can be decomposed (L3 = L7 = L11 = 0). Using it as a floor homography and "
+        "switching to the planar (ground-plane) alignment.[/yellow]"
+    )
+    if len(dlt_coeffs) == 1:
+        frame_ids = np.asarray(frames_3d, dtype=np.int64)
+        h_stack = np.repeat(planar_homography_from_dlt3d(dlt_coeffs[0])[None], len(frame_ids), 0)
+    else:
+        frame_ids = np.asarray(dlt_frames, dtype=np.int64)
+        h_stack = np.stack([planar_homography_from_dlt3d(L) for L in dlt_coeffs])
+    out_dir = Path(output_directory).expanduser().resolve()
+    out_dir.mkdir(parents=True, exist_ok=True)
+    npz_path = out_dir / "planar_dlt3d_homographies.npz"
+    np.savez_compressed(npz_path, frame_ids=frame_ids, H=h_stack, H_inv=np.linalg.inv(h_stack))
+    print(f"Planar homographies        : {npz_path}")
+    return align_monocular_to_planar_world(
+        mono3d_path,
+        npz_path,
+        out_dir,
+        pixels_path=pixels_path,
+        ref3d_path=ref3d_path,
+        point_rate=point_rate,
+        smooth_hz=smooth_hz,
+        origin_markers=origin_markers,
+        skeleton_json_path=skeleton_json_path,
+        mesh_source_dir=mesh_source_dir,
         export_mesh=export_mesh,
         gui=gui,
     )
@@ -1282,7 +1403,7 @@ def run_monocular_dlt_align_gui():
             title="Reference 3D control points (*.ref3d) — optional, Cancel to skip",
             filetypes=[("REF3D", "*.ref3d"), ("CSV", "*.csv"), ("All files", "*")],
         )
-        output = filedialog.askdirectory(title="Output directory")
+        output = ask_output_directory(mono3d, title="Output directory")
         if not output:
             return None
         fps = simpledialog.askfloat(

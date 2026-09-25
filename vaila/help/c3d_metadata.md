@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Data Files
-- **Version:** 0.3.131
-- **Updated:** 2026-09-09
+- **Version:** 0.4.5
+- **Updated:** 2026-09-24
 - **GUI:** Frame C → Data Files → **C3D Metadata** (`C_A_r2_c2`), also accessible from the **C3D <--> CSV** (`C_A_r1_c2`) menu dialog
 - **CLI:** Yes (`uv run vaila/c3d_metadata.py` or `uv run vaila.py --metadata`)
 

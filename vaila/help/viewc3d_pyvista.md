@@ -4,8 +4,8 @@
 
 - **Category:** Visualization
 - **File:** `vaila/viewc3d_pyvista.py`
-- **Version:** 0.4.3
-- **Updated:** 16 September 2026
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Paulo Santiago
 - **GUI Interface:** Yes
 - **Backend:** PyVista (VTK)

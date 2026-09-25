@@ -3,7 +3,7 @@ Project: vailá
 Script: sam3sapiens2_visualize.py
 Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Creation Date: 31 July 2026
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Description:
@@ -50,6 +50,11 @@ try:
     from .vaila_sam import _video_frame_count
 except ImportError:
     from vaila_sam import _video_frame_count  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"}
 DEFAULT_KPT_THR = 0.30
@@ -1078,7 +1083,9 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             vars_["video"].set(chosen)
 
     def browse_output() -> None:
-        chosen = filedialog.askdirectory(parent=dialog, title="Output parent directory")
+        chosen = ask_output_directory(
+            vars_["run"].get(), title="Output parent directory", parent=dialog
+        )
         if chosen:
             vars_["output"].set(chosen)
 

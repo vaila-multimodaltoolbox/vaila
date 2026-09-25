@@ -5,8 +5,8 @@ EMG Analysis Toolkit - emg_labiocom (Improved Version)
 Author: Prof. Dr. Paulo R. P. Santiago
 Improved Version: 2026
 Created: 01.Oct.2024
-Updated: 09.Jun.2026
-Version: 0.3.50
+Updated: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12
 
 Description:
@@ -87,6 +87,11 @@ except ImportError:
     WAVELET_AVAILABLE = False
     print("PyWavelets not available. Wavelet analysis will be disabled.")
     print("Install with: pip install PyWavelets")
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 # HTML report template
 HTML_REPORT_TEMPLATE = """<!DOCTYPE html>
@@ -1447,11 +1452,8 @@ def run_emg_gui():
         "HTML Report", "Generate comprehensive HTML reports for each file?"
     )
 
-    # Select output directory (different from input)
-    output_path = filedialog.askdirectory(
-        title="Select Output Directory for Results",
-        initialdir=os.path.dirname(input_path),  # Start from parent of input dir
-    )
+    # Select output directory (defaults to the input folder)
+    output_path = ask_output_directory(input_path, title="Select Output Directory for Results")
     if not output_path:
         messagebox.showerror("No Output Directory", "No output directory selected. Exiting.")
         return

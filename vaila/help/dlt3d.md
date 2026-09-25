@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/dlt3d.py` |
-| **Version** | 0.4.3 |
-| **Updated** | 16 September 2026 |
+| **Version** | 0.4.5 |
+| **Updated** | 24 September 2026 |
 | **Author** | Paulo Roberto Pereira Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -44,6 +44,8 @@ Points are correlated by **label** — the point prefix before the underscore (e
 - **Per-frame mode**: the REF3D file has multiple rows — matched by the `frame` column.
 
 ---
+
+> **Coplanar control points.** If every REF3D point has the same Z (e.g. all Z = 0 on a floor target) the 11-parameter solve is under-determined: the result has L3 = L7 = L11 = 0 and is only a plane homography (no 3D reconstruction, no camera decomposition). The module prints a warning and still saves the file; add points off the plane for a true DLT3D, or use DLT2D / planar alignment.
 
 ## Output files
 

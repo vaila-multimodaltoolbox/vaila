@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 20 September 2026
-Version: 0.4.4
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -144,6 +144,11 @@ except ImportError:
         run_isolated_gpu_subprocess,
         terminate_process_tree,
     )
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 SAM3_DEFAULT_CKPT_NAME = "sam3.pt"
 SAM3_MULTIPLEX_CKPT_NAME = "sam3.1_multiplex.pt"
@@ -4996,7 +5001,7 @@ class SamVideoDialog(tk.Toplevel):
                 self.out_var.set(str(Path(p).parent))
 
     def _browse_out(self) -> None:
-        p = filedialog.askdirectory(parent=self, title="Output folder")
+        p = ask_output_directory(self.input_var.get(), title="Output folder", parent=self)
         if p:
             self.out_var.set(p)
 

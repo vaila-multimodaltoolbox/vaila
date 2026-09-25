@@ -6,7 +6,8 @@
 - **File:** `vaila\dialogsuser.py`
 - **Lines:** 112
 - **Size:** 4765 characters
-- **Version:** 1.0
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -35,10 +36,15 @@ Main Features:
 
 ## 🔧 Main Functions
 
-**Total functions found:** 2
+**Total functions found:** 5
 
 - `get_user_inputs`
 - `confirm`
+- `default_output_dir` — folder of the input file/folder (list: first item)
+- `ask_output_directory` — output dialog pre-selected on the input folder; one OK click keeps it
+- `link_output_to_input` — form GUIs: output field follows the input field until the user picks another folder
+
+**Output default:** across *vailá* modules the output directory defaults to the input folder to save clicks; choose any other folder to override.
 
 
 

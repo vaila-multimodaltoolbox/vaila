@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 October 2024
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12.14
 
 Description:
@@ -47,6 +47,11 @@ from rich import print
 
 from .dialogsuser import get_user_inputs
 from .readcsv import get_csv_headers, select_headers_gui
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def importc3d(file_path):
@@ -249,7 +254,9 @@ def analyze_imu_data():
         messagebox.showerror("Error", "No input directory selected.")
         return
 
-    output_directory = filedialog.askdirectory(title="Choose directory to save analysis")
+    output_directory = ask_output_directory(
+        directory_path, title="Choose directory to save analysis"
+    )
     if not output_directory:
         messagebox.showerror("Error", "No output directory selected.")
         return

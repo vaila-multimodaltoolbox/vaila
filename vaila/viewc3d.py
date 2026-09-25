@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.3.111
+Version: 0.4.5
 Created: 06 February 2025
-Last Updated: 24 August 2026
+Last Updated: 24 September 2026
 
 To run:
   uv run viewc3d.py [path/to/file.c3d]
@@ -135,6 +135,11 @@ except ImportError:
             TOML_SUPPORT = True
         except ImportError:
             TOML_SUPPORT = False
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 def _create_centered_tk_root():
@@ -3105,6 +3110,7 @@ def run_viewc3d(c3d_path=None):
             title="Save C3D file",
             defaultextension=".c3d",
             initialfile=default_name,
+            initialdir=os.path.dirname(filepath),
             filetypes=[("C3D Files", "*.c3d"), ("All Files", "*.*")],
         )
         root.destroy()
@@ -3224,7 +3230,7 @@ def run_viewc3d(c3d_path=None):
         """Export the whole sequence as PNG images in a chosen directory."""
         nonlocal current_frame, is_playing
         root = _create_centered_tk_root()
-        out_dir = filedialog.askdirectory(title="Select output directory for PNG sequence")
+        out_dir = ask_output_directory(filepath, title="Select output directory for PNG sequence")
         root.destroy()
         if not out_dir:
             print("\n[yellow]PNG sequence export cancelled.[/yellow]")
@@ -3300,6 +3306,7 @@ def run_viewc3d(c3d_path=None):
             title="Save swap template CSV",
             defaultextension=".csv",
             initialfile=default_name,
+            initialdir=os.path.dirname(filepath),
             filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
         )
         root.destroy()
@@ -3364,6 +3371,7 @@ def run_viewc3d(c3d_path=None):
             title="Save skeleton template JSON",
             defaultextension=".json",
             initialfile=default_name,
+            initialdir=os.path.dirname(filepath),
             filetypes=[("JSON Files", "*.json"), ("All Files", "*.*")],
         )
         root.destroy()
@@ -3423,6 +3431,7 @@ def run_viewc3d(c3d_path=None):
             title="Save MP4 video",
             defaultextension=".mp4",
             initialfile=default_name,
+            initialdir=os.path.dirname(filepath),
             filetypes=[("MP4 Video", "*.mp4"), ("All Files", "*.*")],
         )
         root.destroy()
@@ -3488,6 +3497,7 @@ def run_viewc3d(c3d_path=None):
             title="Save turntable MP4",
             defaultextension=".mp4",
             initialfile=default_name,
+            initialdir=os.path.dirname(filepath),
             filetypes=[("MP4 Video", "*.mp4"), ("All Files", "*.*")],
         )
         root.destroy()

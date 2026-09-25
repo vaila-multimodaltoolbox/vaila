@@ -1,8 +1,8 @@
 # vaila-ElasticKick (VEK)
 
 **Module:** `vaila.vek`  
-**Version:** 0.3.114
-**Updated:** 25 August 2026
+**Version:** 0.4.5
+**Updated:** 24 September 2026
 
 VEK estimates biomechanical and mechanical variables from a soccer/futsal kick
 performed with elastic-band resistance.

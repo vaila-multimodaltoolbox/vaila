@@ -6,7 +6,8 @@
 - **File:** `vaila\cop_calculate.py`
 - **Lines:** 308
 - **Size:** 9920 characters
-- **Version:** 0.0.2
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 

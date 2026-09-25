@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago / vaila contributors
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 June 2026
-Update Date: 25 August 2026
-Version: 0.3.114
+Update Date: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12.14
 
 Description:
@@ -74,6 +74,14 @@ try:
     import tomllib
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore[no-redef]
+
+try:
+    from .dialogsuser import ask_output_directory, link_output_to_input
+except ImportError:
+    from dialogsuser import (  # ty: ignore[unresolved-import]
+        ask_output_directory,
+        link_output_to_input,
+    )
 
 VERSION = "0.3.56"
 UPDATE_DATE = "16 June 2026"
@@ -1262,6 +1270,7 @@ def main_gui() -> None:
         "config": tk.StringVar(),
         "output": tk.StringVar(),
     }
+    link_output_to_input(vars_["pose"], vars_["output"])
 
     def pick_file(key: str, title: str, patterns: list[tuple[str, str]]) -> None:
         value = filedialog.askopenfilename(title=title, filetypes=patterns, parent=root)
@@ -1269,7 +1278,9 @@ def main_gui() -> None:
             vars_[key].set(value)
 
     def pick_output() -> None:
-        value = filedialog.askdirectory(title="Select VEK output directory", parent=root)
+        value = ask_output_directory(
+            vars_["pose"].get(), title="Select VEK output directory", parent=root
+        )
         if value:
             vars_["output"].set(value)
 

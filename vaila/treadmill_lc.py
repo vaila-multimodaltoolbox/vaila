@@ -9,8 +9,8 @@ Author: Abel Gonçalves Chinaglia
 Email: abel.chinaglia@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 June 2026
-Update Date: 20 August 2026
-Version: 0.3.108
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 ------------
@@ -68,6 +68,11 @@ try:
     from .cli_highlight import print_gui_cli_mirror
 except ImportError:  # Standalone execution: python vaila/treadmill_lc.py
     from cli_highlight import print_gui_cli_mirror
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 FS = 1000
 VERSION = "0.3.108"
@@ -5230,7 +5235,9 @@ class LoadCellTreadmillDialog:
 
     def _browse_output_dir(self) -> None:
         win = getattr(self, "window", getattr(self, "parent", None))
-        d = filedialog.askdirectory(title="Select Output Directory (Optional)", parent=win)
+        d = ask_output_directory(
+            self.input_dir_var.get(), title="Select Output Directory (Optional)", parent=win
+        )
         if d:
             self.output_dir_var.set(d)
             self._write_log(f"Selected output directory: {d}")

@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.5
 Created: 16 September 2026
-Last Updated: 16 September 2026
+Last Updated: 24 September 2026
 
 ================================================================================
 Description
@@ -120,6 +120,11 @@ except ImportError:  # standalone execution
         generate_blender_companion_script,
         save_rec3d_as_bvh,
     )
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 DEFAULT_FPS = 60.0
 #: 0-based MHR70 ankles + heels (toes optional when finite).
@@ -1335,7 +1340,7 @@ def run_monocular_planar_align_gui():
             title="target_calibration.ref3d — optional, Cancel to skip",
             filetypes=[("REF3D", "*.ref3d"), ("CSV", "*.csv"), ("All files", "*")],
         )
-        output = filedialog.askdirectory(title="Output directory")
+        output = ask_output_directory(mono3d, title="Output directory")
         if not output:
             return None
         fps = simpledialog.askfloat(

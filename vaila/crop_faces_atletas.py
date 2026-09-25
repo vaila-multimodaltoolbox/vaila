@@ -5,8 +5,8 @@ crop_faces_atletas.py
 Creator: Abel Gonçalves Chinaglia
 Project: vailá - Multimodal Toolbox
 Creation Date: 2026
-Update Date: 15 September 2026
-Version: 0.4.3
+Update Date: 24 September 2026
+Version: 0.4.5
 Python Version: 3.12
 
 Description:
@@ -55,6 +55,11 @@ import cv2
 import mediapipe as mp
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 EXTENSOES_VALIDAS = {".jpg", ".jpeg", ".png", ".webp"}
 
@@ -437,9 +442,10 @@ def run_crop_faces_atletas_gui(parent=None):
         if not pasta_entrada:
             return None
 
-        pasta_saida = filedialog.askdirectory(
-            parent=root,
+        pasta_saida = ask_output_directory(
+            pasta_entrada,
             title="Select output directory for cropped faces",
+            parent=root,
         )
         if not pasta_saida:
             return None

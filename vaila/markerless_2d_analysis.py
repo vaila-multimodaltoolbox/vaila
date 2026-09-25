@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 20 September 2026
-Version: 0.4.4
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Example of usage:
 GUI (default): ``uv run python vaila/markerless_2d_analysis.py``
@@ -201,6 +201,11 @@ except ImportError:
 import multiprocessing  # noqa: F401, E402 - For future Linux batch processing
 import signal  # noqa: F401, E402 - For future Linux process management
 import threading  # noqa: F401, E402 - For future Linux thread management
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 landmark_names = [
     "nose",
@@ -5910,7 +5915,7 @@ def process_videos_in_directory(existing_root=None):
         if recursive
         else "Select the base output directory"
     )
-    output_base_selected = filedialog.askdirectory(parent=root, title=output_prompt_title)
+    output_base_selected = ask_output_directory(input_dir, title=output_prompt_title, parent=root)
     if platform.system() == "Darwin" and existing_root is None:
         root.withdraw()  # Hide root window again after dialog closes
     if not output_base_selected:

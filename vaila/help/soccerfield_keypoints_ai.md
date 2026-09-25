@@ -4,7 +4,8 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/soccerfield_keypoints_ai.py`
-- **Version:** 0.3.44 (May 2026)
+- **Version:** 0.4.5 (May 2026)
+- **Updated:** 24 September 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → Field KPs (AI)**
 - **CLI Interface:** Yes

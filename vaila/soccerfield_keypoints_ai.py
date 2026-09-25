@@ -1,7 +1,7 @@
 """AI soccer-field keypoints (pixels) for vailá.
 
 Project: vailá — vaila/soccerfield_keypoints_ai.py
-Update Date: 23 September 2026
+Update Date: 24 September 2026
 Version: 0.4.5
 
 Change History
@@ -57,6 +57,11 @@ try:
     from .soccerfield_calib import load_field_reference
 except ImportError:
     from soccerfield_calib import load_field_reference  # ty: ignore[unresolved-import]
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 HF_REPO_ID = "Simon9/football-field-detection-roboflow"
@@ -523,7 +528,7 @@ def run_gui() -> None:
     if not videos:
         root.destroy()
         return
-    out_parent = filedialog.askdirectory(parent=root, title="Select output folder")
+    out_parent = ask_output_directory(videos, title="Select output folder", parent=root)
     if not out_parent:
         root.destroy()
         return

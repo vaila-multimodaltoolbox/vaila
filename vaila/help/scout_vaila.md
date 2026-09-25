@@ -6,7 +6,8 @@
 - **File:** `vaila\scout_vaila.py`
 - **Lines:** 2510
 - **Size:** 95343 characters
-- **Version:** 0.3.120
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 - **Author:** Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 - **GUI Interface:** ✅ Yes
 

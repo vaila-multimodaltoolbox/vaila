@@ -6,8 +6,8 @@ Author: Paulo R. P. Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 25 September 2024
-Update Date: 09 September 2026
-Version: 0.3.131
+Update Date: 24 September 2026
+Version: 0.4.5
 
 Description:
 This script processes .c3d files, extracting marker data, analog data, events, and points residuals,
@@ -113,6 +113,11 @@ import pandas as pd
 from ezc3d import c3d
 from rich import print
 from tqdm import tqdm
+
+try:
+    from .dialogsuser import ask_output_directory
+except ImportError:
+    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
 # #region agent log
@@ -666,6 +671,7 @@ class DidacticC3DInspector:
             defaultextension=".txt",
             filetypes=[("Text Files", "*.txt")],
             initialfile=f"inspection_{self.filename}.txt",
+            initialdir=str(Path(self.file_path).parent),
             title="Save Advanced Inspection Report",
         )
         if not report_path:
@@ -694,6 +700,7 @@ class DidacticC3DInspector:
             defaultextension=".html",
             filetypes=[("HTML Files", "*.html")],
             initialfile=f"inspection_{self.filename}.html",
+            initialdir=str(Path(self.file_path).parent),
             title="Save Advanced HTML Report",
         )
         if not report_path:
@@ -1783,7 +1790,7 @@ def convert_c3d_to_csv():
     print(f"Input directory selected: {input_directory}")
 
     print("Step 3: Selecting output directory...")
-    output_directory = filedialog.askdirectory(title="Select Output Directory")
+    output_directory = ask_output_directory(input_directory, title="Select Output Directory")
     if not output_directory:
         print("No output directory selected. Exiting.")
         messagebox.showerror("Error", "No output directory selected.")
@@ -1939,7 +1946,7 @@ def batch_convert_c3d_to_csv():
     print(f"Input directory selected: {input_directory}")
 
     print("Step 2: Selecting output directory...")
-    output_directory = filedialog.askdirectory(title="Select Output Directory")
+    output_directory = ask_output_directory(input_directory, title="Select Output Directory")
     if not output_directory:
         print("No output directory selected. Exiting.")
         messagebox.showerror("Error", "No output directory selected.")

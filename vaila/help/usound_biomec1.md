@@ -6,7 +6,8 @@
 - **File:** `vaila\usound_biomec1.py`
 - **Lines:** 1570
 - **Size:** 53500 characters
-- **Version:** 0.3.44
+- **Version:** 0.4.5
+- **Updated:** 24 September 2026
 
 - **GUI Interface:** ✅ Yes
 

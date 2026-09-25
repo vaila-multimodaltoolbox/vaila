@@ -1,7 +1,7 @@
 # VICON CSV Split Batch Processor
 
-**Version:** 0.3.137
-**Updated:** 2026-09-11
+**Version:** 0.4.5
+**Updated:** 2026-09-24
 
 Split first-level VICON Nexus CSV files into device CSVs. The existing converter cleans and merges headers, adds the source file creation Timestamp and preserves device data.
 
