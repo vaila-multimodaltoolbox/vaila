@@ -5,7 +5,7 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 24 September 2026
+Update Date: 25 September 2026
 Version: 0.4.5
 
 Description:
@@ -15,6 +15,14 @@ Description:
     tracking/keypoint/mesh artifacts. SAM3/SAM 3D Body weights are never
     loaded, so this is safe to run on a CPU-only machine right after a GPU
     inference run.
+
+    Supports overriding 2D keypoint coordinates with a manually corrected
+    marker CSV (e.g. from getpixelvideo.py via --markers-csv or auto-detection).
+    When an override is applied, all coordinate-dependent outputs (overlay
+    skeleton video, wide marker CSV, keypoints2d CSV, predictions JSON) are
+    regenerated using the corrected positions, while upstream SAM3 segmentation
+    masks, bounding boxes, 3D body models, camera translation, and metadata
+    are strictly preserved without re-running model inference.
 
     If the source run's *_sam3dinov3_joint_angles.csv exists (runs made after
     this feature was added -- see joint_kinematics.py), it is filtered to the
@@ -36,6 +44,11 @@ Usage:
         --sam3d-results /path/to/processed_sam3dinov3_.../video_stem \
         --video /path/to/video.mp4 --id 2 --output /path/to/output \
         --export-mesh obj
+
+    # Regenerate using manually corrected marker coordinates from getpixelvideo:
+    uv run python -u vaila/sam3dinov3_visualize.py \
+        --input-dir /path/to/..._visualized_id_00 \
+        --markers-csv /path/to/..._overlay_markers.csv
 
     # Omit --id to be prompted interactively with the available person IDs.
     # GUI: omit all arguments, or use Frame B -> YOLO + FB -> SAM3+DINOv3 Visualize ID
@@ -61,6 +74,7 @@ import shutil
 import sys
 import threading
 import tkinter as tk
+from collections.abc import Sequence
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
@@ -357,8 +371,17 @@ def _records_by_frame(payload: dict[str, Any], selected_id: int) -> dict[int, di
 
 
 def _contours_by_frame(run_dir: Path, selected_id: int) -> dict[int, dict[str, Any]]:
-    path = run_dir / "sam3" / "sam_contours.json"
-    if not path.exists():
+    path: Path | None = None
+    for candidate in (
+        run_dir / "sam3" / "sam_contours.json",
+        run_dir / "sam_contours.json",
+        run_dir / "source_artifacts" / "sam3" / "sam_contours.json",
+        run_dir / "source_artifacts" / "sam_contours.json",
+    ):
+        if candidate.is_file():
+            path = candidate
+            break
+    if path is None:
         return {}
     payload = json.loads(path.read_text(encoding="utf-8"))
     result: dict[int, dict[str, Any]] = {}
@@ -595,19 +618,19 @@ def _filter_rows(path: Path, output: Path, id_columns: tuple[str, ...], selected
     return True
 
 
-def _write_filtered_predictions(path: Path, output: Path, selected_id: int) -> bool:
-    if not path.exists():
-        return False
-    with gzip.open(path, "rt", encoding="utf-8") as fh:
-        payload = json.load(fh)
-    for frame in payload.get("frames", []):
+def _write_filtered_predictions(payload: dict[str, Any], output: Path, selected_id: int) -> bool:
+    import copy
+
+    output.parent.mkdir(parents=True, exist_ok=True)
+    payload_copy = copy.deepcopy(payload)
+    for frame in payload_copy.get("frames", []):
         frame["instances"] = [
             inst
             for inst in frame.get("instances", [])
             if _safe_int(inst.get("person_id", inst.get("sam_obj_id"))) == selected_id
         ]
     with gzip.open(output, "wt", encoding="utf-8") as fh:
-        json.dump(payload, fh)
+        json.dump(payload_copy, fh)
     return True
 
 
@@ -626,8 +649,12 @@ def _write_filtered_contours(path: Path, output: Path, selected_id: int) -> bool
 
 def _write_filtered_meshes(run_dir: Path, output_dir: Path, selected_id: int) -> int:
     """Extract the selected person's vertices/cam_t from each per-frame mesh npz."""
-    mesh_dir = run_dir / "meshes"
-    if not mesh_dir.is_dir():
+    mesh_dir: Path | None = None
+    for cand in (run_dir / "meshes", run_dir / "source_artifacts" / "meshes"):
+        if cand.is_dir():
+            mesh_dir = cand
+            break
+    if mesh_dir is None:
         return 0
     out_mesh_dir = output_dir / "meshes"
     written = 0
@@ -646,8 +673,12 @@ def _write_filtered_meshes(run_dir: Path, output_dir: Path, selected_id: int) ->
                 cam_t=data["cam_t"][idx : idx + 1],
             )
             written += 1
-    faces_path = run_dir / "mesh_faces.npy"
-    if written and faces_path.is_file():
+    faces_path: Path | None = None
+    for cand in (run_dir / "mesh_faces.npy", run_dir / "source_artifacts" / "mesh_faces.npy"):
+        if cand.is_file():
+            faces_path = cand
+            break
+    if written and faces_path is not None:
         shutil.copy2(faces_path, output_dir / "mesh_faces.npy")
     return written
 
@@ -781,8 +812,282 @@ def _rebase_wide_markers_to_p0(path: Path) -> None:
             writer.writerow({renamed[i]: row.get(fields[i], "") for i in range(len(fields))})
 
 
+def _find_first_existing(candidates: Sequence[Path | None]) -> Path | None:
+    """Return the first candidate path that exists on disk."""
+    for c in candidates:
+        if c is not None and c.exists():
+            return c
+    return None
+
+
+def resolve_markers_csv(
+    run_dir: Path,
+    selected_id: int,
+    explicit_markers_csv: Path | str | None = None,
+    *,
+    video_stem: str | None = None,
+) -> tuple[Path | None, str]:
+    """Resolve the marker CSV to use and its source type:
+    'explicit', 'auto_detected', or 'original'.
+    """
+    if explicit_markers_csv:
+        p = Path(explicit_markers_csv).expanduser().resolve()
+        if not p.is_file():
+            raise FileNotFoundError(f"Specified markers CSV not found: {p}")
+        return p, "explicit"
+
+    candidates: list[Path] = []
+    seen: set[Path] = set()
+
+    search_dirs = [run_dir]
+    if run_dir.is_dir() and "visualized" in run_dir.name:
+        search_dirs.append(run_dir.parent)
+
+    patterns = [
+        f"*id_{selected_id:02d}*overlay_markers.csv",
+        f"*id_{selected_id:02d}*markers_corrected.csv",
+        f"*id_{selected_id:02d}*corrected_markers.csv",
+    ]
+    for d in search_dirs:
+        if not d.is_dir():
+            continue
+        for pat in patterns:
+            for match in sorted(d.glob(pat)):
+                if match.is_file() and match not in seen:
+                    candidates.append(match)
+                    seen.add(match)
+
+    if not candidates and run_dir.is_dir():
+        for match in sorted(run_dir.glob("*overlay_markers.csv")):
+            if match.is_file() and match not in seen:
+                candidates.append(match)
+                seen.add(match)
+
+    if len(candidates) == 1:
+        _log(f"Auto-detected unambiguous corrected markers CSV: {candidates[0]}")
+        return candidates[0], "auto_detected"
+    if len(candidates) > 1:
+        c_names = ", ".join(c.name for c in candidates)
+        raise ValueError(
+            f"Ambiguous corrected marker files found for ID {selected_id} ({c_names}). "
+            "Please specify --markers-csv explicitly."
+        )
+
+    id_tag = f"{selected_id:02d}"
+    orig_candidates = []
+    if video_stem:
+        orig_candidates.extend(
+            [
+                run_dir / f"{video_stem}_id_{id_tag}_markers.csv",
+                run_dir / "source_artifacts" / f"{video_stem}_id_{id_tag}_markers.csv",
+            ]
+        )
+    orig_candidates.extend(
+        [
+            match
+            for match in sorted(run_dir.glob(f"*_id_{id_tag}_markers.csv"))
+            if not match.name.endswith("_overlay_markers.csv")
+            and not match.name.endswith("_markers_corrected.csv")
+        ]
+    )
+    if (run_dir / "source_artifacts").is_dir():
+        orig_candidates.extend(
+            [
+                match
+                for match in sorted(
+                    (run_dir / "source_artifacts").glob(f"*_id_{id_tag}_markers.csv")
+                )
+                if not match.name.endswith("_overlay_markers.csv")
+                and not match.name.endswith("_markers_corrected.csv")
+            ]
+        )
+    for orig in orig_candidates:
+        if orig and orig.is_file():
+            return orig, "original"
+
+    return None, "model_predictions"
+
+
+def load_marker_coordinates(
+    markers_csv_path: Path,
+    expected_kpts: int = 70,
+    names: list[str] | None = None,
+) -> dict[int, np.ndarray]:
+    """Load marker coordinates from a wide or long CSV.
+
+    Returns:
+        dict mapping frame_idx -> (n_kpts, 2) numpy array of float32.
+    """
+    markers_csv_path = Path(markers_csv_path).expanduser().resolve()
+    if not markers_csv_path.is_file():
+        raise FileNotFoundError(f"Markers CSV not found: {markers_csv_path}")
+
+    with markers_csv_path.open(newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        fields = list(reader.fieldnames or [])
+        rows = list(reader)
+
+    if not rows:
+        raise ValueError(f"Markers CSV is empty: {markers_csv_path}")
+
+    # Long format: frame, (kpt_idx or marker/kpt_name), (x_px or x), (y_px or y)
+    is_long = (
+        "kpt_idx" in fields or "kpt_name" in fields or "marker" in fields or "marker_name" in fields
+    ) and ("x_px" in fields or "x" in fields)
+    if is_long:
+        x_col = "x_px" if "x_px" in fields else "x"
+        y_col = "y_px" if "y_px" in fields else "y"
+        name_to_idx: dict[str, int] = {}
+        if names:
+            for idx, n in enumerate(names):
+                name_to_idx[n] = idx
+                name_to_idx[n.replace("-", "_")] = idx
+        long_coords: dict[int, np.ndarray] = {}
+        for row in rows:
+            f_idx = _safe_int(row.get("frame"))
+            if f_idx is None:
+                continue
+            k_idx = _safe_int(row.get("kpt_idx"))
+            if k_idx is None:
+                m_name = row.get("marker") or row.get("marker_name") or row.get("kpt_name")
+                if m_name and m_name in name_to_idx:
+                    k_idx = name_to_idx[m_name]
+            if k_idx is None or k_idx >= expected_kpts:
+                continue
+            if f_idx not in long_coords:
+                long_coords[f_idx] = np.full((expected_kpts, 2), np.nan, dtype=np.float32)
+            long_coords[f_idx][k_idx, 0] = _safe_float(row.get(x_col), np.nan)
+            long_coords[f_idx][k_idx, 1] = _safe_float(row.get(y_col), np.nan)
+        return long_coords
+
+    # Wide format: frame, p0_x, p0_y, ...
+    indexes = [int(match.group(1)) for field in fields if (match := _P_COL_RE.match(field))]
+    is_legacy_p1 = bool(indexes and 0 not in indexes and min(indexes) == 1)
+
+    coords = {}
+    for row in rows:
+        f_idx = _safe_int(row.get("frame"))
+        if f_idx is None:
+            continue
+        frame_arr = np.full((expected_kpts, 2), np.nan, dtype=np.float32)
+        for i in range(expected_kpts):
+            p_idx = i + 1 if is_legacy_p1 else i
+            x_val = row.get(f"p{p_idx}_x")
+            y_val = row.get(f"p{p_idx}_y")
+            if (x_val is None or y_val is None) and names and i < len(names):
+                raw_name = names[i]
+                safe_name = raw_name.replace("-", "_")
+                if x_val is None:
+                    x_val = row.get(f"{raw_name}_x")
+                if x_val is None:
+                    x_val = row.get(f"{safe_name}_x")
+                if y_val is None:
+                    y_val = row.get(f"{raw_name}_y")
+                if y_val is None:
+                    y_val = row.get(f"{safe_name}_y")
+            if x_val is not None and str(x_val).strip() != "":
+                frame_arr[i, 0] = _safe_float(x_val, np.nan)
+            if y_val is not None and str(y_val).strip() != "":
+                frame_arr[i, 1] = _safe_float(y_val, np.nan)
+        coords[f_idx] = frame_arr
+
+    return coords
+
+
+def validate_marker_coordinates(
+    coords: dict[int, np.ndarray],
+    video_info: dict[str, int | float],
+    names: list[str],
+) -> list[str]:
+    """Validate frame coverage, bounds, and keypoint counts."""
+    warnings: list[str] = []
+    if not coords:
+        raise ValueError("No valid marker coordinates loaded from CSV")
+
+    n_video_frames = _safe_int(video_info.get("frames")) or 0
+    width = _safe_int(video_info.get("width")) or 0
+    height = _safe_int(video_info.get("height")) or 0
+
+    min_frame = min(coords.keys())
+    max_frame = max(coords.keys())
+
+    if min_frame == 1 and max_frame == n_video_frames and n_video_frames > 0:
+        warnings.append(
+            f"CSV frames appear to be 1-based (1..{n_video_frames}) while video is 0-based. "
+            "Coordinates will be shifted down by 1 to align with 0-based frames."
+        )
+
+    out_of_bounds = 0
+    for _f_idx, arr in coords.items():
+        valid_x = arr[:, 0][np.isfinite(arr[:, 0])]
+        valid_y = arr[:, 1][np.isfinite(arr[:, 1])]
+        is_x_oob = width > 0 and (np.any(valid_x < 0) or np.any(valid_x >= width))
+        is_y_oob = height > 0 and (np.any(valid_y < 0) or np.any(valid_y >= height))
+        if is_x_oob or is_y_oob:
+            out_of_bounds += 1
+
+    if out_of_bounds > 0:
+        warnings.append(
+            f"{out_of_bounds} frames have keypoints out of video bounds ({width}x{height})"
+        )
+
+    return warnings
+
+
+def _write_keypoints2d_csv(
+    output_path: Path,
+    records: dict[int, dict[str, Any]],
+    names: list[str],
+    selected_id: int,
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with output_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(["frame", "person_id", "kpt_idx", "kpt_name", "x_px", "y_px"])
+        for frame_idx in sorted(records):
+            inst = records[frame_idx]
+            kp2d = inst.get("keypoints_2d_px") or []
+            for kpt_idx, name in enumerate(names):
+                if kpt_idx < len(kp2d):
+                    pt = kp2d[kpt_idx]
+                    x_val = f"{float(pt[0]):.6f}" if np.isfinite(pt[0]) else ""
+                    y_val = f"{float(pt[1]):.6f}" if np.isfinite(pt[1]) else ""
+                    writer.writerow([frame_idx, selected_id, kpt_idx, name, x_val, y_val])
+
+
+def _write_wide_markers_csv(
+    output_path: Path,
+    records: dict[int, dict[str, Any]],
+    names: list[str],
+) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    header = ["frame"]
+    for i in range(len(names)):
+        header.extend([f"p{i}_x", f"p{i}_y"])
+    with output_path.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(header)
+        for frame_idx in sorted(records):
+            inst = records[frame_idx]
+            kp2d = inst.get("keypoints_2d_px") or []
+            row = [str(frame_idx)]
+            for i in range(len(names)):
+                if i < len(kp2d) and np.isfinite(kp2d[i][0]) and np.isfinite(kp2d[i][1]):
+                    row.extend([f"{float(kp2d[i][0]):.6f}", f"{float(kp2d[i][1]):.6f}"])
+                else:
+                    row.extend(["", ""])
+            writer.writerow(row)
+
+
 def write_selected_artifacts(
-    run_dir: Path, output_dir: Path, selected_id: int, payload: dict[str, Any]
+    run_dir: Path,
+    output_dir: Path,
+    selected_id: int,
+    payload: dict[str, Any],
+    *,
+    records: dict[int, dict[str, Any]] | None = None,
+    names: list[str] | None = None,
+    is_corrected: bool = False,
 ) -> list[str]:
     """Write filtered artifacts and preserve all source artifacts for provenance."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -793,55 +1098,120 @@ def write_selected_artifacts(
     id_tag = f"{selected_id:02d}"
 
     mapping = (
-        (run_dir / "sam3" / "sam_tracks.csv", output_dir / "sam_tracks.csv", ("obj_id",)),
-        (run_dir / "sam3" / "sam_bbox_tracks.csv", output_dir / "sam_bbox_tracks.csv", ("obj_id",)),
         (
-            run_dir / f"{stem}_sam3dinov3_keypoints3d.csv",
+            [
+                run_dir / "sam3" / "sam_tracks.csv",
+                run_dir / "sam_tracks.csv",
+                run_dir / "source_artifacts" / "sam3" / "sam_tracks.csv",
+                run_dir / "source_artifacts" / "sam_tracks.csv",
+            ],
+            output_dir / "sam_tracks.csv",
+            ("obj_id",),
+        ),
+        (
+            [
+                run_dir / "sam3" / "sam_bbox_tracks.csv",
+                run_dir / "sam_bbox_tracks.csv",
+                run_dir / "source_artifacts" / "sam3" / "sam_bbox_tracks.csv",
+                run_dir / "source_artifacts" / "sam_bbox_tracks.csv",
+            ],
+            output_dir / "sam_bbox_tracks.csv",
+            ("obj_id",),
+        ),
+        (
+            [
+                run_dir / f"{stem}_sam3dinov3_keypoints3d.csv",
+                run_dir / "source_artifacts" / f"{stem}_sam3dinov3_keypoints3d.csv",
+            ],
             output_dir / f"{stem}_sam3dinov3_keypoints3d.csv",
             ("person_id",),
         ),
         (
-            run_dir / f"{stem}_sam3dinov3_keypoints2d.csv",
-            output_dir / f"{stem}_sam3dinov3_keypoints2d.csv",
-            ("person_id",),
-        ),
-        (
-            run_dir / f"{stem}_sam3dinov3_camera.csv",
+            [
+                run_dir / f"{stem}_sam3dinov3_camera.csv",
+                run_dir / "source_artifacts" / f"{stem}_sam3dinov3_camera.csv",
+            ],
             output_dir / f"{stem}_sam3dinov3_camera.csv",
             ("person_id",),
         ),
         (
-            run_dir / f"{stem}_sam3dinov3_joint_angles.csv",
+            [
+                run_dir / f"{stem}_sam3dinov3_joint_angles.csv",
+                run_dir / "source_artifacts" / f"{stem}_sam3dinov3_joint_angles.csv",
+            ],
             output_dir / f"{stem}_sam3dinov3_joint_angles.csv",
             ("person_id",),
         ),
     )
-    for source, target, columns in mapping:
-        if _filter_rows(source, target, columns, selected_id):
+    for sources, target, columns in mapping:
+        src = _find_first_existing(sources)
+        if src and _filter_rows(src, target, columns, selected_id):
             written.append(str(target.name))
 
-    # Per-ID wide CSVs already exist in the source run (person_id == sam_obj_id).
-    for suffix in ("mhr70_3d", "mhr70_rec3d", "markers"):
-        source = run_dir / f"{stem}_id_{id_tag}_{suffix}.csv"
-        if source.is_file():
+    # 2D Keypoints (long format): regenerate from records if corrected, else filter source
+    kp2d_out = output_dir / f"{stem}_sam3dinov3_keypoints2d.csv"
+    if is_corrected and records and names:
+        _write_keypoints2d_csv(kp2d_out, records, names, selected_id)
+        written.append(kp2d_out.name)
+    else:
+        src_kp2d = _find_first_existing(
+            [
+                run_dir / f"{stem}_sam3dinov3_keypoints2d.csv",
+                run_dir / "source_artifacts" / f"{stem}_sam3dinov3_keypoints2d.csv",
+            ]
+        )
+        if src_kp2d and _filter_rows(src_kp2d, kp2d_out, ("person_id",), selected_id):
+            written.append(kp2d_out.name)
+
+    # Wide 2D markers: regenerate from records if corrected, else copy source
+    markers_out = output_dir / f"{stem}_id_{id_tag}_markers.csv"
+    if is_corrected and records and names:
+        _write_wide_markers_csv(markers_out, records, names)
+        written.append(markers_out.name)
+    else:
+        src_markers = _find_first_existing(
+            [
+                run_dir / f"{stem}_id_{id_tag}_markers.csv",
+                run_dir / "source_artifacts" / f"{stem}_id_{id_tag}_markers.csv",
+            ]
+        )
+        if src_markers and src_markers.is_file():
+            shutil.copy2(src_markers, markers_out)
+            _rebase_wide_markers_to_p0(markers_out)
+            written.append(markers_out.name)
+
+    # Other per-ID wide CSVs (3D)
+    for suffix in ("mhr70_3d", "mhr70_rec3d"):
+        source = _find_first_existing(
+            [
+                run_dir / f"{stem}_id_{id_tag}_{suffix}.csv",
+                run_dir / "source_artifacts" / f"{stem}_id_{id_tag}_{suffix}.csv",
+            ]
+        )
+        if source and source.is_file():
             target = output_dir / source.name
             shutil.copy2(source, target)
-            if suffix in ("mhr70_rec3d", "markers"):
+            if suffix == "mhr70_rec3d":
                 _rebase_wide_markers_to_p0(target)
             written.append(target.name)
 
-    if _write_filtered_predictions(
-        _predictions_path(run_dir),
-        output_dir / f"{stem}_sam3dinov3_predictions.json.gz",
-        selected_id,
-    ):
-        written.append(f"{stem}_sam3dinov3_predictions.json.gz")
-    if _write_filtered_contours(
-        run_dir / "sam3" / "sam_contours.json",
-        output_dir / "sam_contours.json",
-        selected_id,
+    pred_out = output_dir / f"{stem}_sam3dinov3_predictions.json.gz"
+    if _write_filtered_predictions(payload, pred_out, selected_id):
+        written.append(pred_out.name)
+
+    contour_source = _find_first_existing(
+        [
+            run_dir / "sam3" / "sam_contours.json",
+            run_dir / "sam_contours.json",
+            run_dir / "source_artifacts" / "sam3" / "sam_contours.json",
+            run_dir / "source_artifacts" / "sam_contours.json",
+        ]
+    )
+    if contour_source and _write_filtered_contours(
+        contour_source, output_dir / "sam_contours.json", selected_id
     ):
         written.append("sam_contours.json")
+
     n_meshes = _write_filtered_meshes(run_dir, output_dir, selected_id)
     if n_meshes:
         written.append(f"meshes/ ({n_meshes} frames)")
@@ -851,6 +1221,8 @@ def write_selected_artifacts(
     # remains ID-specific, while provenance is never silently discarded.
     for source in run_dir.rglob("*"):
         if not source.is_file() or source == output_dir or output_dir in source.parents:
+            continue
+        if "source_artifacts" in source.parts:
             continue
         if source.name.endswith("_sam3dinov3_overlay.mp4") or source.name.endswith(
             "_sam3dinov3_overlay.avi"
@@ -870,6 +1242,7 @@ def visualize_selected_id(
     selected_id: int,
     output_dir: Path,
     *,
+    markers_csv: Path | str | None = None,
     overwrite: bool = False,
     export_mesh: str = "none",
 ) -> dict[str, Any]:
@@ -878,6 +1251,8 @@ def visualize_selected_id(
     if not video_path.is_file() or video_path.suffix.lower() not in VIDEO_EXTENSIONS:
         raise FileNotFoundError(f"Video not found or unsupported: {video_path}")
     payload = load_predictions(run_dir)
+    video_info = validate_source_video(video_path, payload)
+    total_frames = int(video_info["frames"])
     available = discover_ids(run_dir, payload)
     if selected_id not in available:
         raise ValueError(f"ID {selected_id} is unavailable; choose one of {available}")
@@ -895,6 +1270,56 @@ def visualize_selected_id(
     names = [str(n) for n in names]
     edges = skeleton_edges(names)
 
+    resolved_markers_csv, marker_source_type = resolve_markers_csv(
+        run_dir, selected_id, markers_csv, video_stem=video_path.stem
+    )
+    is_corrected = (
+        marker_source_type in ("explicit", "auto_detected") and resolved_markers_csv is not None
+    )
+    marker_source_label = "manual_correction" if is_corrected else "automatic"
+    marker_csv_used = str(resolved_markers_csv) if resolved_markers_csv else "model_predictions"
+
+    if is_corrected and resolved_markers_csv is not None:
+        _log(f"Marker source: MANUALLY CORRECTED ({marker_source_type})")
+        _log(f"Marker CSV: {resolved_markers_csv}")
+        corrected_coords = load_marker_coordinates(
+            resolved_markers_csv, expected_kpts=len(names), names=names
+        )
+        warns = validate_marker_coordinates(corrected_coords, video_info, names)
+        for w in warns:
+            _log(f"WARNING: {w}")
+
+        if (
+            total_frames > 0
+            and len(corrected_coords) == total_frames
+            and min(corrected_coords.keys()) == 1
+            and max(corrected_coords.keys()) == total_frames
+        ):
+            _log("Adjusting 1-based CSV frame numbering (1..N) to 0-based to match video.")
+            corrected_coords = {f - 1: arr for f, arr in corrected_coords.items()}
+
+        for f_idx, kp_arr in corrected_coords.items():
+            if f_idx in records:
+                records[f_idx]["keypoints_2d_px"] = kp_arr.tolist()
+            else:
+                records[f_idx] = {
+                    "person_id": selected_id,
+                    "sam_obj_id": selected_id,
+                    "keypoints_2d_px": kp_arr.tolist(),
+                    "bbox_xyxy": None,
+                    "cam_t_m": [0.0, 0.0, 0.0],
+                }
+
+        for frame_obj in payload.get("frames", []):
+            f_idx = _safe_int(frame_obj.get("frame"))
+            if f_idx is not None and f_idx in corrected_coords:
+                for inst in frame_obj.get("instances", []):
+                    pid = _safe_int(inst.get("person_id", inst.get("sam_obj_id")))
+                    if pid == selected_id:
+                        inst["keypoints_2d_px"] = corrected_coords[f_idx].tolist()
+    else:
+        _log(f"Marker source: AUTOMATIC ({marker_csv_used})")
+
     _log(f"Starting visualization for ID {selected_id} on video: {video_path.name}")
     _log(f"Rendering overlay video for ID {selected_id}...")
     overlay, frames, drawn = render_selected_video(
@@ -907,7 +1332,15 @@ def visualize_selected_id(
         selected_id=selected_id,
     )
     _log(f"Filtering and writing artifacts for ID {selected_id}...")
-    written = write_selected_artifacts(run_dir, output_dir, selected_id, payload)
+    written = write_selected_artifacts(
+        run_dir,
+        output_dir,
+        selected_id,
+        payload,
+        records=records,
+        names=names,
+        is_corrected=is_corrected,
+    )
 
     mesh_export_dir: Path | None = None
     n_mesh_exported = 0
@@ -935,6 +1368,9 @@ def visualize_selected_id(
         "source_video": str(video_path),
         "selected_id": selected_id,
         "available_ids": available,
+        "marker_source": marker_source_label,
+        "marker_csv": marker_csv_used,
+        "corrected_markers_applied": is_corrected,
         "fps": payload.get("fps"),
         "width": payload.get("width"),
         "height": payload.get("height"),
@@ -963,6 +1399,7 @@ def visualize_selected_id(
         f"selected_id={selected_id}\nsource_run={run_dir}\nsource_video={video_path}\n"
         "identity_authority=SAM3 obj_id (person_id == sam_obj_id)\n"
         "coordinate_units=full-frame pixels for 2D; metres for 3D; frame_index=zero-based\n"
+        f"marker_source={marker_source_label} ({marker_csv_used})\n"
         "The root contains filtered artifacts. source_artifacts/ preserves the original run.\n"
         "Overlay style: SAM3 contour fill/outline + MHR70 skeleton "
         "(left=green RGB 0,255,0; right=orange RGB 255,128,0; center=blue) + depth label.\n"
@@ -1006,6 +1443,7 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
     vars_: dict[str, tk.StringVar] = {
         "run": tk.StringVar(),
         "video": tk.StringVar(),
+        "markers_csv": tk.StringVar(),
         "output": tk.StringVar(),
         "id": tk.StringVar(),
         "status": tk.StringVar(value="Choose a processed_sam3dinov3_* directory first."),
@@ -1016,6 +1454,23 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
     ttk.Label(
         frame, text="SAM3+DINOv3 3D — selected-ID visualization", font=("TkDefaultFont", 11, "bold")
     ).grid(column=0, row=0, columnspan=3, sticky="w", pady=(0, 10))
+
+    def on_id_change(_event: Any = None) -> None:
+        raw_id = vars_["id"].get()
+        if not raw_id:
+            return
+        try:
+            curr_id = int(raw_id)
+            run_val = vars_["run"].get()
+            if run_val:
+                vid_val = vars_["video"].get()
+                cand_csv, cand_type = resolve_markers_csv(
+                    Path(run_val), curr_id, video_stem=Path(vid_val).stem if vid_val else None
+                )
+                if cand_type in ("explicit", "auto_detected") and cand_csv is not None:
+                    vars_["markers_csv"].set(str(cand_csv))
+        except Exception:
+            pass
 
     def browse_run() -> None:
         chosen = filedialog.askdirectory(parent=dialog, title="Processed SAM3+DINOv3 directory")
@@ -1037,6 +1492,15 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
                 vars_["status"].set(f"Available IDs: {ids}. Source video found automatically.")
             else:
                 vars_["status"].set(f"Available IDs: {ids}. Choose the matching source video.")
+            if ids:
+                try:
+                    cand_csv, cand_type = resolve_markers_csv(
+                        resolved, ids[0], video_stem=source_video.stem if source_video else None
+                    )
+                    if cand_type in ("explicit", "auto_detected") and cand_csv is not None:
+                        vars_["markers_csv"].set(str(cand_csv))
+                except Exception:
+                    pass
         except Exception as exc:
             combo["values"] = []
             vars_["id"].set("")
@@ -1051,6 +1515,15 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
         if chosen:
             vars_["video"].set(chosen)
 
+    def browse_markers_csv() -> None:
+        chosen = filedialog.askopenfilename(
+            parent=dialog,
+            title="Corrected markers CSV (from getpixelvideo.py)",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*")],
+        )
+        if chosen:
+            vars_["markers_csv"].set(chosen)
+
     def browse_output() -> None:
         chosen = ask_output_directory(
             vars_["run"].get(), title="Output parent directory", parent=dialog
@@ -1062,6 +1535,7 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
         (
             ("Run directory", "run", browse_run),
             ("Video", "video", browse_video),
+            ("Markers CSV (optional)", "markers_csv", browse_markers_csv),
             ("Output parent", "output", browse_output),
         ),
         start=1,
@@ -1071,16 +1545,17 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             column=1, row=row, sticky="ew", padx=6
         )
         ttk.Button(frame, text="Browse…", command=command).grid(column=2, row=row)
-    ttk.Label(frame, text="Selected ID").grid(column=0, row=4, sticky="w", pady=3)
+    ttk.Label(frame, text="Selected ID").grid(column=0, row=5, sticky="w", pady=3)
     combo = ttk.Combobox(frame, textvariable=vars_["id"], state="readonly", width=14)
-    combo.grid(column=1, row=4, sticky="w", padx=6)
+    combo.grid(column=1, row=5, sticky="w", padx=6)
+    combo.bind("<<ComboboxSelected>>", on_id_change)
     ttk.Checkbutton(
         frame,
         text="Export mesh sequence (.obj, for Blender — needs --save-mesh in the source run)",
         variable=export_mesh_var,
-    ).grid(column=0, row=5, columnspan=3, sticky="w", pady=2)
+    ).grid(column=0, row=6, columnspan=3, sticky="w", pady=2)
     ttk.Label(frame, textvariable=vars_["status"], foreground="#7a4f00", wraplength=560).grid(
-        column=0, row=6, columnspan=3, sticky="w", pady=(8, 4)
+        column=0, row=7, columnspan=3, sticky="w", pady=(8, 4)
     )
 
     def run() -> None:
@@ -1088,6 +1563,8 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             run_dir = Path(vars_["run"].get()).expanduser()
             video = Path(vars_["video"].get()).expanduser()
             selected = int(vars_["id"].get())
+            markers_csv_text = vars_["markers_csv"].get().strip()
+            markers_csv_path = Path(markers_csv_text).expanduser() if markers_csv_text else None
             output_text = vars_["output"].get().strip()
             output_parent = Path(output_text).expanduser() if output_text else run_dir
             output = _unique_gui_output_dir(output_parent, video, selected)
@@ -1108,6 +1585,8 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
             "--output",
             str(output),
         ]
+        if markers_csv_path is not None:
+            cli.extend(["--markers-csv", str(markers_csv_path)])
         if export_mesh != "none":
             cli.extend(["--export-mesh", export_mesh])
         _log("GUI equivalent CLI: " + " ".join(cli))
@@ -1116,7 +1595,12 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
         def worker() -> None:
             try:
                 result = visualize_selected_id(
-                    run_dir, video, selected, output, export_mesh=export_mesh
+                    run_dir,
+                    video,
+                    selected,
+                    output,
+                    markers_csv=markers_csv_path,
+                    export_mesh=export_mesh,
                 )
                 dialog.after(
                     0,
@@ -1144,9 +1628,9 @@ def run_visualizer_gui(existing_root: tk.Tk | tk.Toplevel | None = None) -> None
         threading.Thread(target=worker, daemon=True).start()
 
     ttk.Button(frame, text="Run selected ID", command=run).grid(
-        column=1, row=7, sticky="w", padx=6, pady=(10, 0)
+        column=1, row=8, sticky="w", padx=6, pady=(10, 0)
     )
-    ttk.Button(frame, text="Cancel", command=dialog.destroy).grid(column=2, row=7, pady=(10, 0))
+    ttk.Button(frame, text="Cancel", command=dialog.destroy).grid(column=2, row=8, pady=(10, 0))
     dialog.protocol("WM_DELETE_WINDOW", dialog.destroy)
     _show_dialog_in_front(dialog)
     if owns_root:
@@ -1171,6 +1655,16 @@ def build_parser() -> argparse.ArgumentParser:
         dest="selected_id",
         type=int,
         help="SAM/person ID to visualize. If omitted in CLI mode, prompt interactively.",
+    )
+    parser.add_argument(
+        "--markers-csv",
+        type=Path,
+        default=None,
+        help=(
+            "Override 2D keypoint coordinates with a manually corrected CSV "
+            "(e.g. from getpixelvideo.py). If omitted, an unambiguous *overlay_markers.csv "
+            "or *_markers_corrected.csv in the run directory is auto-detected."
+        ),
     )
     parser.add_argument("--output", "-o", type=Path, help="New output directory for this ID.")
     parser.add_argument(
@@ -1272,6 +1766,7 @@ def _run_recursive_batch(args: argparse.Namespace) -> int:
                         source_video,
                         target_id,
                         output_dir,
+                        markers_csv=args.markers_csv,
                         overwrite=args.overwrite,
                         export_mesh=args.export_mesh,
                     )
@@ -1295,35 +1790,76 @@ def main(argv: list[str] | None = None) -> int:
         if args.depth < -1 or args.depth > 99:
             parser.error("--depth must be -1 (unlimited), 0 (root only), or 1-99.")
         return _run_recursive_batch(args)
-    if not any((args.sam3d_results, args.video, args.selected_id is not None, args.output)):
+    if not any(
+        (
+            args.sam3d_results,
+            args.video,
+            args.selected_id is not None,
+            args.output,
+            args.markers_csv,
+        )
+    ):
         run_visualizer_gui()
         return 0
-    if args.sam3d_results is None or args.video is None:
-        parser.error("--sam3d-results/--input-dir and --video/-i must be supplied together")
+    if args.sam3d_results is None:
+        parser.error("--sam3d-results/--input-dir is required in CLI mode")
     run_dir = resolve_run_dir(args.sam3d_results, args.video)
     payload = load_predictions(run_dir)
+    video_path = args.video
+    if video_path is None:
+        video_path = discover_source_video(run_dir, payload)
+        if video_path is None:
+            parser.error(
+                "--video/-i could not be auto-discovered; please specify --video explicitly"
+            )
+        print(f">> Source video auto-discovered: {video_path}")
+    else:
+        video_path = video_path.expanduser().resolve()
+
     ids = discover_ids(run_dir, payload)
     print(f">> Available person IDs: {ids}")
     if args.list_ids:
         return 0
     selected_id = args.selected_id
     if selected_id is None:
-        selected_id = prompt_selected_id(ids)
+        if len(ids) == 1:
+            selected_id = ids[0]
+            print(f">> Single person ID {selected_id} auto-selected.")
+        else:
+            selected_id = prompt_selected_id(ids)
     elif selected_id not in ids:
         parser.error(f"ID {selected_id} is unavailable; choose one of {ids}")
-    if args.output is None:
-        parser.error("--output/-o is required for rendering")
+
+    output_dir = args.output
+    if output_dir is None:
+        if run_dir.name.endswith(f"_id_{selected_id:02d}"):
+            output_dir = run_dir.parent / f"{run_dir.name}_corrected"
+        else:
+            suffix = "_corrected" if args.markers_csv is not None else ""
+            output_dir = _unique_gui_output_dir(run_dir.parent, video_path, selected_id)
+            if suffix and not str(output_dir).endswith(suffix):
+                output_dir = output_dir.parent / f"{output_dir.name}{suffix}"
+        print(f">> Defaulting output directory to: {output_dir}")
+    else:
+        output_dir = output_dir.expanduser().resolve()
+
     if args.dry_run:
-        validate_source_video(args.video.expanduser().resolve(), payload)
-        print(
-            f">> Dry-run OK: video={args.video} run_dir={run_dir} id={selected_id} output={args.output}"
+        validate_source_video(video_path, payload)
+        resolved_csv, marker_type = resolve_markers_csv(
+            run_dir, selected_id, args.markers_csv, video_stem=video_path.stem
         )
+        print(
+            f">> Dry-run OK: video={video_path} run_dir={run_dir} id={selected_id} output={output_dir}"
+        )
+        print(f">> Marker source: {marker_type} ({resolved_csv})")
         return 0
+
     visualize_selected_id(
         run_dir,
-        args.video,
+        video_path,
         selected_id,
-        args.output,
+        output_dir,
+        markers_csv=args.markers_csv,
         overwrite=args.overwrite,
         export_mesh=args.export_mesh,
     )

@@ -3,7 +3,7 @@
 <head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID</title></head>
 <body>
 <h1>SAM3+DINOv3 3D — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.4.5 &nbsp; <strong>Updated:</strong> 2026-09-24</p>
+<p><strong>Version:</strong> 0.4.5 &nbsp; <strong>Updated:</strong> 2026-09-25</p>
 <p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one person, draw its SAM contour, bounding box, ID and reprojected MHR70 skeleton, and write filtered keypoint/camera/contour/predictions artifacts plus an overlay video (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
@@ -53,8 +53,15 @@
   --sam3d-results /path/to/root -r -d -1
 </code></pre>
 <p><code>--recursive</code>/<code>-r</code> walks <code>--sam3d-results</code> for every completed <code>processed_sam3dinov3_*</code> run directory found below it, instead of a single run — <code>--video</code> is not used in this mode, each run's source video is auto-discovered. <code>--depth</code>/<code>-d N</code> bounds the walk (<code>-1</code> unlimited — default, <code>0</code> root only, <code>1-99</code> levels). If <code>--id</code> is omitted, <strong>every</strong> available ID is rendered per video (no "best ID" heuristic); if given, it is applied to every discovered video, skipped with a warning where that ID is unavailable. An ID already rendered is never re-rendered. This mode is CLI-only — the GUI stays single-run/single-ID.</p>
+<h3>Manual Marker Correction Override (<code>--markers-csv</code>) (v0.4.5)</h3>
+<p>When keypoint tracking coordinates are manually edited frame-by-frame in <code>getpixelvideo.py</code>, the corrected coordinates can be fed back into <code>sam3dinov3_visualize.py</code> without re-running SAM3 or SAM 3D Body model inference:</p>
+<pre>uv run python -u vaila/sam3dinov3_visualize.py \
+  --input-dir /path/to/video_sam3dinov3_visualized_id_00 \
+  --markers-csv /path/to/video_sam3dinov3_id_00_overlay_markers.csv</pre>
+<p><strong>Resolution Priority:</strong> (1) Explicit <code>--markers-csv</code>; (2) GUI-selected CSV; (3) Auto-detected unambiguous <code>*overlay_markers.csv</code> or <code>*_markers_corrected.csv</code>; (4) Original model predictions.</p>
+<p><strong>Regenerated vs. Preserved:</strong> Regenerates <code>*_sam3dinov3_id_NN_overlay.mp4</code>, <code>keypoints2d.csv</code>, <code>*_markers.csv</code>, and <code>predictions.json.gz</code> with corrected coordinates. Preserves SAM3 contours, bounding boxes, 3D meshes, and camera translations. Provenance is recorded in <code>sam3dinov3_selected_id_manifest.json</code>.</p>
 <h2>GUI</h2>
-<p>Frame B → <strong>Markerless 3D</strong> → <strong>SAM3+DINOv3 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3dinov3_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. Choose an <strong>output parent</strong> and an ID from the combobox. Check <strong>"Export mesh sequence (.obj, for Blender)"</strong> to also write the OBJ sequence (needs <code>--save-mesh</code> in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
+<p>Frame B → <strong>Markerless 3D</strong> → <strong>SAM3+DINOv3 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3dinov3_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. If a corrected marker file is present, it is auto-detected into <strong>Markers CSV (optional)</strong>, or you can browse for a corrected CSV. Choose an <strong>output parent</strong> and an ID from the combobox. Check <strong>"Export mesh sequence (.obj, for Blender)"</strong> to also write the OBJ sequence (needs <code>--save-mesh</code> in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
 <h2>Outputs</h2>
 <table>
 <tr><th>File</th><th>Content</th></tr>
