@@ -1,7 +1,7 @@
 # SAM3+DINOv3 3D — Visualize selected ID
 
 **Version:** 0.4.5
-**Updated:** 2026-09-24
+**Updated:** 2026-09-25
 
 This CPU-only tool rerenders an existing `processed_sam3dinov3_*` (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights, so it is safe to run right after a GPU inference run to isolate one person, and does not repeat GPU allocation.
 
@@ -101,9 +101,31 @@ discovered video, skipped with a warning where that ID is unavailable. An ID
 already rendered (`<video>_sam3dinov3_visualized_id_NN` exists) is never
 re-rendered. This mode is CLI-only — the GUI stays single-run/single-ID.
 
+### Manual Marker Correction Override (`--markers-csv`) (v0.4.5)
+
+When keypoint tracking coordinates are manually edited frame-by-frame in `getpixelvideo.py`, the corrected coordinates can be fed back into `sam3dinov3_visualize.py` without re-running SAM3 or SAM 3D Body model inference:
+
+```bash
+uv run python -u vaila/sam3dinov3_visualize.py \
+  --input-dir /path/to/video_sam3dinov3_visualized_id_00 \
+  --markers-csv /path/to/video_sam3dinov3_id_00_overlay_markers.csv
+```
+
+**Resolution Priority:**
+1. Explicit `--markers-csv <path>` (highest priority)
+2. GUI-selected corrected CSV
+3. Auto-detected unambiguous `*overlay_markers.csv` (saved by `getpixelvideo.py`) or `*_markers_corrected.csv` in the run directory
+4. Original automatically generated marker CSV / model predictions
+
+**Regenerated vs. Preserved Artifacts:**
+- **Regenerated with corrected coordinates:** `*_sam3dinov3_id_NN_overlay.mp4` (skeleton reprojection), `<video>_sam3dinov3_keypoints2d.csv`, `<video>_id_NN_markers.csv`, and `<video>_sam3dinov3_predictions.json.gz`.
+- **Preserved without modification:** Upstream SAM3 segmentation contours (`sam_contours.json`), bounding box tracks, camera translation (`cam_t`), 3D body mesh sequence, and tracking metadata.
+- **Output safety:** When `--markers-csv` is supplied and `--output` is omitted, the tool automatically defaults to `<run_dir>_corrected/` to avoid overwriting original automatic results.
+- **Provenance tracking:** The manifest (`sam3dinov3_selected_id_manifest.json`) records `marker_source: "manual_correction"`, `marker_csv: "<path>"`, and `corrected_markers_applied: true`.
+
 ## GUI
 
-Frame B → **Markerless 3D** → **SAM3+DINOv3 Visualize ID** (or run with no arguments). Select the processed run directory first. The matching source video is filled automatically from `sam3dinov3_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. Select an **output parent** and an ID from the combobox. Check **"Export mesh sequence (.obj, for Blender)"** to also write the OBJ sequence described above (needs `--save-mesh` in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
+Frame B → **Markerless 3D** → **SAM3+DINOv3 Visualize ID** (or run with no arguments). Select the processed run directory first. The matching source video is filled automatically from `sam3dinov3_summary.json`; if the run was moved, choose the synchronized/cropped source video manually. If a corrected marker file (such as `*overlay_markers.csv`) is present, it is auto-detected into **Markers CSV (optional)**, or you can browse for a corrected CSV. Select an **output parent** and an ID from the combobox. Check **"Export mesh sequence (.obj, for Blender)"** to also write the OBJ sequence described above (needs `--save-mesh` in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.
 
 Before rendering, the CLI `--dry-run` path verifies the source frame count and image dimensions against `width`/`height`/`n_frames` recorded in the gzipped predictions — this prevents accidentally applying a synchronized/cropped result to the wrong source video.
 

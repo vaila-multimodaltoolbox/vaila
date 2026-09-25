@@ -1,7 +1,7 @@
 """Tests for the selected-ID SAM3+DINOv3 3D rerenderer.
 
-Update Date: 24 August 2026
-Version: 0.3.112
+Update Date: 25 September 2026
+Version: 0.4.5
 """
 
 from __future__ import annotations
@@ -332,3 +332,172 @@ def test_legacy_p1_marker_header_rebases_to_p0(tmp_path: Path) -> None:
     already.write_text("frame,p0_x,p0_y\n0,9,8\n", encoding="utf-8")
     viz._rebase_wide_markers_to_p0(already)
     assert already.read_text(encoding="utf-8").splitlines()[1].startswith("0,9,8")
+
+
+def test_resolve_markers_csv_explicit_and_auto_detect(tmp_path: Path) -> None:
+    run_dir = tmp_path / "run_id_00"
+    run_dir.mkdir()
+
+    # 1. Nonexistent explicit path raises FileNotFoundError
+    with pytest.raises(FileNotFoundError, match="Specified markers CSV not found"):
+        viz.resolve_markers_csv(run_dir, 0, tmp_path / "missing.csv")
+
+    # 2. Explicit valid path returns ("explicit", path)
+    explicit_file = tmp_path / "custom_markers.csv"
+    explicit_file.write_text("frame,p0_x,p0_y\n0,1,2\n", encoding="utf-8")
+    path, source_type = viz.resolve_markers_csv(run_dir, 0, explicit_file)
+    assert source_type == "explicit"
+    assert path == explicit_file.resolve()
+
+    # 3. Fallback when no corrected files exist returns original or model_predictions
+    orig_file = run_dir / "clip_id_00_markers.csv"
+    orig_file.write_text("frame,p0_x,p0_y\n0,5,6\n", encoding="utf-8")
+    path, source_type = viz.resolve_markers_csv(run_dir, 0, None)
+    assert source_type == "original"
+    assert path == orig_file.resolve()
+
+    # 4. Auto-detect *overlay_markers.csv
+    overlay_file = run_dir / "clip_sam3dinov3_id_00_overlay_markers.csv"
+    overlay_file.write_text("frame,p0_x,p0_y\n0,10,20\n", encoding="utf-8")
+    path, source_type = viz.resolve_markers_csv(run_dir, 0, None)
+    assert source_type == "auto_detected"
+    assert path == overlay_file.resolve()
+
+    # 5. Ambiguity check: multiple corrected candidates raise ValueError
+    second_corrected = run_dir / "clip_id_00_markers_corrected.csv"
+    second_corrected.write_text("frame,p0_x,p0_y\n0,30,40\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="Ambiguous corrected marker files found"):
+        viz.resolve_markers_csv(run_dir, 0, None)
+
+
+def test_load_and_validate_marker_coordinates(tmp_path: Path) -> None:
+    # Wide format with named coordinates
+    wide_file = tmp_path / "wide.csv"
+    wide_file.write_text(
+        "frame,nose_x,nose_y,left-eye_x,left-eye_y\n0,10.0,20.0,30.0,40.0\n1,15.0,25.0,35.0,45.0\n",
+        encoding="utf-8",
+    )
+    names = ["nose", "left-eye"]
+    coords = viz.load_marker_coordinates(wide_file, expected_kpts=2, names=names)
+    assert len(coords) == 2
+    assert coords[0].shape == (2, 2)
+    assert coords[0][0, 0] == 10.0
+    assert coords[0][0, 1] == 20.0
+    assert coords[1][1, 0] == 35.0
+    assert coords[1][1, 1] == 45.0
+
+    # Long format
+    long_file = tmp_path / "long.csv"
+    long_file.write_text(
+        "frame,marker,x,y\n"
+        "0,nose,10.0,20.0\n"
+        "0,left-eye,30.0,40.0\n"
+        "1,nose,15.0,25.0\n"
+        "1,left-eye,35.0,45.0\n",
+        encoding="utf-8",
+    )
+    long_coords = viz.load_marker_coordinates(long_file, expected_kpts=2, names=names)
+    assert np.allclose(coords[0], long_coords[0])
+    assert np.allclose(coords[1], long_coords[1])
+
+    # Validation: video dimensions and bounds
+    video_info = {"frames": 2, "width": 80, "height": 60, "fps": 10.0}
+    warns = viz.validate_marker_coordinates(coords, video_info, names)
+    assert len(warns) == 0
+
+    # Out of bounds warning
+    oob_file = tmp_path / "oob.csv"
+    oob_file.write_text(
+        "frame,nose_x,nose_y,left-eye_x,left-eye_y\n0,100.0,20.0,30.0,40.0\n",
+        encoding="utf-8",
+    )
+    oob_coords = viz.load_marker_coordinates(oob_file, expected_kpts=2, names=names)
+    oob_warns = viz.validate_marker_coordinates(oob_coords, video_info, names)
+    assert any("out of video bounds" in w for w in oob_warns)
+
+
+def test_visualize_selected_id_with_manual_markers_override(tmp_path: Path) -> None:
+    run, video = _fixture_run(tmp_path)
+    corrected_csv = tmp_path / "clip_sam3dinov3_id_02_overlay_markers.csv"
+    # Create corrected coordinates for person 2:
+    # 2 frames, 6 keypoints
+    header = ["frame"]
+    for i in range(len(NAMES)):
+        header.extend([f"p{i}_x", f"p{i}_y"])
+    row0 = [0] + [50.0, 40.0] * len(NAMES)
+    row1 = [1] + [52.0, 42.0] * len(NAMES)
+    with corrected_csv.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.writer(fh)
+        writer.writerow(header)
+        writer.writerow(row0)
+        writer.writerow(row1)
+
+    output = tmp_path / "selected_corrected"
+    result = viz.visualize_selected_id(
+        run, video, 2, output, markers_csv=corrected_csv, overwrite=True
+    )
+    assert result["selected_id"] == 2
+    assert result["marker_source"] == "manual_correction"
+    assert result["corrected_markers_applied"] is True
+
+    # Check keypoints2d.csv
+    kp2d_rows = list(
+        csv.DictReader((output / "clip_sam3dinov3_keypoints2d.csv").open(encoding="utf-8"))
+    )
+    assert len(kp2d_rows) == 2 * len(NAMES)
+    first_row = kp2d_rows[0]
+    assert float(first_row["x_px"]) == 50.0
+    assert float(first_row["y_px"]) == 40.0
+
+    # Check wide markers.csv
+    markers_rows = list(csv.DictReader((output / "clip_id_02_markers.csv").open(encoding="utf-8")))
+    assert len(markers_rows) == 2
+    assert float(markers_rows[0]["p0_x"]) == 50.0
+    assert float(markers_rows[0]["p0_y"]) == 40.0
+    assert float(markers_rows[1]["p0_x"]) == 52.0
+    assert float(markers_rows[1]["p0_y"]) == 42.0
+
+    # Check predictions JSON
+    with gzip.open(output / "clip_sam3dinov3_predictions.json.gz", "rt", encoding="utf-8") as fh:
+        pred = json.load(fh)
+    inst0 = pred["frames"][0]["instances"][0]
+    assert inst0["keypoints_2d_px"][0] == [50.0, 40.0]
+
+    # Check manifest and README
+    manifest = json.loads(
+        (output / "sam3dinov3_selected_id_manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["marker_source"] == "manual_correction"
+    assert manifest["marker_csv"] == str(corrected_csv.resolve())
+    readme = (output / "README_sam3dinov3_selected_id.txt").read_text(encoding="utf-8")
+    assert "marker_source=manual_correction" in readme
+
+
+def test_cli_markers_csv_flag_and_auto_output(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run, video = _fixture_run(tmp_path)
+    (run / "sam3dinov3_summary.json").write_text(
+        json.dumps({"video": str(video), "person_ids": [2]}), encoding="utf-8"
+    )
+    corrected_csv = tmp_path / "custom_markers.csv"
+    corrected_csv.write_text("frame,p0_x,p0_y\n0,1,2\n1,3,4\n", encoding="utf-8")
+
+    code = viz.main(
+        [
+            "--sam3d-results",
+            str(run),
+            "--video",
+            str(video),
+            "--id",
+            "2",
+            "--markers-csv",
+            str(corrected_csv),
+            "--dry-run",
+        ]
+    )
+    assert code == 0
+    captured = capsys.readouterr().out
+    assert "Dry-run OK" in captured
+    assert "Marker source: explicit" in captured
+    assert "custom_markers.csv" in captured
