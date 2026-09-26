@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 23 September 2026
+Update Date: 26 September 2026
 Version: 0.4.5
 
 Example of usage:
@@ -428,6 +428,7 @@ C_B_r2_c1 - Compress Video C_B_r2_c2 - Video Stabilizer C_B_r2_c3 - Make Sync fi
 C_B_r3_c1 - GetPixelCoord C_B_r3_c2 - Metadata info  C_B_r3_c3 - Merge|Split Video
 C_B_r4_c1 - Distort Video/data C_B_r4_c2 - Cut Video  C_B_r4_c3 - Resize Video
 C_B_r5_c1 - YT Downloader C_B_r5_c2 - Insert Audio   C_B_r5_c3 - rm Dup PNG
+C_B_r6_c1 - Record Cameras
 
 -> C_C: Visualization
 C_C_r1_c1 - Show C3D      C_C_r1_c2 - Show CSV 3D    C_C_r2_c1 - Plot 2D
@@ -1572,6 +1573,14 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
+        # C_B_r6_c1 - Video: Record N cameras simultaneously (multi-cam capture)
+        record_cameras_btn = tk.Button(
+            tools_col2,
+            text="Record Cameras",
+            command=self.record_cameras,
+            width=button_width,
+        )
+
         # Packing Video buttons
         extract_png_btn.grid(row=0, column=0, padx=2, pady=2)
         planar_geo_btn.grid(row=0, column=1, padx=2, pady=2)
@@ -1588,6 +1597,7 @@ class Vaila(tk.Tk):
         ytdownloader_btn.grid(row=4, column=0, padx=2, pady=2)
         iaudiovid_btn.grid(row=4, column=1, padx=2, pady=2)
         remove_duplicate_frames_btn.grid(row=4, column=2, padx=2, pady=2)
+        record_cameras_btn.grid(row=5, column=0, padx=2, pady=2)
         tools_col2.pack(side="left", fill="both", expand=True, padx=5, pady=5)
 
         ## VVVVVVVVVVVVVVV VISUALIZATION BUTTONS VVVVVVVVVVVVVVVV
@@ -3245,6 +3255,18 @@ class Vaila(tk.Tk):
         from vaila import remove_frames2sync
 
         remove_frames2sync.run_remove_frames2sync()
+
+    # C_B_r6_c1
+    def record_cameras(self):
+        """Open the multi-camera simultaneous recording tool.
+
+        Detects available cameras and records the selected ones in parallel
+        via ffmpeg (stream copy, no re-encoding), replacing hand-typed
+        per-camera ffmpeg commands for multi-view capture.
+        """
+        from vaila import multicam_recorder
+
+        multicam_recorder.run_multicam_recorder(parent=self)
 
     # C_C_r1_c1
     def show_c3d_data(self):

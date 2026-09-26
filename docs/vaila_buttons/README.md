@@ -75,6 +75,7 @@ Each button in the vailá GUI has its own documentation file:
 | C_B_r5_c1 | YT Downloader | `ytdownloader` | [yt-downloader.md](yt-downloader.md) |
 | C_B_r5_c2 | Insert Audio | `run_iaudiovid` | [insert-audio.md](insert-audio.md) |
 | C_B_r5_c3 | rm Dup PNG | `remove_duplicate_frames` | [rm-dup-png.md](rm-dup-png.md) |
+| C_B_r6_c1 | Record Cameras | `record_cameras` | [record-cameras.md](record-cameras.md) |
 | C_C_r1_c1 | Show C3D | `show_c3d_data` | [show-c3d.md](show-c3d.md) |
 | C_C_r1_c2 | Show CSV 3D | `show_csv_file` | [show-csv.md](show-csv.md) |
 | C_C_r2_c1 | Plot 2D | `plot_2d_data` | [plot-2d.md](plot-2d.md) |

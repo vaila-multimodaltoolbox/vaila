@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vailá - multicam_recorder</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 40px;
+        line-height: 1.6;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      h1 {
+        color: #2c3e50;
+        border-bottom: 3px solid #3498db;
+        padding-bottom: 10px;
+      }
+      h2 {
+        color: #34495e;
+        margin-top: 30px;
+      }
+      h3 {
+        color: #2c3e50;
+      }
+      .module-info {
+        background: #ecf0f1;
+        padding: 15px;
+        border-radius: 5px;
+        margin: 20px 0;
+      }
+      .functions {
+        background: #f8f9fa;
+        padding: 15px;
+        border-left: 4px solid #28a745;
+        margin: 15px 0;
+      }
+      .docstring {
+        background: #fff3cd;
+        padding: 15px;
+        border-left: 4px solid #ffc107;
+        margin: 15px 0;
+      }
+      .cli-section {
+        background: #e8f4f8;
+        padding: 15px;
+        border-left: 4px solid #17a2b8;
+        margin: 15px 0;
+      }
+      .warning-section {
+        background: #fdecea;
+        padding: 15px;
+        border-left: 4px solid #e74c3c;
+        margin: 15px 0;
+      }
+      code {
+        background: #e9ecef;
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: monospace;
+      }
+      pre {
+        background: #2d2d2d;
+        color: #f8f8f2;
+        padding: 15px;
+        border-radius: 5px;
+        overflow-x: auto;
+      }
+      .footer {
+        margin-top: 40px;
+        padding-top: 20px;
+        border-top: 1px solid #dee2e6;
+        color: #6c757d;
+        font-size: 0.9em;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>vailá - multicam_recorder</h1>
+
+      <div class="module-info">
+        <h3>📋 Module Information</h3>
+        <p><strong>Category:</strong> Tools</p>
+        <p><strong>File:</strong> vaila/multicam_recorder.py</p>
+        <p><strong>Version:</strong> 0.4.5</p>
+        <p><strong>GUI Interface:</strong> ✅ Yes</p>
+        <p><strong>CLI Interface:</strong> ❌ No (GUI only; prints an equivalent CLI command per camera)</p>
+      </div>
+
+      <div class="docstring">
+        <h3>📖 Description</h3>
+        <p>
+          Records video from <strong>N cameras simultaneously</strong> through
+          a simple Tkinter GUI, replacing hand-typed per-camera
+          <code>ffmpeg</code> commands launched in parallel from the shell.
+          Each camera is captured with its own <code>ffmpeg</code> subprocess
+          using <strong>stream copy</strong> (<code>-c:v copy</code>) — no
+          re-encoding, so quality and CPU usage match manual capture exactly.
+        </p>
+        <ul>
+          <li>
+            <strong>Cross-platform camera detection</strong>:
+            <code>/dev/video*</code> on Linux, ffmpeg
+            <code>avfoundation</code> listing on macOS, ffmpeg
+            <code>dshow</code> listing on Windows
+          </li>
+          <li>
+            <strong>Per-camera resolution/fps</strong>: editable pickers,
+            best-effort probed via OpenCV
+          </li>
+          <li>
+            <strong>Single Start/Stop toggle</strong> for every selected
+            camera
+          </li>
+          <li>
+            <strong>Graceful stop</strong>: sends ffmpeg's interactive
+            <code>q</code> command on each process's stdin so every
+            <code>.mp4</code> is finalized correctly
+          </li>
+          <li>
+            <strong>Fault isolation</strong>: a disconnected/hung camera never
+            blocks stopping the others
+          </li>
+          <li>
+            <strong>Session output layout</strong>:
+            <code>&lt;output_dir&gt;/&lt;session_name&gt;_&lt;timestamp&gt;/cam&lt;N&gt;_&lt;session_name&gt;.mp4</code>
+            (<code>.mp4</code> so recordings are directly readable by vailá's
+            Markerless 2D tools)
+          </li>
+          <li>
+            <strong>Live preview</strong>: every detected camera previews
+            automatically in one small mosaic window, kept live even while
+            recording (via a low-res JPEG ffmpeg also writes)
+          </li>
+          <li>
+            <strong>GUI→CLI mirror</strong>: prints the exact equivalent
+            <code>ffmpeg</code> command for each camera on Start
+          </li>
+        </ul>
+      </div>
+
+      <div class="cli-section">
+        <h3>🚀 Usage</h3>
+        <p>
+          <strong>GUI:</strong> select <strong>Record Cameras</strong> in
+          vailá's Video and Image tools, then pick cameras, output directory
+          and session name, and click <strong>Start Recording</strong>.
+        </p>
+        <p><strong>Standalone:</strong></p>
+        <pre>uv run python vaila/multicam_recorder.py</pre>
+      </div>
+
+      <div class="functions">
+        <h3>🔧 Main Functions</h3>
+        <ul>
+          <li><code>enumerate_cameras</code> — Detect available cameras per OS</li>
+          <li><code>build_record_command</code> — Build the per-OS ffmpeg argv (stream copy)</li>
+          <li><code>format_record_cli_command</code> — Render an argv as a copy-pasteable shell command</li>
+          <li><code>build_session_dir</code> / <code>build_output_filename</code> — Output naming</li>
+          <li><code>MulticamRecorderController</code> — Owns the live ffmpeg subprocesses (start/stop/watchdog)</li>
+          <li><code>MulticamRecorderApp</code> — Tkinter GUI</li>
+          <li><code>run_multicam_recorder</code> — GUI entry point</li>
+        </ul>
+      </div>
+
+      <div class="warning-section">
+        <h3>⚠️ Known Limitations (v1)</h3>
+        <ul>
+          <li>
+            Windows DirectShow duplicate device names (two identical webcam
+            models) are disambiguated via the device's
+            <code>@device_pnp_...</code> alternative name, not a friendlier
+            label.
+          </li>
+          <li>
+            No hardware frame-level synchronization between cameras — relies
+            on near-simultaneous process launch, same as manual
+            <code>&amp;</code>/<code>wait</code> shell capture.
+          </li>
+        </ul>
+      </div>
+
+      <div class="footer">
+        <p>📅 Updated: 26/09/2026</p>
+        <p>🔗 Part of vailá - Multimodal Toolbox</p>
+        <p>
+          🌐
+          <a href="https://github.com/vaila-multimodaltoolbox/vaila"
+            >GitHub Repository</a
+          >
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

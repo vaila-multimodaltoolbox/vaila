@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 136 | **Categories:** 7 | **Generated on:** 25/09/2026 (v0.4.5)
+**Documented topics:** 137 | **Categories:** 7 | **Generated on:** 26/09/2026 (v0.4.5)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -159,7 +159,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
 
-## Tools (45)
+## Tools (46)
 
 - **ai_tracker_train** — Offline fine-tuning for vailá Track AI assets under vaila/models/ai_tracker/,
   - [HTML](ai_tracker_train.html) · [Markdown](ai_tracker_train.md)
@@ -207,6 +207,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](mergestack.html) · [Markdown](mergestack.md)
 - **mkvis3d** — Location: /home/preto/data/mkvis3d/mkvis3d.py
   - [HTML](mkvis3d.html) · [Markdown](mkvis3d.md)
+- **multicam_recorder** — Records video from N cameras simultaneously through a simple Tkinter GUI,
+  - [HTML](multicam_recorder.html) · [Markdown](multicam_recorder.md)
 - **numberframes** — This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected dire...
   - [HTML](numberframes.html) · [Markdown](numberframes.md)
 - **numstepsmp** — Opens a dialog to select a CSV file of foot coordinates and calculates the number of steps based on foot position using MediaPipe data. Includes Butterworth...
