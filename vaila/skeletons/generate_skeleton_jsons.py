@@ -11,7 +11,7 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.4.5
 Created: 04 August 2026
-Last Updated: 24 September 2026
+Last Updated: 25 September 2026
 
 Description:
     Maintenance/dev tool that regenerates all standard skeleton-connection
@@ -963,16 +963,16 @@ def _generate_soccerfield_kiki49() -> dict:
         "left_goal_area_bottom_inner",
         "left_penalty_spot",
         "left_pen_box_top_inner",
-        "left_pen_box_inner_top_at_goal_y",
-        "left_pen_box_inner_bottom_at_goal_y",
+        "left_penalty_arc_right_intersection",
+        "left_penalty_arc_left_intersection",
         "left_pen_box_bottom_inner",
         "midfield_top",
         "center_circle_top",
         "center_circle_bottom",
         "midfield_bottom",
         "right_pen_box_top_inner",
-        "right_pen_box_inner_top_at_goal_y",
-        "right_pen_box_inner_bottom_at_goal_y",
+        "right_penalty_arc_right_intersection",
+        "right_penalty_arc_left_intersection",
         "right_pen_box_bottom_inner",
         "right_penalty_spot",
         "right_goal_area_top_inner",

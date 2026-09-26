@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>freekiki — vailá</title>
+    <style>
+      body { font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; margin: 0;
+             padding: 20px; background-color: #f5f5f5; color: #333; }
+      .container { max-width: 1200px; margin: 0 auto; background: #fff; padding: 30px; border-radius: 10px;
+                   box-shadow: 0 0 20px rgba(0,0,0,0.1); }
+      h1 { color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; margin-bottom: 24px; }
+      h2 { color: #34495e; border-left: 4px solid #3498db; padding-left: 12px; margin-top: 28px; }
+      code { background: #e9ecef; padding: 1px 5px; border-radius: 3px; font-family: "Courier New", monospace; }
+      pre { background: #f8f9fa; border: 1px solid #e9ecef; padding: 12px; border-radius: 5px; overflow-x: auto;
+            font-family: "Courier New", monospace; font-size: 0.92em; }
+      table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+      th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+      th { background: #f8f9fa; }
+      .feature-box { background: #e8f4fd; border: 1px solid #3498db; border-radius: 5px; padding: 14px;
+                     margin: 14px 0; }
+      .footer { margin-top: 40px; padding-top: 18px; border-top: 1px solid #dee2e6; color: #6c757d;
+                font-size: 0.9em; }
+      a { color: #3498db; text-decoration: none; } a:hover { text-decoration: underline; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>FreeKiki — 49 soccer-field keypoints (train / retrain / detect)</h1>
+
+      <div class="feature-box">
+        <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
+        <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
+        <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,check,train,status,resume,evaluate,detect} -w WORKSPACE</code><br />
+        <strong>Version:</strong> 0.4.5 · <strong>Updated:</strong> 25 September 2026
+      </div>
+
+      <h2>What it does</h2>
+      <p>FreeKiki teaches a YOLO-pose network to find the <strong>49 soccer-field keypoints</strong> of the kiki
+        template (<code>vaila/models/soccerfield_kiki.csv</code>, skeleton <code>vaila/skeletons/soccerfield_kiki49.json</code>)
+        in broadcast video — line intersections, penalty-arc intersections, goal posts and nets, corner flags and the
+        centre — and then finds them in your videos. These points are what a later step needs to calibrate the camera
+        frame by frame (calibration is a future FreeKiki feature). Compared with <strong>Field KPs (AI)</strong>
+        (32-point FIFA/Roboflow schema), FreeKiki uses the richer 49-point schema with 3D-aware points (posts and flags,
+        z ≠ 0).</p>
+
+      <h2>Quick start (5 steps)</h2>
+      <table>
+        <tr><th>Step</th><th>GUI button</th><th>What happens</th><th>Time</th></tr>
+        <tr><td>1</td><td><strong>Init workspace</strong></td><td>creates the workspace folder layout</td><td>seconds</td></tr>
+        <tr><td>2</td><td><strong>Import (copy)</strong> → <strong>Check dataset</strong></td><td>copies the kiki49 dataset in and validates it</td><td>~10 min (11 GB)</td></tr>
+        <tr><td>3</td><td><strong>Smoke preset</strong> → <strong>Train</strong></td><td>tiny training to prove everything works</td><td>~5 min</td></tr>
+        <tr><td>4</td><td><strong>Full preset</strong> → <strong>Train</strong></td><td>the real training</td><td>many hours</td></tr>
+        <tr><td>5</td><td><strong>Evaluate model</strong> and <strong>Detect</strong></td><td>measure quality, then run on your videos</td><td>minutes</td></tr>
+      </table>
+      <p>Training stopped (Stop button, crash, power loss)? Nothing finished is lost: press
+        <strong>Resume interrupted</strong> — see <a href="#resume">If the training stops</a>.</p>
+      <p>Every GUI action prints the equivalent <code>&gt;&gt;</code> command in the terminal, so any step can be
+        repeated from the command line. The full mapping is in <a href="#gui-cli">GUI button ↔ CLI command</a>.</p>
+
+      <h2 id="gui-cli">GUI button ↔ CLI command</h2>
+      <p>Open the GUI with <code>uv run vaila.py</code> → <strong>Frame B → Soccer Tools → FreeKiki</strong>, or directly
+        with <code>uv run vaila/freekiki.py</code>. <code>WS</code> is the workspace folder.</p>
+      <table>
+        <tr><th>GUI section → button</th><th>Same thing from the terminal</th></tr>
+        <tr><td>1. Workspace → <strong>Init workspace</strong></td><td><code>uv run vaila/freekiki.py init -w WS</code></td></tr>
+        <tr><td>2. Dataset → <strong>Import (copy)</strong></td><td><code>uv run vaila/freekiki.py import-dataset -w WS --src /path/kiki49_dataset</code></td></tr>
+        <tr><td>2. Dataset → <strong>Check dataset</strong></td><td><code>uv run vaila/freekiki.py check -w WS</code></td></tr>
+        <tr><td>3. Train → <strong>Smoke preset</strong> then <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1</code></td></tr>
+        <tr><td>3. Train → <strong>Full preset</strong> then <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --base yolo26m-pose.pt --epochs 150 --imgsz 1280 --batch -1</code></td></tr>
+        <tr><td>3. Train → Base model <code>active</code> then <strong>Train</strong> (retrain)</td><td><code>uv run vaila/freekiki.py train -w WS --base active --epochs 60</code></td></tr>
+        <tr><td>3. Train → <strong>Runs status</strong></td><td><code>uv run vaila/freekiki.py status -w WS</code></td></tr>
+        <tr><td>3. Train → <strong>Resume interrupted</strong></td><td><code>uv run vaila/freekiki.py resume -w WS</code> (add <code>--name RUN</code> to choose the run)</td></tr>
+        <tr><td>4. Evaluate → <strong>Evaluate model</strong></td><td><code>uv run vaila/freekiki.py evaluate -w WS</code></td></tr>
+        <tr><td>5. Detect → Video + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video match.mp4</code></td></tr>
+        <tr><td>5. Detect → <strong>Folder</strong> + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos</code></td></tr>
+        <tr><td><strong>Stop</strong></td><td><code>Ctrl+C</code> in the terminal</td></tr>
+        <tr><td><strong>Help</strong></td><td>opens this page</td></tr>
+      </table>
+      <p>The GUI fields map to the options of the same name (<code>Epochs</code> → <code>--epochs</code>,
+        <code>Device</code> → <code>--device</code>, <code>KP conf</code> → <code>--kp-conf</code>,
+        <code>Stride</code> → <code>--stride</code>, ...). On NVIDIA/CUDA machines write <code>uv run --no-sync</code>
+        instead of <code>uv run</code>.</p>
+
+      <h2 id="resume">If the training stops (Stop, crash, power loss) — resume it</h2>
+      <p><strong>What is saved.</strong> At the end of <strong>every epoch</strong> Ultralytics writes
+        <code>runs/&lt;run&gt;/weights/last.pt</code> (model <strong>and</strong> optimizer state, epoch number) and one
+        row in <code>runs/&lt;run&gt;/results.csv</code>. If the computer switches off in the middle of epoch 38, epochs
+        1–37 are safe; only the unfinished epoch is repeated.</p>
+      <p><strong>Step 1 — see what is there:</strong> <strong>Runs status</strong> (or <code>status -w WS</code>) lists
+        every run:</p>
+      <pre>[freekiki] smoke_n640_e5            registered     epochs 5/5 imgsz 640 base yolo26n-pose.pt
+[freekiki] kiki49_20260925_222907   resumable      epochs 37/150 imgsz 1280 base yolo26m-pose.pt
+[freekiki] to continue: uv run vaila/freekiki.py resume -w WS --name kiki49_20260925_222907</pre>
+      <table>
+        <tr><th>State</th><th>Meaning</th><th>What to do</th></tr>
+        <tr><td><code>running</code></td><td>a FreeKiki process is training it right now</td><td>wait (do <strong>not</strong> resume it twice)</td></tr>
+        <tr><td><code>resumable</code></td><td>interrupted; <code>last.pt</code> keeps the optimizer</td><td><strong>Resume interrupted</strong></td></tr>
+        <tr><td><code>finished</code></td><td>training ended but was not registered (e.g. closed during the final validation)</td><td><strong>Resume interrupted</strong> only registers it (no training)</td></tr>
+        <tr><td><code>registered</code></td><td>finished and logged in <code>models/registry.csv</code></td><td>nothing; to improve it, retrain with Base model <code>active</code></td></tr>
+        <tr><td><code>no-checkpoint</code></td><td>stopped before the first epoch ended</td><td>start <strong>Train</strong> again</td></tr>
+      </table>
+      <p><strong>Step 2 — continue:</strong> <strong>Resume interrupted</strong> (or <code>resume -w WS</code>) continues
+        the newest interrupted run from its last completed epoch, with the same settings (base, epochs, imgsz,
+        learning-rate schedule). When it ends the run is registered and promoted to <code>models/active.pt</code> if it
+        is better — exactly as a normal Train.</p>
+      <ul>
+        <li>Choose a specific run with <code>resume -w WS --name RUN</code>.</li>
+        <li><code>--device 0</code> or <code>--batch 8</code> may be changed on resume (e.g. after an out-of-memory
+          error); everything else comes from the run.</li>
+        <li>A workspace <strong>copied to another machine</strong> can be resumed there: the dataset path and run folder
+          are taken from the current workspace.</li>
+        <li><strong>Do not</strong> press <strong>Train</strong> again for an interrupted run: it would start a new run
+          from epoch 1. FreeKiki refuses a Train that would overwrite a resumable or running run of the same name.</li>
+        <li>A run that <strong>finished</strong> (all epochs, or early stop by <code>patience</code>) cannot be resumed —
+          its optimizer is removed. To train more, use <strong>Retrain</strong> (Base model <code>active</code>).</li>
+      </ul>
+
+      <h2>Portable workspace</h2>
+      <pre>&lt;workspace&gt;/
+  freekiki.toml            settings + which model is active (relative paths)
+  spec/                    soccerfield_kiki.csv + soccerfield_kiki49.json snapshot
+  datasets/kiki49/         imported YOLO-pose dataset
+  runs/&lt;name&gt;/             Ultralytics training runs (weights, results.csv, plots)
+  models/registry.csv      every finished training and its validation pose mAP
+  models/evaluations.csv   every "Evaluate" result (compare models over time)
+  models/active.pt         best model so far (Evaluate / Detect / Retrain)
+  outputs/                 evaluation reports</pre>
+      <p>Copy the folder to another machine and point FreeKiki at it to keep training.</p>
+
+      <h2>Workflow in detail</h2>
+      <ol>
+        <li><strong>Init workspace</strong> — creates the layout. Safe to repeat; never deletes.</li>
+        <li><strong>Import (copy)</strong> — copies <code>data.yaml</code>, <code>images/</code>, <code>labels/</code>,
+          <code>manifest.csv</code>, <code>keypoints_kiki49.csv</code>, <code>cameras.jsonl</code>, <code>reports/</code>
+          of a kiki49 build. The source is only read; re-running resumes. <code>data.yaml</code> <code>path:</code> is
+          rewritten to the new absolute folder (refreshed before each training).</li>
+        <li><strong>Check dataset</strong> — <code>kpt_shape [49, 3]</code>, <code>flip_idx</code>/<code>kpt_names</code>
+          equal to the CSV, per-split counts, label columns (5 + 147).</li>
+        <li><strong>Train</strong>
+          <ul>
+            <li><strong>Smoke preset</strong>: <code>yolo26n-pose.pt</code>, 5 epochs, 10 % of the images, <code>imgsz 640</code>.
+              Only proves the pipeline works; the model is weak.</li>
+            <li><strong>Full preset</strong> (recommended real run): <code>yolo26m-pose.pt</code>, 150 epochs,
+              <code>imgsz 1280</code>, <code>batch -1</code> (AutoBatch), patience 30.</li>
+            <li><strong>Retrain</strong>: base <code>active</code> fine-tunes the best model so far.</li>
+          </ul>
+          The best epoch (by validation <code>metrics/mAP50-95(P)</code>) goes to <code>models/registry.csv</code>;
+          <code>models/active.pt</code> is replaced <em>only</em> when the new run is better.</li>
+        <li><strong>Evaluate model</strong> — measures a model on the labelled <strong>test</strong> split (never used in
+          training).</li>
+        <li><strong>Detect</strong> — runs the active (or any) model on <strong>one video or a whole folder</strong>.</li>
+      </ol>
+
+      <h2>How to read the quality numbers</h2>
+      <h3>Evaluate (labelled test split — the objective measure)</h3>
+      <p>Report folder <code>outputs/processed_freekiki_eval_test_&lt;timestamp&gt;/</code>: <code>eval_summary.json</code>,
+        <code>per_keypoint.csv</code>, <code>ultralytics_val/</code> (plots), plus one row in
+        <code>models/evaluations.csv</code>.</p>
+      <table>
+        <tr><th>Number</th><th>Meaning</th><th>Good sign</th></tr>
+        <tr><td><strong>pose mAP50-95</strong></td><td>Ultralytics keypoint score (OKS-based), 0–1</td><td>higher; picks the active model</td></tr>
+        <tr><td><strong>kp recall</strong></td><td>labelled keypoints the model found (confidence ≥ <em>KP conf</em>)</td><td>close to 1</td></tr>
+        <tr><td><strong>kp precision</strong></td><td>found keypoints that really are labelled (not invented)</td><td>close to 1 — false points break calibration</td></tr>
+        <tr><td><strong>median error px@1920</strong></td><td>distance to the label, rescaled to a 1920-px-wide frame</td><td>a few px</td></tr>
+        <tr><td><strong>PCK10 / PCK25</strong></td><td>share of found keypoints within 10 / 25 px@1920</td><td>close to 1</td></tr>
+      </table>
+      <p><code>per_keypoint.csv</code> gives the same numbers per point (<code>p0..p48</code>); the log lists the
+        <strong>hardest keypoints</strong> (lowest recall) — usually the ones to label more of.</p>
+
+      <h3>Detect (your videos — no labels, so indirect indicators)</h3>
+      <p>Each video gets <code>quality.json</code>; a folder run also writes <code>quality_summary.csv</code>.</p>
+      <table>
+        <tr><th>Number</th><th>Meaning</th><th>Good sign</th></tr>
+        <tr><td><strong>detection_rate</strong></td><td>frames where the field was found</td><td>close to 1</td></tr>
+        <tr><td><strong>mean_visible_kps</strong></td><td>keypoints above <em>KP conf</em> per frame</td><td>depends on the shot; more is better</td></tr>
+        <tr><td><strong>calib_ready_rate</strong></td><td>frames with ≥ 4 visible keypoints (minimum for a homography/DLT2D)</td><td>close to 1</td></tr>
+        <tr><td><strong>mean_kp_conf</strong></td><td>mean confidence of the visible keypoints</td><td>higher</td></tr>
+        <tr><td><strong>jitter_px</strong></td><td>median frame-to-frame shake of each keypoint (2nd difference); smooth pans give ~0</td><td>low (a few px)</td></tr>
+      </table>
+      <p>Also look at <code>&lt;video&gt;_freekiki_snapshot.png</code> and the overlay MP4 — wrong points are obvious there.</p>
+
+      <h2>Detect outputs</h2>
+      <p>Folder <code>processed_freekiki_&lt;video&gt;_&lt;timestamp&gt;/</code> inside the output folder (default: the
+        video's folder). A folder of videos writes <code>processed_freekiki_batch_&lt;timestamp&gt;/</code> with one
+        sub-folder per video.</p>
+      <table>
+        <tr><th>File</th><th>Content</th></tr>
+        <tr><td><code>field_kps_getpixelvideo.csv</code></td><td><code>frame,p0_x,p0_y,...,p48_x,p48_y</code> (0-based pixels,
+          blank below <em>KP conf</em>) — loads in getpixelvideo</td></tr>
+        <tr><td><code>field_kps_conf.csv</code></td><td>per-keypoint confidence</td></tr>
+        <tr><td><code>&lt;video&gt;_freekiki_overlay.mp4</code></td><td>keypoints + kiki49 skeleton (optional)</td></tr>
+        <tr><td><code>&lt;video&gt;_freekiki_snapshot.png</code></td><td>middle frame with keypoints (quick look)</td></tr>
+        <tr><td><code>quality.json</code></td><td>detect quality indicators</td></tr>
+        <tr><td><code>README.txt</code></td><td>parameters used</td></tr>
+      </table>
+
+      <h2>CLI</h2>
+      <pre>uv run vaila/freekiki.py init     -w /path/FreeKiki
+uv run vaila/freekiki.py import-dataset -w /path/FreeKiki --src /path/kiki49_dataset
+uv run vaila/freekiki.py check    -w /path/FreeKiki
+uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1   # smoke
+uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26m-pose.pt --epochs 150 --imgsz 1280                           # full
+uv run vaila/freekiki.py train    -w /path/FreeKiki --base active --epochs 60                                                  # retrain
+uv run vaila/freekiki.py status   -w /path/FreeKiki                        # runs, which can be resumed
+uv run vaila/freekiki.py resume   -w /path/FreeKiki [--name RUN]           # continue after stop / power loss
+uv run vaila/freekiki.py evaluate -w /path/FreeKiki
+uv run vaila/freekiki.py detect   -w /path/FreeKiki --video match.mp4 --stride 5
+uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_videos</pre>
+      <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Evaluate and Detect use the <strong>image size the
+        model was trained with</strong> (read from the <code>.pt</code>: 640 smoke, 1280 full); <code>--imgsz</code>
+        overrides it from the CLI, the GUI always uses the model's size. Options: <code>resume --name --device
+        --batch</code>; <code>evaluate --model --split --kp-conf
+        --max-images</code>; <code>detect --model --start --max-frames --conf --kp-conf --imgsz --no-overlay
+        --output-dir</code>.</p>
+
+      <h2>Base models</h2>
+      <p>Official <code>yolo26{n,s,m,l,x}-pose.pt</code> or any pose <code>.pt</code> (e.g. a public 32-keypoint pitch
+        model: only backbone/neck transfer, the 49-keypoint head is re-initialised).</p>
+
+      <h2>See also</h2>
+      <ul>
+        <li><code>vaila/help/soccerfield_keypoints_ai.html</code> — 32-point Field KPs (AI)</li>
+        <li><code>vaila/help/soccerfield_calib.html</code> — DLT2D field calibration</li>
+        <li><code>vaila/help/yolotrain.html</code> — generic YOLO training</li>
+      </ul>
+
+      <div class="footer"><i>vailá</i> — Multimodal Toolbox · AGPL-3.0 · Generated September 25, 2026 ·
+        <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></div>
+    </div>
+  </body>
+</html>

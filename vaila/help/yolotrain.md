@@ -4,8 +4,8 @@
 
 - **Category:** ML
 - **File:** `vaila/yolotrain.py`
-- **Version:** 0.3.67
-- **Updated:** 2026-06-29
+- **Version:** 0.4.5
+- **Updated:** 2026-09-25
 - **GUI Interface:** Yes
 - **CLI Interface:** Yes
 

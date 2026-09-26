@@ -183,6 +183,25 @@ def test_pose_looks_like_misexported_detection_flags_generic_keypoint_slots() ->
     assert nkp == 32
 
 
+def test_pose_looks_like_misexported_detection_allows_semantic_field_template() -> None:
+    # 49-point soccer-field template (FreeKiki / kiki49): Ultralytics dict form.
+    names49 = [f"field_point_{idx}" for idx in range(49)]
+    suspect, nkp = yolotrain.pose_looks_like_misexported_detection(
+        {"names": {0: "football_pitch"}, "kpt_shape": [49, 3], "kpt_names": {0: names49}}
+    )
+    assert suspect is False
+    assert nkp == 49
+    suspect_list, _ = yolotrain.pose_looks_like_misexported_detection(
+        {"names": ["football_pitch"], "kpt_shape": [49, 3], "kpt_names": names49}
+    )
+    assert suspect_list is False
+    # Same size without names is still the classic mis-export.
+    suspect_unnamed, _ = yolotrain.pose_looks_like_misexported_detection(
+        {"names": ["football_pitch"], "kpt_shape": [49, 3]}
+    )
+    assert suspect_unnamed is True
+
+
 def test_suspicious_pose_requires_explicit_override() -> None:
     yaml_data = {"names": ["person"], "kpt_shape": [62, 3]}
     with pytest.raises(ValueError, match="Training blocked.*individual player"):
