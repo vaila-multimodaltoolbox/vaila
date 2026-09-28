@@ -370,9 +370,7 @@ def test_inspect_label_schema_distinguishes_detect_and_pose(tmp_path: Path) -> N
     assert detect["token_counts"] == {5: 2}
     assert detect["invalid_rows"] == 0
 
-    pose = _inspect_label_schema(
-        str(images), "pose", {"names": ["person"], "kpt_shape": [62, 3]}
-    )
+    pose = _inspect_label_schema(str(images), "pose", {"names": ["person"], "kpt_shape": [62, 3]})
     assert pose["invalid_rows"] == 2
 
 
@@ -540,6 +538,37 @@ def test_attach_yolo_progress_callbacks_registers_events() -> None:
     assert "on_fit_epoch_end" in model.callbacks
     model.callbacks["on_fit_epoch_end"][0](_FakeTrainer())
     assert any("Epoch 5/100 complete" in line for line in lines)
+
+
+def test_progress_callbacks_final_eval_is_not_an_epoch() -> None:
+    """Ultralytics final_eval() fires on_fit_epoch_end with epoch+1: no 'Epoch 151/150'."""
+
+    class _FakeModel:
+        def __init__(self) -> None:
+            self.callbacks: dict[str, list] = {}
+
+        def add_callback(self, event: str, func) -> None:
+            self.callbacks.setdefault(event, []).append(func)
+
+    class _Trainer:
+        epochs = 3
+        epoch = 0
+        metrics: dict = {}
+
+    model = _FakeModel()
+    lines: list[str] = []
+    _attach_yolo_progress_callbacks(model, emit=lines.append)
+    trainer = _Trainer()
+    for epoch in range(trainer.epochs):
+        trainer.epoch = epoch
+        model.callbacks["on_train_epoch_end"][0](trainer)
+        model.callbacks["on_fit_epoch_end"][0](trainer)
+    trainer.epoch += 1  # what BaseTrainer.final_eval() does
+    model.callbacks["on_fit_epoch_end"][0](trainer)
+    epochs = [line for line in lines if line.startswith("Epoch ")]
+    assert epochs == [f"Epoch {e}/3 complete" for e in (1, 2, 3)]
+    assert lines[-1].startswith("Final validation of best.pt")
+    assert not any("4/3" in line for line in lines)
 
 
 def test_print_class_name_hints_detect_object(capsys) -> None:

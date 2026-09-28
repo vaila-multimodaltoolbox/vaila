@@ -31,8 +31,8 @@
       <div class="feature-box">
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
-        <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,check,train,status,resume,evaluate,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.5 · <strong>Updated:</strong> 25 September 2026
+        <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,check,manifest,train,status,resume,bench,evaluate,sweep,compare,audit,detect} -w WORKSPACE</code><br />
+        <strong>Version:</strong> 0.4.5 · <strong>Updated:</strong> 28 September 2026
       </div>
 
       <h2>What it does</h2>
@@ -40,7 +40,8 @@
         template (<code>vaila/models/soccerfield_kiki.csv</code>, skeleton <code>vaila/skeletons/soccerfield_kiki49.json</code>)
         in broadcast video — line intersections, penalty-arc intersections, goal posts and nets, corner flags and the
         centre — and then finds them in your videos. These points are what a later step needs to calibrate the camera
-        frame by frame (calibration is a future FreeKiki feature). Compared with <strong>Field KPs (AI)</strong>
+        frame by frame; FreeKiki already checks, per frame, whether the accepted points give a <strong>geometrically
+        valid field homography</strong> (RANSAC, inliers, reprojection error, orientation). Compared with <strong>Field KPs (AI)</strong>
         (32-point FIFA/Roboflow schema), FreeKiki uses the richer 49-point schema with 3D-aware points (posts and flags,
         z ≠ 0).</p>
 
@@ -71,8 +72,14 @@
         <tr><td>3. Train → Base model <code>active</code> then <strong>Train</strong> (retrain)</td><td><code>uv run vaila/freekiki.py train -w WS --base active --epochs 60</code></td></tr>
         <tr><td>3. Train → <strong>Runs status</strong></td><td><code>uv run vaila/freekiki.py status -w WS</code></td></tr>
         <tr><td>3. Train → <strong>Resume interrupted</strong></td><td><code>uv run vaila/freekiki.py resume -w WS</code> (add <code>--name RUN</code> to choose the run)</td></tr>
-        <tr><td>4. Evaluate → <strong>Evaluate model</strong></td><td><code>uv run vaila/freekiki.py evaluate -w WS</code></td></tr>
-        <tr><td>5. Detect → Video + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video match.mp4</code></td></tr>
+        <tr><td>3. Train → <strong>Build oversampling manifest</strong></td><td><code>uv run vaila/freekiki.py manifest -w WS --rfs-t 0.05 --cap 4 --seed 0</code></td></tr>
+        <tr><td>3. Train → Manifest <code>v001</code> then <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --manifest v001 --base active</code></td></tr>
+        <tr><td>3. Train → <strong>Bench batch/VRAM</strong></td><td><code>uv run vaila/freekiki.py bench -w WS --batches 2,8,16 --fraction 0.02</code></td></tr>
+        <tr><td>4. Evaluate → <strong>Evaluate model</strong></td><td><code>uv run vaila/freekiki.py evaluate -w WS --split val</code></td></tr>
+        <tr><td>4. Evaluate → <strong>Sweep thresholds (val)</strong></td><td><code>uv run vaila/freekiki.py sweep -w WS --eval-dir outputs/processed_freekiki_eval_val_&lt;ts&gt;</code></td></tr>
+        <tr><td>4. Evaluate → <strong>Compare with active</strong></td><td><code>uv run vaila/freekiki.py compare -w WS --baseline active --candidate runs/RUN/weights/best.pt</code></td></tr>
+        <tr><td>4. Evaluate → <strong>Audit dataset</strong></td><td><code>uv run vaila/freekiki.py audit -w WS</code></td></tr>
+        <tr><td>5. Detect → Video + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video match.mp4</code> (add <code>--fill-gaps 3</code> to also write the interpolated CSV)</td></tr>
         <tr><td>5. Detect → <strong>Folder</strong> + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos</code></td></tr>
         <tr><td><strong>Stop</strong></td><td><code>Ctrl+C</code> in the terminal</td></tr>
         <tr><td><strong>Help</strong></td><td>opens this page</td></tr>
@@ -106,6 +113,8 @@
         is better — exactly as a normal Train.</p>
       <ul>
         <li>Choose a specific run with <code>resume -w WS --name RUN</code>.</li>
+        <li>A run started with <code>--manifest vNNN</code> resumes on the same oversampled train
+          list (the manifest is re-checked against the current labels first).</li>
         <li><code>--device 0</code> or <code>--batch 8</code> may be changed on resume (e.g. after an out-of-memory
           error); everything else comes from the run.</li>
         <li>A workspace <strong>copied to another machine</strong> can be resumed there: the dataset path and run folder
@@ -143,42 +152,117 @@
               Only proves the pipeline works; the model is weak.</li>
             <li><strong>Full preset</strong> (recommended real run): <code>yolo26m-pose.pt</code>, 150 epochs,
               <code>imgsz 1280</code>, <code>batch -1</code> (AutoBatch), patience 30.</li>
-            <li><strong>Retrain</strong>: base <code>active</code> fine-tunes the best model so far.</li>
+            <li><strong>Retrain</strong>: base <code>active</code> fine-tunes the best model so far
+              with AdamW, <code>lr0=1e-4</code>, <code>lrf=0.01</code>, one warmup epoch,
+              cosine schedule and <code>mosaic=0</code>. The backbone stays trainable.
+              A first train from <code>yolo26*-pose.pt</code> keeps <code>optimizer=auto</code>.</li>
+            <li><strong>Build oversampling manifest</strong>: repeat-factor sampling (LVIS) of rare
+              keypoints into an immutable <code>manifests/vNNN/</code>. The dataset is not modified.
+              Default <code>t = 0.05</code>, cap <code>4</code>, seed <code>0</code>. A keypoint seen in
+              a fraction <code>f</code> of train images repeats <code>max(1, sqrt(t / f))</code> times;
+              each image follows its rarest visible point. Put <code>v001</code> in Manifest, or
+              <code>train --manifest v001</code>. Val and test stay the original split. The first
+              training on that list may rebuild <code>labels/train.cache</code> (derived; images and
+              labels stay as they are).</li>
           </ul>
-          The best epoch (by validation <code>metrics/mAP50-95(P)</code>) goes to <code>models/registry.csv</code>;
-          <code>models/active.pt</code> is replaced <em>only</em> when the new run is better.</li>
-        <li><strong>Evaluate model</strong> — measures a model on the labelled <strong>test</strong> split (never used in
-          training).</li>
+          <code>best.pt</code> goes to <code>models/registry.csv</code>, is evaluated on <strong>val</strong> and compared
+          with the active model; <code>models/active.pt</code> is replaced <em>only</em> when the configurable gate passes
+          (see <a href="#promotion">Model promotion</a>).</li>
+        <li><strong>Evaluate model</strong> — measures a model on a labelled split: <strong>val</strong> to choose thresholds
+          and compare models, <strong>test</strong> only for the final report.</li>
         <li><strong>Detect</strong> — runs the active (or any) model on <strong>one video or a whole folder</strong>.</li>
       </ol>
 
       <h2>How to read the quality numbers</h2>
-      <h3>Evaluate (labelled test split — the objective measure)</h3>
-      <p>Report folder <code>outputs/processed_freekiki_eval_test_&lt;timestamp&gt;/</code>: <code>eval_summary.json</code>,
-        <code>per_keypoint.csv</code>, <code>ultralytics_val/</code> (plots), plus one row in
-        <code>models/evaluations.csv</code>.</p>
+      <h3>Evaluate (labelled split — the objective measure)</h3>
+      <p>Use <strong><code>--split val</code></strong> to choose thresholds and compare models. Keep <strong>test</strong>
+        for the final report only: every look at test that changes a decision makes it less independent
+        (<code>sweep</code> refuses a test evaluation unless <code>--allow-test</code>).</p>
+      <p>Report folder <code>outputs/processed_freekiki_eval_&lt;split&gt;_&lt;timestamp&gt;/</code>:</p>
       <table>
-        <tr><th>Number</th><th>Meaning</th><th>Good sign</th></tr>
-        <tr><td><strong>pose mAP50-95</strong></td><td>Ultralytics keypoint score (OKS-based), 0–1</td><td>higher; picks the active model</td></tr>
-        <tr><td><strong>kp recall</strong></td><td>labelled keypoints the model found (confidence ≥ <em>KP conf</em>)</td><td>close to 1</td></tr>
-        <tr><td><strong>kp precision</strong></td><td>found keypoints that really are labelled (not invented)</td><td>close to 1 — false points break calibration</td></tr>
-        <tr><td><strong>median error px@1920</strong></td><td>distance to the label, rescaled to a 1920-px-wide frame</td><td>a few px</td></tr>
-        <tr><td><strong>PCK10 / PCK25</strong></td><td>share of found keypoints within 10 / 25 px@1920</td><td>close to 1</td></tr>
+        <tr><th>File</th><th>Content</th></tr>
+        <tr><td><code>eval_summary.json</code></td><td>model sha256, split, image-list sha1, thresholds, OKS sigmas, Ultralytics mAP, FreeKiki keypoint metrics, homography summary, <strong>definitions</strong> of every metric</td></tr>
+        <tr><td><code>per_keypoint.csv</code></td><td>one row per point <code>p0..p48</code> (counts, precision, recall, error percentiles, PCK, identity swaps)</td></tr>
+        <tr><td><code>per_source.csv</code></td><td>the same numbers per dataset source (soccernet, ts_worldcup, ...)</td></tr>
+        <tr><td><code>failures.csv</code></td><td>every missed / mislocalised / false point with coordinates and the index it was confused with</td></tr>
+        <tr><td><code>calibration_per_image.csv</code></td><td>homography status, inliers, RMSE per image (from the ground-truth-visible accepted points) and the error of the labelled points reprojected through it</td></tr>
+        <tr><td><code>predictions.npz</code></td><td>raw predictions down to box conf 0.01 — <code>sweep</code> re-scores them offline</td></tr>
       </table>
-      <p><code>per_keypoint.csv</code> gives the same numbers per point (<code>p0..p48</code>); the log lists the
-        <strong>hardest keypoints</strong> (lowest recall) — usually the ones to label more of.</p>
+      <p>Homography has two rates. <strong>valid</strong> (<code>calib.ok_rate</code>) only checks that the
+        predicted points agree with each other (RANSAC, RMSE, spread, orientation); a model that always outputs an
+        average field layout can pass it. <strong>correct</strong> (<code>calib.correct_rate</code>) also requires the
+        labelled points to reproject within 10 px@1920 (median). The promotion gate uses <strong>correct</strong>.</p>
+      <p>How a predicted point is matched (same index only, never another index):</p>
+      <table>
+        <tr><th>Status</th><th>Meaning</th></tr>
+        <tr><td><strong>TP</strong></td><td>labelled (v &gt; 0) and predicted (box ≥ det conf, kp ≥ kp conf) within <code>--match-px</code> (default 25 px@1920)</td></tr>
+        <tr><td><strong>MIS</strong></td><td>labelled and predicted, but farther than <code>--match-px</code> (counted as a miss <em>and</em> as a false point)</td></tr>
+        <tr><td><strong>FN</strong></td><td>labelled, not predicted (below a threshold or no box) — its error is <strong>undefined</strong>, never 0</td></tr>
+        <tr><td><strong>FP</strong></td><td>predicted where there is no label</td></tr>
+      </table>
+      <table>
+        <tr><th>Number</th><th>Formula</th><th>Unit</th></tr>
+        <tr><td><strong>recall</strong></td><td>TP / labelled</td><td>0–1</td></tr>
+        <tr><td><strong>precision</strong></td><td>TP / predicted</td><td>0–1</td></tr>
+        <tr><td><strong>err_mean / median / p90 / p95</strong></td><td>pixel distance over TP only</td><td>px@1920 (distance × 1920 / image width)</td></tr>
+        <tr><td><strong>err_any_median / p90</strong></td><td>distance over every labelled+predicted point (TP + MIS)</td><td>px@1920</td></tr>
+        <tr><td><strong>pckN_pred</strong></td><td>TP within N px / predicted-and-labelled (TP + MIS)</td><td>0–1</td></tr>
+        <tr><td><strong>pckN_all</strong></td><td>TP within N px / <strong>all labelled</strong> — a miss counts as a failure</td><td>0–1</td></tr>
+        <tr><td><strong>swap_mirror / rot180 / other</strong></td><td>a labelled point missed while another index was predicted on it (left↔right mirror, 180° field rotation, anything else)</td><td>count</td></tr>
+        <tr><td><strong>pose mAP50-95</strong></td><td>Ultralytics OKS score, uniform sigmas (the field has no human-like per-point scale)</td><td>0–1</td></tr>
+      </table>
+      <p><code>n_ref</code> and <code>n_groups_ref</code> (distinct matches/recordings) give the support: a point with
+        n &lt; 30 or few groups is a weak estimate. The log lists the <strong>hardest keypoints</strong> with their support
+        and swap counts.</p>
+
+      <h3>Choosing thresholds (val only)</h3>
+      <p><code>sweep</code> re-applies a grid of box (<code>--det-confs</code>) and keypoint (<code>--kp-confs</code>)
+        thresholds to the saved <code>predictions.npz</code> and writes <code>sweep.csv</code> (recall, precision, false
+        points, <code>pck*_all</code>, share of images with a valid and a correct homography). It shows the trade-off; pick on val, never
+        on test.</p>
+
+      <h3 id="promotion">Model promotion (candidate vs active)</h3>
+      <p>After <code>train</code>, the new <code>best.pt</code> is evaluated on <strong>val</strong> and compared with the
+        active model on the same images (<code>compare</code>). It is copied to <code>models/active.pt</code> only if the gate
+        passes; every decision (both model hashes, reasons) is appended to <code>models/promotion_log.csv</code>. Candidate
+        weights are always kept in <code>models/</code>. Configure it in <code>freekiki.toml</code>:</p>
+      <pre>[promotion]
+mode = "gate"            # gate | map (old: pose mAP only) | never
+split = "val"
+pck_px = 10
+max_map_drop = 0.0       # pose mAP50-95 may not drop
+max_pck_all_drop = 0.0
+critical_kps = [0, 5, 13, 16, 24, 29, 32, 33, 40, 41, 48]
+min_support = 30         # critical points with fewer labels are reported, not gated
+max_recall_drop = 0.02
+max_median_err_increase_px = 1.0
+max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
+      <p><code>best.pt</code> itself is chosen by Ultralytics during training: the epoch with the highest
+        <strong>pose mAP50-95 + box mAP50-95</strong> (first maximum), not pose mAP alone.</p>
+
+      <h3>Dataset audit</h3>
+      <p><code>audit</code> never modifies the dataset. It writes <code>kp_availability.csv</code> (labels per point,
+        split, source and recording group), <code>label_issues.csv</code> (visibility, out-of-range, duplicated points,
+        mirrored labels), <code>label_outliers.csv</code> (label vs the homography fitted to the other labels),
+        <code>leakage_groups.csv</code> (recordings present in more than one split) and <code>near_duplicates.csv</code>
+        (dHash across splits).</p>
 
       <h3>Detect (your videos — no labels, so indirect indicators)</h3>
-      <p>Each video gets <code>quality.json</code>; a folder run also writes <code>quality_summary.csv</code>.</p>
+      <p>These are <strong>not accuracy</strong>: without labels a confident, stable point can still be the wrong landmark.
+        Each video gets <code>quality.json</code>; a folder run also writes <code>quality_summary.csv</code>.</p>
       <table>
-        <tr><th>Number</th><th>Meaning</th><th>Good sign</th></tr>
-        <tr><td><strong>detection_rate</strong></td><td>frames where the field was found</td><td>close to 1</td></tr>
-        <tr><td><strong>mean_visible_kps</strong></td><td>keypoints above <em>KP conf</em> per frame</td><td>depends on the shot; more is better</td></tr>
-        <tr><td><strong>calib_ready_rate</strong></td><td>frames with ≥ 4 visible keypoints (minimum for a homography/DLT2D)</td><td>close to 1</td></tr>
-        <tr><td><strong>mean_kp_conf</strong></td><td>mean confidence of the visible keypoints</td><td>higher</td></tr>
-        <tr><td><strong>jitter_px</strong></td><td>median frame-to-frame shake of each keypoint (2nd difference); smooth pans give ~0</td><td>low (a few px)</td></tr>
+        <tr><th>Number</th><th>Meaning</th></tr>
+        <tr><td><strong>detection_rate</strong></td><td>frames with a field box ≥ <em>Conf</em></td></tr>
+        <tr><td><strong>mean_visible_kps</strong></td><td>accepted points (box ≥ <em>Conf</em> and kp ≥ <em>KP conf</em>) per frame</td></tr>
+        <tr><td><strong>min4_kps_rate</strong></td><td>frames with ≥ 4 accepted points — only the <em>minimum count</em>, not a valid calibration</td></tr>
+        <tr><td><strong>calib_ok_rate</strong> / <strong>calib_status</strong></td><td>(no labels here, so plausibility, not correctness) frames whose accepted ground points give a valid homography: ≥ 6 RANSAC inliers (8 px@1920), RMSE ≤ 6 px@1920, field spread ≥ 1 m on the minor axis, not mirrored. Otherwise <code>few_points</code>, <code>degenerate</code>, <code>ransac_fail</code>, <code>few_inliers</code>, <code>high_error</code>, <code>mirrored</code></td></tr>
+        <tr><td><strong>cuts</strong></td><td>shot changes found (colour-histogram jump); temporal measures never cross a cut</td></tr>
+        <tr><td><strong>displacement_median/p90_px</strong></td><td>frame-to-frame movement of the accepted points — mostly <strong>camera motion</strong></td></tr>
+        <tr><td><strong>residual_median/p90_px</strong></td><td>movement left after removing the camera motion (homography, or translation when too few points) — the keypoint <strong>jitter</strong></td></tr>
+        <tr><td><strong>point_codes</strong></td><td>counts of the per-point status codes below</td></tr>
       </table>
-      <p>Also look at <code>&lt;video&gt;_freekiki_snapshot.png</code> and the overlay MP4 — wrong points are obvious there.</p>
+      <p>Also look at <code>diag_frames/</code> (green accepted, red rejected with name, confidence and code) and the
+        overlay MP4 — wrong points are obvious there.</p>
 
       <h2>Detect outputs</h2>
       <p>Folder <code>processed_freekiki_&lt;video&gt;_&lt;timestamp&gt;/</code> inside the output folder (default: the
@@ -186,33 +270,53 @@
         sub-folder per video.</p>
       <table>
         <tr><th>File</th><th>Content</th></tr>
-        <tr><td><code>field_kps_getpixelvideo.csv</code></td><td><code>frame,p0_x,p0_y,...,p48_x,p48_y</code> (0-based pixels,
-          blank below <em>KP conf</em>) — loads in getpixelvideo</td></tr>
-        <tr><td><code>field_kps_conf.csv</code></td><td>per-keypoint confidence</td></tr>
+        <tr><td><code>field_kps_getpixelvideo.csv</code></td><td><code>frame,p0_x,p0_y,...,p48_x,p48_y</code> (0-based pixels;
+          accepted points only, blank otherwise) — loads in getpixelvideo</td></tr>
+        <tr><td><code>field_kps_conf.csv</code></td><td>per-keypoint confidence <code>p0_conf..p48_conf</code></td></tr>
+        <tr><td><code>field_kps_raw.csv</code></td><td>best instance down to box conf 0.01, no filtering (for re-analysis)</td></tr>
+        <tr><td><code>field_kps_status.csv</code></td><td>per frame: cut flag, homography status/inliers/RMSE and one code per point</td></tr>
+        <tr><td><code>field_kps_filled_getpixelvideo.csv</code> / <code>_source.csv</code></td><td>only with <code>--fill-gaps N</code>: gaps ≤ N frames inside one shot linearly interpolated, each point marked <code>D</code> or <code>I</code></td></tr>
+        <tr><td><code>frame_issues.csv</code></td><td>frames with a cut, no box or no valid homography</td></tr>
+        <tr><td><code>diag_frames/</code></td><td>a few annotated frames (<code>--diag-frames</code>)</td></tr>
         <tr><td><code>&lt;video&gt;_freekiki_overlay.mp4</code></td><td>keypoints + kiki49 skeleton (optional)</td></tr>
         <tr><td><code>&lt;video&gt;_freekiki_snapshot.png</code></td><td>middle frame with keypoints (quick look)</td></tr>
-        <tr><td><code>quality.json</code></td><td>detect quality indicators</td></tr>
-        <tr><td><code>README.txt</code></td><td>parameters used</td></tr>
+        <tr><td><code>quality.json</code></td><td>the detect indicators above</td></tr>
+        <tr><td><code>README.txt</code></td><td>parameters used and the status codes</td></tr>
       </table>
+      <p>Point status codes: <strong>D</strong> detected (box ≥ <em>Conf</em>, kp ≥ <em>KP conf</em>); <strong>N</strong> no
+        field instance; <strong>Rb</strong> rejected, box below <em>Conf</em>; <strong>Rk</strong> rejected, keypoint below
+        <em>KP conf</em>; <strong>Ro</strong> outside the image; <strong>Rd</strong> same pixel (&lt; 3 px@1920) as a
+        higher-confidence index; <strong>I</strong> interpolated (filled CSV only). Gap filling never crosses a cut and never
+        extrapolates past the first/last detection.</p>
 
       <h2>CLI</h2>
       <pre>uv run vaila/freekiki.py init     -w /path/FreeKiki
 uv run vaila/freekiki.py import-dataset -w /path/FreeKiki --src /path/kiki49_dataset
 uv run vaila/freekiki.py check    -w /path/FreeKiki
+uv run vaila/freekiki.py manifest -w /path/FreeKiki --rfs-t 0.05 --cap 4 --seed 0   # oversample rare points; no training
+uv run vaila/freekiki.py train    -w /path/FreeKiki --manifest v001 --base active     # train on that list
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1   # smoke
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26m-pose.pt --epochs 150 --imgsz 1280                           # full
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base active --epochs 60                                                  # retrain
 uv run vaila/freekiki.py status   -w /path/FreeKiki                        # runs, which can be resumed
 uv run vaila/freekiki.py resume   -w /path/FreeKiki [--name RUN]           # continue after stop / power loss
-uv run vaila/freekiki.py evaluate -w /path/FreeKiki
+uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split val            # choose / compare on val
+uv run vaila/freekiki.py sweep    -w /path/FreeKiki --eval-dir /path/FreeKiki/outputs/processed_freekiki_eval_val_&lt;ts&gt;
+uv run vaila/freekiki.py compare  -w /path/FreeKiki --baseline active --candidate /path/FreeKiki/runs/RUN/weights/best.pt
+uv run vaila/freekiki.py audit    -w /path/FreeKiki                        # read-only dataset audit
+uv run vaila/freekiki.py bench    -w /path/FreeKiki --batches 2,8,16 --workers 8 --fraction 0.02
+uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split test           # final report only
 uv run vaila/freekiki.py detect   -w /path/FreeKiki --video match.mp4 --stride 5
 uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_videos</pre>
-      <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Evaluate and Detect use the <strong>image size the
-        model was trained with</strong> (read from the <code>.pt</code>: 640 smoke, 1280 full); <code>--imgsz</code>
-        overrides it from the CLI, the GUI always uses the model's size. Options: <code>resume --name --device
-        --batch</code>; <code>evaluate --model --split --kp-conf
-        --max-images</code>; <code>detect --model --start --max-frames --conf --kp-conf --imgsz --no-overlay
-        --output-dir</code>.</p>
+      <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Useful options: <code>manifest --rfs-t --cap --seed --exclude FILE --name</code>;
+        <code>train --manifest v001 --batch --device 0 --name
+        --patience --seed --workers</code>; <code>resume --name --device --batch</code>; <code>evaluate --model PATH.pt --split val
+        --det-conf --kp-conf --match-px --pck 5,10,25 --max-images</code>; <code>compare --promote</code> (copies to
+        <code>active.pt</code> only if the gate passes); <code>detect --model PATH.pt --start --max-frames --conf --kp-conf
+        --imgsz --no-overlay --output-dir --fill-gaps N --diag-frames N</code>.</p>
+      <p>Evaluate and Detect use the <strong>image size the model was trained with</strong> (read from the
+        <code>.pt</code>: 640 smoke, 1280 full); <code>--imgsz</code> overrides it from the CLI, the GUI always uses the
+        model's size.</p>
 
       <h2>Base models</h2>
       <p>Official <code>yolo26{n,s,m,l,x}-pose.pt</code> or any pose <code>.pt</code> (e.g. a public 32-keypoint pitch

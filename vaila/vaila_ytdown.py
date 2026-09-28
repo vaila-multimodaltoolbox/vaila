@@ -4,14 +4,15 @@ YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Create: 10 October 2025
-Update Date: 11 September 2026
-Version: 0.3.137
+Update Date: 27 September 2026
+Version: 0.4.5
 
 Description:
 ------------
 Review editable URLs (Load TXT only fills the list), select destination and MP4
 or MP3, then Download. Cancellation is cooperative; completed files are kept.
-MP4 uses yt-dlp bestvideo+bestaudio/best; MP3 uses bestaudio/best, converted at
+MP4 offers per-video resolution/FPS choices, defaulting to highest FPS then
+resolution. MP3 uses bestaudio/best, converted at
 192 kbps. Both need ffmpeg. GUI workers send queued events to Tk's main thread.
 CLI: python -m vaila.vaila_ytdown --file urls.txt --output /data --audio-only --no-gui
 Use --debug for technical details. See help/vaila_ytdown.md for outputs.
@@ -24,6 +25,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 import argparse
+import copy
 import os
 import re
 import shutil
@@ -62,6 +64,53 @@ except ImportError:
 
 # Preferred JS runtimes for YouTube EJS challenges (yt-dlp wiki/EJS).
 _JS_RUNTIME_CANDIDATES = ("deno", "node", "qjs")
+
+
+def quality_key(fmt):
+    return tuple(fmt.get(key) or 0 for key in ("width", "height", "fps"))
+
+
+def quality_label(fmt):
+    width, height, fps = quality_key(fmt)
+    return f"{width or '?'}x{height or '?'} · {f'{fps:g}' if fps else 'unknown'} FPS"
+
+
+def video_formats(info):
+    """Keep usable video formats in yt-dlp preference order (worst to best)."""
+    return [
+        fmt
+        for fmt in info.get("formats", [])
+        if fmt.get("vcodec") not in (None, "none")
+        and not fmt.get("has_drm")
+        and fmt.get("url")
+        and fmt.get("format_id")
+    ]
+
+
+def quality_options(info):
+    # yt-dlp has already sorted equivalent variants; last one wins.
+    grouped = {quality_key(fmt): fmt for fmt in video_formats(info)}
+    return sorted(
+        grouped.values(),
+        key=lambda f: (
+            f.get("fps") or 0,
+            min(f.get("width") or 0, f.get("height") or 0),
+            max(f.get("width") or 0, f.get("height") or 0),
+        ),
+        reverse=True,
+    )
+
+
+def parse_video_selections(values, count):
+    selections = {}
+    for value in values:
+        index, separator, format_id = value.partition("=")
+        if not separator or not index.isdecimal() or not 1 <= int(index) <= count or not format_id:
+            raise ValueError("--video-format requires INDEX=FORMAT_ID (index starts at 1)")
+        if int(index) in selections:
+            raise ValueError(f"Duplicate video selection: {index}")
+        selections[int(index)] = format_id
+    return selections
 
 
 def get_help_html_path():
@@ -213,15 +262,22 @@ class YTDownloader:
         if data.get("status") == "downloading":
             total = data.get("total_bytes") or data.get("total_bytes_estimate")
             percent = min(100, 100 * data.get("downloaded_bytes", 0) / total) if total else None
+            fragments = data.get("fragment_count")
+            fragment_index = data.get("fragment_index", 0)
+            if fragments:
+                percent = min(99, 100 * fragment_index / fragments)
+            elif percent is not None:
+                percent = min(99, percent)
+            detail = f"Fragments: {fragment_index}/{fragments}" if fragments else None
             if self.progress_callback:
                 self.progress_callback(data)
             now = time.monotonic()
             if now - self._last_gui_progress >= 0.1:
-                self._event("progress", {"percent": percent})
+                self._event("progress", {"percent": percent, "detail": detail})
                 self._last_gui_progress = now
             if now - self._last_progress >= 1:
                 self.feedback(
-                    f"Downloading: {percent:.1f}%"
+                    detail or f"Downloading: {percent:.1f}%"
                     if percent is not None
                     else "Downloading: size unknown"
                 )
@@ -300,9 +356,10 @@ class YTDownloader:
             quiet=True,
             no_warnings=True,
             skip_download=True,
-            format="best",
+            format="bestvideo+bestaudio/best",
+            format_sort=["fps", "res"],
+            format_sort_force=True,
             simulate=True,
-            dump_single_json=True,
             logger=_YTDLPLogger(self.feedback),
         )
 
@@ -310,71 +367,75 @@ class YTDownloader:
             self._check_cancel()
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
-                # Process all available formats to get comprehensive quality options
-                available_formats = []
-
-                if "formats" in info:
-                    video_formats = [
-                        f for f in info["formats"] if f.get("vcodec", "none") != "none"
-                    ]
-
-                    # Group formats by resolution and find best FPS for each
-                    resolution_formats = {}
-                    for fmt in video_formats:
-                        height = fmt.get("height", 0)
-                        fps = fmt.get("fps", 0)
-
-                        key = f"{fmt.get('width', 0)}x{height}"
-                        if key not in resolution_formats or fps > resolution_formats[key]["fps"]:
-                            resolution_formats[key] = {
-                                "resolution": key,
-                                "height": height,
-                                "width": fmt.get("width", 0),
-                                "fps": fps,
-                                "format_id": fmt.get("format_id", ""),
-                                "ext": fmt.get("ext", ""),
-                                "filesize": fmt.get("filesize", 0),
-                                "vcodec": fmt.get("vcodec", ""),
-                            }
-
-                    # Convert to sorted list (highest resolution first)
-                    available_formats = sorted(
-                        resolution_formats.values(),
-                        key=lambda x: (x["height"], x["fps"]),
-                        reverse=True,
-                    )
-
-                return {
-                    "title": info.get("title", "Unknown"),
-                    "uploader": info.get("uploader", "Unknown"),
-                    "duration": info.get("duration", 0),
-                    "upload_date": info.get("upload_date", ""),
-                    "available_formats": available_formats,
-                    "url": url,
-                }
+                self._check_cancel()
+                if not info or not quality_options(info):
+                    raise ValueError("No downloadable video qualities found")
+                return info
+        except DownloadCancelledError:
+            raise
         except Exception as e:
-            self._message(f"[red]Error getting video info: {str(e)}[/red]")
-            # Return basic info so download can still proceed
-            return {
-                "title": "Unknown",
-                "url": url,
-                "available_formats": [],
-            }
+            raise ValueError(f"Cannot consult video qualities: {e}") from e
 
-    def download_video(self, url, output_dir=None, filename_prefix=""):
-        """Download yt-dlp best video + audio and produce a verified MP4."""
+    def download_video(
+        self, url, output_dir=None, filename_prefix="", *, video_info=None, format_id=None
+    ):
+        """Download the selected video quality with audio and verify the final MP4."""
         if output_dir:
             self.output_dir = output_dir
 
         # Create timestamp for unique folder
         self._check_ready()
+        video_info = video_info or self.get_video_info(url)
+        options = quality_options(video_info)
+        if not options:
+            raise ValueError("No downloadable video qualities found")
+        selected = (
+            next((fmt for fmt in video_formats(video_info) if fmt["format_id"] == format_id), None)
+            if format_id
+            else options[0]
+        )
+        if selected is None:
+            raise ValueError(f"Video format unavailable: {format_id}")
+        requested_quality = quality_key(selected)
         save_dir = str(_make_directory(self.output_dir, "vaila_ytdownload"))
         if self.feedback.log_file is None:
             self.feedback.log_file = Path(save_dir) / "download_log.txt"
 
-        # Format spec: Let yt-dlp decide best quality available (default behavior)
-        format_spec = "bestvideo+bestaudio/best"
-        self._message("[blue]Downloading best available quality (video+audio)[/blue]")
+        def selector(context):
+            # IDs come from extraction, never interpolate them into selector syntax.
+            video = next(
+                (f for f in context["formats"] if f["format_id"] == selected["format_id"]), None
+            )
+            if video is None:
+                raise ValueError("Selected video format is no longer available")
+            if video.get("acodec") not in (None, "none"):
+                yield video
+                return
+            audio = next(
+                (
+                    f
+                    for f in reversed(context["formats"])
+                    if f.get("vcodec") == "none"
+                    and f.get("acodec") not in (None, "none")
+                    and not f.get("has_drm")
+                ),
+                None,
+            )
+            if audio is None:
+                raise ValueError("No audio stream available for selected video")
+            yield {
+                "format_id": f"{video['format_id']}+{audio['format_id']}",
+                "ext": "mp4",
+                "requested_formats": [video, audio],
+                "width": video.get("width"),
+                "height": video.get("height"),
+                "fps": video.get("fps"),
+                "vcodec": video.get("vcodec"),
+                "acodec": audio.get("acodec"),
+                "protocol": f"{video['protocol']}+{audio['protocol']}",
+            }
+
+        self._message(f"Selected: {quality_label(selected)} (format {selected['format_id']})")
 
         # Prepare filename template with prefix if provided
         outtmpl = os.path.join(
@@ -384,7 +445,9 @@ class YTDownloader:
 
         # Set up download options with max FPS preference + YouTube EJS/JS runtime
         ydl_opts = build_ytdlp_base_opts(
-            format=format_spec,
+            format=selector,
+            format_sort=["fps", "res"],
+            format_sort_force=True,
             outtmpl=outtmpl,
             progress_hooks=[self._progress_hook],
             postprocessor_hooks=[self._postprocessor_hook],
@@ -403,18 +466,28 @@ class YTDownloader:
         )
 
         try:
-            # First get extended video information for the detailed info file
-            try:
-                self._message(f"[blue]Getting detailed info for: {url}[/blue]")
-                video_info = self.get_video_info(url)
-            except Exception as e:
-                self._message(f"[yellow]Warning: Could not get detailed info: {str(e)}[/yellow]")
-                video_info = {"url": url, "available_formats": []}
-
-            # Now download the video
             self._check_cancel()
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
+                for attempt in range(2):
+                    try:
+                        info = ydl.process_ie_result(copy.deepcopy(video_info), download=True)
+                        break
+                    except yt_dlp.utils.DownloadError as error:
+                        self._check_cancel()
+                        if attempt or not re.search(r"\b(?:403|410)\b", str(error)):
+                            raise
+                        self.feedback("Media URL expired or denied; refreshing once.")
+                        video_info = self.get_video_info(url)
+                        selected = next(
+                            (
+                                f
+                                for f in reversed(video_formats(video_info))
+                                if quality_key(f) == requested_quality
+                            ),
+                            None,
+                        )
+                        if selected is None:
+                            raise ValueError("Selected quality is no longer available") from error
                 self.current_video_title = info.get("title", "Unknown")
 
                 actual_filename = self._finished_filename(ydl, info, ".mp4")
@@ -425,6 +498,8 @@ class YTDownloader:
                     f.write(f"Title: {info.get('title', 'Unknown')}\n")
                     f.write(f"Channel: {info.get('uploader', 'Unknown')}\n")
                     f.write(f"URL: {redact(url)}\n")
+                    f.write(f"Requested quality (width, height, fps): {requested_quality}\n")
+                    f.write(f"Downloaded format: {info.get('format_id', selected['format_id'])}\n")
                     f.write(
                         f"Downloaded resolution: {info.get('width', 0)}x{info.get('height', 0)}\n"
                     )
@@ -436,20 +511,13 @@ class YTDownloader:
                     f.write("AVAILABLE RESOLUTIONS AND FPS OPTIONS (sorted by FPS):\n")
                     f.write("=================================================\n")
 
-                    if video_info.get("available_formats"):
-                        # Sort formats by FPS first, then by resolution
-                        sorted_formats = sorted(
-                            video_info["available_formats"],
-                            key=lambda x: (x.get("fps", 0), x.get("height", 0)),
-                            reverse=True,
-                        )
-
-                        for i, fmt in enumerate(sorted_formats, 1):
-                            f.write(
-                                f"{i}. FPS: {fmt.get('fps')} | Resolution: {fmt.get('resolution')}\n"
-                            )
+                    if options:
+                        for i, fmt in enumerate(options, 1):
+                            f.write(f"{i}. {quality_label(fmt)} | ID: {fmt['format_id']}\n")
                             f.write(f"   Video codec: {fmt.get('vcodec')}\n")
-                            filesize_mb = fmt.get("filesize", 0) / (1024 * 1024)
+                            filesize_mb = (
+                                fmt.get("filesize") or fmt.get("filesize_approx") or 0
+                            ) / (1024 * 1024)
                             if filesize_mb > 0:
                                 f.write(f"   Approximate size: {filesize_mb:.1f} MB\n")
                             f.write("\n")
@@ -535,7 +603,9 @@ class YTDownloader:
                 self.status_callback(f"Error: {error_msg}")
             raise Exception(error_msg) from e
 
-    def download_urls(self, urls, output_dir=None, audio_only=False, *, batch=None):
+    def download_urls(
+        self, urls, output_dir=None, audio_only=False, *, batch=None, selections=None, previews=None
+    ):
         """Single execution path for GUI, TXT, CLI and interactive input."""
         if not self._batch_lock.acquire(blocking=False):
             raise RuntimeError("A download is already running")
@@ -544,6 +614,10 @@ class YTDownloader:
             urls = parse_urls(urls)
             if not urls:
                 raise ValueError("Enter at least one URL")
+            selections = selections or {}
+            previews = previews or {}
+            if any(index < 1 or index > len(urls) for index in selections):
+                raise ValueError("Video selection index is outside the URL list")
             destination = Path(output_dir or self.output_dir).expanduser().resolve()
             use_batch = len(urls) > 1 if batch is None else batch
             folder_type = "audio" if audio_only else "batch"
@@ -570,11 +644,14 @@ class YTDownloader:
                 argv.extend(["--url", urls[0]])
             if audio_only:
                 argv.append("--audio-only")
+            else:
+                for index, format_id in sorted(selections.items()):
+                    argv.extend(["--video-format", f"{index}={format_id}"])
             if self.feedback.debug_enabled:
                 argv.append("--debug")
             self.feedback("Equivalent CLI: " + command_text(argv))
             self.feedback(
-                f"Starting {len(urls)} items; format={'MP3 (192 kbps)' if audio_only else 'MP4 (best video + audio)'}"
+                f"Starting {len(urls)} items; format={'MP3 (192 kbps)' if audio_only else 'MP4 (selected quality; default highest FPS, then resolution)'}"
             )
             for index, url in enumerate(urls, 1):
                 if self.cancel_event.is_set():
@@ -585,10 +662,19 @@ class YTDownloader:
                 item_dir = run_dir / f"{index:03d}" if use_batch else destination
                 try:
                     download = self.download_audio if audio_only else self.download_video
+                    preview = previews.get(index)
+                    if not audio_only and isinstance(preview, Exception):
+                        raise ValueError(f"Quality consultation failed: {preview}")
+                    extra = (
+                        {}
+                        if audio_only
+                        else {"video_info": preview, "format_id": selections.get(index)}
+                    )
                     output = download(
                         url,
                         output_dir=str(item_dir),
                         filename_prefix=f"{index:03d}" if use_batch else "",
+                        **extra,
                     )
                     result.files.append(output)
                     if not use_batch:
@@ -638,8 +724,12 @@ class DownloaderGUI:
         self.downloader.status_callback = lambda message: self.task.emit("phase", message)
         self.last_directory = None
         self.close_requested = False
+        self.preview_urls = []
+        self.previews = {}
+        self.selections = {}
+        self.operation = None
         root.title("vailá YouTube Downloader")
-        root.geometry("850x680")
+        root.geometry("900x850")
         root.minsize(640, 520)
         frame = ttk.Frame(root, padding=16)
         frame.pack(fill="both", expand=True)
@@ -647,7 +737,7 @@ class DownloaderGUI:
             anchor="w"
         )
         ttk.Label(
-            frame, text="1. Review URLs -> 2. Choose destination and format -> 3. Download"
+            frame, text="1. Review URLs -> 2. Choose destination -> 3. Consult qualities -> 4. Download"
         ).pack(anchor="w", pady=6)
         self.urls_text = tk.Text(frame, height=8, wrap="word", undo=True)
         self.urls_text.pack(fill="both", expand=True)
@@ -679,9 +769,24 @@ class DownloaderGUI:
             format_row, text="Audio (MP3)", variable=self.audio_only, value=True
         )
         self.audio_button.pack(side="left", padx=12)
+        self.consult_button = ttk.Button(
+            frame, text="Consult qualities", command=self.consult_qualities
+        )
+        self.consult_button.pack(anchor="w", pady=5)
+        self.quality_table = ttk.Treeview(
+            frame, columns=("title", "quality"), show="headings", height=5
+        )
+        self.quality_table.heading("title", text="Video / consultation status")
+        self.quality_table.heading("quality", text="Selected resolution / FPS")
+        self.quality_table.pack(fill="x")
+        self.quality_table.bind("<<TreeviewSelect>>", self.show_quality_choices)
+        self.quality_choice = ttk.Combobox(frame, state="disabled")
+        self.quality_choice.pack(fill="x", pady=5)
+        self.quality_choice.bind("<<ComboboxSelected>>", self.choose_quality)
         ttk.Label(
             frame,
-            text="MP4: yt-dlp best video + audio. MP3: best audio converted to 192 kbps.\n"
+            text="MP4 default: highest FPS, then highest resolution; choose separately for each video.\n"
+            "MP3: best audio converted to 192 kbps. "
             "Both formats require ffmpeg. Completion includes merging/conversion.",
             wraplength=760,
         ).pack(anchor="w", pady=6)
@@ -727,6 +832,7 @@ class DownloaderGUI:
             self.audio_button,
             self.debug_button,
             self.urls_text,
+            self.consult_button,
         ]
         root.protocol("WM_DELETE_WINDOW", self.close)
         root.bind("<Control-Return>", lambda event: self.start_download())
@@ -735,10 +841,82 @@ class DownloaderGUI:
         self.poll_id = root.after(75, self.poll)
 
     def update_count(self, event=None):
+        urls = parse_urls(self.urls_text.get("1.0", "end"))
+        if urls != self.preview_urls and not self.task.busy:
+            self.previews.clear()
+            self.selections.clear()
+            self.preview_urls = []
+            self.quality_table.delete(*self.quality_table.get_children())
+            self.quality_choice.set("")
+            self.quality_choice.configure(state="disabled")
         self.count_label.configure(
             text=f"{len(parse_urls(self.urls_text.get('1.0', 'end')))} entries"
         )
         self.urls_text.edit_modified(False)
+
+    def set_busy(self):
+        for widget in self.input_widgets:
+            widget.configure(state="disabled")
+        self.quality_choice.configure(state="disabled")
+        self.download_button.configure(state="disabled")
+        self.cancel_button.configure(state="normal")
+
+    def consult_qualities(self):
+        if self.task.busy or self.audio_only.get():
+            return False
+        urls = parse_urls(self.urls_text.get("1.0", "end"))
+        if not urls:
+            self.status.configure(text="Enter URLs before consulting qualities")
+            return False
+        self.preview_urls = urls
+        self.previews = {}
+        self.selections = {}
+        self.quality_table.delete(*self.quality_table.get_children())
+        for index, url in enumerate(urls, 1):
+            self.quality_table.insert("", "end", iid=str(index), values=(url, "Waiting"))
+        self.operation = "consult"
+        self.downloader.feedback.debug_enabled = self.debug.get()
+        self.status.configure(text="Consulting available qualities...")
+        self.set_busy()
+
+        def consult():
+            for index, url in enumerate(urls, 1):
+                if self.task.cancel.is_set():
+                    break
+                try:
+                    info = self.downloader.get_video_info(url)
+                except DownloadCancelledError:
+                    break
+                except Exception as error:
+                    info = error
+                self.task.emit("qualities", (index, info))
+
+        self.task.start(consult)
+        return True
+
+    def show_quality_choices(self, event=None):
+        selected = self.quality_table.selection()
+        if self.task.busy or not selected:
+            return
+        index = int(selected[0])
+        info = self.previews.get(index)
+        options = quality_options(info) if isinstance(info, dict) else []
+        self.quality_choice.configure(
+            values=[quality_label(f) for f in options], state="readonly" if options else "disabled"
+        )
+        self.quality_choice.set("")
+        for position, fmt in enumerate(options):
+            if fmt["format_id"] == self.selections.get(index):
+                self.quality_choice.current(position)
+
+    def choose_quality(self, event=None):
+        selected = self.quality_table.selection()
+        if self.task.busy or not selected or self.quality_choice.current() < 0:
+            return
+        index = int(selected[0])
+        fmt = quality_options(self.previews[index])[self.quality_choice.current()]
+        self.selections[index] = fmt["format_id"]
+        self.quality_table.set(str(index), "quality", quality_label(fmt))
 
     def load_txt(self):
         if self.task.busy:
@@ -787,15 +965,23 @@ class DownloaderGUI:
             )
             return False
         audio_only = self.audio_only.get()
+        if not audio_only and (urls != self.preview_urls or len(self.previews) != len(urls)):
+            return self.consult_qualities()
+        if not audio_only and not self.selections:
+            self.status.configure(text="No valid qualities; consult again before downloading")
+            return False
+        self.operation = "download"
         self.downloader.feedback.debug_enabled = self.debug.get()
         self.counts.configure(text="Success: 0 · Failed: 0")
         self.progress.configure(value=0, mode="determinate")
         self.status.configure(text="Starting...")
-        for widget in self.input_widgets:
-            widget.configure(state="disabled")
-        self.download_button.configure(state="disabled")
-        self.cancel_button.configure(state="normal")
-        self.task.start(lambda: self.downloader.download_urls(urls, output, audio_only))
+        self.set_busy()
+        selections, previews = dict(self.selections), dict(self.previews)
+        self.task.start(
+            lambda: self.downloader.download_urls(
+                urls, output, audio_only, selections=selections, previews=previews
+            )
+        )
         return True
 
     def cancel(self):
@@ -846,6 +1032,8 @@ class DownloaderGUI:
                 self.progress.stop()
                 self.progress.configure(mode="determinate", value=0)
             elif kind == "progress":
+                if payload.get("detail"):
+                    self.status.configure(text=payload["detail"])
                 percent = payload["percent"]
                 self.progress.stop()
                 self.progress.configure(
@@ -867,7 +1055,18 @@ class DownloaderGUI:
                 self.counts.configure(
                     text=f"Success: {payload['success']} · Failed: {payload['failed']}"
                 )
-            elif kind == "result":
+            elif kind == "qualities":
+                index, info = payload
+                self.previews[index] = info
+                if isinstance(info, Exception):
+                    self.quality_table.set(str(index), "quality", f"Failed: {redact(info)}")
+                else:
+                    fmt = quality_options(info)[0]
+                    self.selections[index] = fmt["format_id"]
+                    self.quality_table.item(
+                        str(index), values=(info.get("title", "Unknown"), quality_label(fmt))
+                    )
+            elif kind == "result" and self.operation == "download":
                 self.last_directory = payload.directory
                 self.status.configure(text=payload.summary())
                 self.counts.configure(
@@ -883,6 +1082,15 @@ class DownloaderGUI:
                     widget.configure(state="normal")
                 self.download_button.configure(state="normal")
                 self.cancel_button.configure(state="disabled")
+                if self.operation == "consult":
+                    self.status.configure(
+                        text="Consultation cancelled"
+                        if self.task.cancel.is_set()
+                        else "Review each video's quality, then click Download. Failed items will be reported and skipped."
+                    )
+                    if self.quality_table.get_children():
+                        self.quality_table.selection_set(self.quality_table.get_children()[0])
+                self.show_quality_choices()
                 if self.close_requested:
                     self.root.destroy()
                     return
@@ -891,7 +1099,7 @@ class DownloaderGUI:
 
 def run_ytdown(argv=None):
     parser = argparse.ArgumentParser(
-        description="Download best video + audio as MP4, or audio as MP3",
+        description="Download MP4 with per-video quality selection (default: highest FPS, then resolution), or MP3",
         epilog='Example: python -m vaila.vaila_ytdown --file "my urls.txt" --output "my videos" --audio-only --no-gui',
     )
     inputs = parser.add_mutually_exclusive_group()
@@ -901,13 +1109,34 @@ def run_ytdown(argv=None):
     parser.add_argument("-a", "--audio-only", action="store_true", help="Produce MP3 (192 kbps)")
     parser.add_argument("--no-gui", action="store_true", help="CLI only; prompt for URL if absent")
     parser.add_argument(
+        "--list-formats",
+        action="store_true",
+        help="List resolution/FPS choices without downloading",
+    )
+    parser.add_argument(
+        "--video-format",
+        action="append",
+        default=[],
+        metavar="INDEX=FORMAT_ID",
+        help="Select video format for a 1-based URL index; repeat for a batch",
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Include technical details and traceback"
     )
     # Embedded launch does not consume the parent application's command line.
     embedded = TKINTER_AVAILABLE and tk._default_root is not None
     args = parser.parse_args([] if argv is None and embedded else argv)
+    if args.audio_only and (args.list_formats or args.video_format):
+        parser.error("Video quality options cannot be combined with --audio-only")
     feedback = Feedback("vaila_ytdown", args.debug)
-    if args.url or args.file or args.no_gui or not TKINTER_AVAILABLE:
+    if (
+        args.url
+        or args.file
+        or args.no_gui
+        or args.list_formats
+        or args.video_format
+        or not TKINTER_AVAILABLE
+    ):
         downloader = YTDownloader()
         downloader.feedback = feedback
         try:
@@ -915,8 +1144,27 @@ def run_ytdown(argv=None):
             if not urls:
                 feedback("Waiting for URL input:")
                 urls = [input().strip()]
+            try:
+                selections = parse_video_selections(args.video_format, len(urls))
+            except ValueError as error:
+                parser.error(str(error))
+            if args.list_formats:
+                failed = False
+                for index, url in enumerate(urls, 1):
+                    try:
+                        info = downloader.get_video_info(url)
+                        feedback(f"Item {index}: {info.get('title', 'Unknown')}")
+                        for position, fmt in enumerate(quality_options(info)):
+                            feedback(
+                                f"{'DEFAULT ' if position == 0 else ''}{quality_label(fmt)} | "
+                                f"--video-format {index}={fmt['format_id']}"
+                            )
+                    except Exception as error:
+                        failed = True
+                        feedback.error(error)
+                return int(failed)
             result = downloader.download_urls(
-                urls, args.output, args.audio_only, batch=bool(args.file)
+                urls, args.output, args.audio_only, batch=bool(args.file), selections=selections
             )
             return result.exit_code
         except (KeyboardInterrupt, EOFError):

@@ -1,7 +1,7 @@
 """Downloader backend and batch regression tests (no network).
 
-Version: 0.3.137
-Update Date: 11 September 2026
+Version: 0.4.5
+Update Date: 27 September 2026
 """
 
 import contextlib
@@ -39,7 +39,22 @@ def backend(monkeypatch):
 
         def extract_info(self, url, download):
             if not download:
-                return {"title": "Example", "formats": []}
+                return {
+                    "title": "Example",
+                    "webpage_url": url,
+                    "formats": [
+                        {
+                            "format_id": "v60",
+                            "width": 1920,
+                            "height": 1080,
+                            "fps": 60,
+                            "vcodec": "h264",
+                            "acodec": "aac",
+                            "url": url,
+                            "protocol": "https",
+                        }
+                    ],
+                }
             state["calls"].append(url)
             if "fail" in url:
                 raise OSError("simulated transfer failure token=hidden-token")
@@ -51,7 +66,7 @@ def backend(monkeypatch):
                 hook({"status": "started", "postprocessor": "FFmpeg", "info_dict": info})
             if state["during_processing"]:
                 state["during_processing"]()
-            suffix = ".mp4" if self.opts["format"] == "bestvideo+bestaudio/best" else ".mp3"
+            suffix = ".mp4" if callable(self.opts["format"]) else ".mp3"
             output = Path(self.prepare_filename(info)).with_suffix(suffix)
             if not state["missing_output"]:
                 output.write_bytes(b"fake finished media")
@@ -59,6 +74,10 @@ def backend(monkeypatch):
             for hook in self.opts.get("postprocessor_hooks", []):
                 hook({"status": "finished", "postprocessor": "FFmpeg", "info_dict": info})
             return info
+
+        def process_ie_result(self, info, download):
+            list(self.opts["format"]({"formats": info["formats"]}))
+            return self.extract_info(info["webpage_url"], download)
 
     monkeypatch.setattr(yt.yt_dlp, "YoutubeDL", FakeYDL)
     monkeypatch.setattr(yt.YTDownloader, "_check_ffmpeg", lambda self: True)
@@ -306,6 +325,53 @@ def test_downloader_gui_responsive_cancel_and_help(gui_window, tmp_path, backend
     assert "Success: 1" in app.counts.cget("text")
     assert len(backend["calls"]) == 1
     app.close()
+
+
+def test_gui_video_qualities_review_selection_and_invalidation(
+    gui_window, tmp_path, backend, monkeypatch, capsys
+):
+    parent, window, _ = gui_window
+    app = yt.DownloaderGUI(window)
+    original = app.downloader.get_video_info
+
+    def consult(url):
+        info = original(url)
+        info["formats"].insert(0, dict(info["formats"][0], format_id="v30", fps=30))
+        return info
+
+    monkeypatch.setattr(app.downloader, "get_video_info", consult)
+    app.urls_text.insert("1.0", "https://example/one\nhttps://example/two")
+    app.output_dir_var.set(str(tmp_path))
+    assert app.start_download()  # First click only consults.
+    pump(parent, lambda: not app.task.busy)
+    assert not backend["calls"]
+    assert app.selections == {1: "v60", 2: "v60"}
+    app.quality_table.selection_set("2")
+    app.show_quality_choices()
+    app.quality_choice.current(1)
+    app.choose_quality()
+    assert app.selections == {1: "v60", 2: "v30"}
+    assert app.start_download()
+    pump(parent, lambda: not app.task.busy)
+    assert backend["calls"] == ["https://example/one", "https://example/two"]
+    assert "--video-format 1=v60 --video-format 2=v30" in capsys.readouterr().out
+    app.urls_text.insert("end", "\nhttps://example/three")
+    app.update_count()
+    assert not app.selections and not app.previews
+    assert not app.quality_table.get_children()
+    app.close()
+
+
+def test_failed_preview_does_not_download_that_item(tmp_path, backend):
+    downloader = yt.YTDownloader()
+    result = downloader.download_urls(
+        ["https://example/one", "https://example/two"],
+        tmp_path,
+        previews={1: ValueError("No qualities")},
+        selections={2: "v60"},
+    )
+    assert result.exit_code == 1 and len(result.files) == 1 and len(result.errors) == 1
+    assert backend["calls"] == ["https://example/two"]
 
 
 def test_filemanager_gui_same_operations_as_cli(gui_window, tmp_path, monkeypatch):

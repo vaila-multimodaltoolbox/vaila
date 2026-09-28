@@ -1,12 +1,13 @@
 """Tests for vaila/freekiki.py (workspace, dataset, registry, CSV rows, quality metrics).
 
-Update Date: 25 September 2026
+Update Date: 28 September 2026
 Version: 0.4.5
 """
 
 from __future__ import annotations
 
 import csv
+import json
 from pathlib import Path
 
 import numpy as np
@@ -14,6 +15,7 @@ import pytest
 import yaml
 
 from vaila import freekiki as fk
+from vaila import freekiki_diag as diag
 
 
 def _fake_kiki49(root: Path, *, nkp: int = fk.NKP, flip_idx: list[int] | None = None) -> Path:
@@ -105,6 +107,9 @@ def _fake_run(ws: Path, name: str, score: float) -> Path:
 
 def test_register_run_promotes_only_better(tmp_path: Path) -> None:
     ws = fk.init_workspace(tmp_path / "ws")
+    settings = fk.load_settings(ws)
+    settings["promotion"]["mode"] = "map"  # legacy policy: pose mAP50-95 only
+    fk.save_settings(ws, settings)
     first = fk.register_run(
         ws, _fake_run(ws, "r1", 0.40), base="yolo26m-pose.pt", epochs=2, imgsz=640
     )
@@ -119,6 +124,68 @@ def test_register_run_promotes_only_better(tmp_path: Path) -> None:
     with (ws / fk.REGISTRY_CSV).open(encoding="utf-8") as f:
         assert [r["run"] for r in csv.DictReader(f)] == ["r1", "r2", "r3"]
     assert fk.resolve_model(ws, "active").endswith("active.pt")
+
+
+def test_register_run_gate_and_never_keep_active(tmp_path: Path, monkeypatch) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    assert fk.load_settings(ws)["promotion"]["mode"] == "gate"
+    first = fk.register_run(ws, _fake_run(ws, "r1", 0.40), base="b.pt", epochs=2, imgsz=640)
+    assert first["promoted"]  # first model of the workspace, no evaluation
+    calls: list[str] = []
+
+    def fake_decision(ws_, candidate, settings):
+        calls.append(candidate)
+        return {"promote": False, "reasons": ["p5_recall: 0.9 -> 0.1 (tolerance 0.02)"]}
+
+    monkeypatch.setattr(fk, "promotion_decision", fake_decision)
+    row = fk.register_run(ws, _fake_run(ws, "r2", 0.90), base="active", epochs=2, imgsz=640)
+    assert not row["promoted"] and calls and calls[0].endswith("kiki49_r2.pt")
+    assert (ws / fk.ACTIVE_MODEL).read_bytes() == b"r1"  # better mAP alone is not enough
+    assert (ws / "models" / "kiki49_r2.pt").is_file()  # candidate kept for later compare
+
+    settings = fk.load_settings(ws)
+    settings["promotion"]["mode"] = "never"
+    fk.save_settings(ws, settings)
+    row = fk.register_run(ws, _fake_run(ws, "r3", 0.99), base="active", epochs=2, imgsz=640)
+    assert not row["promoted"] and (ws / fk.ACTIVE_MODEL).read_bytes() == b"r1"
+    with (ws / fk.PROMOTION_LOG).open(encoding="utf-8") as f:
+        log = list(csv.DictReader(f))
+    assert [r["promoted"] for r in log] == ["True", "False", "False"]
+    assert "p5_recall" in log[1]["reasons"] and log[2]["mode"] == "never"
+
+
+def test_read_best_metrics_uses_pose_plus_box_fitness(tmp_path: Path) -> None:
+    results = tmp_path / "results.csv"
+    with results.open("w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(
+            ["epoch", "  metrics/mAP50(P)", "  metrics/mAP50-95(P)", "  metrics/mAP50-95(B)"]
+        )
+        w.writerow([139, 0.95, 0.858, 0.890])  # best pose mAP
+        w.writerow([148, 0.95, 0.857, 0.898])  # best pose + box: what best.pt holds
+        w.writerow([149, 0.95, 0.857, 0.898])  # tie: the first maximum wins
+    best = fk.read_best_metrics(results)
+    assert best["best_epoch"] == "148" and best["pose_map50_95"] == 0.857
+    assert best["fitness"] == pytest.approx(1.755)
+    assert fk.read_best_metrics(tmp_path / "missing.csv")["best_epoch"] == ""
+
+
+def test_parser_new_subcommands() -> None:
+    p = fk.build_parser()
+    a = p.parse_args(["evaluate", "-w", "ws"])
+    assert a.split == "val" and a.match_px == 25
+    a = p.parse_args(["evaluate", "-w", "ws", "--split", "test", "--kp-conf", "0.3"])
+    assert a.split == "test" and a.kp_conf == 0.3
+    a = p.parse_args(["compare", "-w", "ws", "--candidate", "models/x.pt"])
+    assert a.baseline == "active" and not a.promote
+    a = p.parse_args(["sweep", "-w", "ws", "--eval-dir", "e"])
+    assert not a.allow_test
+    assert p.parse_args(["audit", "-w", "ws", "--no-hash"]).no_hash
+    assert p.parse_args(["bench", "-w", "ws"]).batches == "2,8,16"
+    assert p.parse_args(["train", "-w", "ws"]).seed == 0
+    assert (
+        p.parse_args(["detect", "-w", "ws", "--video", "v.mp4", "--fill-gaps", "3"]).fill_gaps == 3
+    )
 
 
 def _interrupted_run(ws: Path, name: str, *, optimizer: dict | None, epochs: int = 150) -> Path:
@@ -211,6 +278,47 @@ def test_resume_interrupted_run_continues_in_place(
     assert row["run"] == "cut" and row["epochs"] == 150 and row["imgsz"] == 1280
 
 
+def test_bench_reports_effective_batch_after_oom_reduction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Ultralytics halves the batch after OOM; throughput must use the batch trained."""
+    import sys
+    import types
+
+    ws = fk.init_workspace(tmp_path / "ws")
+    fk.import_dataset(ws, _fake_kiki49(tmp_path / "src"))
+    clock = iter(float(i) for i in range(1000))
+    monkeypatch.setattr("time.perf_counter", lambda: next(clock))
+
+    class FakeYOLO:
+        def __init__(self, weights):
+            self.cb = None
+
+        def add_callback(self, name, fn):
+            assert name == "on_train_batch_end"
+            self.cb = fn
+
+        def train(self, **kwargs):
+            bs = kwargs["batch"]
+            trainer = types.SimpleNamespace(batch_size=bs)
+            if bs > 8:  # OOM after 2 batches -> halved, like trainer.py
+                for _ in range(2):
+                    self.cb(trainer)
+                trainer.batch_size = bs // 2
+            for _ in range(12):
+                self.cb(trainer)
+
+    monkeypatch.setitem(sys.modules, "ultralytics", types.SimpleNamespace(YOLO=FakeYOLO))
+    out = fk.bench(ws, batches=(8, 16), workers=(2,), warmup=2)
+    with (out / "bench.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert [r["status"] for r in rows] == ["ok", "oom_reduced"]
+    assert [int(r["batch_effective"]) for r in rows] == [8, 8]
+    # 1 s between timed batches -> images_per_s == effective batch, not the requested 16
+    assert [float(r["images_per_s"]) for r in rows] == [8.0, 8.0]
+    assert [int(r["batches_timed"]) for r in rows] == [9, 9]
+
+
 def test_resolve_model_active_missing(tmp_path: Path) -> None:
     ws = fk.init_workspace(tmp_path / "ws")
     with pytest.raises(FileNotFoundError):
@@ -242,37 +350,182 @@ def test_read_label_keypoints(tmp_path: Path) -> None:
     assert fk.read_label_keypoints(label) == (None, None)
 
 
-def test_keypoint_errors_and_summary() -> None:
-    gt_xy = np.zeros((fk.NKP, 2))
-    gt_vis = np.zeros(fk.NKP)
-    gt_vis[:3] = 2  # p0..p2 labelled
-    pred_xy = gt_xy.copy()
-    pred_xy[1] = [3.0, 4.0]  # 5 px off at 960 px wide -> 10 px @1920
-    conf = np.zeros(fk.NKP)
-    conf[[0, 1, 5]] = 0.9  # p2 missed, p5 false positive
-    res = fk.keypoint_errors(pred_xy, conf, gt_xy, gt_vis, 960, 0.5)
-    assert res["found"][:3].tolist() == [True, True, False]
-    assert res["false_pos"][5] and res["false_pos"].sum() == 1
-    assert res["err_px"][1] == pytest.approx(10.0) and np.isnan(res["err_px"][2])
-
-    missed = fk.keypoint_errors(None, None, gt_xy, gt_vis, 960, 0.5)
-    overall, per_kp = fk.summarize_keypoint_errors([res, missed])
-    assert overall["images"] == 2 and overall["labelled"] == 6
-    assert overall["recall"] == pytest.approx(2 / 6, abs=1e-3)
-    assert overall["precision"] == pytest.approx(2 / 3, abs=1e-3)
-    assert overall["pck10"] == 1.0 and overall["median_err_px"] == 5.0
-    assert per_kp[1]["kp"] == "p1" and per_kp[1]["recall"] == 0.5
-    assert per_kp[10]["labelled"] == 0 and per_kp[10]["recall"] is None
+def test_point_codes_rejection_reasons() -> None:
+    xy = np.zeros((fk.NKP, 2))
+    xy[:, 0] = np.arange(fk.NKP) * 30.0 + 5.0
+    xy[:, 1] = 100.0
+    kc = np.full(fk.NKP, 0.9)
+    kc[2] = 0.2  # below kp_conf
+    xy[3] = [-10.0, 100.0]  # outside the image
+    xy[5] = xy[4] + [0.5, 0.0]  # identity clash with p4, lower confidence
+    kc[5] = 0.8
+    codes = fk.point_codes(xy, kc, 0.9, 0.25, 0.5, (1920, 1080))
+    assert codes[:6] == ["D", "D", "Rk", "Ro", "D", "Rd"]
+    assert fk.point_codes(xy, kc, 0.1, 0.25, 0.5, (1920, 1080)) == ["Rb"] * fk.NKP
+    assert fk.point_codes(None, None, float("nan"), 0.25, 0.5, (1920, 1080)) == ["N"] * fk.NKP
+    assert set(fk.POINT_CODES) >= {"D", "N", "Rb", "Rk", "Ro", "Rd", "I"}
 
 
 def test_video_quality_indicators() -> None:
     kc_on = np.zeros(fk.NKP)
     kc_on[:5] = 0.8
     xy = np.zeros((fk.NKP, 2))
+    xy[:5] = [[100, 100], [500, 120], [900, 400], [300, 700], [1200, 800]]
     xy_seq = [xy + [t, 0.0] for t in range(4)] + [None]  # smooth pan, then a miss
     kc_seq = [kc_on] * 4 + [None]
     q = fk.video_quality(xy_seq, kc_seq, 0.5)
     assert q["frames"] == 5 and q["detection_rate"] == 0.8
-    assert q["mean_visible_kps"] == 4.0 and q["calib_ready_rate"] == 0.8
-    assert q["mean_kp_conf"] == pytest.approx(0.8) and q["jitter_px"] == 0.0
-    assert fk.video_quality([], [], 0.5)["jitter_px"] is None
+    assert q["mean_visible_kps"] == 4.0 and q["min4_kps_rate"] == 0.8
+    assert q["mean_kp_conf"] == pytest.approx(0.8)
+    assert q["displacement_median_px"] == 1.0 and q["residual_median_px"] == 0.0
+    assert "calib_ok_rate" not in q and q["cuts"] == 0
+    q = fk.video_quality(xy_seq, kc_seq, 0.5, calib=["ok", "ok", "degenerate", "ok", "few_points"])
+    assert q["calib_ok_rate"] == 0.6 and q["calib_status"]["degenerate"] == 1
+    assert fk.video_quality([], [], 0.5)["residual_median_px"] is None
+
+
+def test_train_cli_passes_workers_and_seed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    seen: dict = {}
+    monkeypatch.setattr(fk, "train", lambda ws, **kw: seen.update(kw) or {})
+    fk.main(["train", "-w", str(ws), "--batch", "8", "--workers", "16", "--seed", "3"])
+    assert (seen["batch"], seen["workers"], seen["seed"]) == (8, 16, 3)
+    fk.main(["train", "-w", str(ws), "--manifest", "v001"])
+    assert seen["manifest"] == "v001"
+
+
+def _visible_label(on: set[int]) -> str:
+    parts = ["0", "0.5", "0.5", "1", "1"]
+    for k in range(fk.NKP):
+        parts += ["0.2", "0.3", "2"] if k in on else ["0", "0", "0"]
+    return " ".join(parts) + "\n"
+
+
+def _write_rfs_dataset(ds: Path, *, n_common: int = 39) -> None:
+    """One train image with only p5 visible, plus ``n_common`` with only p0."""
+    names, flip = fk.load_schema()
+    rows = ["image,label,split,source,group"]
+    for split in ("train", "val"):
+        (ds / "images" / split).mkdir(parents=True)
+        (ds / "labels" / split).mkdir(parents=True)
+    specs = [("rare.jpg", {5})] + [(f"common_{i:02d}.jpg", {0}) for i in range(n_common)]
+    for name, vis in specs:
+        (ds / "images" / "train" / name).write_bytes(b"jpg")
+        label_name = Path(name).with_suffix(".txt").name
+        (ds / "labels" / "train" / label_name).write_text(_visible_label(vis), encoding="utf-8")
+        rows.append(f"images/train/{name},labels/train/{label_name},train,synth,g")
+    (ds / "images" / "val" / "v.jpg").write_bytes(b"jpg")
+    (ds / "labels" / "val" / "v.txt").write_text(_visible_label({0}), encoding="utf-8")
+    rows.append("images/val/v.jpg,labels/val/v.txt,val,synth,g")
+    (ds / "manifest.csv").write_text("\n".join(rows) + "\n", encoding="utf-8")
+    data = {
+        "path": str(ds),
+        "train": "images/train",
+        "val": "images/val",
+        "test": "images/val",
+        "kpt_shape": [fk.NKP, 3],
+        "flip_idx": flip,
+        "names": {0: "football_pitch"},
+        "kpt_names": {0: names},
+    }
+    (ds / "data.yaml").write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+
+
+def test_manifest_is_versioned_immutable_and_trains_from_a_copy(tmp_path: Path) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    ds = fk.dataset_dir(ws)
+    _write_rfs_dataset(ds)
+    label_before = (ds / "labels" / "train" / "rare.txt").read_bytes()
+    exclude = tmp_path / "exclude.txt"
+    exclude.write_text("common_00.jpg\n", encoding="utf-8")
+
+    first = fk.make_manifest(ws, t=0.05, cap=4.0, seed=0, exclude=exclude)
+    assert first.name == "v001"
+    assert (ds / "labels" / "train" / "rare.txt").read_bytes() == label_before
+    info = json.loads((first / "manifest.json").read_text(encoding="utf-8"))
+    assert info["counts"]["excluded"] == 1
+    assert info["counts"]["entries_after"] >= info["counts"]["kept_images"]
+    assert info["inputs"]["data_yaml_sha256"]
+    listed = (first / "train_list.txt").read_text(encoding="utf-8")
+    assert "common_00.jpg" not in listed
+    assert "rare.jpg" in listed
+    again = fk.make_manifest(ws, t=0.05, cap=4.0, seed=0)
+    assert again.name == "v002"
+    assert (again / "train_list.txt").read_text(encoding="utf-8") != listed  # exclude differs
+    same = tmp_path / "same"
+    diag.build_rfs_manifest(ds, same / "a", t=0.05, cap=4, seed=3, log=lambda *_a, **_k: None)
+    diag.build_rfs_manifest(ds, same / "b", t=0.05, cap=4, seed=3, log=lambda *_a, **_k: None)
+    assert (same / "a" / "train_list.txt").read_bytes() == (
+        same / "b" / "train_list.txt"
+    ).read_bytes()
+    with pytest.raises(FileExistsError):
+        fk.make_manifest(ws, name="v001")
+    with pytest.raises(ValueError):
+        fk.make_manifest(ws, cap=0.5)
+
+    yaml_path, sampling = fk.materialize_manifest(ws, "v001", ws / "runs" / "dry")
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8"))
+    train_txt = Path(data["train"])
+    lines = [ln for ln in train_txt.read_text(encoding="utf-8").splitlines() if ln]
+    assert len(lines) == info["counts"]["entries_after"] == sampling["entries"]
+    assert all(ln.startswith(str(ds.resolve())) for ln in lines)
+    assert data["val"].endswith("images/val")
+    rare_line = next(ln for ln in lines if ln.endswith("rare.jpg"))
+    reps = list(csv.DictReader((first / "repeats.csv").open(encoding="utf-8")))
+    rare = next(r for r in reps if r["image"].endswith("rare.jpg"))
+    # common_00 excluded: f5 = 1/39, r = sqrt(0.05 * 39)
+    assert float(rare["repeat_factor"]) == pytest.approx((0.05 * 39) ** 0.5, abs=1e-3)
+    assert lines.count(rare_line) == int(rare["copies"])
+
+    (first / "train_list.txt").write_text("tampered\n", encoding="utf-8")
+    with pytest.raises(fk.RunStateError):
+        fk.materialize_manifest(ws, "v001", ws / "runs" / "dry2")
+
+
+def test_retrain_from_active_uses_low_adamw_lr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    ds = fk.dataset_dir(ws)
+    ds.mkdir(parents=True)
+    (ds / "data.yaml").write_text("path: /tmp\ntrain: images/train\n", encoding="utf-8")
+    (ws / "models" / "active.pt").write_bytes(b"checkpoint")
+    seen: dict = {}
+
+    def fake_train(*_args, **kwargs) -> None:
+        seen.clear()
+        seen.update(kwargs)
+
+    monkeypatch.setattr("vaila.yolotrain.train_yolo_dataset", fake_train)
+    monkeypatch.setattr(fk, "register_run", lambda *_a, **_k: {})
+    fk.train(ws, base="active", epochs=2, imgsz=640, batch=2, name="ft", workers=4, seed=0)
+    extra = seen["extra_train_args"]
+    assert extra["optimizer"] == "AdamW"
+    assert extra["lr0"] == 1e-4
+    assert extra["lrf"] == 0.01
+    assert extra["warmup_epochs"] == 1.0
+    assert extra["cos_lr"] is True
+    assert extra["mosaic"] == 0.0
+    assert "freeze" not in extra
+    assert (extra["workers"], extra["seed"], extra["patience"]) == (4, 0, 30)
+
+    fk.train(ws, base="yolo26n-pose.pt", epochs=1, imgsz=640, batch=2, name="from_coco")
+    assert "optimizer" not in seen["extra_train_args"]
+    assert seen["model"] == "yolo26n-pose.pt"
+
+
+def test_ultralytics_train_list_keeps_duplicate_lines(tmp_path: Path) -> None:
+    pytest.importorskip("ultralytics")
+    from ultralytics.data.base import BaseDataset
+
+    img = tmp_path / "images" / "train" / "a.jpg"
+    img.parent.mkdir(parents=True)
+    img.write_bytes(b"\xff\xd8\xff\xd9")
+    listed = img.resolve().as_posix()
+    txt = tmp_path / "train.txt"
+    txt.write_text(f"{listed}\n{listed}\n", encoding="utf-8")
+    dataset = BaseDataset.__new__(BaseDataset)
+    dataset.prefix = ""
+    dataset.fraction = 1.0
+    files = BaseDataset.get_img_files(dataset, str(txt))
+    assert len(files) == 2 and files[0] == files[1]

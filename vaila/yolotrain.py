@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 24 May 2025
-Update Date: 25 September 2026
+Update Date: 27 September 2026
 Version: 0.4.5
 
 Description:
@@ -27,6 +27,8 @@ License:
     This project is licensed under the terms of GNU General Public License v3.0.
 
 Change History:
+    - v0.4.5 (27 Sep 2026): Progress callback no longer prints "Epoch N+1/N"
+              for Ultralytics' final validation of best.pt.
     - v0.4.5: Misexport gate no longer flags 1-class pose sets whose kpt_names
               are semantic (list or per-class dict form), e.g. the 49-point
               soccer-field template used by FreeKiki.
@@ -887,12 +889,24 @@ def _attach_yolo_progress_callbacks(yolo_model, emit=None) -> None:
     def on_train_start(trainer) -> None:
         emit(f"Training loop started: {trainer.epochs} epochs on device={trainer.device}")
 
+    # Ultralytics' final_eval() re-fires on_fit_epoch_end with trainer.epoch
+    # temporarily incremented (validation of best.pt after the last epoch),
+    # which printed "Epoch 151/150". Only a fit-epoch-end that follows a
+    # train-epoch-end of the same epoch is a real epoch.
+    last_train_epoch: dict = {"epoch": None}
+
+    def on_train_epoch_end(trainer) -> None:
+        last_train_epoch["epoch"] = int(getattr(trainer, "epoch", 0))
+
     def on_fit_epoch_end(trainer) -> None:
-        epoch = int(getattr(trainer, "epoch", 0)) + 1
+        epoch0 = int(getattr(trainer, "epoch", 0))
         total = int(getattr(trainer, "epochs", 0))
         metrics_txt = _format_trainer_metrics(trainer)
         suffix = f" | {metrics_txt}" if metrics_txt else ""
-        emit(f"Epoch {epoch}/{total} complete{suffix}")
+        if last_train_epoch["epoch"] is not None and epoch0 != last_train_epoch["epoch"]:
+            emit(f"Final validation of best.pt{suffix}")
+        else:
+            emit(f"Epoch {epoch0 + 1}/{total} complete{suffix}")
 
     def on_train_end(_trainer) -> None:
         emit("Training finished — writing weights, metrics CSV, and plots.")
@@ -900,6 +914,7 @@ def _attach_yolo_progress_callbacks(yolo_model, emit=None) -> None:
     for event, func in (
         ("on_pretrain_routine_start", on_pretrain_routine_start),
         ("on_train_start", on_train_start),
+        ("on_train_epoch_end", on_train_epoch_end),
         ("on_fit_epoch_end", on_fit_epoch_end),
         ("on_train_end", on_train_end),
     ):
