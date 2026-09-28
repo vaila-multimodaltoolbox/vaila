@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.5
+Version: 0.4.6
 Created: 25 September 2026
 Update Date: 28 September 2026
 
@@ -116,6 +116,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import webbrowser
 from collections import Counter
@@ -157,6 +158,7 @@ REGISTRY_FIELDS = [
     "model",
     "promoted",
     "fitness",
+    "backend",
 ]
 # Parts of a kiki49 build needed for training; preview/, frames/ and
 # tracking_eval/ are build by-products and stay behind.
@@ -207,6 +209,8 @@ ACTIVE_FINETUNE_ARGS = {
 MAP50_COL = "metrics/mAP50(P)"
 MAP50_95_COL = "metrics/mAP50-95(P)"
 BOX_MAP50_95_COL = "metrics/mAP50-95(B)"
+HEATMAP_FITNESS_COL = "val/pck10_all"  # = freekiki_heatmap.FITNESS_COL
+HEATMAP_VAL_IMAGES = 500  # val images scored after every heatmap epoch (evenly spaced)
 PROMOTION_LOG = "models/promotion_log.csv"
 # evaluate: raw predictions are kept down to this box confidence so the
 # det_conf / kp_conf thresholds can be applied (and swept) offline.
@@ -233,7 +237,14 @@ def load_schema(csv_path: Path = SCHEMA_CSV) -> tuple[list[str], list[int]]:
     """Return ``(point names, flip_idx)`` from the kiki field CSV (0-based order)."""
     with Path(csv_path).open(encoding="utf-8") as f:
         rows = sorted(csv.DictReader(f), key=lambda r: int(r["point_number"]))
-    return [r["point_name"] for r in rows], [int(r["flip_idx"]) for r in rows]
+    numbers = [int(r["point_number"]) for r in rows]
+    names = [r["point_name"] for r in rows]
+    flips = [int(r["flip_idx"]) for r in rows]
+    if numbers != list(range(NKP)) or len(set(names)) != NKP or any(not n for n in names):
+        raise ValueError("Invalid Kiki49 point indices or names")
+    if sorted(flips) != list(range(NKP)) or any(flips[flips[i]] != i for i in range(NKP)):
+        raise ValueError("Invalid Kiki49 flip_idx")
+    return names, flips
 
 
 def load_bones(json_path: Path = SKELETON_JSON) -> list[tuple[int, int]]:
@@ -336,6 +347,248 @@ def import_dataset(ws, src) -> Path:
     return dst
 
 
+def _validate_ingest_label(path: Path) -> int:
+    lines = [line.split() for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    if len(lines) != 1 or len(lines[0]) != 5 + 3 * NKP or lines[0][0] != "0":
+        raise ValueError(f"{path}: expected one class-0 label with 152 fields")
+    values = [float(v) for v in lines[0][1:]]
+    if any(not math.isfinite(v) for v in values):
+        raise ValueError(f"{path}: non-finite label value")
+    cx, cy, bw, bh = values[:4]
+    if not (
+        0 < bw <= 1 and 0 < bh <= 1 and bw / 2 <= cx <= 1 - bw / 2 and bh / 2 <= cy <= 1 - bh / 2
+    ):
+        raise ValueError(f"{path}: invalid bbox")
+    visible = 0
+    for i in range(NKP):
+        x, y, v = values[4 + 3 * i : 7 + 3 * i]
+        if v == 0:
+            if x != 0 or y != 0:
+                raise ValueError(f"{path}: invisible point {i} must be 0 0 0")
+        elif v == 2 and 0 <= x <= 1 and 0 <= y <= 1:
+            if not (
+                cx - bw / 2 - 1e-7 <= x <= cx + bw / 2 + 1e-7
+                and cy - bh / 2 - 1e-7 <= y <= cy + bh / 2 + 1e-7
+            ):
+                raise ValueError(f"{path}: visible point {i} lies outside bbox")
+            visible += 1
+        else:
+            raise ValueError(f"{path}: invalid point {i}")
+    if not visible:
+        raise ValueError(f"{path}: no visible points")
+    return visible
+
+
+def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: int = 10) -> dict:
+    """Validate an entire reviewed session, then append new rows to train only."""
+    import cv2
+    import numpy as np
+
+    ws = Path(ws).expanduser().resolve()
+    src = Path(src).expanduser().resolve()
+    if not match_id.strip() or any(c in match_id for c in "\r\n,/"):
+        raise ValueError("--match-id must be a nonempty match/sequence identifier")
+    session = load_review_session(src / "session.json")
+    if session["session_id"] != src.name:
+        raise ValueError("Session directory identity mismatch")
+    ds = dataset_dir(ws)
+    if not (ds / "data.yaml").is_file() or not (ds / "manifest.csv").is_file():
+        raise ValueError("Workspace needs an imported Kiki49 dataset")
+    yaml_data = yaml.safe_load((ds / "data.yaml").read_text(encoding="utf-8"))
+    names, flips = load_schema()
+    if (
+        yaml_data.get("kpt_shape") != [NKP, 3]
+        or list(yaml_data.get("flip_idx", [])) != flips
+        or (_yaml_kpt_names(yaml_data) not in (None, names))
+    ):
+        raise ValueError("Dataset schema differs from Kiki49")
+    with (src / "reviewed_frames.csv").open(encoding="utf-8") as f:
+        incoming = list(csv.DictReader(f))
+    if not incoming:
+        raise ValueError("No reviewed frames")
+    with (ds / "manifest.csv").open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fields = list(reader.fieldnames or [])
+        existing = list(reader)
+    for field in ("split", "image", "label", "source", "group"):
+        if field not in fields:
+            raise ValueError(f"Manifest lacks {field}")
+    reserved_groups = {
+        diag.match_key(r["source"], r["group"]) for r in existing if r["split"] in ("val", "test")
+    }
+    if match_id in reserved_groups or any(
+        r["group"] == match_id and r["split"] in ("val", "test") for r in existing
+    ):
+        raise ValueError(f"Match {match_id} is reserved in val/test")
+    existing_stems = {Path(r["image"]).stem for r in existing}
+    identities = {(r.get("video", ""), r.get("frame", "")) for r in existing}
+    content_pairs = {
+        (file_sha256(ds / r["image"]), file_sha256(ds / r["label"]))
+        for r in existing
+        if (ds / r["image"]).is_file() and (ds / r["label"]).is_file()
+    }
+    image_hashes = {pair[0] for pair in content_pairs}
+    reserved = [
+        (r, diag.dhash_image(ds / r["image"])[0]) for r in existing if r["split"] in ("val", "test")
+    ]
+    if any(h is None for _, h in reserved):
+        raise ValueError("Unreadable reserved val/test image; run check/audit first")
+    seen_stems, seen_identity, new_rows, copies = set(), set(), [], []
+    extra = [
+        "video",
+        "frame",
+        "timestamp",
+        "session",
+        "reviewed_at",
+        "model_sha256",
+        "n_corrected",
+        "n_ai",
+    ]
+    for row in incoming:
+        frame = int(row["frame"])
+        state = session["frames"].get(str(frame), {}).get("state")
+        if state != "EXPORTED" or row["video"] != session["video"]:
+            raise ValueError(f"Frame {frame} is not exported from this review session")
+        img_rel, lbl_rel = Path(row["image"]), Path(row["label"])
+        if (
+            img_rel.parent != Path("images")
+            or lbl_rel.parent != Path("labels")
+            or img_rel.suffix.lower() != ".png"
+            or lbl_rel.suffix.lower() != ".txt"
+            or img_rel.stem != lbl_rel.stem
+        ):
+            raise ValueError(f"Invalid pair paths for frame {frame}")
+        img, lbl = src / img_rel, src / lbl_rel
+        if not img.is_file() or not lbl.is_file():
+            raise ValueError(f"Missing PNG/TXT for frame {frame}")
+        if row.get("image_sha256") != file_sha256(img) or row.get("label_sha256") != file_sha256(
+            lbl
+        ):
+            raise ValueError(f"Exported PNG/TXT changed after review: frame {frame}")
+        reviewed = session["frames"][str(frame)]
+        if lbl.read_text(encoding="utf-8") != pose_label_line(
+            reviewed["points"], session["width"], session["height"], bbox=reviewed.get("bbox")
+        ):
+            raise ValueError(f"Label no longer matches human review: frame {frame}")
+        n_vis = _validate_ingest_label(lbl)
+        if n_vis != int(row["n_visible"]):
+            raise ValueError(f"Visibility count differs for frame {frame}")
+        decoded = cv2.imread(str(img), cv2.IMREAD_UNCHANGED)
+        if decoded is None or (decoded.shape[1], decoded.shape[0]) != (
+            session["width"],
+            session["height"],
+        ):
+            raise ValueError(f"Unreadable PNG or wrong dimensions: {img}")
+        ih, _ = diag.dhash_image(img)
+        for reserved_row, rh in reserved:
+            if int(np.bitwise_count(ih ^ rh).sum()) <= dup_bits:
+                raise ValueError(f"Near duplicate of reserved {reserved_row['image']}: {img.name}")
+        identity = (row["video"], str(frame))
+        previous = next(
+            (
+                r
+                for r in existing
+                if r.get("session") == session["session_id"]
+                and r.get("video") == row["video"]
+                and r.get("frame") == str(frame)
+            ),
+            None,
+        )
+        if previous is not None and previous["group"] != match_id:
+            raise ValueError(f"Frame {frame} was already ingested under group {previous['group']}")
+        if (
+            previous is not None
+            and previous["split"] == "train"
+            and (
+                file_sha256(img) == file_sha256(ds / previous["image"])
+                and file_sha256(lbl) == file_sha256(ds / previous["label"])
+            )
+        ):
+            continue  # completed earlier; safe re-run
+        if (
+            img_rel.stem in existing_stems
+            or img_rel.stem in seen_stems
+            or identity in identities
+            or identity in seen_identity
+        ):
+            raise ValueError(f"Name or video/frame collision: {img_rel.stem}")
+        content = (file_sha256(img), file_sha256(lbl))
+        if content[0] in image_hashes or content in content_pairs:
+            raise ValueError(f"Identical image already registered: {img_rel.stem}")
+        seen_stems.add(img_rel.stem)
+        seen_identity.add(identity)
+        content_pairs.add(content)
+        image_hashes.add(content[0])
+        new_rows.append(
+            {
+                "split": "train",
+                "image": f"images/train/{img.name}",
+                "label": f"labels/train/{lbl.name}",
+                "source": "freekiki_review",
+                "group": match_id,
+                "origin": "human_reviewed",
+                "n_visible": str(n_vis),
+                **{k: row.get(k, "") for k in extra},
+            }
+        )
+        copies.extend(
+            (
+                (img, ds / "images/train" / img.name, content[0]),
+                (lbl, ds / "labels/train" / lbl.name, content[1]),
+            )
+        )
+    expected_stems = {Path(r["image"]).stem for r in incoming}
+    if {p.stem for p in (src / "images").glob("*.png")} != expected_stems or {
+        p.stem for p in (src / "labels").glob("*.txt")
+    } != expected_stems:
+        raise ValueError("Unlisted PNG/TXT files in session")
+    report = {
+        "frames": len(new_rows),
+        "skipped_existing": len(incoming) - len(new_rows),
+        "visible_points": sum(int(r["n_visible"]) for r in new_rows),
+        "ai_points": sum(int(r["n_ai"] or 0) for r in new_rows),
+        "corrected_points": sum(int(r["n_corrected"] or 0) for r in new_rows),
+        "sources": {"freekiki_review": len(new_rows)},
+        "match_id": match_id,
+        "committed": False,
+    }
+    _log(f"ingest preview: {report}")
+    if commit:
+        for source, target, expected_sha in copies:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if target.exists():
+                if file_sha256(target) != expected_sha:
+                    raise ValueError(f"Interrupted copy conflicts with {target}")
+                continue
+            with tempfile.NamedTemporaryFile(
+                dir=target.parent, prefix=".ingest-", delete=False
+            ) as f:
+                tmp = Path(f.name)
+            try:
+                shutil.copy2(source, tmp)
+                if file_sha256(tmp) != expected_sha:
+                    raise ValueError(f"Source changed during ingest: {source}")
+                os.link(tmp, target)  # fails if target appeared; never overwrite it
+            finally:
+                tmp.unlink(missing_ok=True)
+        all_fields = fields + [key for key in extra if key not in fields]
+        with tempfile.NamedTemporaryFile(
+            "w", newline="", encoding="utf-8", dir=ds, prefix=".manifest-", delete=False
+        ) as f:
+            tmp = Path(f.name)
+            writer = csv.DictWriter(f, fieldnames=all_fields, extrasaction="ignore")
+            writer.writeheader()
+            writer.writerows(existing + new_rows)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, ds / "manifest.csv")
+        report["committed"] = True
+    _log(f"check: uv run --no-sync vaila/freekiki.py check -w {ws}")
+    _log(f"audit: uv run --no-sync vaila/freekiki.py audit -w {ws}")
+    _log(f"train: uv run --no-sync vaila/freekiki.py train -w {ws} --base active")
+    return report
+
+
 def _yaml_kpt_names(data: dict) -> list[str] | None:
     names = data.get("kpt_names")
     if isinstance(names, dict) and len(names) == 1:
@@ -393,13 +646,28 @@ def read_best_metrics(results_csv: Path) -> dict:
 
     Ultralytics 8.4 pose fitness = pose mAP50-95 + box mAP50-95 (first
     maximum wins); older CSVs without box columns fall back to pose only.
+    A heatmap run has no mAP: its fitness is val PCK10_all (with misses) and
+    the pose mAP fields stay blank.
     """
     best = {"best_epoch": "", "pose_map50": 0.0, "pose_map50_95": 0.0, "fitness": 0.0}
     if not Path(results_csv).is_file():
         return best
     top = float("-inf")
     with Path(results_csv).open(encoding="utf-8") as f:
-        for raw in csv.DictReader(f):
+        reader = csv.DictReader(f)
+        if HEATMAP_FITNESS_COL in [k.strip() for k in reader.fieldnames or []]:
+            best = {"best_epoch": "", "pose_map50": "", "pose_map50_95": "", "fitness": ""}
+            for raw in reader:
+                row = {k.strip(): (v or "").strip() for k, v in raw.items() if k}
+                try:
+                    fitness = float(row.get(HEATMAP_FITNESS_COL) or "nan")
+                except ValueError:
+                    continue
+                if fitness == fitness and fitness > top:
+                    top = fitness
+                    best |= {"best_epoch": row.get("epoch", ""), "fitness": round(fitness, 5)}
+            return best
+        for raw in reader:
             row = {k.strip(): (v or "").strip() for k, v in raw.items() if k}
             try:
                 pose = float(row.get(MAP50_95_COL, "nan"))
@@ -466,6 +734,33 @@ def log_promotion(ws, row: dict) -> None:
     _append_csv(Path(ws) / PROMOTION_LOG, row)
 
 
+def _upgrade_registry(ws) -> list[str]:
+    """Add missing :data:`REGISTRY_FIELDS` columns to an older ``registry.csv``; return its header.
+
+    Additive only: existing columns and values stay, new columns are blank,
+    except ``backend``, which is read back from ``runs/<run>/args.yaml``.
+    """
+    registry = Path(ws) / REGISTRY_CSV
+    with registry.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        header = list(reader.fieldnames or [])
+        rows = list(reader)
+    missing = [c for c in REGISTRY_FIELDS if c not in header]
+    if not header or not missing:
+        return header or REGISTRY_FIELDS
+    header += missing
+    for row in rows:
+        if "backend" in missing and row.get("run"):
+            row["backend"] = run_backend(Path(ws) / "runs" / row["run"])
+    tmp = registry.with_suffix(".csv.tmp")
+    with tmp.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=header, restval="")
+        writer.writeheader()
+        writer.writerows(rows)
+    tmp.replace(registry)
+    return header
+
+
 def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
     """Copy a run's best.pt into ``models/``, log it, promote to active if the policy allows.
 
@@ -485,13 +780,24 @@ def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
         raise FileNotFoundError(f"Training produced no best.pt: {best_pt}")
     settings = load_settings(ws)
     metrics = read_best_metrics(run_dir / "results.csv")
+    backend = run_backend(run_dir)
     model_rel = f"models/{DATASET_NAME}_{run_dir.name}.pt"
     shutil.copy2(best_pt, ws / model_rel)
     active = settings["active"]
     active_path = ws / active["model"]
     mode = str(settings["promotion"].get("mode", "gate"))
     reasons: list[str] = []
-    if not active_path.is_file():
+    if backend == "heatmap":
+        # Never replaces the active model on its own: compare it on val first.
+        mode = "heatmap"
+        promoted, reasons = (
+            False,
+            [
+                f"heatmap backend: automatic promotion off; use compare --candidate {model_rel} "
+                "(add --promote to replace active.pt)"
+            ],
+        )
+    elif not active_path.is_file():
         promoted, reasons = True, ["first model of the workspace"]
     elif mode == "map":
         promoted = metrics["pose_map50_95"] > float(active.get("pose_map50_95", 0.0))
@@ -517,12 +823,10 @@ def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
         **metrics,
         "model": model_rel,
         "promoted": promoted,
+        "backend": backend,
     }
     registry = ws / REGISTRY_CSV
-    header = REGISTRY_FIELDS
-    if registry.is_file():  # keep an existing registry's columns
-        with registry.open(encoding="utf-8") as f:
-            header = next(csv.reader(f), []) or REGISTRY_FIELDS
+    header = _upgrade_registry(ws) if registry.is_file() else REGISTRY_FIELDS
     new_file = not registry.is_file()
     with registry.open("a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=header, extrasaction="ignore")
@@ -539,8 +843,13 @@ def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
             "reasons": " | ".join(reasons),
         },
     )
+    score = (
+        f"val PCK10_all={metrics['fitness']}"
+        if backend == "heatmap"
+        else f"pose mAP50-95={metrics['pose_map50_95']:.4f}"
+    )
     _log(
-        f"run {run_dir.name}: pose mAP50-95={metrics['pose_map50_95']:.4f} ({mode}) "
+        f"run {run_dir.name}: {score} ({mode}) "
         f"-> {'PROMOTED to ' + ACTIVE_MODEL if promoted else 'kept previous active model'}"
         + ("" if promoted else " | " + "; ".join(reasons))
     )
@@ -575,8 +884,17 @@ def train(
     seed: int = 0,
     workers: int | None = None,
     manifest: str | None = None,
+    backend: str = "yolo",
+    backbone: str = "resnet50",
+    pretrained: bool = True,
+    lr: float | None = None,
 ) -> dict:
     """Train (from a base model) or retrain (``base='active'``) on the workspace dataset.
+
+    ``backend='heatmap'`` trains the vailá-native ResNet heatmap network
+    (:mod:`freekiki_heatmap`, torch/torchvision only) on the same labels instead
+    of Ultralytics YOLO; ``base`` is then only used when it is a heatmap
+    checkpoint (continued fine-tune). Heatmap runs are never auto-promoted.
 
     ``manifest`` (e.g. ``v001``) trains on the oversampled list of
     ``manifests/<manifest>/`` instead of ``images/train`` (see
@@ -593,11 +911,6 @@ def train(
 
     ws = Path(ws).expanduser().resolve()
     defaults = load_settings(ws)["train"]
-    base = base or defaults["base"]
-    epochs = int(epochs or defaults["epochs"])
-    imgsz = int(imgsz or defaults["imgsz"])
-    batch = defaults["batch"] if batch is None else batch
-    patience = int(defaults["patience"] if patience is None else patience)
     name = name or f"{DATASET_NAME}_{datetime.now():%Y%m%d_%H%M%S}"
     if (ws / "runs" / name).is_dir():
         info = run_state(ws, ws / "runs" / name)
@@ -606,6 +919,30 @@ def train(
                 f"Run '{name}' is {info['state']} (epoch {info['epochs_done']}/{info['epochs']}); "
                 f"a new Train would overwrite it. Use: resume --name {name}"
             )
+    if backend == "heatmap":
+        return _train_heatmap(
+            ws,
+            base=base,
+            epochs=epochs,
+            imgsz=imgsz,
+            batch=batch,
+            device=device,
+            name=name,
+            fraction=fraction,
+            seed=seed,
+            workers=workers,
+            manifest=manifest,
+            backbone=backbone,
+            pretrained=pretrained,
+            lr=lr,
+        )
+    if backend != "yolo":
+        raise ValueError(f"Unknown backend {backend!r} (yolo or heatmap)")
+    base = base or defaults["base"]
+    epochs = int(epochs or defaults["epochs"])
+    imgsz = int(imgsz or defaults["imgsz"])
+    batch = defaults["batch"] if batch is None else batch
+    patience = int(defaults["patience"] if patience is None else patience)
     yaml_path = refresh_yaml_path(dataset_dir(ws) / "data.yaml")
     sampling = None
     if manifest:
@@ -650,6 +987,131 @@ def train(
     return register_run(ws, ws / "runs" / name, base=base, epochs=epochs, imgsz=imgsz)
 
 
+def _heatmap_data(
+    ws: Path, run_dir: Path, manifest: str | None, fraction: float, seed: int
+) -> tuple[Path, dict | None, list[Path], Any]:
+    """Train list, val scorer and data.yaml of a heatmap run (same labels as YOLO).
+
+    ``fraction`` < 1 keeps a seeded random subset of the train list (so a
+    resume rebuilds the same one). ``val_fn`` scores at most
+    ``HEATMAP_VAL_IMAGES`` evenly spaced val images with the FreeKiki tables.
+    """
+    import numpy as np
+
+    fh = _heatmap()
+    settings = load_settings(ws)
+    ds = dataset_dir(ws)
+    yaml_path = refresh_yaml_path(ds / "data.yaml")
+    sampling = None
+    if manifest:
+        yaml_path, sampling = materialize_manifest(ws, manifest, run_dir)
+    data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+    train_images = fh.list_images(ds, data["train"])
+    if fraction < 1.0:
+        keep = np.random.default_rng(seed).permutation(len(train_images))
+        keep = np.sort(keep[: max(1, round(len(train_images) * fraction))])
+        train_images = [train_images[i] for i in keep]
+    val_all = fh.list_images(ds, data["val"])
+    step = max(1, math.ceil(len(val_all) / HEATMAP_VAL_IMAGES))
+    val_images = val_all[::step]
+    lbl_dir = ds / str(data["val"]).replace("images", "labels", 1)
+    index = manifest_index(ws)
+    det_conf = float(settings["detect"]["conf"])
+    kp_conf = float(settings["detect"]["kp_conf"])
+
+    def val_fn(predictor) -> dict:
+        pred = collect_predictions(predictor, val_images, lbl_dir, index)
+        return diag.score_predictions(
+            pred, det_conf=det_conf, kp_conf=kp_conf, match_px=25.0, with_calib=False
+        )["overall"]
+
+    _log(f"heatmap data: {len(train_images)} train images, {len(val_images)} val images/epoch")
+    return yaml_path, sampling, train_images, val_fn
+
+
+def _train_heatmap(
+    ws: Path,
+    *,
+    base,
+    epochs,
+    imgsz,
+    batch,
+    device,
+    name: str,
+    fraction: float,
+    seed: int,
+    workers,
+    manifest,
+    backbone: str,
+    pretrained: bool,
+    lr,
+) -> dict:
+    """``train --backend heatmap`` (see :func:`train`)."""
+    fh = _heatmap()
+    run_dir = ws / "runs" / name
+    init = None
+    if base:
+        path = resolve_model(ws, base)
+        if Path(path).is_file() and fh.model_backend(path) == "heatmap":
+            init = path
+        else:
+            _log(f"heatmap: --base {base} is not a heatmap checkpoint; ignored ({backbone} start)")
+    epochs = int(epochs or fh.DEFAULTS["epochs"])
+    imgsz = int(imgsz or fh.DEFAULTS["imgsz"])
+    batch = int(batch) if batch and float(batch) >= 1 else fh.DEFAULTS["batch"]
+    workers = fh.DEFAULTS["workers"] if workers is None else int(workers)
+    lr = float(lr or fh.DEFAULTS["lr"])
+    _, flip_idx = load_schema()
+    with _running_marker(run_dir):
+        yaml_path, sampling, train_images, val_fn = _heatmap_data(
+            ws, run_dir, manifest, fraction, seed
+        )
+        start = init or f"{backbone}-{'imagenet' if pretrained else 'scratch'}"
+        _log(
+            f"train: backend=heatmap start={start} epochs={epochs} imgsz={imgsz} "
+            f"batch={batch} lr={lr} run={name}" + (f" manifest={manifest}" if manifest else "")
+        )
+        write_train_manifest(
+            run_dir,
+            base=init or start,
+            yaml_path=yaml_path,
+            args={
+                "backend": "heatmap",
+                "backbone": backbone,
+                "pretrained": pretrained,
+                "epochs": epochs,
+                "imgsz": imgsz,
+                "batch": batch,
+                "workers": workers,
+                "lr": lr,
+                "device": device,
+                "seed": seed,
+                "fraction": fraction,
+            },
+            dataset=dataset_dir(ws),
+            sampling=sampling,
+        )
+        fh.train_heatmap(
+            run_dir,
+            train_images=train_images,
+            flip_idx=flip_idx,
+            val_fn=val_fn,
+            epochs=epochs,
+            imgsz=imgsz,
+            batch=batch,
+            workers=workers,
+            lr=lr,
+            backbone=backbone,
+            pretrained=pretrained,
+            init=init,
+            device=device,
+            seed=seed,
+            extra_args={"fraction": fraction, "manifest": manifest},
+            log=_log,
+        )
+    return register_run(ws, run_dir, base=init or start, epochs=epochs, imgsz=imgsz)
+
+
 def write_train_manifest(
     run_dir: Path,
     *,
@@ -663,7 +1125,7 @@ def write_train_manifest(
     import platform
 
     versions = {"python": platform.python_version()}
-    for mod in ("torch", "ultralytics", "numpy", "cv2"):
+    for mod in ("torch", "torchvision", "ultralytics", "numpy", "cv2"):
         try:
             versions[mod] = __import__(mod).__version__
         except ImportError:
@@ -909,6 +1371,13 @@ def list_runs(ws) -> list[dict]:
     return rows
 
 
+def run_backend(run_dir) -> str:
+    """``heatmap`` when the run's ``args.yaml`` says so, else ``yolo``."""
+    args_yaml = Path(run_dir) / "args.yaml"
+    args = yaml.safe_load(args_yaml.read_text(encoding="utf-8")) if args_yaml.is_file() else {}
+    return "heatmap" if (args or {}).get("backend") == "heatmap" else "yolo"
+
+
 def _run_sampling_manifest(run_dir: Path) -> str | None:
     """Name of the oversampling manifest a run was started with (None: plain train split)."""
     path = Path(run_dir) / "train_manifest.json"
@@ -943,7 +1412,32 @@ def resume(ws, *, name: str | None = None, device: str | None = None, batch=None
         )
     info = rows[-1]
     run_dir = ws / "runs" / info["run"]
-    if info["state"] == "resumable":
+    if info["state"] == "resumable" and run_backend(run_dir) == "heatmap":
+        args = yaml.safe_load((run_dir / "args.yaml").read_text(encoding="utf-8")) or {}
+        _log(
+            f"resume: heatmap run={info['run']} after epoch "
+            f"{info['epochs_done']}/{info['epochs']} from {run_dir / 'weights' / 'last.pt'}"
+        )
+        with _running_marker(run_dir):
+            _, _, train_images, val_fn = _heatmap_data(
+                ws,
+                run_dir,
+                args.get("manifest") or _run_sampling_manifest(run_dir),
+                float(args.get("fraction") or 1.0),
+                int(args.get("seed") or 0),
+            )
+            _heatmap().train_heatmap(
+                run_dir,
+                train_images=train_images,
+                flip_idx=load_schema()[1],
+                val_fn=val_fn,
+                batch=int(batch) if batch and float(batch) >= 1 else None,
+                workers=None,
+                device=device,
+                resume=True,
+                log=_log,
+            )
+    elif info["state"] == "resumable":
         try:
             from . import yolotrain
         except ImportError:
@@ -995,12 +1489,542 @@ def model_imgsz(net, imgsz: int | None, fallback: int) -> int:
     return int(imgsz or net.overrides.get("imgsz") or fallback)
 
 
+def _heatmap():
+    """``freekiki_heatmap`` (lazy: it imports torch/torchvision)."""
+    try:
+        from . import freekiki_heatmap as fh
+    except ImportError:
+        import freekiki_heatmap as fh  # ty: ignore[unresolved-import]
+    return fh
+
+
+class YoloPredictor:
+    """Ultralytics pose model behind the predictor interface of :func:`load_predictor`."""
+
+    backend = "yolo"
+
+    def __init__(self, model_path: str, *, imgsz: int | None, fallback_imgsz: int, device=None):
+        from ultralytics import YOLO
+
+        self.net = YOLO(model_path)
+        self.imgsz = model_imgsz(self.net, imgsz, fallback_imgsz)
+        self.device = device
+
+    def predict(self, frame) -> tuple[float, Any, Any]:
+        results = self.net.predict(
+            frame, imgsz=self.imgsz, conf=RAW_CONF, device=self.device, verbose=False
+        )
+        return best_instance(list(results)[0])
+
+
+def load_predictor(
+    model_path: str, *, imgsz: int | None = None, fallback_imgsz: int = 1280, device=None
+):
+    """One interface for both backends: ``.predict(frame BGR) -> (box conf, xy (49, 2), conf (49,))``.
+
+    ``.backend`` is ``yolo`` or ``heatmap`` and ``.imgsz`` the network input
+    width. Ultralytics predictions keep boxes down to ``RAW_CONF``; a heatmap
+    model always returns all 49 peaks (thresholds are applied afterwards).
+    A heatmap model has a fixed input size, so ``imgsz`` is ignored for it.
+    """
+    fh = _heatmap()
+    if fh.model_backend(model_path) == "heatmap":
+        predictor = fh.HeatmapPredictor.load(model_path, device)
+        if imgsz and int(imgsz) != predictor.imgsz:
+            _log(
+                f"heatmap model has a fixed input {predictor.width}x{predictor.height}; imgsz ignored"
+            )
+        return predictor
+    return YoloPredictor(model_path, imgsz=imgsz, fallback_imgsz=fallback_imgsz, device=device)
+
+
 def file_sha256(path, chunk: int = 1 << 20) -> str:
     h = hashlib.sha256()
     with Path(path).open("rb") as f:
         while block := f.read(chunk):
             h.update(block)
     return h.hexdigest()
+
+
+def pose_label_line(
+    points, width: int, height: int, *, class_id: int = 0, bbox=None, pad: float = 0.0
+) -> str:
+    """Build one sparse YOLO pose instance; reject coordinates outside the image."""
+    if width <= 0 or height <= 0 or not class_id >= 0:
+        raise ValueError("Invalid image size or class")
+    visible = []
+    for point in points:
+        if point is None:
+            continue
+        x, y = map(float, point)
+        if not (math.isfinite(x) and math.isfinite(y) and 0 <= x <= width and 0 <= y <= height):
+            raise ValueError(f"Point outside image: {point}")
+        visible.append((x, y))
+    if not visible:
+        raise ValueError("At least one visible point is required")
+    if bbox is None:
+        xs, ys = zip(*visible, strict=True)
+        x0, x1 = min(xs), max(xs)
+        y0, y1 = min(ys), max(ys)
+        margin = pad * max(width, height)
+        x0, y0 = max(0.0, x0 - margin), max(0.0, y0 - margin)
+        x1, y1 = min(float(width), x1 + margin), min(float(height), y1 + margin)
+        if x1 == x0:
+            x0, x1 = max(0.0, x0 - 0.5), min(float(width), x1 + 0.5)
+        if y1 == y0:
+            y0, y1 = max(0.0, y0 - 0.5), min(float(height), y1 + 0.5)
+        bbox = (x0, y0, x1 - x0, y1 - y0)
+    bx, by, bw, bh = map(float, bbox)
+    if not all(math.isfinite(v) for v in (bx, by, bw, bh)) or not (
+        0 <= bx < width
+        and 0 <= by < height
+        and bw > 0
+        and bh > 0
+        and bx + bw <= width
+        and by + bh <= height
+    ):
+        raise ValueError(f"Invalid bbox: {bbox}")
+    parts = [
+        str(class_id),
+        f"{(bx + bw / 2) / width:.8f}",
+        f"{(by + bh / 2) / height:.8f}",
+        f"{bw / width:.8f}",
+        f"{bh / height:.8f}",
+    ]
+    for point in points:
+        if point is None:
+            parts.extend(("0", "0", "0"))
+        else:
+            x, y = map(float, point)
+            parts.extend((f"{x / width:.8f}", f"{y / height:.8f}", "2"))
+    return " ".join(parts) + "\n"
+
+
+def write_pose_pair(image_path: Path, label_path: Path, image, label: str) -> None:
+    """Write one image/YOLO-pose label pair for either GetPixelVideo exporter."""
+    import cv2
+
+    image_path = Path(image_path)
+    label_path = Path(label_path)
+    image_path.parent.mkdir(parents=True, exist_ok=True)
+    label_path.parent.mkdir(parents=True, exist_ok=True)
+    if not cv2.imwrite(str(image_path), image):
+        raise OSError(f"Could not write {image_path}")
+    label_path.write_text(label, encoding="utf-8")
+
+
+def new_review_session(
+    video, width: int, height: int, fps: float, *, workspace=None, session_path=None
+) -> dict:
+    """Create a video-bound review session; callers keep its in-memory frame map."""
+    video = Path(video).expanduser().resolve()
+    if not video.is_file() or width <= 0 or height <= 0 or not math.isfinite(fps) or fps <= 0:
+        raise ValueError("Review needs an existing video and valid dimensions/FPS")
+    names, flips = load_schema()
+    if session_path is None:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        sid = f"{video.stem}_{hashlib.sha256(str(video).encode()).hexdigest()[:10]}_{stamp}"
+        parent = Path(workspace) / "incoming" if workspace else video.parent
+        session_path = parent / sid / "session.json"
+    return {
+        "format": 1,
+        "session_id": Path(session_path).parent.name,
+        "session_path": str(Path(session_path).expanduser().resolve()),
+        "video": str(video),
+        "video_size": video.stat().st_size,
+        "video_mtime_ns": video.stat().st_mtime_ns,
+        "width": int(width),
+        "height": int(height),
+        "fps": float(fps),
+        "schema": "soccerfield_kiki49",
+        "names": names,
+        "flip_idx": flips,
+        "frames": {},
+    }
+
+
+def save_review_session(session: dict) -> Path:
+    path = Path(session["session_path"])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, prefix=".session-", suffix=".json", delete=False
+    ) as f:
+        tmp = Path(f.name)
+        try:
+            json.dump(session, f, indent=2, allow_nan=False)
+            f.flush()
+            os.fsync(f.fileno())
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+    os.replace(tmp, path)
+    return path
+
+
+def load_review_session(path, video=None, width=None, height=None, fps=None) -> dict:
+    path = Path(path).expanduser().resolve()
+    session = json.loads(path.read_text(encoding="utf-8"))
+    names, flips = load_schema()
+    if (
+        session.get("format") != 1
+        or session.get("schema") != "soccerfield_kiki49"
+        or session.get("names") != names
+        or session.get("flip_idx") != flips
+    ):
+        raise ValueError("Review session schema mismatch")
+    source = Path(video or session["video"]).expanduser().resolve()
+    if (
+        str(source) != session["video"]
+        or not source.is_file()
+        or source.stat().st_size != session["video_size"]
+        or source.stat().st_mtime_ns != session["video_mtime_ns"]
+        or (width is not None and int(width) != session["width"])
+        or (height is not None and int(height) != session["height"])
+        or (fps is not None and not math.isclose(float(fps), session["fps"], rel_tol=1e-3))
+    ):
+        raise ValueError("Review session video identity or metadata mismatch")
+    if any(len(r.get("points", [])) != NKP for r in session["frames"].values()):
+        raise ValueError("Review session contains a frame with wrong point count")
+    session["session_path"] = str(path)
+    return session
+
+
+def review_frame(session: dict, frame: int) -> dict:
+    if frame < 0:
+        raise ValueError("Negative frame index")
+    return session["frames"].setdefault(
+        str(frame),
+        {
+            "state": "UNLABELED",
+            "points": [None] * NKP,
+            "hidden": [],
+            "point_sources": ["absent"] * NKP,
+            "prediction": None,
+            "model_sha256": "",
+            "reviewed_at": "",
+            "bbox": None,
+        },
+    )
+
+
+def edit_review_point(session: dict, frame: int, index: int, point) -> None:
+    if not 0 <= index < NKP:
+        raise ValueError("Kiki49 index outside 0..48")
+    row = review_frame(session, frame)
+    if point is not None:
+        pose_label_line([point], session["width"], session["height"])
+        point = list(map(float, point))
+    before = row["points"][index]
+    row["points"][index] = point
+    row["point_sources"][index] = (
+        "absent" if point is None else "corrected" if row["prediction"] else "manual"
+    )
+    if point != before or row["state"] == "UNLABELED":
+        row["state"] = "DRAFT_MANUAL"
+        row["reviewed_at"] = ""
+
+
+def apply_review_prediction(
+    session: dict, frame: int, xy, conf, model_sha256: str, *, kp_conf: float = 0.5, box_conf=None
+) -> None:
+    row = review_frame(session, frame)
+    if row["state"] in ("HUMAN_REVIEWED", "EXPORTED"):
+        raise ValueError("Reviewed frame must be explicitly reopened before prediction")
+    if xy is not None and (len(xy) != NKP or len(conf) != NKP):
+        raise ValueError("Prediction must contain 49 points")
+    prediction = []
+    points = []
+    for i in range(NKP):
+        if xy is None or not all(math.isfinite(float(v)) for v in (*xy[i], conf[i])):
+            prediction.append(None)
+            points.append(None)
+            continue
+        x, y, c = float(xy[i][0]), float(xy[i][1]), float(conf[i])
+        prediction.append([x, y, c])
+        points.append(
+            [x, y]
+            if c >= kp_conf and 0 <= x <= session["width"] and 0 <= y <= session["height"]
+            else None
+        )
+    row.update(
+        state="AI_DRAFT",
+        points=points,
+        prediction=prediction,
+        point_sources=["predicted" if p is not None else "absent" for p in points],
+        model_sha256=model_sha256,
+        box_conf=box_conf,
+        reviewed_at="",
+    )
+
+
+def mark_reviewed(session: dict, frame: int) -> None:
+    row = review_frame(session, frame)
+    if row["state"] == "UNLABELED" or not any(p is not None for p in row["points"]):
+        raise ValueError("Mark at least one visible point before review")
+    if len(row["points"]) != NKP:
+        raise ValueError("Expected exactly 49 points")
+    pose_label_line(row["points"], session["width"], session["height"], bbox=row["bbox"])
+    row["state"] = "HUMAN_REVIEWED"
+    row["reviewed_at"] = datetime.now().astimezone().isoformat()
+
+
+def _prediction_dir_for_video(batch_dir: Path, video: str) -> Path:
+    """Newest ``processed_freekiki_*`` child of a detect batch whose README names ``video``."""
+    for child in sorted(batch_dir.glob("processed_freekiki_*"), reverse=True):
+        readme = child / "README.txt"
+        if not readme.is_file():
+            continue
+        for line in readme.read_text(encoding="utf-8").splitlines():
+            if line.startswith("video: ") and Path(line[7:]).resolve() == Path(video):
+                return child
+    raise ValueError(f"No detect output for {Path(video).name} in {batch_dir}")
+
+
+def load_raw_review_predictions(session: dict, directory, *, kp_conf: float = 0.5) -> int:
+    """Load detect's raw CSV only after checking its README and video metadata.
+
+    ``directory`` is one detect output or a detect batch folder; for a batch the
+    newest output of the session's video is used.
+    """
+    import cv2
+
+    directory = Path(directory)
+    if not (directory / "README.txt").is_file():
+        directory = _prediction_dir_for_video(directory, session["video"])
+    readme = (directory / "README.txt").read_text(encoding="utf-8")
+    video_line = next(
+        (line[7:] for line in readme.splitlines() if line.startswith("video: ")), None
+    )
+    model_line = next(
+        (line[7:] for line in readme.splitlines() if line.startswith("model: ")), None
+    )
+    hash_line = next(
+        (line[14:] for line in readme.splitlines() if line.startswith("model_sha256: ")), None
+    )
+    dimensions = next(
+        (line[12:] for line in readme.splitlines() if line.startswith("dimensions: ")), None
+    )
+    if video_line is None or Path(video_line).resolve() != Path(session["video"]):
+        raise ValueError("Prediction CSV belongs to a different video")
+    if dimensions and dimensions != f"{session['width']}x{session['height']}":
+        raise ValueError("Prediction CSV dimensions differ from review session")
+    cap = cv2.VideoCapture(str(session["video"]))
+    try:
+        if (
+            not cap.isOpened()
+            or int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) != session["width"]
+            or int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) != session["height"]
+        ):
+            raise ValueError("Prediction video dimensions differ from review session")
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    finally:
+        cap.release()
+    model_sha = hash_line or (
+        file_sha256(model_line) if model_line and Path(model_line).is_file() else ""
+    )
+    if not model_sha:
+        raise ValueError("Prediction provenance has no model hash")
+    rows = list(csv.DictReader((directory / "field_kps_raw.csv").open(encoding="utf-8")))
+    seen = set()
+    for row in rows:
+        frame = int(row["frame"])
+        if frame in seen or not 0 <= frame < total:
+            raise ValueError(f"Duplicate or invalid prediction frame: {frame}")
+        seen.add(frame)
+    for row in rows:
+        frame = int(row["frame"])
+        if review_frame(session, frame)["state"] != "UNLABELED":
+            continue
+        xy, conf = [], []
+        for i in range(NKP):
+            if row[f"p{i}_x"] == "" or row[f"p{i}_y"] == "":
+                xy.append((float("nan"), float("nan")))
+                conf.append(float("nan"))
+            else:
+                xy.append((float(row[f"p{i}_x"]), float(row[f"p{i}_y"])))
+                conf.append(float(row[f"p{i}_conf"]))
+        apply_review_prediction(
+            session,
+            frame,
+            xy,
+            conf,
+            model_sha,
+            kp_conf=kp_conf,
+            box_conf=float(row["box_conf"]) if row["box_conf"] else None,
+        )
+    return len(rows)
+
+
+REVIEWED_FIELDS = (
+    "image",
+    "label",
+    "image_sha256",
+    "label_sha256",
+    "video",
+    "frame",
+    "timestamp",
+    "group",
+    "session",
+    "reviewed_at",
+    "model_sha256",
+    "n_visible",
+    "n_corrected",
+    "n_ai",
+)
+
+
+def export_reviewed_session(session: dict) -> Path:
+    """Write only human-confirmed frames into incoming/<session>/, never a split."""
+    import cv2
+
+    root = Path(session["session_path"]).parent
+    reviewed = [
+        (int(k), v)
+        for k, v in session["frames"].items()
+        if v["state"] in ("HUMAN_REVIEWED", "EXPORTED")
+    ]
+    if not reviewed:
+        raise ValueError("No human-reviewed frames to export")
+    reviewed.sort()
+    cap = cv2.VideoCapture(session["video"])
+    if not cap.isOpened():
+        raise ValueError("Could not open review video")
+    (root / "images").mkdir(parents=True, exist_ok=True)
+    (root / "labels").mkdir(parents=True, exist_ok=True)
+    rows = []
+    origin = hashlib.sha256(session["video"].encode()).hexdigest()[:10]
+    try:
+        for frame, row in reviewed:
+            label = pose_label_line(
+                row["points"], session["width"], session["height"], bbox=row.get("bbox")
+            )
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame)
+            ok, image = cap.read()
+            if not ok or image.shape[1] != session["width"] or image.shape[0] != session["height"]:
+                raise ValueError(f"Could not read matching video frame {frame}")
+            stem = f"{Path(session['video']).stem}_{origin}_f{frame:08d}"
+            img = root / "images" / f"{stem}.png"
+            txt = root / "labels" / f"{stem}.txt"
+            if img.exists() and txt.exists() and txt.read_text(encoding="utf-8") != label:
+                raise ValueError(f"Existing export has different label: {stem}")
+            write_pose_pair(img, txt, image, label)
+            rows.append(
+                {
+                    "image": f"images/{img.name}",
+                    "label": f"labels/{txt.name}",
+                    "image_sha256": file_sha256(img),
+                    "label_sha256": file_sha256(txt),
+                    "video": session["video"],
+                    "frame": frame,
+                    "timestamp": f"{frame / session['fps']:.6f}",
+                    "group": "",  # supplied as --match-id during ingest
+                    "session": session["session_id"],
+                    "reviewed_at": row["reviewed_at"],
+                    "model_sha256": row.get("model_sha256", ""),
+                    "n_visible": sum(p is not None for p in row["points"]),
+                    "n_corrected": row["point_sources"].count("corrected"),
+                    "n_ai": row["point_sources"].count("predicted"),
+                }
+            )
+            row["state"] = "EXPORTED"
+    finally:
+        cap.release()
+    with (root / "reviewed_frames.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=REVIEWED_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    save_review_session(session)
+    write_review_diagnostics(session)
+    return root
+
+
+def write_review_diagnostics(session: dict) -> Path:
+    root = Path(session["session_path"]).parent
+    names, _ = load_schema()
+    rows = []
+    diag_len = math.hypot(session["width"], session["height"])
+    for frame, review in sorted(session["frames"].items(), key=lambda kv: int(kv[0])):
+        if review["state"] not in ("HUMAN_REVIEWED", "EXPORTED") or review["prediction"] is None:
+            continue
+        for i, (human, pred) in enumerate(zip(review["points"], review["prediction"], strict=True)):
+            error = math.dist(human, pred[:2]) if human is not None and pred is not None else None
+            status = (
+                "prediction_absent"
+                if pred is None
+                else "human_absent"
+                if human is None
+                else "accepted"
+                if review["point_sources"][i] == "predicted"
+                else "corrected"
+            )
+            rows.append(
+                {
+                    "video": session["video"],
+                    "frame": frame,
+                    "point": i,
+                    "name": names[i],
+                    "model_sha256": review.get("model_sha256", ""),
+                    "human_x": human[0] if human else "",
+                    "human_y": human[1] if human else "",
+                    "ai_x": pred[0] if pred else "",
+                    "ai_y": pred[1] if pred else "",
+                    "confidence": pred[2] if pred else "",
+                    "error_px": error if error is not None else "",
+                    "error_diagonal": error / diag_len if error is not None else "",
+                    "status": status,
+                }
+            )
+    fields = (
+        "video",
+        "frame",
+        "point",
+        "name",
+        "model_sha256",
+        "human_x",
+        "human_y",
+        "ai_x",
+        "ai_y",
+        "confidence",
+        "error_px",
+        "error_diagonal",
+        "status",
+    )
+    path = root / "human_vs_ai.csv"
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+    for key, filename in (
+        ("point", "human_vs_ai_by_point.csv"),
+        ("video", "human_vs_ai_by_video.csv"),
+    ):
+        groups = {}
+        for row in rows:
+            groups.setdefault(row[key], []).append(row)
+        with (root / filename).open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    key,
+                    "n",
+                    "accepted",
+                    "corrected",
+                    "prediction_absent",
+                    "human_absent",
+                    "mean_error_px",
+                ]
+            )
+            for group, items in groups.items():
+                errors = [float(r["error_px"]) for r in items if r["error_px"] != ""]
+                writer.writerow(
+                    [group, len(items)]
+                    + [
+                        sum(r["status"] == s for r in items)
+                        for s in ("accepted", "corrected", "prediction_absent", "human_absent")
+                    ]
+                    + [sum(errors) / len(errors) if errors else ""]
+                )
+    return path
 
 
 def manifest_index(ws) -> dict[str, dict]:
@@ -1028,8 +2052,11 @@ def best_instance(result) -> tuple[float, Any, Any]:
     return float(result.boxes.conf[best]), xy, kc
 
 
-def collect_predictions(net, images, lbl_dir, manifest, *, imgsz, device, raw_conf) -> dict:
-    """Raw best-instance predictions + labels of every image (no threshold applied)."""
+def collect_predictions(predictor, images, lbl_dir, manifest) -> dict:
+    """Raw best-instance predictions + labels of every image (no threshold applied).
+
+    ``predictor``: see :func:`load_predictor`.
+    """
     import cv2
     import numpy as np
 
@@ -1040,10 +2067,7 @@ def collect_predictions(net, images, lbl_dir, manifest, *, imgsz, device, raw_co
         if frame is None:
             continue
         h, w = frame.shape[:2]
-        result: Any = list(
-            net.predict(frame, imgsz=imgsz, device=device, conf=raw_conf, verbose=False)
-        )[0]
-        box_conf, xy, kc = best_instance(result)
+        box_conf, xy, kc = predictor.predict(frame)
         row = manifest.get(img_path.stem, {})
         keep["images"].append(img_path.name)
         keep["groups"].append(row.get("group", img_path.stem))
@@ -1128,17 +2152,19 @@ def evaluate(
     Raw best-instance predictions are saved at a low confidence
     (``predictions.npz``) so thresholds can be swept offline (``sweep``).
     Writes ``<ws>/outputs/processed_freekiki_eval_<split>_<ts>/`` and appends a
-    row to ``models/evaluations_v2.csv``.
+    row to ``models/evaluations_v2.csv``. A heatmap model has no Ultralytics
+    validation: its pose mAP fields stay blank and only the FreeKiki tables
+    (the same for both backends) are written.
     """
-    from ultralytics import YOLO
-
     ws = Path(ws).expanduser().resolve()
     settings = load_settings(ws)
     det_conf = float(settings["detect"]["conf"] if det_conf is None else det_conf)
     kp_conf = float(settings["detect"]["kp_conf"] if kp_conf is None else kp_conf)
     model_path = resolve_model(ws, model)
-    net = YOLO(model_path)
-    imgsz = model_imgsz(net, imgsz, settings["detect"]["imgsz"])
+    predictor = load_predictor(
+        model_path, imgsz=imgsz, fallback_imgsz=settings["detect"]["imgsz"], device=device
+    )
+    imgsz = predictor.imgsz
     yaml_path = refresh_yaml_path(dataset_dir(ws) / "data.yaml")
     data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
     if not data.get(split):
@@ -1147,28 +2173,30 @@ def evaluate(
     lbl_dir = dataset_dir(ws) / str(data[split]).replace("images", "labels", 1)
     out = ws / "outputs" / f"processed_freekiki_eval_{split}_{datetime.now():%Y%m%d_%H%M%S}"
     out.mkdir(parents=True, exist_ok=True)
-    _log(f"evaluate: model={model_path} split={split} imgsz={imgsz} -> {out}")
+    _log(f"evaluate: model={model_path} ({predictor.backend}) split={split} imgsz={imgsz} -> {out}")
     if split == "test":
         _log("note: test split - report only, do not choose thresholds/hyper-parameters on it")
 
-    val = net.val(
-        data=str(yaml_path),
-        split=split,
-        imgsz=imgsz,
-        batch=batch,
-        device=device,
-        project=str(out),
-        name="ultralytics_val",
-        verbose=False,
-    )
-    ultra = {k: round(float(v), 4) for k, v in val.results_dict.items()}
+    ultra: dict = {}
+    if isinstance(predictor, YoloPredictor):
+        val = predictor.net.val(
+            data=str(yaml_path),
+            split=split,
+            imgsz=imgsz,
+            batch=batch,
+            device=device,
+            project=str(out),
+            name="ultralytics_val",
+            verbose=False,
+        )
+        ultra = {k: round(float(v), 4) for k, v in val.results_dict.items()}
+    else:
+        _log("heatmap backend: no Ultralytics mAP (not comparable); FreeKiki tables only")
 
     images = sorted(p for p in img_dir.iterdir() if p.suffix.lower() in {".jpg", ".jpeg", ".png"})
     if max_images:
         images = images[:max_images]
-    pred = collect_predictions(
-        net, images, lbl_dir, manifest_index(ws), imgsz=imgsz, device=device, raw_conf=RAW_CONF
-    )
+    pred = collect_predictions(predictor, images, lbl_dir, manifest_index(ws))
     np_savez(out / "predictions.npz", pred)
     scores = diag.score_predictions(
         pred, det_conf=det_conf, kp_conf=kp_conf, match_px=match_px, pck=pck
@@ -1183,6 +2211,7 @@ def evaluate(
         "eval_schema": diag.EVAL_SCHEMA,
         "model": model_path,
         "model_sha256": file_sha256(model_path),
+        "backend": predictor.backend,
         "split": split,
         "n_images": len(pred["images"]),
         "images_sha1": diag.names_digest(pred["images"].tolist()),
@@ -1675,7 +2704,6 @@ def detect_video(
     """
     import cv2
     import numpy as np
-    from ultralytics import YOLO
 
     ws = Path(ws).expanduser().resolve()
     video = Path(video).expanduser().resolve()
@@ -1684,8 +2712,10 @@ def detect_video(
     kp_conf = float(defaults["kp_conf"] if kp_conf is None else kp_conf)
     stride = max(1, int(stride))
     model_path = resolve_model(ws, model)
-    net = YOLO(model_path)
-    imgsz = model_imgsz(net, imgsz, defaults["imgsz"])
+    predictor = load_predictor(
+        model_path, imgsz=imgsz, fallback_imgsz=defaults["imgsz"], device=device
+    )
+    imgsz = predictor.imgsz
     base_out = Path(output_dir).expanduser() if output_dir else video.parent
     out = base_out / f"processed_freekiki_{video.stem}_{datetime.now():%Y%m%d_%H%M%S}"
     (out / "diag_frames").mkdir(parents=True, exist_ok=True)
@@ -1730,8 +2760,7 @@ def detect_video(
             ok, frame = cap.read()
             if not ok:
                 break
-            results = net.predict(frame, imgsz=imgsz, conf=RAW_CONF, device=device, verbose=False)
-            box_conf, xy, kc = best_instance(list(results)[0])
+            box_conf, xy, kc = predictor.predict(frame)
             sig = diag.frame_signature(frame)
             cut = diag.is_cut(prev_sig, sig, cut_threshold)
             prev_sig = sig
@@ -1880,7 +2909,8 @@ def detect_video(
         )
     (out / "README.txt").write_text(
         "FreeKiki field keypoints (vailá)\n"
-        f"video: {video}\nmodel: {model_path}\nframes: {processed} (start={start}, "
+        f"video: {video}\nmodel: {model_path}\nmodel_sha256: {file_sha256(model_path)}\n"
+        f"dimensions: {width}x{height}\nframes: {processed} (start={start}, "
         f"stride={stride})\ndetection (box) conf: {conf}\nkeypoint conf: {kp_conf}\n"
         f"imgsz: {imgsz}\nfill gaps: {fill_gaps} frames\n"
         "schema: vaila/models/soccerfield_kiki.csv (p0..p48, 0-based)\n\n"
@@ -1917,6 +2947,25 @@ def detect_video(
 VIDEO_EXTS = {".mp4", ".avi", ".mov", ".mkv", ".m4v"}
 
 
+def workspace_for_model_file(model_file: str | Path) -> Path | None:
+    """Find the owning workspace when a model file is selected in the GUI."""
+    path = Path(model_file).expanduser()
+    if not path.is_file():
+        return None
+    return next((parent for parent in path.parents if (parent / CONFIG_NAME).is_file()), None)
+
+
+def validate_detection_workspace(ws, model: str) -> None:
+    """Fail before creating output when detection lacks a workspace or active model."""
+    if not str(ws).strip():
+        raise FileNotFoundError("Choose a FreeKiki workspace folder containing freekiki.toml.")
+    load_settings(Path(ws).expanduser())
+    if not model.strip():
+        raise ValueError("Choose 'active' or a model .pt file for detection.")
+    if model == "active":
+        resolve_model(ws, model)
+
+
 def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
     """Detect on one video or on every video of a folder.
 
@@ -1924,6 +2973,7 @@ def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
     default the folder itself) with one sub-folder per video and
     ``quality_summary.csv`` comparing them. Returns the output folder.
     """
+    validate_detection_workspace(ws, kwargs.get("model", "active"))
     source = Path(source).expanduser().resolve()
     if source.is_file():
         return detect_video(ws, source, output_dir=output_dir, **kwargs)
@@ -1960,6 +3010,7 @@ def build_parser() -> argparse.ArgumentParser:
     for cmd, help_text in (
         ("init", "Create the workspace layout."),
         ("import-dataset", "Copy a kiki49 YOLO-pose build into the workspace."),
+        ("ingest", "Validate reviewed frames; --commit appends them to train."),
         ("check", "Validate the workspace dataset."),
         ("manifest", "Build an oversampled train list (manifests/vNNN) for rare keypoints."),
         ("train", "Train or retrain (--base active) the field-keypoint network."),
@@ -1976,6 +3027,14 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
         if cmd == "import-dataset":
             p.add_argument("--src", required=True, help="kiki49 dataset folder (has data.yaml).")
+        elif cmd == "ingest":
+            p.add_argument("--src", required=True, help="Exported review session directory.")
+            p.add_argument(
+                "--match-id", required=True, help="Match/sequence shared across cameras and cuts."
+            )
+            p.add_argument(
+                "--commit", action="store_true", help="Publish validated pairs to train."
+            )
         elif cmd == "train":
             p.add_argument("--base", help="yolo26*-pose.pt, 'active' or a .pt path.")
             p.add_argument("--epochs", type=int)
@@ -1990,6 +3049,24 @@ def build_parser() -> argparse.ArgumentParser:
                 "--workers", type=int, help="Dataloader workers (default Ultralytics 8; see bench)."
             )
             p.add_argument("--manifest", help="Train on manifests/<name> (e.g. v001).")
+            p.add_argument(
+                "--backend",
+                choices=("yolo", "heatmap"),
+                default="yolo",
+                help="yolo = Ultralytics pose; heatmap = vailá ResNet heatmap (torchvision only).",
+            )
+            p.add_argument(
+                "--backbone",
+                default="resnet50",
+                help="Heatmap backbone (resnet18/34/50/101/152, ImageNet weights from torch cache).",
+            )
+            p.add_argument(
+                "--no-pretrained",
+                dest="pretrained",
+                action="store_false",
+                help="Heatmap: start from random weights (no ImageNet checkpoint needed).",
+            )
+            p.add_argument("--lr", type=float, help="Heatmap AdamW learning rate (default 1e-3).")
         elif cmd == "manifest":
             p.add_argument("--rfs-t", type=float, default=0.05, help="Repeat-factor threshold t.")
             p.add_argument("--cap", type=float, default=4.0, help="Max repeat factor per image.")
@@ -2077,6 +3154,8 @@ def main(argv: list[str] | None = None) -> int:
         init_workspace(ws)
     elif args.command == "import-dataset":
         import_dataset(ws, args.src)
+    elif args.command == "ingest":
+        ingest_reviewed(ws, args.src, args.match_id, commit=args.commit)
     elif args.command == "check":
         return 1 if check_dataset(ws) else 0
     elif args.command == "status":
@@ -2100,6 +3179,10 @@ def main(argv: list[str] | None = None) -> int:
             seed=args.seed,
             workers=args.workers,
             manifest=args.manifest,
+            backend=args.backend,
+            backbone=args.backbone,
+            pretrained=args.pretrained,
+            lr=args.lr,
         )
     elif args.command == "manifest":
         make_manifest(
@@ -2202,6 +3285,7 @@ def run_freekiki() -> None:
         "ws": tk.StringVar(value=_last_workspace()),
         "src": tk.StringVar(),
         "base": tk.StringVar(value="yolo26m-pose.pt"),
+        "backend": tk.StringVar(value="yolo"),
         "epochs": tk.StringVar(value="150"),
         "imgsz": tk.StringVar(value="1280"),
         "batch": tk.StringVar(value="-1"),
@@ -2230,6 +3314,14 @@ def run_freekiki() -> None:
         path = filedialog.askopenfilename(title=title, filetypes=types)
         if path:
             var.set(path)
+
+    def browse_detection_model():
+        path = filedialog.askopenfilename(title="Model weights", filetypes=[("PyTorch", "*.pt")])
+        if path:
+            v["model"].set(path)
+            model_ws = workspace_for_model_file(path)
+            if model_ws is not None:
+                v["ws"].set(str(model_ws))
 
     def run_cli(args: list[str]) -> None:
         if state["proc"] is not None and state["proc"].poll() is None:
@@ -2279,8 +3371,14 @@ def run_freekiki() -> None:
         return [flag, value] if value else []
 
     def do_train():
+        base = v["base"].get().strip()
+        heatmap = v["backend"].get() == "heatmap"
+        # A YOLO base name means nothing to the heatmap backend (ImageNet start instead).
+        args = ["train", "--backend", "heatmap"] if heatmap else ["train"]
+        if base and not (heatmap and Path(base).name.startswith("yolo")):
+            args += ["--base", base]
         run_cli(
-            ["train", "--base", v["base"].get().strip()]
+            args
             + opt("--epochs", "epochs")
             + opt("--imgsz", "imgsz")
             + opt("--batch", "batch")
@@ -2291,6 +3389,7 @@ def run_freekiki() -> None:
 
     def smoke_preset():
         for key, value in (
+            ("backend", "yolo"),
             ("base", "yolo26n-pose.pt"),
             ("epochs", "5"),
             ("imgsz", "640"),
@@ -2299,8 +3398,20 @@ def run_freekiki() -> None:
         ):
             v[key].set(value)
 
+    def heatmap_preset():
+        for key, value in (
+            ("backend", "heatmap"),
+            ("base", ""),
+            ("epochs", "60"),
+            ("imgsz", "1024"),
+            ("batch", "16"),
+            ("fraction", "1.0"),
+        ):
+            v[key].set(value)
+
     def full_preset():
         for key, value in (
+            ("backend", "yolo"),
             ("base", "yolo26m-pose.pt"),
             ("epochs", "150"),
             ("imgsz", "1280"),
@@ -2339,6 +3450,19 @@ def run_freekiki() -> None:
     def do_detect():
         if not v["video"].get().strip():
             messagebox.showerror("FreeKiki", "Choose a video or a folder of videos.", parent=root)
+            return
+        ws = v["ws"].get().strip()
+        model = v["model"].get().strip()
+        try:
+            validate_detection_workspace(ws, model)
+        except (FileNotFoundError, ValueError, toml.TomlDecodeError) as exc:
+            messagebox.showerror(
+                "FreeKiki",
+                "In section 5, choose the FreeKiki workspace folder containing "
+                "freekiki.toml (and models/active.pt when Model is 'active').\n\n"
+                f"{exc}",
+                parent=root,
+            )
             return
         args = ["detect", "--video", v["video"].get().strip(), "--model", v["model"].get().strip()]
         args += opt("--output-dir", "out") + opt("--stride", "stride")
@@ -2401,11 +3525,16 @@ def run_freekiki() -> None:
     ):
         ttk.Label(grid, text=label).grid(row=0, column=2 * i, padx=(4, 2))
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
+    ttk.Label(grid, text="Backend").grid(row=0, column=12, padx=(4, 2))
+    ttk.Combobox(
+        grid, textvariable=v["backend"], values=("yolo", "heatmap"), width=8, state="readonly"
+    ).grid(row=0, column=13)
     bar = ttk.Frame(box)
     bar.grid(row=2, column=1, sticky="w", pady=2)
     ttk.Button(bar, text="Train", command=do_train).pack(side="left")
     ttk.Button(bar, text="Smoke preset (~5 min)", command=smoke_preset).pack(side="left", padx=6)
     ttk.Button(bar, text="Full preset (hours)", command=full_preset).pack(side="left")
+    ttk.Button(bar, text="Heatmap preset", command=heatmap_preset).pack(side="left", padx=6)
     ttk.Button(
         bar,
         text="Bench batch/VRAM (~5 min)",
@@ -2428,7 +3557,9 @@ def run_freekiki() -> None:
         "mosaic off, backbone unfrozen.\n"
         "Manifest = e.g. v001 from 'Build oversampling manifest' (rare points repeated; "
         "empty = plain train split).\n"
-        "Stopped / crash / power loss? Every finished epoch is saved: press Resume interrupted.",
+        "Stopped / crash / power loss? Every finished epoch is saved: press Resume interrupted.\n"
+        "Backend heatmap = vailá ResNet heatmap net (torch/torchvision only, no Ultralytics); "
+        "never auto-promoted: Evaluate + Compare on val first.",
     ).grid(row=4, column=0, columnspan=3, sticky="w", padx=4)
 
     box = ttk.LabelFrame(frm, text="4. Evaluate quality (labelled split)", padding=6)
@@ -2451,21 +3582,28 @@ def run_freekiki() -> None:
 
     box = ttk.LabelFrame(frm, text="5. Detect field keypoints (video or folder)", padding=6)
     box.pack(fill="x", pady=4)
-    video_types = [("Video", "*.mp4 *.avi *.mov *.mkv *.m4v"), ("All", "*.*")]
-    row(box, 0, "Video", v["video"], lambda: browse_file(v["video"], "Video", video_types))
-    ttk.Button(box, text="Folder", command=lambda: browse_dir(v["video"], "Folder of videos")).grid(
-        row=0, column=3
-    )
-    row(box, 1, "Output dir", v["out"], lambda: browse_dir(v["out"], "Output folder"))
     row(
         box,
-        2,
+        0,
+        "Workspace (freekiki.toml)",
+        v["ws"],
+        lambda: browse_dir(v["ws"], "FreeKiki workspace (contains freekiki.toml)"),
+    )
+    video_types = [("Video", "*.mp4 *.avi *.mov *.mkv *.m4v"), ("All", "*.*")]
+    row(box, 1, "Video", v["video"], lambda: browse_file(v["video"], "Video", video_types))
+    ttk.Button(box, text="Folder", command=lambda: browse_dir(v["video"], "Folder of videos")).grid(
+        row=1, column=3
+    )
+    row(box, 2, "Output dir", v["out"], lambda: browse_dir(v["out"], "Output folder"))
+    row(
+        box,
+        3,
         "Model",
         v["model"],
-        lambda: browse_file(v["model"], "Model weights", [("PyTorch", "*.pt")]),
+        browse_detection_model,
     )
     grid = ttk.Frame(box)
-    grid.grid(row=3, column=0, columnspan=3, sticky="w", pady=2)
+    grid.grid(row=4, column=0, columnspan=3, sticky="w", pady=2)
     for i, (label, key) in enumerate(
         (
             ("Stride", "stride"),
@@ -2478,7 +3616,7 @@ def run_freekiki() -> None:
         ttk.Label(grid, text=label).grid(row=0, column=2 * i, padx=(4, 2))
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
     ttk.Checkbutton(grid, text="Overlay MP4", variable=overlay).grid(row=0, column=10, padx=6)
-    ttk.Button(box, text="Detect", command=do_detect).grid(row=4, column=1, sticky="w", pady=2)
+    ttk.Button(box, text="Detect", command=do_detect).grid(row=5, column=1, sticky="w", pady=2)
 
     bar = ttk.Frame(frm)
     bar.pack(fill="x", pady=4)
