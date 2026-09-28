@@ -219,10 +219,27 @@
     <div class="container">
       <h1>getpixelvideo.py - Complete Documentation</h1>
 
+      <section>
+        <h2>FreeKiki Kiki49 human review</h2>
+        <p><code>uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS</code>
+          opens a review session. Use <code>--freekiki</code> for manual work,
+          <code>--freekiki-session SESSION.json</code> to reopen,
+          <code>--freekiki-predictions DIR</code> for a detect raw CSV (one output folder or a whole <code>processed_freekiki_batch_*</code> folder), and
+          <code>--freekiki-videos DIR</code> for sorted videos.</p>
+        <p>The 49 named slots are numbered 00–48. Ctrl+I enables marker editing.
+          Tab or Ctrl+G selects a point; Ctrl+F jumps to a zero-based frame;
+          Page Up/Down moves among drafts. F2 predicts, F3 marks human reviewed,
+          F4 saves, and F9 exports reviewed frames. Predicted markers are square;
+          the panel shows textual point status. Edits require another F3 review.</p>
+        <p>Export writes PNG/TXT pairs, <code>reviewed_frames.csv</code>, and
+          <code>human_vs_ai.csv</code>. See <a href="freekiki.html">FreeKiki help</a>
+          to preview and ingest these into train.</p>
+      </section>
+
       <div class="version-info">
-        <strong>Version:</strong> 0.4.5<br />
+        <strong>Version:</strong> 0.4.6<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 23 September 2026<br />
+        <strong>Updated:</strong> 28 September 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />

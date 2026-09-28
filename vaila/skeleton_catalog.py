@@ -1,10 +1,11 @@
 """Skeleton pose template catalog for getpixelvideo ``Tpl:`` and related tools.
 
 Loads canonical JSON presets from ``vaila/skeletons/`` (excluding soccer-field
-layouts, which use the dedicated Soccer-Kiki pitch-guide path).
+layouts, which use the dedicated Soccer-Kiki pitch-guide path). FreeKiki
+(kiki49 review) is a special non-JSON mode listed next to Soccer-Kiki.
 
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 28 September 2026
+Version: 0.4.6
 """
 
 from __future__ import annotations
@@ -35,11 +36,13 @@ _POSE_TEMPLATE_ORDER: tuple[tuple[str, str, str, str], ...] = (
 
 # Special (non-JSON) modes always available in the Tpl dialog.
 # Internal id stays ``fifa`` for CLI/TOML/dataset compatibility; UI label is Soccer-Kiki.
-SPECIAL_TEMPLATE_IDS: frozenset[str] = frozenset({"free", "fifa"})
+# ``freekiki`` starts a kiki49 human-review session (see getpixelvideo FreeKiki path).
+SPECIAL_TEMPLATE_IDS: frozenset[str] = frozenset({"free", "fifa", "freekiki"})
 
 SPECIAL_TEMPLATE_LABELS: dict[str, str] = {
     "free": "Free",
     "fifa": "Soccer-Kiki",
+    "freekiki": "FreeKiki49",
 }
 
 
@@ -167,6 +170,7 @@ def dialog_choices() -> list[tuple[str, str]]:
     rows: list[tuple[str, str]] = [
         ("free", "Free (variable markers)"),
         ("fifa", "Soccer-Kiki (pitch guide)"),
+        ("freekiki", "FreeKiki kiki49 (49 field KPs)"),
     ]
     for spec in list_pose_templates():
         rows.append((spec.id, spec.dialog_label))

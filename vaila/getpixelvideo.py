@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 23 September 2026
-Version: 0.4.5
+Update: 28 September 2026
+Version: 0.4.6
 Python Version: 3.12.14
 
 Description:
@@ -36,6 +36,7 @@ Template Marker Mode (toolbar Template / ``Tpl:`` button):
   - **Free** — variable-length markers
   - **Soccer-Kiki** — pitch guide (``soccerfield_kiki.csv`` / dataset keypoints;
     internal mode id ``fifa`` kept for TOML/CLI compatibility)
+  - **FreeKiki** — kiki49 (49 field KPs) human-review session
   - Pose / hand presets from ``vaila/skeletons/`` via dialog (MediaPipe 33,
     YOLO 17, OpenPose 25, Halpe 26, FIFA Body-15, SAM3+DINOv3 70, Sapiens2 308,
     Hand 21 / Hands 42 / Holistic 75, COCO WholeBody 133)
@@ -259,8 +260,8 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.5"
-GETPIXELVIDEO_UPDATE_DATE = "23 September 2026"
+GETPIXELVIDEO_VERSION = "0.4.6"
+GETPIXELVIDEO_UPDATE_DATE = "28 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -1969,7 +1970,6 @@ def pygame_file_dialog(
 
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
-
                 if event.button == 1:  # Left click
                     # Check path input field
                     if input_rect.collidepoint(x, y):
@@ -2140,6 +2140,7 @@ def play_video_with_controls(
     metadata=None,
     initial_fifa_mode=False,
     initial_frame: int = 0,
+    freekiki_options: dict | None = None,
 ):
     if frame_source is not None:
         cap = frame_source
@@ -2181,6 +2182,38 @@ def play_video_with_controls(
         coordinates = {i: [] for i in range(total_frames)}
 
     deleted_positions = {i: set() for i in range(total_frames)}
+
+    freekiki_session: Any = None
+    freekiki_api: Any = None
+    if freekiki_options is not None:
+        if is_image_source:
+            raise ValueError("FreeKiki review requires a video")
+        try:
+            from . import freekiki as freekiki_api
+        except ImportError:
+            import freekiki as freekiki_api  # ty: ignore[unresolved-import]
+        session_file = freekiki_options.get("session")
+        if session_file:
+            freekiki_session = freekiki_api.load_review_session(
+                session_file, video_path, original_width, original_height, fps
+            )
+        else:
+            if freekiki_options.get("workspace"):
+                freekiki_api.load_settings(Path(freekiki_options["workspace"]))
+            freekiki_session = freekiki_api.new_review_session(
+                video_path,
+                original_width,
+                original_height,
+                fps,
+                workspace=freekiki_options.get("workspace"),
+            )
+        for frame_str, review in freekiki_session["frames"].items():
+            fi = int(frame_str)
+            if 0 <= fi < total_frames:
+                coordinates[fi] = [
+                    tuple(p) if p is not None else (None, None) for p in review["points"]
+                ]
+                deleted_positions[fi] = set(review.get("hidden", []))
 
     assert coordinates is not None
     assert deleted_positions is not None
@@ -2270,6 +2303,11 @@ def play_video_with_controls(
 
     # For regular mode, we'll track deleted positions
     deleted_positions = {i: set() for i in range(total_frames)}
+    if freekiki_session is not None:
+        for frame_str, review in freekiki_session["frames"].items():
+            fi = int(frame_str)
+            if 0 <= fi < total_frames:
+                deleted_positions[fi] = set(review.get("hidden", []))
 
     # VISUAL (safe browse, default) vs INSERT (edit markers). Ctrl+I / EditMode button.
     # Helpers + initial restore snapshot are wired after bboxes / HUD banners exist.
@@ -2380,6 +2418,10 @@ def play_video_with_controls(
     # - "fifa": Soccer-Kiki pitch guide (visual; UI label Soccer-Kiki)
     # - other ids: pose/hand presets from vaila/skeletons/ (see skeleton_catalog)
     template_mode = "fifa" if pitch_guide_fifa_mode else "free"
+    if freekiki_session is not None:
+        template_mode = "freekiki"
+        pitch_guide_fifa_mode = True
+        fifa_fixed_keypoints = 49
     template_keypoint_names: list[str] | None = None
     template_connections: frozenset[tuple[int, int]] | None = None
 
@@ -3150,10 +3192,22 @@ def play_video_with_controls(
 
     # Auto-enable Pitch Guide in FIFA mode (CLI --fifa-dataset / GUI button).
     if pitch_guide_fifa_mode:
-        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
+        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(
+            prefer_fifa_dataset=freekiki_session is None
+        )
         if pitch_guide_points:
             pitch_guide_mode = True
             fifa_fixed_keypoints = len(pitch_guide_points)
+        if freekiki_session is not None:
+            names, flips = freekiki_api.load_schema()
+            if (
+                [p["point_number"] for p in pitch_guide_points] != list(range(49))
+                or [p["point_name"] for p in pitch_guide_points] != names
+                or flips != freekiki_session["flip_idx"]
+            ):
+                raise ValueError("Kiki49 guide/schema mismatch")
+            template_keypoint_names = names
+            template_connections = frozenset(freekiki_api.load_bones())
         n_fix = max(1, int(fifa_fixed_keypoints if fifa_fixed_keypoints else 48))
         for fi in range(total_frames):
             row = coordinates.get(fi, [])
@@ -5583,18 +5637,74 @@ def play_video_with_controls(
         nonlocal pitch_guide_points, pitch_guide_source, pitch_guide_mode
         nonlocal one_line_mode
         nonlocal _TEMPLATE_LABELS
+        nonlocal freekiki_session, freekiki_api
 
         if not isinstance(coordinates, dict):
             coordinates = {i: [] for i in range(total_frames)}
 
         mode = mode.strip().lower()
+        if freekiki_session is not None and mode != "freekiki":
+            raise ValueError("Save and close the FreeKiki session before changing template")
         _TEMPLATE_LABELS = skeleton_catalog.template_labels()
-        known = set(_TEMPLATE_LABELS) | set(skeleton_catalog.SPECIAL_TEMPLATE_IDS)
+        known = set(_TEMPLATE_LABELS) | set(skeleton_catalog.SPECIAL_TEMPLATE_IDS) | {"freekiki"}
         if mode not in known:
             mode = "free"
+        if mode not in ("free", "fifa", "freekiki"):
+            candidate = skeleton_catalog.get_template(mode)
+            target_n = (
+                int(candidate.num_keypoints)
+                if candidate is not None
+                else 33
+                if mode == "mediapipe"
+                else 17
+                if mode == "yolo"
+                else None
+            )
+            if target_n is not None and any(
+                any(p is not None and p != (None, None) for p in row[target_n:])
+                for row in coordinates.values()
+            ):
+                raise ValueError(f"Template has {target_n} slots; existing markers would be lost")
 
         # Back up before destructive reshape.
         make_backup()
+
+        if mode == "freekiki":
+            if any(
+                any(p is not None and p != (None, None) for p in row[49:])
+                for row in coordinates.values()
+            ):
+                raise ValueError("Existing markers beyond slot 48; save or clear them first")
+            if freekiki_api is None:
+                try:
+                    from . import freekiki as freekiki_api
+                except ImportError:
+                    import freekiki as freekiki_api  # ty: ignore[unresolved-import]
+            names, flips = freekiki_api.load_schema()
+            pts, src = _load_pitch_guide_points(prefer_fifa_dataset=False)
+            if (
+                [p["point_number"] for p in pts] != list(range(49))
+                or [p["point_name"] for p in pts] != names
+                or (freekiki_session is not None and freekiki_session["flip_idx"] != flips)
+            ):
+                raise ValueError("Kiki49 guide/schema mismatch")
+            if freekiki_session is None:
+                freekiki_session = freekiki_api.new_review_session(
+                    video_path, original_width, original_height, fps
+                )
+            template_mode = "freekiki"
+            template_keypoint_names = names
+            template_connections = frozenset(freekiki_api.load_bones())
+            pitch_guide_points, pitch_guide_source = pts, src
+            pitch_guide_fifa_mode = pitch_guide_mode = True
+            fifa_fixed_keypoints = 49
+            fifa_start_keypoint = fifa_index_base = 0
+            current_label = "football_pitch"
+            one_line_mode = False
+            for fi, row in coordinates.items():
+                coordinates[fi] = list(row[:49]) + [(None, None)] * max(0, 49 - len(row))
+            selected_marker_idx = 0
+            return
 
         if mode == "free":
             template_mode = "free"
@@ -5645,6 +5755,11 @@ def play_video_with_controls(
             fifa_fixed_keypoints = int(spec.num_keypoints)
 
         n = max(1, int(fifa_fixed_keypoints))
+        if any(
+            any(p is not None and p != (None, None) for p in row[n:])
+            for row in coordinates.values()
+        ):
+            raise ValueError(f"Template has {n} slots; existing markers would be lost")
         new_coords: dict[int, list[tuple[Any, Any]]] = {}
         for i in range(total_frames):
             old = list(coordinates.get(i, []))
@@ -5661,16 +5776,24 @@ def play_video_with_controls(
         selected_marker_idx = 0
 
     def _ask_template_mode() -> str | None:
-        """Open column dialog to pick Free / Soccer-Kiki / pose presets."""
-        answer = show_input_dialog(skeleton_catalog.format_template_dialog_prompt(), "0")
-        return skeleton_catalog.resolve_dialog_choice(answer)
+        """Open column dialog to pick Free / Soccer-Kiki / FreeKiki / pose presets."""
+        return skeleton_catalog.resolve_dialog_choice(
+            show_input_dialog(skeleton_catalog.format_template_dialog_prompt(), "0")
+        )
 
     def _cycle_template_mode() -> str | None:
         """Open the Tpl picker dialog and apply. Returns chosen id, or None if cancelled."""
+        nonlocal save_message_text, showing_save_message, save_message_timer
         chosen = _ask_template_mode()
         if chosen is None:
             return None
-        _apply_template_mode(chosen)
+        try:
+            _apply_template_mode(chosen)
+        except ValueError as exc:
+            save_message_text = str(exc)
+            showing_save_message = True
+            save_message_timer = 180
+            return "error"
         return chosen
 
     def draw_controls():
@@ -6911,14 +7034,20 @@ def play_video_with_controls(
         nonlocal one_line_mode
         if not isinstance(coordinates, dict):
             coordinates = {i: [] for i in range(total_frames)}
+        next_points, next_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
+        n = max(1, len(next_points) if next_points else 48)
+        if any(
+            any(p is not None and p != (None, None) for p in row[n:])
+            for row in coordinates.values()
+        ):
+            raise ValueError(f"Soccer-Kiki template has {n} slots; existing markers would be lost")
         one_line_mode = False
         pitch_guide_fifa_mode = True
-        pitch_guide_points, pitch_guide_source = _load_pitch_guide_points(prefer_fifa_dataset=True)
-        fifa_fixed_keypoints = len(pitch_guide_points) if pitch_guide_points else 48
+        pitch_guide_points, pitch_guide_source = next_points, next_source
+        fifa_fixed_keypoints = n
         fifa_start_keypoint = 0
         fifa_index_base = 0
         current_label = "football_pitch"
-        n = max(1, int(fifa_fixed_keypoints))
         new_coords: dict[int, list[tuple[Any, Any]]] = {}
         for i in range(total_frames):
             old = list(coordinates.get(i, []))
@@ -9228,6 +9357,11 @@ def play_video_with_controls(
         sibling JSON project file with the raw markers (for later re-editing).
         """
         nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+        if freekiki_session is not None:
+            save_message_text = "FreeKiki exports only human reviewed frames (F9)"
+            showing_save_message = True
+            save_message_timer = 120
+            return False
 
         # Guard against the most common mistake: exporting a POSE dataset after
         # loading SAM3 bbox tracks and converting them to markers. Pose makes a
@@ -9607,6 +9741,11 @@ def play_video_with_controls(
     def save_split_dataset_with_all_labels():
         """Export split PNG dataset (pose or detect) and build all_labels view."""
         nonlocal save_message_text, showing_save_message, save_message_timer, current_dataset_dir
+        if freekiki_session is not None:
+            save_message_text = "FreeKiki exports only human reviewed frames (F9)"
+            showing_save_message = True
+            save_message_timer = 120
+            return
         task, task_label = _choose_ml_export_task()
         if task is None:
             save_message_text = task_label
@@ -10884,6 +11023,105 @@ def play_video_with_controls(
     # Session-open restore checkpoint (refreshed after successful Save).
     _refresh_restore_snapshot()
 
+    def _review_sync(fi: int) -> None:
+        if (
+            freekiki_session is None
+            or not isinstance(coordinates, dict)
+            or not 0 <= fi < total_frames
+        ):
+            return
+        pts = coordinates.get(fi, [])
+        if (
+            str(fi) not in freekiki_session["frames"]
+            and not any(p is not None and p != (None, None) for p in pts)
+            and not deleted_positions.get(fi)
+        ):
+            return
+        row = freekiki_api.review_frame(freekiki_session, fi)
+        if len(pts) > 49 and any(p != (None, None) for p in pts[49:]):
+            raise ValueError("FreeKiki frame has markers beyond slot 48")
+        for i in range(49):
+            point = pts[i] if i < len(pts) else None
+            if i in deleted_positions.get(fi, set()):
+                point = None
+            point = None if point is None or point[0] is None or point[1] is None else list(point)
+            if point != row["points"][i]:
+                freekiki_api.edit_review_point(freekiki_session, fi, i, point)
+        row["hidden"] = sorted(deleted_positions.get(fi, set()))
+
+    def _review_action(action: str) -> str:
+        if freekiki_session is None or not isinstance(coordinates, dict):
+            return "FreeKiki session is not active"
+        _review_sync(frame_count)
+        if action == "predict":
+            ws = freekiki_options.get("workspace") if freekiki_options else None
+            if not ws:
+                return "Predict requires --freekiki-workspace"
+            model = freekiki_api.resolve_model(Path(ws), "active")
+            settings = freekiki_api.load_settings(Path(ws))["detect"]
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_count)
+            ok, source = cap.read()
+            if not ok:
+                raise ValueError(f"Could not read frame {frame_count}")
+            # YOLO or heatmap checkpoint, same (box conf, xy, kp conf) contract.
+            predictor = freekiki_api.load_predictor(model, imgsz=int(settings["imgsz"]))
+            box, xy, kc = predictor.predict(source)
+            freekiki_api.apply_review_prediction(
+                freekiki_session,
+                frame_count,
+                xy,
+                kc,
+                freekiki_api.file_sha256(model),
+                kp_conf=float(settings["kp_conf"]),
+                box_conf=box,
+            )
+            row = freekiki_api.review_frame(freekiki_session, frame_count)
+            coordinates[frame_count] = [
+                tuple(p) if p is not None else (None, None) for p in row["points"]
+            ]
+            deleted_positions[frame_count].clear()
+            return f"Prediction draft: frame {frame_count}"
+        if action == "review":
+            freekiki_api.mark_reviewed(freekiki_session, frame_count)
+            freekiki_api.save_review_session(freekiki_session)
+            return f"Human reviewed: frame {frame_count}"
+        if action == "save":
+            path = freekiki_api.save_review_session(freekiki_session)
+            return f"Review session saved: {path}"
+        if action == "export":
+            root = freekiki_api.export_reviewed_session(freekiki_session)
+            return f"Reviewed frames exported: {root}"
+        raise ValueError(action)
+
+    def _review_point_status(row: dict | None, index: int) -> str:
+        if row is None:
+            return "absent"
+        if index in row.get("hidden", []):
+            return "hidden"
+        source = row["point_sources"][index]
+        if source in ("predicted", "manual") and row["state"] in ("HUMAN_REVIEWED", "EXPORTED"):
+            return "accepted"
+        return source
+
+    if (
+        freekiki_session is not None
+        and freekiki_options is not None
+        and freekiki_options.get("predictions")
+    ):
+        freekiki_api.load_raw_review_predictions(
+            freekiki_session,
+            freekiki_options["predictions"],
+            kp_conf=float(
+                freekiki_api.load_settings(Path(freekiki_options["workspace"]))["detect"]["kp_conf"]
+            )
+            if freekiki_options.get("workspace")
+            else 0.5,
+        )
+        for frame_str, row in freekiki_session["frames"].items():
+            fi = int(frame_str)
+            coordinates[fi] = [tuple(p) if p is not None else (None, None) for p in row["points"]]
+        freekiki_api.save_review_session(freekiki_session)
+
     last_valid_frame = None
     slow_mo_accumulator = 0.0
     hover_pixel_xy: tuple[float, float] | None = None
@@ -11384,7 +11622,22 @@ def play_video_with_controls(
                 # Inactive markers stay r=3; active slot uses a tighter core so the
                 # click target (and image under it) remains readable.
                 _core_r = 2 if i == selected_marker_idx else 3
-                pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), _core_r)
+                _current_review = (
+                    freekiki_session["frames"].get(str(frame_count))
+                    if freekiki_session is not None
+                    else None
+                )
+                _predicted = (
+                    _current_review is not None
+                    and i < 49
+                    and _current_review["point_sources"][i] == "predicted"
+                )
+                if _predicted:
+                    pygame.draw.rect(
+                        screen, (255, 210, 40), pygame.Rect(screen_x - 4, screen_y - 4, 8, 8), 2
+                    )
+                else:
+                    pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), _core_r)
                 if template_mode != "free":
                     display_idx = int(fifa_start_keypoint) + i + int(fifa_index_base)
                 else:
@@ -11624,7 +11877,7 @@ def play_video_with_controls(
             _reference_surface = None
             _rw = _rh = 0
             if pitch_guide_show_reference:
-                if template_mode == "fifa" and pitch_guide_points:
+                if template_mode in ("fifa", "freekiki") and pitch_guide_points:
                     if pitch_guide_fifa_mode:
                         _reference_surface = _pitch_guide_reference_surface_fifa(_ov)
                     else:
@@ -11646,7 +11899,7 @@ def play_video_with_controls(
             _panel.set_alpha(142)
             _panel.fill((20, 55, 20))
 
-            if template_mode == "fifa" and pitch_guide_points:
+            if template_mode in ("fifa", "freekiki") and pitch_guide_points:
                 _total_pts = len(pitch_guide_points)
                 _ov = selected_marker_idx if 0 <= selected_marker_idx < _total_pts else 0
                 _pt = pitch_guide_points[_ov]
@@ -11677,6 +11930,49 @@ def play_video_with_controls(
             if _reference_surface is not None and _rw > 0:
                 screen.blit(_reference_surface, (window_width - _rw - 10, 10))
 
+        freekiki_buttons = {}
+        if freekiki_session is not None:
+            review = freekiki_session["frames"].get(str(frame_count))
+            panel = pygame.Rect(10, max(0, window_height - 86), min(window_width - 20, 530), 80)
+            pygame.draw.rect(screen, (22, 34, 42), panel)
+            pygame.draw.rect(screen, (220, 220, 220), panel, 1)
+            point_i = max(0, min(48, selected_marker_idx))
+            source = _review_point_status(review, point_i)
+            state_text = (
+                f"Kiki49 frame {frame_count} [{review['state'] if review else 'UNLABELED'}]  "
+                f"{point_i:02d} {freekiki_session['names'][point_i]}: {source}"
+            )
+            label = pygame.font.SysFont("verdana", 12).render(
+                state_text[:78], True, (255, 255, 255)
+            )
+            screen.blit(label, (panel.x + 7, panel.y + 6))
+            list_y = max(4, panel.y - 160)
+            list_rect = pygame.Rect(10, list_y, min(window_width - 20, 360), 154)
+            pygame.draw.rect(screen, (22, 34, 42), list_rect)
+            pygame.draw.rect(screen, (180, 180, 180), list_rect, 1)
+            first = max(0, min(42, point_i - 3))
+            small = pygame.font.SysFont("verdana", 11)
+            for index in range(first, first + 7):
+                status = _review_point_status(review, index)
+                line = f"{index:02d} {freekiki_session['names'][index]} — {status}"
+                color = (255, 230, 120) if index == point_i else (235, 235, 235)
+                screen.blit(
+                    small.render(line[:52], True, color),
+                    (list_rect.x + 7, list_rect.y + 5 + (index - first) * 20),
+                )
+            for n, (action, caption) in enumerate(
+                (
+                    ("predict", "Predict Kiki49"),
+                    ("review", "Mark Reviewed"),
+                    ("save", "Save Session"),
+                    ("export", "Export Reviewed"),
+                )
+            ):
+                rect = pygame.Rect(panel.x + 6 + n * 129, panel.y + 34, 124, 32)
+                freekiki_buttons[action] = rect
+                pygame.draw.rect(screen, (50, 95, 115), rect)
+                txt = pygame.font.SysFont("verdana", 11).render(caption, True, (255, 255, 255))
+                screen.blit(txt, txt.get_rect(center=rect.center))
         pygame.display.flip()
 
         # Auto-marking logic - mark points automatically during playback
@@ -11703,6 +11999,7 @@ def play_video_with_controls(
                     if selected_marker_idx in deleted_positions[frame_count]:
                         deleted_positions[frame_count].remove(selected_marker_idx)
 
+        _review_before_events = frame_count
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -11718,7 +12015,56 @@ def play_video_with_controls(
                     pygame.display.set_caption(GETPIXELVIDEO_WINDOW_TITLE)
 
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
+                if freekiki_session is not None and event.key in (
+                    pygame.K_F2,
+                    pygame.K_F3,
+                    pygame.K_F4,
+                    pygame.K_F9,
+                ):
+                    action = {
+                        pygame.K_F2: "predict",
+                        pygame.K_F3: "review",
+                        pygame.K_F4: "save",
+                        pygame.K_F9: "export",
+                    }[event.key]
+                    try:
+                        save_message_text = _review_action(action)
+                    except (OSError, ValueError, RuntimeError) as exc:
+                        save_message_text = f"FreeKiki: {exc}"
+                    showing_save_message = True
+                    save_message_timer = 180
+                elif (
+                    freekiki_session is not None
+                    and event.key == pygame.K_f
+                    and (pygame.key.get_mods() & pygame.KMOD_CTRL)
+                ):
+                    answer = show_input_dialog("Go to frame index (0-based):", str(frame_count))
+                    if answer and answer.isdecimal() and int(answer) < total_frames:
+                        frame_count = int(answer)
+                        paused = True
+                elif freekiki_session is not None and event.key in (
+                    pygame.K_PAGEUP,
+                    pygame.K_PAGEDOWN,
+                ):
+                    pending = sorted(
+                        int(f)
+                        for f, row in freekiki_session["frames"].items()
+                        if row["state"] in ("AI_DRAFT", "DRAFT_MANUAL")
+                    )
+                    if pending:
+                        if event.key == pygame.K_PAGEDOWN:
+                            frame_count = next((f for f in pending if f > frame_count), pending[0])
+                        else:
+                            frame_count = next(
+                                (f for f in reversed(pending) if f < frame_count), pending[-1]
+                            )
+                        paused = True
+                elif event.key == pygame.K_ESCAPE:
+                    if freekiki_session is not None:
+                        _review_sync(frame_count)
+                        freekiki_api.save_review_session(freekiki_session)
+                        running = False
+                        continue
                     if labeling_mode and bboxes:
                         # Export labeling dataset
                         dataset_dir, message = export_labeling_dataset(
@@ -12175,7 +12521,9 @@ def play_video_with_controls(
                         save_message_timer = 90
                     else:
                         chosen = _cycle_template_mode()
-                        if chosen is None:
+                        if chosen == "error":
+                            pass
+                        elif chosen is None:
                             save_message_text = "Template: cancelled"
                         else:
                             _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
@@ -12187,7 +12535,7 @@ def play_video_with_controls(
                                 _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
                                 save_message_text = f"Template: {_tpl} — fixed slots N={_n}"
                         showing_save_message = True
-                        save_message_timer = 45
+                        save_message_timer = 180 if chosen == "error" else 45
                 elif event.key == pygame.K_TAB:
                     if marker_selection_locked:
                         save_message_text = (
@@ -12636,6 +12984,21 @@ def play_video_with_controls(
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 # Toolbar / control panel: primary (left) button only — ignore
+                if (
+                    freekiki_session is not None
+                    and event.button == 1
+                    and any(rect.collidepoint(x, y) for rect in freekiki_buttons.values())
+                ):
+                    action = next(
+                        name for name, rect in freekiki_buttons.items() if rect.collidepoint(x, y)
+                    )
+                    try:
+                        save_message_text = _review_action(action)
+                    except (OSError, ValueError, RuntimeError) as exc:
+                        save_message_text = f"FreeKiki: {exc}"
+                    showing_save_message = True
+                    save_message_timer = 180
+                    continue
                 # middle, right, and extra buttons so they cannot fire UI actions.
                 if y >= window_height and event.button != 1:
                     pass
@@ -12660,7 +13023,9 @@ def play_video_with_controls(
                             save_message_timer = 90
                         else:
                             chosen = _cycle_template_mode()
-                            if chosen is None:
+                            if chosen == "error":
+                                pass
+                            elif chosen is None:
                                 save_message_text = "Template: cancelled"
                             else:
                                 _tpl = _TEMPLATE_LABELS.get(template_mode, template_mode)
@@ -12674,7 +13039,7 @@ def play_video_with_controls(
                                     _n = int(fifa_fixed_keypoints) if fifa_fixed_keypoints else 0
                                     save_message_text = f"Template: {_tpl} — fixed slots N={_n}"
                             showing_save_message = True
-                            save_message_timer = 45
+                            save_message_timer = 180 if chosen == "error" else 45
                     elif marker_mode_button_rect.collidepoint(x, rel_y):
                         if labeling_mode:
                             save_message_text = (
@@ -12704,7 +13069,14 @@ def play_video_with_controls(
                     elif help_button_rect.collidepoint(x, rel_y):
                         show_help_dialog()
                     elif save_button_rect.collidepoint(x, rel_y):
-                        if labeling_mode and bboxes:
+                        if freekiki_session is not None:
+                            try:
+                                save_message_text = _review_action("save")
+                            except (OSError, ValueError, RuntimeError) as exc:
+                                save_message_text = f"FreeKiki: {exc}"
+                            showing_save_message = True
+                            save_message_timer = 90
+                        elif labeling_mode and bboxes:
                             # New Unified Save Logic
                             save_labeling_project()
                             _refresh_restore_snapshot()
@@ -13727,6 +14099,8 @@ def play_video_with_controls(
                 save_message_timer = 30
 
         # Hold-to-repeat arrow navigation (paused only)
+        if freekiki_session is not None:
+            _review_sync(_review_before_events)
         if paused and _nav_hold_key is not None:
             pressed = pygame.key.get_pressed()
             if not pressed[_nav_hold_key]:
@@ -13762,12 +14136,17 @@ def play_video_with_controls(
             clock.tick(fps)
 
     if switch_to_video:
+        if freekiki_session is not None:
+            freekiki_api.save_review_session(freekiki_session)
         cap.release()
         # Do not pygame.quit() so run_getpixelvideo can reopen with new video
         return ("switch_video", switch_to_video, current_dataset_dir, labeling_mode)
 
     cap.release()
     pygame.quit()
+
+    if freekiki_session is not None:
+        freekiki_api.save_review_session(freekiki_session)
 
     if saved:
         print("Coordinates were saved.")
@@ -16127,6 +16506,11 @@ def export_pose_dataset(
     """
     import random
 
+    try:
+        from .freekiki import write_pose_pair
+    except ImportError:
+        from freekiki import write_pose_pair  # ty: ignore[unresolved-import]
+
     image_ext = str(image_format or "jpg").lower().lstrip(".")
     if image_ext != "png":
         image_ext = "jpg"
@@ -16398,12 +16782,9 @@ def export_pose_dataset(
             img_dir, lbl_dir = _split_paths(dataset_dir, split_name, layout_to_use)
             img_filename = f"{file_prefix}frame_{frame_num:06d}.{image_ext}"
             img_path = os.path.join(img_dir, img_filename)
-            cv2.imwrite(img_path, frame)
-
             txt_filename = f"{file_prefix}frame_{frame_num:06d}.txt"
             txt_path = os.path.join(lbl_dir, txt_filename)
-            with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(" ".join(parts) + "\n")
+            write_pose_pair(Path(img_path), Path(txt_path), frame, " ".join(parts) + "\n")
             written += 1
 
     cap.release()
@@ -16746,6 +17127,7 @@ def run_getpixelvideo(
     initial_source_type=None,
     initial_fifa_mode: bool = False,
     initial_start_frame: int = 0,
+    freekiki_options: dict | None = None,
 ):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
@@ -16819,9 +17201,13 @@ def run_getpixelvideo(
             metadata=metadata,
             initial_fifa_mode=initial_fifa_mode,
             initial_frame=start_frame,
+            freekiki_options=freekiki_options,
         )
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
+            if freekiki_options is not None:
+                freekiki_options["session"] = None
+                freekiki_options["predictions"] = None
             video_path = result[1]
             initial_dataset_dir = result[2]
             initial_labeling_mode = result[3] if len(result) > 3 else False
@@ -16829,7 +17215,7 @@ def run_getpixelvideo(
             labels = []
             # Re-open media for next iteration (path may be video, single_png, or png_sequence dir)
             frame_source.release()
-            media_path, source_type, start_frame = get_media_path()
+            media_path, source_type, start_frame = classify_media_path(video_path)
             if not media_path or not source_type:
                 break
             video_path = media_path
@@ -16864,6 +17250,11 @@ if __name__ == "__main__":
             "  --sequence DIR      Folder of PNG frames\n"
             "  --dataset DIR       YOLO / multi-video dataset root\n"
             "  --fifa / --fifa-dataset [DIR]  FIFA labeling mode\n"
+            "  --freekiki  Manual Kiki49 review session\n"
+            "  --freekiki-workspace WS  Save under WS/incoming; enable active-model prediction\n"
+            "  --freekiki-session SESSION.json  Reopen reviewed markers and states\n"
+            "  --freekiki-predictions DIR  Load detect's field_kps_raw.csv\n"
+            "  --freekiki-videos DIR  Review videos in a folder\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
             "Run without arguments to open one file picker (type auto-detected).\n"
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
@@ -16899,6 +17290,29 @@ if __name__ == "__main__":
     initial_source_type = None
     initial_start_frame = 0
     initial_fifa_mode = False
+    freekiki_options = None
+    if any(
+        arg in sys.argv
+        for arg in (
+            "--freekiki",
+            "--freekiki-workspace",
+            "--freekiki-session",
+            "--freekiki-predictions",
+            "--freekiki-videos",
+        )
+    ):
+        freekiki_options = {}
+        for flag, key in (
+            ("--freekiki-workspace", "workspace"),
+            ("--freekiki-session", "session"),
+            ("--freekiki-predictions", "predictions"),
+        ):
+            if flag in sys.argv:
+                pos = sys.argv.index(flag)
+                if pos + 1 >= len(sys.argv) or sys.argv[pos + 1].startswith("-"):
+                    raise SystemExit(f"{flag} requires a path")
+                freekiki_options[key] = sys.argv[pos + 1]
+        initial_fifa_mode = True
 
     if "--dataset" in sys.argv:
         idx = sys.argv.index("--dataset")
@@ -16969,10 +17383,45 @@ if __name__ == "__main__":
             else:
                 print(f"Error: {opt} path is not usable media: {file_path}")
 
+    if (
+        freekiki_options is not None
+        and freekiki_options.get("session")
+        and initial_media_path is None
+    ):
+        try:
+            from . import freekiki as _freekiki
+        except ImportError:
+            import freekiki as _freekiki  # ty: ignore[unresolved-import]
+        session = _freekiki.load_review_session(freekiki_options["session"])
+        initial_media_path = session["video"]
+        initial_source_type = "video"
+    if "--freekiki-videos" in sys.argv:
+        assert freekiki_options is not None
+        pos = sys.argv.index("--freekiki-videos")
+        if pos + 1 >= len(sys.argv):
+            raise SystemExit("--freekiki-videos requires a directory")
+        directory = Path(sys.argv[pos + 1])
+        videos = sorted(
+            p
+            for p in directory.iterdir()
+            if p.suffix.lower() in (".mp4", ".avi", ".mkv", ".mov", ".webm")
+        )
+        if not videos:
+            raise SystemExit(f"No videos in {directory}")
+        for video in videos:
+            run_getpixelvideo(
+                initial_media_path=str(video),
+                initial_source_type="video",
+                initial_fifa_mode=True,
+                freekiki_options=dict(freekiki_options),
+            )
+        raise SystemExit(0)
+
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,
         initial_media_path=initial_media_path,
         initial_source_type=initial_source_type,
         initial_fifa_mode=initial_fifa_mode,
         initial_start_frame=initial_start_frame,
+        freekiki_options=freekiki_options,
     )

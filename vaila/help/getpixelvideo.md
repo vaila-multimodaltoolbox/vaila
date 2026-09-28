@@ -4,13 +4,35 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.5
+**Version:** 0.4.6
 **Date:** 22 July 2025  
-**Updated:** 23 September 2026
+**Updated:** 28 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
 ## Key Features
+
+### FreeKiki Kiki49 human review
+
+Open a video with `--freekiki` for manual review, or add `--freekiki-workspace WS`
+to save sessions under `WS/incoming/` and enable prediction from the active
+FreeKiki model. `--freekiki-session SESSION.json` reopens markers and review
+states. `--freekiki-predictions DIR` loads `field_kps_raw.csv` from `freekiki
+detect` (one output folder, or a whole `processed_freekiki_batch_*` folder: each
+video takes its newest matching output); `--freekiki-videos DIR` visits videos in sorted order. `--dir` still
+means a PNG sequence.
+
+The **FreeKiki Kiki49** template has exactly 49 slots (`00` through `48`),
+named by `soccerfield_kiki.csv`. Turn on **INSERT** (`Ctrl+I`) to click or drag
+points. Predicted points have square outlines; the context panel shows the
+selected point's name and textual status. Use `Tab` and `Ctrl+G` to choose a
+point, `Ctrl+F` to jump to a zero-based frame such as `17608`, and Page Up/Down
+to move among draft frames. F2 **Predict Kiki49**, F3 **Mark Reviewed**, F4
+**Save Session**, and F9 **Export Reviewed** are exclusive to this mode. A
+correction to a reviewed frame makes it a draft until F3 confirms all 49
+visibilities again. Escape saves the session. The export contains only reviewed
+frames in `images/`, `labels/`, `reviewed_frames.csv`, and `human_vs_ai.csv`;
+it does not create train/val/test splits. See the FreeKiki help page for ingest.
 
 - **VISUAL / INSERT editor modes (v0.4.2):** Opens in **VISUAL** (safe browse — no marker edits). **Ctrl+I** or the **VISUAL/INSERT** toolbar button switches to **INSERT** for normal marking. **Ctrl+Z** undoes discrete marker edits (INSERT). **Restore** reverts to session open or the last successful **Save**; discarded when you quit.
 

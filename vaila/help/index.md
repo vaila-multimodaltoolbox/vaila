@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 137 | **Categories:** 7 | **Generated on:** 28/09/2026 (v0.4.5)
+**Documented topics:** 137 | **Categories:** 7 | **Generated on:** 28/09/2026 (v0.4.6)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -28,7 +28,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](emg_labiocom.html) · [Markdown](emg_labiocom.md)
 - **forceplate_analysis** — This script serves as the central control interface for the VAILA (Virtual Analysis
   - [HTML](forceplate_analysis.html) · [Markdown](forceplate_analysis.md)
-- **freekiki** — FreeKiki trains, retrains and runs a YOLO-pose network that finds the
+- **freekiki** — GUI Interface: Yes (Tkinter) — Frame B → Soccer Tools → FreeKiki (49 field KPs)
   - [HTML](freekiki.html) · [Markdown](freekiki.md)
 - **gnss_analysis** — Este script lê um file GPX contendo informações de latitude, longitude, elevação, tempo, velocidade (speed) e cadência (cad).
   - [HTML](gnss_analysis.html) · [Markdown](gnss_analysis.md)

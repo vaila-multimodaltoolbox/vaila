@@ -4,7 +4,7 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
-- **Version:** 0.4.5
+- **Version:** 0.4.6
 - **Updated:** 28 September 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
@@ -14,6 +14,26 @@
 ---
 
 ## What it does (in one paragraph)
+
+### Human reviewed video annotations
+
+```bash
+uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS
+uv run --no-sync vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION_ID --match-id MATCH_ID
+uv run --no-sync vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION_ID --match-id MATCH_ID --commit
+uv run --no-sync vaila/freekiki.py check -w WS
+uv run --no-sync vaila/freekiki.py audit -w WS
+uv run --no-sync vaila/freekiki.py train -w WS --base active
+```
+
+The first ingest command previews and validates every PNG/TXT pair. `--commit`
+copies only human reviewed frames to `train` and updates `manifest.csv` last.
+Use one `--match-id` for a match or sequence shared across cameras and cuts.
+Groups already in val/test and near duplicate frames against those splits are
+rejected for manual resolution. Val/test and `data.yaml` stay unchanged. A
+repeated commit of an unchanged session is safe. `human_vs_ai.csv` describes
+training annotations and is not an independent evaluation; continue to use
+`evaluate --split val` and `compare` for model selection.
 
 **FreeKiki** teaches a YOLO-pose network to find the **49 soccer-field
 keypoints** of the *kiki* template (`vaila/models/soccerfield_kiki.csv`,
@@ -44,6 +64,15 @@ Every GUI action prints the equivalent `>>` command in the terminal, so any
 step can be repeated from the command line. The full mapping is in
 *GUI button ↔ CLI command* below.
 
+To run detection with an existing model, use **section 5 alone**: choose the
+FreeKiki **Workspace** folder containing `freekiki.toml` and
+`models/active.pt`, choose a video or video folder, then press **Detect**.
+The Workspace field in sections 1 and 5 is shared. The model file by itself
+does not replace the workspace because detection also reads its settings.
+Browsing to a `.pt` inside a workspace fills that Workspace field automatically.
+**Init workspace**, dataset import, and training are only needed when creating
+a new workspace/model.
+
 ## GUI button ↔ CLI command
 
 Open the GUI with `uv run vaila.py` → **Frame B → Soccer Tools → FreeKiki**, or
@@ -56,6 +85,7 @@ directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder.
 | 2. Dataset → **Check dataset** | `uv run vaila/freekiki.py check -w WS` |
 | 3. Train → **Smoke preset** then **Train** | `uv run vaila/freekiki.py train -w WS --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1` |
 | 3. Train → **Full preset** then **Train** | `uv run vaila/freekiki.py train -w WS --base yolo26m-pose.pt --epochs 150 --imgsz 1280 --batch -1` |
+| 3. Train → **Heatmap preset** (Backend `heatmap`) then **Train** | `uv run vaila/freekiki.py train -w WS --backend heatmap --epochs 60 --imgsz 1024 --batch 16` |
 | 3. Train → Base model `active` then **Train** (retrain) | `uv run vaila/freekiki.py train -w WS --base active --epochs 60` |
 | 3. Train → **Runs status** | `uv run vaila/freekiki.py status -w WS` |
 | 3. Train → **Resume interrupted** | `uv run vaila/freekiki.py resume -w WS` (add `--name RUN` to choose the run) |
@@ -66,8 +96,8 @@ directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder.
 | 4. Evaluate → **Sweep thresholds (val)** | `uv run vaila/freekiki.py sweep -w WS --eval-dir outputs/processed_freekiki_eval_val_<ts>` |
 | 4. Evaluate → **Compare with active** | `uv run vaila/freekiki.py compare -w WS --baseline active --candidate runs/RUN/weights/best.pt` |
 | 4. Evaluate → **Audit dataset** | `uv run vaila/freekiki.py audit -w WS` |
-| 5. Detect → Video + **Detect** | `uv run vaila/freekiki.py detect -w WS --video match.mp4` (add `--fill-gaps 3` to also write the interpolated CSV) |
-| 5. Detect → **Folder** + **Detect** | `uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos` |
+| 5. Detect → Workspace + Video + **Detect** | `uv run vaila/freekiki.py detect -w WS --video match.mp4` (add `--fill-gaps 3` to also write the interpolated CSV) |
+| 5. Detect → Workspace + **Folder** + **Detect** | `uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos` |
 | **Stop** | `Ctrl+C` in the terminal |
 | **Help** | opens this page |
 
@@ -331,6 +361,8 @@ uv run vaila/freekiki.py train    -w /path/FreeKiki --manifest v001 --base activ
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1   # smoke
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26m-pose.pt --epochs 150 --imgsz 1280                           # full
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base active --epochs 60                                                  # retrain
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 1 --fraction 0.01                              # heatmap pilot
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 60 --imgsz 1024 --batch 16                     # heatmap full
 uv run vaila/freekiki.py status   -w /path/FreeKiki                        # runs, which can be resumed
 uv run vaila/freekiki.py resume   -w /path/FreeKiki [--name RUN]           # continue after stop / power loss
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split val            # choose / compare on val
@@ -346,7 +378,8 @@ uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_vide
 On NVIDIA/CUDA machines use `uv run --no-sync`.
 
 Useful options: `manifest --rfs-t --cap --seed --exclude FILE --name`;
-`train --manifest v001 --batch --device 0 --name --patience --seed --workers`;
+`train --manifest v001 --batch --device 0 --name --patience --seed --workers
+--backend {yolo,heatmap} --backbone resnet50 --no-pretrained --lr`;
 `resume --name --device --batch`;
 `evaluate --model PATH.pt --split val --det-conf --kp-conf --match-px --pck 5,10,25 --max-images`;
 `compare --promote` (copies to `active.pt` only if the gate passes);
@@ -363,6 +396,44 @@ Official Ultralytics `yolo26{n,s,m,l,x}-pose.pt` (cached in `vaila/models/`
 or downloaded by Ultralytics). Any `.pt` pose model can be used as base,
 e.g. a public 32-keypoint pitch model; only its backbone/neck transfer
 because the 49-keypoint head is re-initialised.
+
+## Heatmap backend (vailá-native, no company-owned framework)
+
+`train --backend heatmap` trains a second kind of network on the **same
+labels** (`datasets/kiki49`, no rebuild): a torchvision ResNet trunk
+(default `resnet50`, ImageNet weights from the local torch cache — nothing is
+downloaded) + 3 deconvolutions + one 49-channel heatmap head (stride 4,
+Gaussian targets σ = 2). The pitch is one instance per frame, so no box head
+is needed. Code: `vaila/freekiki_heatmap.py`, only PyTorch/torchvision
+(BSD-3-Clause) — the model and its training loop are part of *vailá*
+(AGPL-3.0) and do not depend on Ultralytics or its enterprise license.
+
+| Item | Value |
+|---|---|
+| Input | 16:9 letterbox, `--imgsz` = canvas width (1024 → 1024×576) |
+| Augmentation | scale ±20 %, rotation ±5°, shift ±5 %, h-flip with `flip_idx`, brightness/contrast |
+| Loss / optimizer | MSE on heatmaps (v=0 points have an empty target), AdamW + warmup + cosine, bf16 on CUDA |
+| Decode | arg-max + log-parabola sub-cell refinement, then the inverse letterbox to frame pixels; conf = heatmap peak (0..1) |
+| Per epoch | `results.csv` (loss, val recall/precision/median error, `val/pck10_all` on ≤ 500 val images), `weights/last.pt` (resumable), `weights/best.pt` |
+| `best.pt` | epoch with the highest val PCK10 **with misses** (not mAP) |
+| Resume | `resume -w WS [--name RUN]`, same as YOLO (same train subset for `--fraction`) |
+| `--base` | only a heatmap checkpoint (continued fine-tune); a `yolo*.pt` base is ignored |
+
+**Never promoted automatically.** A heatmap run is registered
+(`backend = heatmap` in `models/registry.csv`) but `active.pt` is not
+touched, even in a new workspace. Compare it with the active YOLO model on
+**val** — the FreeKiki keypoint tables (recall, precision, PCK with misses,
+median error, critical points) are computed the same way for both
+backends; pose mAP exists only for YOLO:
+
+```bash
+uv run --no-sync vaila/freekiki.py compare -w WS --baseline active \
+    --candidate models/kiki49_<RUN>.pt              # add --promote only after reading it
+```
+
+`evaluate`, `detect`, `compare` and the getpixelvideo **Predict** button load
+either kind of `.pt` (the backend is read from the checkpoint). A heatmap
+model has a fixed input size, so `--imgsz` is ignored for it.
 
 ## See also
 

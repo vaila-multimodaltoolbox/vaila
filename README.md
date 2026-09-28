@@ -1,8 +1,10 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.5 (see `vaila.py`). **Package version:** 0.4.5 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.6 (see `vaila.py`). **Package version:** 0.4.6 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
 **Last updated:** 2026-09-28
+
+FreeKiki Kiki49 review: `uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS` opens a 49-point review session. After **Mark Reviewed** and **Export Reviewed**, preview with `uv run --no-sync vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH_ID`; add `--commit` to append validated frames to train. See [GetPixelVideo help](vaila/help/getpixelvideo.md) and [FreeKiki help](vaila/help/freekiki.md).
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
 momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
@@ -190,7 +192,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 25.Sep.2026 v0.4.5 (Python 3.12.14)
+vailá - 28.Sep.2026 v0.4.6 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -968,7 +970,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). As of milestone **`0.4.5`**, the checked-in package line and the **GUI/CLI banner** in `vaila.py` are aligned at **`0.4.5`**. Between milestones the banner may still be bumped on every script change per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). As of milestone **`0.4.6`**, the checked-in package line and the **GUI/CLI banner** in `vaila.py` are aligned at **`0.4.6`**. Between milestones the banner may still be bumped on every script change per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

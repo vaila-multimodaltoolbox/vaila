@@ -1,7 +1,7 @@
 """Tests for vaila/freekiki.py (workspace, dataset, registry, CSV rows, quality metrics).
 
 Update Date: 28 September 2026
-Version: 0.4.5
+Version: 0.4.6
 """
 
 from __future__ import annotations
@@ -63,6 +63,31 @@ def test_init_workspace_layout_and_settings(tmp_path: Path) -> None:
     fk.init_workspace(ws)  # re-init keeps user settings
     assert fk.load_settings(ws)["train"]["epochs"] == 7
     assert fk.load_settings(ws)["train"]["imgsz"] == 1280
+
+
+def test_detection_checks_workspace_and_active_model_before_creating_output(tmp_path: Path) -> None:
+    video_dir = tmp_path / "videos"
+    video_dir.mkdir()
+    (video_dir / "match.mp4").touch()
+    output_dir = tmp_path / "results"
+
+    with pytest.raises(FileNotFoundError, match="freekiki.toml"):
+        fk.detect_videos(tmp_path / "not_a_workspace", video_dir, output_dir=output_dir)
+    assert not output_dir.exists()
+
+    ws = fk.init_workspace(tmp_path / "workspace")
+    with pytest.raises(FileNotFoundError, match="No active model"):
+        fk.detect_videos(ws, video_dir, output_dir=output_dir)
+    assert not output_dir.exists()
+
+
+def test_model_picker_can_find_its_workspace(tmp_path: Path) -> None:
+    ws = fk.init_workspace(tmp_path / "workspace")
+    model = ws / "models" / "active.pt"
+    model.touch()
+    assert fk.workspace_for_model_file(model) == ws
+    assert fk.workspace_for_model_file(tmp_path / "missing.pt") is None
+    fk.validate_detection_workspace(ws, "active")
 
 
 def test_import_dataset_copies_and_rewrites_path(tmp_path: Path) -> None:
