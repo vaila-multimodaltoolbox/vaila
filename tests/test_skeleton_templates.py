@@ -1,7 +1,7 @@
 """Tests for skeleton templates and presets in vaila/skeletons and tests/skeleton_templates.
 
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 25 September 2026
+Version: 0.4.5
 """
 
 from __future__ import annotations
@@ -107,6 +107,18 @@ def test_tests_skeleton_templates_presets(filename: str, expected_count: int) ->
 def test_models_skeleton_templates_presets(filename: str, expected_count: int) -> None:
     path = MODELS_SKEL_DIR / filename
     _check_skeleton_json_structure(path, expected_count)
+
+
+@pytest.mark.parametrize("base_dir", [SKEL_DIR, TEMPLATE_DIR, MODELS_SKEL_DIR])
+def test_kiki49_keypoint_names_match_field_csv(base_dir: Path) -> None:
+    """kiki49 skeleton names must follow vaila/models/soccerfield_kiki.csv order."""
+    import csv
+
+    csv_path = REPO_ROOT / "vaila" / "models" / "soccerfield_kiki.csv"
+    with csv_path.open(encoding="utf-8") as f:
+        csv_names = [row["point_name"] for row in csv.DictReader(f)]
+    data = json.loads((base_dir / "soccerfield_kiki49.json").read_text(encoding="utf-8"))
+    assert data["keypoints"] == csv_names
 
 
 @pytest.mark.parametrize(

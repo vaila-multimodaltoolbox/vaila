@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.5 (see `vaila.py`). **Package version:** 0.4.5 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-25
+**Last updated:** 2026-09-28
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
 momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
@@ -190,7 +190,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 23.Sep.2026 v0.4.5 (Python 3.12.14)
+vailá - 25.Sep.2026 v0.4.5 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -239,7 +239,7 @@ B5_r5_c4 - Start Block    B5_r5_c5 - vailá
 B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - tugturn
 B5_r6_c4 - Soccer Tools (coringa: Field KPs AI, Soccer-Field Calib,
             FIFA cams→DLT, FIFA Dataset Builder, VEK ElasticKick,
-            FIFA: merge manual labels, Scout, Pynalty)
+            FIFA: merge manual labels, Scout, Pynalty, FreeKiki)
 B5_r6_c5 - Deadlift
 
 B6_r7_c1 - vailá          B6_r7_c2 - vailá           B6_r7_c3 - Treadmill LC
