@@ -1,6 +1,6 @@
 """Tests for vaila.skeleton_catalog (Tpl: pose presets).
 
-Update Date: 28 September 2026
+Update Date: 30 September 2026
 Version: 0.4.6
 """
 
@@ -99,8 +99,10 @@ def test_dialog_prompt_is_column_layout() -> None:
     assert "type freekiki" not in prompt
     assert any("SAM3+DINOv3" in line for line in lines)
     assert any("Sapiens2 Goliath" in line for line in lines)
-    # One option per line after the header.
-    assert len(lines) == 1 + len(skeleton_catalog.dialog_choices())
+    # FreeKiki Load sits right under FreeKiki (letter L; numbers unchanged).
+    assert lines[4].startswith("L = FreeKiki Load")
+    # One option per line after the header, plus the L line.
+    assert len(lines) == 2 + len(skeleton_catalog.dialog_choices())
 
 
 def test_resolve_dialog_choice_numeric_and_id() -> None:
@@ -110,6 +112,8 @@ def test_resolve_dialog_choice_numeric_and_id() -> None:
     assert skeleton_catalog.resolve_dialog_choice("1") == "fifa"
     assert skeleton_catalog.resolve_dialog_choice("2") == "freekiki"
     assert skeleton_catalog.resolve_dialog_choice("3") == "mediapipe"
+    for answer in ("L", "l", "load"):
+        assert skeleton_catalog.resolve_dialog_choice(answer) == skeleton_catalog.FREEKIKI_LOAD_ID
     assert skeleton_catalog.resolve_dialog_choice("8") == "sam3d70"
     assert skeleton_catalog.resolve_dialog_choice("9") == "sapiens308"
     assert skeleton_catalog.resolve_dialog_choice("sam3d70") == "sam3d70"

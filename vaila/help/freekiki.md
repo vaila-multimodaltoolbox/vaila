@@ -15,7 +15,33 @@
 
 ## What it does (in one paragraph)
 
-### Human reviewed video annotations (labeling for a retrain)
+### Correct and retrain (3 steps)
+
+1. **Detect**, then **Correct in getpixelvideo** (section 5). A folder of videos opens them one after the
+   other.
+   - Or, in getpixelvideo, press **Tpl:** and type **L** (FreeKiki Load), or use the **Load run folder** button
+     of the FreeKiki panel. Open the run or batch folder in the
+     browser and press **Enter** to use it. It finds the original video and opens it in correction mode; for a
+     batch it asks which video. The CLI equivalent is `getpixelvideo.py --freekiki-run DIR`.
+   - The predicted labels appear on the video, already in edit (INSERT) mode.
+2. **Fix** every frame you want to use.
+   - **Right-click** a point to pick it; **left-click** to place it where it belongs.
+   - Missing points: pick them in the list or with the ghost, then left-click. **F10** accepts a ghost.
+   - A point that is inside the picture but not visible: **Del** (this frame) or **Del Range** (that point over
+     many frames). Points outside the picture are ignored.
+   - **F3 Frame OK** when the frame is right. **Next draft (PgDn)** goes to the next frame.
+   - **F9 Save dataset** asks for a folder (default `freekiki_corrections_<video>`) and writes a YOLO-pose
+     dataset there: `images/`, `labels/`, `data.yaml`, `session.json`. Only complete frames are saved; the others
+     stay as drafts and are listed in `incomplete_frames.csv`.
+3. In section 3, **Corrections → Add folder…** (several videos: several folders), then **Train**.
+   - Base `active` gives a fine-tune.
+   - The folders are added to the train split once, with the same leakage and duplicate checks as `ingest`, and
+     then the training starts.
+   - **Match id** is optional. The default is the video name; give clips of one match the same id.
+   - CLI: `train -w WS --base active --add-dataset FOLDER [--add-dataset FOLDER2] [--match-id M]`.
+     Do not combine it with `--manifest`, because a manifest is a fixed list without the new frames.
+
+### Advanced (CLI): label queue, ingest, hard holdout
 
 ```bash
 # 1. detect, then queue the frames worth labelling (one review session per clip)
@@ -162,10 +188,9 @@ directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder.
 | 4. Evaluate → **Audit dataset** | `uv run vaila/freekiki.py audit -w WS` |
 | 5. Detect → Workspace + Video + **Detect** | `uv run vaila/freekiki.py detect -w WS --video match.mp4` (add `--fill-gaps 3` to also write the interpolated CSV) |
 | 5. Detect → Workspace + **Folder** + **Detect** | `uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos` |
-| 6. Label → Detect batch + **Build label queue** | `uv run vaila/freekiki.py queue -w WS --batch /path/processed_freekiki_batch_<ts>` |
-| 6. Label → Session + **Open review** | `uv run vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session WS/incoming/SESSION/session.json` |
-| 6. Label → Match id + Split + **Ingest preview** | `uv run vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION --match-id MATCH --split train` |
-| 6. Label → **Ingest commit** | same with `--commit` (`--split hard` = labelled holdout, never trained on) |
+| 5. Detect → Video + Output dir + **Correct in getpixelvideo** | `uv run vaila/getpixelvideo.py -f VIDEO --freekiki --freekiki-workspace WS --freekiki-predictions OUTPUT_DIR` |
+| 3. Train → **Corrections** folder(s) + **Train** | `uv run vaila/freekiki.py train -w WS --base active --add-dataset FOLDER [--match-id M]` |
+| (CLI only) label queue / ingest / hard holdout | `queue -w WS --batch DIR`, `ingest -w WS --src DIR --match-id M [--split hard] [--commit]` |
 | 4. Evaluate → Split `hard` + **Evaluate model** | `uv run vaila/freekiki.py evaluate -w WS --split hard` |
 | **Stop** | `Ctrl+C` in the terminal |
 | **Help** | opens this page |
@@ -451,9 +476,10 @@ confidence and code) and the overlay MP4 — wrong points are obvious there.
 
 ## Detect outputs
 
-Written to `processed_freekiki_<video>_<timestamp>/` inside the output folder
+Written to `freekiki_predict_<video>_<timestamp>/` inside the output folder
 (default: the video's folder). A folder of videos writes
 `processed_freekiki_batch_<timestamp>/` with one such sub-folder per video.
+Older runs named `processed_freekiki_<video>_<timestamp>/` still open.
 
 | File | Content |
 |---|---|

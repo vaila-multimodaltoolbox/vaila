@@ -36,9 +36,12 @@ Template Marker Mode (toolbar Template / ``Tpl:`` button):
   - **Free** — variable-length markers
   - **Soccer-Kiki** — pitch guide (``soccerfield_kiki.csv`` / dataset keypoints;
     internal mode id ``fifa`` kept for TOML/CLI compatibility)
-  - **FreeKiki** — kiki49 (49 field KPs) human-review session (F2 predict, F3 mark
-    reviewed, F4 save, F9 export, F10 accept ghost, Del hide = "not visible";
-    PageUp/PageDown = queued frames). Ghosts: cyan circle = AI point below kp_conf,
+  - **FreeKiki** — kiki49 (49 field KPs) correction session. **Load** a freekiki
+    detect output (its CSV or folder) to edit its predictions. Right-click picks a
+    point, left-click places it, Del / Del Range = "not visible", F10 accept ghost,
+    F3 frame OK, PgDn next draft, F9 save dataset folder (F2 predict, F4 save
+    session). **Tpl: → L = FreeKiki Load** / ``--freekiki-run DIR``: point at a
+    freekiki detect run or batch folder; the original video opens in correction mode. Ghosts: cyan circle = AI point below kp_conf,
     pink cross = field-homography projection. Only complete frames (every visible
     point labelled or hidden) can be marked reviewed / exported.
   - Pose / hand presets from ``vaila/skeletons/`` via dialog (MediaPipe 33,
@@ -174,6 +177,7 @@ import math
 import os
 import platform
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -266,6 +270,17 @@ VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
 GETPIXELVIDEO_VERSION = "0.4.6"
+# FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
+FREEKIKI_PANEL_ALPHA = 140
+
+
+def blit_translucent(surface, rect, rgb, alpha: int) -> None:
+    """Fill ``rect`` on ``surface`` with a semi-transparent colour (image stays visible)."""
+    box = pygame.Surface(rect.size, pygame.SRCALPHA)
+    box.fill((*rgb, alpha))
+    surface.blit(box, rect.topleft)
+
+
 GETPIXELVIDEO_UPDATE_DATE = "30 September 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
@@ -2374,6 +2389,7 @@ def play_video_with_controls(
 
     # When opening with a dataset (e.g. after F8 switch or --dataset), auto-load project for this video
     switch_to_video = None  # If set, exit and run_getpixelvideo will reopen with this path
+    switch_freekiki_run = None  # FreeKiki Load: detect run to open in correction mode after switch
     auto_load_project_done = False
 
     # Feature: Click & Pass
@@ -5862,6 +5878,11 @@ def play_video_with_controls(
         chosen = _ask_template_mode()
         if chosen is None:
             return None
+        if chosen == skeleton_catalog.FREEKIKI_LOAD_ID:
+            save_message_text = _freekiki_load()
+            showing_save_message = True
+            save_message_timer = 240
+            return "error"  # message already set; callers keep it
         try:
             _apply_template_mode(chosen)
         except ValueError as exc:
@@ -10079,7 +10100,7 @@ def play_video_with_controls(
             showing_save_message = True
             save_message_timer = 60
 
-    def show_file_browser(start_dir, title="Select a file", extensions=None):
+    def show_file_browser(start_dir, title="Select a file", extensions=None, select_dir=False):
         """Pygame-based file browser with mouse navigation, Ctrl+V paste, and scroll.
         Returns selected file path or None on cancel (Escape).
         *extensions*: list of lowercase extensions to highlight, e.g. ['.yaml']
@@ -10334,11 +10355,19 @@ def play_video_with_controls(
                         filter_yaml_only = not filter_yaml_only
                         list_dir(cur_dir)
 
+                    elif select_dir and event.key == pygame.K_RETURN and not input_active:
+                        # Folder mode: Enter uses the folder being shown
+                        result_path = cur_dir
+                        browsing = False
+
                     elif input_active:
                         if event.key == pygame.K_RETURN:
                             # Confirm typed path
                             typed = input_text.strip()
-                            if os.path.isfile(typed):
+                            if select_dir and os.path.isdir(typed):
+                                result_path = os.path.abspath(typed)
+                                browsing = False
+                            elif os.path.isfile(typed):
                                 result_path = typed
                                 browsing = False
                             elif os.path.isdir(typed):
@@ -11086,6 +11115,21 @@ def play_video_with_controls(
             save_message_timer = 60
             return
 
+        # A freekiki detect output (folder or one of its CSVs): correction mode.
+        try:
+            from .freekiki import detect_output_dir
+        except ImportError:
+            from freekiki import detect_output_dir  # ty: ignore[unresolved-import]
+        run_dir = detect_output_dir(input_path)
+        if run_dir is not None:
+            try:
+                save_message_text = _load_freekiki_run(run_dir)
+            except (OSError, ValueError, KeyError) as exc:
+                save_message_text = f"FreeKiki run not loaded: {exc}"
+            showing_save_message = True
+            save_message_timer = 240
+            return
+
         # Check if it's a YOLO dataset directory
         is_yolo, images_dir, labels_dir, classes_file = is_yolo_dataset(input_path)
 
@@ -11373,10 +11417,24 @@ def play_video_with_controls(
             _review_sync(int(fi))
 
     def _review_action(action: str) -> str:
-        nonlocal selected_marker_idx
+        nonlocal selected_marker_idx, frame_count, paused
         if freekiki_session is None or not isinstance(coordinates, dict):
             return "FreeKiki session is not active"
         _review_sync(frame_count)
+        if action == "load":
+            # Same as Tpl -> L: a freekiki run/batch folder opens its video to correct.
+            return _freekiki_load()
+        if action == "next":
+            pending = sorted(
+                int(f)
+                for f, row in freekiki_session["frames"].items()
+                if row["state"] in ("AI_DRAFT", "DRAFT_MANUAL")
+            )
+            if not pending:
+                return "No draft frames left: F9 = save dataset"
+            frame_count = next((f for f in pending if f > frame_count), pending[0])
+            paused = True
+            return f"Draft frame {frame_count} ({len(pending)} drafts left)"
         if action == "accept":
             # F10: take the ghost of the selected point (or the first ghost).
             ghosts = freekiki_api.review_suggestions(freekiki_session, frame_count)["suggestions"]
@@ -11449,15 +11507,16 @@ def play_video_with_controls(
                 )
             except Exception as e:
                 print(f"Warning: could not save coordinates CSV: {e}")
-            export_msg = ""
-            try:
-                root = freekiki_api.export_reviewed_session(freekiki_session)
-                export_msg = f" & dataset -> {root.name}"
-            except Exception as e:
-                export_msg = f" ({e})"
-            return f"Review session saved: {path.name}{export_msg}"
+            return f"Review session saved: {path} (F9 = save dataset)"
         if action == "export":
             _review_sync_all()
+            if not freekiki_session.get("dataset_folder"):
+                video = Path(freekiki_session["video"])
+                default = video.parent / f"freekiki_corrections_{video.stem}"
+                answer = show_input_dialog("Save the corrected dataset in folder:", str(default))
+                if not answer or not answer.strip():
+                    return "Save dataset cancelled"
+                freekiki_api.relocate_review_session(freekiki_session, answer.strip())
             root = freekiki_api.export_reviewed_session(freekiki_session)
             with contextlib.suppress(Exception):
                 save_coordinates(
@@ -11470,8 +11529,132 @@ def play_video_with_controls(
                     coord_format="float",
                     coord_decimals=2,
                 )
-            return f"Reviewed frames exported: {root.name}"
+            done = sum(r["state"] == "EXPORTED" for r in freekiki_session["frames"].values())
+            left = sum(r["state"] == "DRAFT_MANUAL" for r in freekiki_session["frames"].values())
+            return f"Dataset saved: {done} frames ({left} incomplete left as draft) -> {root}"
         raise ValueError(action)
+
+    def _coordinates_from_session() -> None:
+        """Show every session frame (points + hidden) in the marker grid."""
+        assert freekiki_session is not None and isinstance(coordinates, dict)
+        for frame_str, row in freekiki_session["frames"].items():
+            fi = int(frame_str)
+            coordinates[fi] = [tuple(p) if p is not None else (None, None) for p in row["points"]]
+            deleted_positions[fi] = set(row.get("hidden", []))
+
+    def _pick_freekiki_point(vx: float, vy: float, radius_px: float = 15.0) -> int | None:
+        """Nearest labelled point or ghost to a click (within ``radius_px`` on screen)."""
+        assert isinstance(coordinates, dict)
+        candidates = [
+            (i, p)
+            for i, p in enumerate(coordinates.get(frame_count, [])[:49])
+            if p is not None
+            and p[0] is not None
+            and p[1] is not None
+            and i not in deleted_positions.get(frame_count, set())
+        ]
+        candidates += [(g["index"], g["xy"]) for g in _review_hints()["suggestions"]]
+        best = min(
+            candidates,
+            key=lambda c: math.hypot(float(c[1][0]) - vx, float(c[1][1]) - vy),
+            default=None,
+        )
+        if best is None:
+            return None
+        dist = math.hypot(float(best[1][0]) - vx, float(best[1][1]) - vy) * zoom_level
+        return int(best[0]) if dist <= radius_px else None
+
+    def _load_freekiki_run(folder: Path) -> str:
+        """Load button on a freekiki detect output: predictions become editable drafts."""
+        nonlocal freekiki_options, selected_marker_idx, sequential_mode, one_line_mode
+        if freekiki_session is None:
+            _apply_template_mode("freekiki")  # 49 slots + session; raises if markers would be lost
+        assert freekiki_session is not None and freekiki_api is not None
+        readme = (folder / "README.txt").read_text(encoding="utf-8").splitlines()
+        model = next((line[7:] for line in readme if line.startswith("model: ")), "")
+        ws = freekiki_api.workspace_for_model_file(model) if model else None
+        if ws is not None:
+            freekiki_options = {**(freekiki_options or {}), "workspace": str(ws)}
+        kp_conf = float(freekiki_api.load_settings(ws)["detect"]["kp_conf"]) if ws else 0.5
+        n = freekiki_api.load_raw_review_predictions(freekiki_session, folder, kp_conf=kp_conf)
+        _coordinates_from_session()
+        freekiki_api.save_review_session(freekiki_session)
+        return _enter_correction_mode(n)
+
+    def _enter_correction_mode(n: int) -> str:
+        """INSERT + Mark mode on the first missing point; returns the how-to line."""
+        nonlocal selected_marker_idx, sequential_mode, one_line_mode
+        if editor_mode != "insert":
+            _toggle_editor_mode()
+        sequential_mode = one_line_mode = False
+        suspects = _review_hints()["suspects"]
+        selected_marker_idx = suspects[0] if suspects else 0
+        return (
+            f"FreeKiki run: {n} frames drafted. Left-click place · right-click pick · "
+            "Del/Del Range not visible · F10 ghost · F3 frame OK · F9 save dataset"
+        )
+
+    def _freekiki_load() -> str:
+        """Tpl -> L FreeKiki Load: pick a freekiki run (or batch) folder, open its video to correct."""
+        nonlocal switch_to_video, switch_freekiki_run, running
+        try:
+            from . import freekiki as fk
+        except ImportError:
+            import freekiki as fk  # ty: ignore[unresolved-import]
+
+        start = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+        if sys.platform == "linux":
+            pick = show_file_browser(
+                start,
+                title="FreeKiki Load: open the run (or batch) folder, then Enter = use this folder",
+                extensions=[".csv", ".txt"],
+                select_dir=True,
+            )
+        else:
+            pick = None
+            try:
+                from tkinter import Tk, filedialog
+
+                root = Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                pick = filedialog.askdirectory(
+                    title="FreeKiki run or batch folder", initialdir=start
+                )
+                root.destroy()
+            except Exception:
+                pass
+        if not pick:
+            return "FreeKiki Load cancelled"
+        try:
+            runs = fk.detect_runs(pick)
+        except (OSError, ValueError) as exc:
+            return f"FreeKiki Load: {exc}"
+        if not runs:
+            return "Not a freekiki detect folder (no README.txt from detect)"
+        run, video = runs[0]
+        if len(runs) > 1:
+            menu = "  ".join(f"{i}) {v.name}" for i, (_, v) in enumerate(runs, 1))
+            answer = show_input_dialog(f"Which video? {menu}", "1")
+            if not answer or not answer.strip().isdecimal():
+                return "FreeKiki Load cancelled"
+            k = int(answer.strip())
+            if not 1 <= k <= len(runs):
+                return f"Choose 1..{len(runs)}"
+            run, video = runs[k - 1]
+        print(
+            f">> vaila/getpixelvideo: uv run --no-sync vaila/getpixelvideo.py --freekiki-run {shlex.quote(str(run))}"
+        )
+        if video_path and Path(video_path).resolve() == video:
+            try:
+                return _load_freekiki_run(run)
+            except (OSError, ValueError, KeyError) as exc:
+                return f"FreeKiki run not loaded: {exc}"
+        if freekiki_session is not None:
+            _review_sync_all()
+            freekiki_api.save_review_session(freekiki_session)
+        switch_to_video, switch_freekiki_run, running = str(video), str(run), False
+        return f"Opening {video.name} for correction..."
 
     review_hints_memo: dict = {"key": None, "hints": None}
 
@@ -11510,7 +11693,7 @@ def play_video_with_controls(
         and freekiki_options is not None
         and freekiki_options.get("predictions")
     ):
-        freekiki_api.load_raw_review_predictions(
+        n_drafted = freekiki_api.load_raw_review_predictions(
             freekiki_session,
             freekiki_options["predictions"],
             kp_conf=float(
@@ -11519,10 +11702,11 @@ def play_video_with_controls(
             if freekiki_options.get("workspace")
             else 0.5,
         )
-        for frame_str, row in freekiki_session["frames"].items():
-            fi = int(frame_str)
-            coordinates[fi] = [tuple(p) if p is not None else (None, None) for p in row["points"]]
+        _coordinates_from_session()
         freekiki_api.save_review_session(freekiki_session)
+        save_message_text = _enter_correction_mode(n_drafted)
+        showing_save_message = True
+        save_message_timer = 300
 
     last_valid_frame = None
     slow_mo_accumulator = 0.0
@@ -12358,8 +12542,9 @@ def play_video_with_controls(
                     text += f" {ghost['conf']:.2f}"
                 screen.blit(small.render(text, True, color), (gx + 10, gy - 16))
             review = freekiki_session["frames"].get(str(frame_count))
+
             panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 660), 100)
-            pygame.draw.rect(screen, (22, 34, 42), panel)
+            blit_translucent(screen, panel, (22, 34, 42), FREEKIKI_PANEL_ALPHA)
             pygame.draw.rect(screen, (220, 220, 220), panel, 1)
             point_i = max(0, min(48, selected_marker_idx))
             source = _review_point_status(review, point_i)
@@ -12383,11 +12568,13 @@ def play_video_with_controls(
             else:
                 missing, missing_color = "", (255, 255, 255)
             screen.blit(
-                small.render(missing[:100], True, missing_color), (panel.x + 7, panel.y + 26)
+                small.render(missing[:100], True, missing_color), (panel.x + 7, panel.y + 22)
             )
+            hint = "Left-click place · Right-click pick · Del / Del Range = not visible"
+            screen.blit(small.render(hint, True, (200, 210, 220)), (panel.x + 7, panel.y + 38))
             list_y = max(4, panel.y - 160)
             list_rect = pygame.Rect(10, list_y, min(window_width - 20, 360), 154)
-            pygame.draw.rect(screen, (22, 34, 42), list_rect)
+            blit_translucent(screen, list_rect, (22, 34, 42), FREEKIKI_PANEL_ALPHA)
             pygame.draw.rect(screen, (180, 180, 180), list_rect, 1)
             first = max(0, min(42, point_i - 3))
             for index in range(first, first + 7):
@@ -12400,16 +12587,18 @@ def play_video_with_controls(
                 )
             for n, (action, caption) in enumerate(
                 (
-                    ("predict", "Predict Kiki49"),
-                    ("review", "Mark Reviewed"),
-                    ("save", "Save Session"),
-                    ("export", "Export Reviewed"),
-                    ("accept", "Accept ghost F10"),
+                    ("load", "Load run folder"),
+                    ("review", "Frame OK (F3)"),
+                    ("accept", "Accept ghost (F10)"),
+                    ("next", "Next draft (PgDn)"),
+                    ("export", "Save dataset (F9)"),
                 )
             ):
                 rect = pygame.Rect(panel.x + 6 + n * 129, panel.y + 54, 124, 32)
                 freekiki_buttons[action] = rect
-                pygame.draw.rect(screen, (50, 95, 115), rect)
+                blit_translucent(
+                    screen, rect, (30, 110, 60) if action == "load" else (50, 95, 115), 210
+                )
                 txt = pygame.font.SysFont("verdana", 11).render(caption, True, (255, 255, 255))
                 screen.blit(txt, txt.get_rect(center=rect.center))
         pygame.display.flip()
@@ -14064,6 +14253,23 @@ def play_video_with_controls(
                                 frame_count = min(frame_count + 1, total_frames - 1)
                                 paused = True
 
+                    elif event.button == 3 and freekiki_session is not None and not one_line_mode:
+                        # FreeKiki correction: right-click picks the nearest point or ghost,
+                        # so the next left-click moves it (Del hides it).
+                        picked = _pick_freekiki_point(video_x, video_y)
+                        if picked is None:
+                            save_message_text = (
+                                "Right-click on a point to select it (Del = not visible)"
+                            )
+                        else:
+                            selected_marker_idx = picked
+                            save_message_text = (
+                                f"Selected p{picked} {freekiki_session['names'][picked]}: "
+                                "left-click to place it"
+                            )
+                        showing_save_message = True
+                        save_message_timer = 60
+
                     elif event.button == 3:  # Right click
                         # Remove currently selected marker (not the last one).
                         remove_marker()
@@ -14497,7 +14703,13 @@ def play_video_with_controls(
             freekiki_api.save_review_session(freekiki_session)
         cap.release()
         # Do not pygame.quit() so run_getpixelvideo can reopen with new video
-        return ("switch_video", switch_to_video, current_dataset_dir, labeling_mode)
+        return (
+            "switch_video",
+            switch_to_video,
+            current_dataset_dir,
+            labeling_mode,
+            switch_freekiki_run,
+        )
 
     cap.release()
     pygame.quit()
@@ -17633,7 +17845,15 @@ def run_getpixelvideo(
         )
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
-            if freekiki_options is not None:
+            if len(result) > 4 and result[4]:
+                # FreeKiki Load: the new video opens in FreeKiki correction mode.
+                try:
+                    from . import freekiki as _freekiki
+                except ImportError:
+                    import freekiki as _freekiki  # ty: ignore[unresolved-import]
+                freekiki_options = _freekiki.freekiki_run_options(result[4])
+                initial_fifa_mode = True  # same as the --freekiki CLI flags
+            elif freekiki_options is not None:
                 freekiki_options["session"] = None
                 freekiki_options["predictions"] = None
             video_path = result[1]
@@ -17687,6 +17907,7 @@ if __name__ == "__main__":
             "  --freekiki-session SESSION.json  Reopen reviewed markers and states\n"
             "  --freekiki-predictions DIR  Load detect's field_kps_raw.csv\n"
             "  --freekiki-videos DIR  Review videos in a folder\n"
+            "  --freekiki-run DIR  FreeKiki Load: open a freekiki detect run/batch folder (finds the video)\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
             "Run without arguments to open one file picker (type auto-detected).\n"
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
@@ -17827,6 +18048,26 @@ if __name__ == "__main__":
         session = _freekiki.load_review_session(freekiki_options["session"])
         initial_media_path = session["video"]
         initial_source_type = "video"
+    if "--freekiki-run" in sys.argv:
+        pos = sys.argv.index("--freekiki-run")
+        if pos + 1 >= len(sys.argv):
+            raise SystemExit("--freekiki-run requires a freekiki detect run or batch folder")
+        try:
+            from . import freekiki as _fk
+        except ImportError:
+            import freekiki as _fk  # ty: ignore[unresolved-import]
+        runs = _fk.detect_runs(sys.argv[pos + 1])
+        if not runs:
+            raise SystemExit(f"Not a freekiki detect run or batch: {sys.argv[pos + 1]}")
+        for run, video in runs:  # a batch opens its videos one after the other
+            run_getpixelvideo(
+                initial_media_path=str(video),
+                initial_source_type="video",
+                initial_fifa_mode=True,
+                freekiki_options=_fk.freekiki_run_options(run),
+            )
+        raise SystemExit(0)
+
     if "--freekiki-videos" in sys.argv:
         assert freekiki_options is not None
         pos = sys.argv.index("--freekiki-videos")

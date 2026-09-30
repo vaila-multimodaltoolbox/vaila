@@ -7,8 +7,8 @@ Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Update: 24 September 2026
-Version: 0.4.5
+Update: 30 September 2026
+Version: 0.4.6
 Python Version: 3.12.14
 
 Description:
@@ -27,6 +27,8 @@ Features:
   CPU rescaling when target resolution matches native video stream dimensions.
 - Parallel Batch Processing: Multi-video extraction via ThreadPoolExecutor,
   saturating NVDEC hardware decoders and multi-core CPU pipelines.
+- PNG → video from any folder: a contiguous ``%09d`` sequence (from 0) uses the
+  image2 demuxer; otherwise every PNG is encoded in natural filename order.
 - Modern Tkinter GUI with hardware acceleration status badge, compression chooser,
   parallel worker controls, and CLI mirror reproduction.
 - Full CLI supporting extract, create, and frames subcommands with headless parity.
@@ -50,9 +52,11 @@ import contextlib
 import functools
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import tkinter as tk
 from concurrent.futures import ThreadPoolExecutor
@@ -331,14 +335,8 @@ def build_select_frame_command(
     return cmd
 
 
-def build_png_to_video_command(
-    input_pattern: str | Path,
-    output_video: str | Path,
-    *,
-    fps: float,
-    codec: str = "264",
-    hwaccel: bool | str = False,
-) -> list[str]:
+def _png_video_encoder(codec: str, hwaccel: bool | str) -> tuple[str, list[str]]:
+    """Return ``(vcodec, extra_args)`` for PNG → video encoding."""
     use_nvenc = False
     if hwaccel in (True, "cuda") or str(codec).endswith("_nvenc"):
         use_nvenc = True
@@ -360,7 +358,18 @@ def build_png_to_video_command(
         else:
             vcodec = "libx264"
             extra = []
+    return vcodec, extra
 
+
+def build_png_to_video_command(
+    input_pattern: str | Path,
+    output_video: str | Path,
+    *,
+    fps: float,
+    codec: str = "264",
+    hwaccel: bool | str = False,
+) -> list[str]:
+    vcodec, extra = _png_video_encoder(codec, hwaccel)
     return [
         "ffmpeg",
         "-y",
@@ -376,6 +385,108 @@ def build_png_to_video_command(
         "yuv420p",
         str(output_video),
     ]
+
+
+def build_png_concat_command(
+    list_file: str | Path,
+    output_video: str | Path,
+    *,
+    fps: float,
+    codec: str = "264",
+    hwaccel: bool | str = False,
+) -> list[str]:
+    """Encode a concat-demuxer list of still PNGs. Frame timing lives in the list."""
+    vcodec, extra = _png_video_encoder(codec, hwaccel)
+    return [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-f",
+        "concat",
+        "-safe",
+        "0",
+        "-i",
+        str(list_file),
+        "-r",
+        str(fps),
+        "-c:v",
+        vcodec,
+        *extra,
+        "-pix_fmt",
+        "yuv420p",
+        str(output_video),
+    ]
+
+
+def _natural_sort_key(name: str) -> list[tuple[int, int | str]]:
+    """Filename order with digit runs compared as integers (``frame_2`` before ``frame_10``)."""
+    key: list[tuple[int, int | str]] = []
+    for part in re.split(r"(\d+)", name.casefold()):
+        if not part:
+            continue
+        if part.isdigit():
+            key.append((0, int(part)))
+        else:
+            key.append((1, part))
+    return key
+
+
+def list_pngs_sorted(directory: str | Path) -> list[Path]:
+    """Every ``.png`` file in ``directory`` (not recursive), in natural filename order."""
+    directory = Path(directory)
+    pngs = [p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".png"]
+    return sorted(pngs, key=lambda p: _natural_sort_key(p.name))
+
+
+_PRINTF_INT = re.compile(r"^(.*)%(0)?(\d*)d(.*)$")
+
+
+def _pattern_covers_pngs(directory: Path, pattern: str) -> bool:
+    """True when every PNG matches ``pattern`` as a gap-free sequence starting at 0.
+
+    FFmpeg's image2 demuxer reads ``%09d`` / ``%d`` from index 0 and stops at the
+    first missing number. Anything else is encoded from :func:`list_pngs_sorted`.
+    """
+    pngs = [p for p in directory.iterdir() if p.is_file() and p.suffix.lower() == ".png"]
+    if not pngs:
+        return False
+    match = _PRINTF_INT.fullmatch(pattern)
+    if match is None:
+        return False
+    prefix, _zero, width, suffix = match.groups()
+    num = rf"\d{{{int(width)}}}" if width else r"\d+"
+    rx = re.compile(rf"^{re.escape(prefix)}({num}){re.escape(suffix)}$")
+    indices: list[int] = []
+    for png in pngs:
+        found = rx.fullmatch(png.name)
+        if found is None:
+            return False
+        indices.append(int(found.group(1)))
+    indices.sort()
+    return indices == list(range(len(indices)))
+
+
+def _concat_quote(path: Path) -> str:
+    return str(path.resolve()).replace("'", r"'\''")
+
+
+def _write_png_concat_list(pngs: list[Path], fps: float, dest: Path) -> Path:
+    """Concat demuxer list. The last file is repeated so FFmpeg keeps that frame."""
+    if fps <= 0:
+        raise ValueError("fps must be > 0")
+    duration = 1.0 / fps
+    lines: list[str] = []
+    for png in pngs:
+        quoted = _concat_quote(png)
+        lines.append(f"file '{quoted}'")
+        lines.append(f"duration {duration:.9f}")
+    if pngs:
+        lines.append(f"file '{_concat_quote(pngs[-1])}'")
+    fd, name = tempfile.mkstemp(prefix="vaila_png_concat_", suffix=".txt", dir=dest)
+    os.close(fd)
+    list_path = Path(name)
+    list_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return list_path
 
 
 def _run_ffmpeg(cmd: list[str]) -> None:
@@ -605,6 +716,22 @@ def _png_dirs_to_process(src: Path, exclude: Path | None = None) -> list[Path]:
     return dirs
 
 
+def _png_dir_encode_command(
+    source: str | Path,
+    output_video: str | Path,
+    *,
+    fps: float,
+    codec: str,
+    hwaccel: bool | str,
+    use_sequence: bool,
+) -> list[str]:
+    if use_sequence:
+        return build_png_to_video_command(
+            source, output_video, fps=fps, codec=codec, hwaccel=hwaccel
+        )
+    return build_png_concat_command(source, output_video, fps=fps, codec=codec, hwaccel=hwaccel)
+
+
 def create_video_from_png(
     src_dir: str | Path,
     *,
@@ -623,7 +750,7 @@ def create_video_from_png(
 
     png_dirs = _png_dirs_to_process(src_dir, exclude=dest)
     if not png_dirs:
-        raise FileNotFoundError(f"No PNG sequences found under {src_dir}")
+        raise FileNotFoundError(f"No PNG files found under {src_dir}")
 
     cuda_info = get_cuda_status()
     use_nvenc = hwaccel == "cuda" or (
@@ -631,27 +758,51 @@ def create_video_from_png(
     )
     enc_desc = f"NVIDIA NVENC ({cuda_info['device_name']})" if use_nvenc else "CPU Software Encoder"
 
-    print(f"Creating videos from {len(png_dirs)} PNG sequence(s) @ {fps} fps [{enc_desc}]...")
+    print(f"Creating videos from {len(png_dirs)} PNG folder(s) @ {fps} fps [{enc_desc}]...")
     for png_dir in png_dirs:
         output_video = dest / f"{png_dir.name}.mp4"
-        input_pattern = png_dir / pattern
+        use_sequence = _pattern_covers_pngs(png_dir, pattern)
+        list_path: Path | None = None
+        if use_sequence:
+            source: str | Path = png_dir / pattern
+        else:
+            pngs = list_pngs_sorted(png_dir)
+            if not pngs:
+                raise FileNotFoundError(f"No PNG files in {png_dir}")
+            print(
+                f"  {png_dir.name}: {len(pngs)} PNG(s) in filename order "
+                f"(no contiguous {pattern} sequence)"
+            )
+            list_path = _write_png_concat_list(pngs, fps, dest)
+            source = list_path
+
         t0 = time.time()
         try:
-            _run_ffmpeg(
-                build_png_to_video_command(
-                    input_pattern, output_video, fps=fps, codec=codec, hwaccel=hwaccel
-                )
-            )
-        except subprocess.CalledProcessError:
-            if use_nvenc:
-                print("Hardware NVENC encoding failed, falling back to CPU software encoder...")
-                _run_ffmpeg(
-                    build_png_to_video_command(
-                        input_pattern, output_video, fps=fps, codec=codec, hwaccel=False
-                    )
-                )
-            else:
-                raise
+            try:
+                _run_ffmpeg(_png_dir_encode_command(
+                    source,
+                    output_video,
+                    fps=fps,
+                    codec=codec,
+                    hwaccel=hwaccel,
+                    use_sequence=use_sequence,
+                ))
+            except subprocess.CalledProcessError:
+                if use_nvenc:
+                    print("Hardware NVENC encoding failed, falling back to CPU software encoder...")
+                    _run_ffmpeg(_png_dir_encode_command(
+                        source,
+                        output_video,
+                        fps=fps,
+                        codec=codec,
+                        hwaccel=False,
+                        use_sequence=use_sequence,
+                    ))
+                else:
+                    raise
+        finally:
+            if list_path is not None:
+                list_path.unlink(missing_ok=True)
         dt = time.time() - t0
         print(f"  video created in {dt:.2f} s: {output_video}")
     print(f"Done. Output: {dest}")
@@ -891,7 +1042,8 @@ class ExtractPngApp:
             self.hwaccel_label.grid(row=1, column=2, sticky="w", padx=4, pady=2)
             self.hwaccel_combo.grid(row=1, column=3, sticky="w", padx=4, pady=2)
             self.status_var.set(
-                "Select a folder of PNG sequences (or subfolders). NVENC GPU encoding supported."
+                "Select a folder of PNGs (or subfolders). Any filenames are sorted and encoded. "
+                "NVENC GPU encoding supported."
             )
         else:
             self.frames_label.grid(row=0, column=0, sticky="w", padx=4, pady=2)
@@ -1059,7 +1211,7 @@ class VideoProcessor:
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="extractpng",
-        description="Extract PNG frames from video, or build video from PNG sequences (GPU accelerated).",
+        description="Extract PNG frames from video, or build video from PNG folders (GPU accelerated).",
     )
     sub = parser.add_subparsers(dest="command")
 
@@ -1093,7 +1245,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Number of parallel workers for multi-video extraction (default: auto)",
     )
 
-    p_cr = sub.add_parser("create", help="PNG sequences → videos")
+    p_cr = sub.add_parser("create", help="PNG folders → videos")
     p_cr.add_argument("-i", "--input", required=True, help="Directory with PNG folders")
     p_cr.add_argument("-o", "--output", default=None, help="Output directory")
     p_cr.add_argument("--fps", type=float, default=30.0, help="Output FPS")

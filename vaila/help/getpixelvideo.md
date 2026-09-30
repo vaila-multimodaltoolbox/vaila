@@ -719,7 +719,26 @@ Built-in backup system for data safety:
 
 ## Version History
 
-### Version 0.4.6 (30 September 2026) — AV1 videos open through an H.264 copy
+### Version 0.4.6 (30 September 2026) — FreeKiki correction from Load; AV1 videos open through an H.264 copy
+
+**FreeKiki correction from Load**
+
+- **Tpl: → L = FreeKiki Load**, the **Load run folder** button of the FreeKiki panel, or `--freekiki-run DIR`,
+  opens a freekiki detect run.
+- The FreeKiki panel and point list (bottom-left) are semi-transparent, so the pitch behind stays visible.
+  - Point at the run or batch folder only: open it in the browser and press **Enter** (or type its path). A batch
+    asks which video.
+  - It opens the original video (found from the run's README, or next to the run if moved) in correction mode.
+- **Load** on the run's `field_kps_getpixelvideo.csv` does the same for the video already open.
+- The predicted 49 points appear as editable drafts, in INSERT mode.
+- **Right-click** picks a point or ghost; **left-click** places it.
+- **Del** / **Del Range** mark a point that is inside the picture but not visible.
+- **F10** accepts a ghost, **F3** is Frame OK, **PgDn** goes to the next draft.
+- **F9 Save dataset** writes a YOLO-pose folder you choose (default `freekiki_corrections_<video>`). Only complete
+  frames are saved.
+- Add that folder in FreeKiki → Train → **Corrections** (`--add-dataset`).
+
+**AV1 videos**
 
 - OpenCV's bundled FFmpeg has no software AV1 decoder, so AV1 videos (e.g.
   YouTube downloads) opened but every frame read failed

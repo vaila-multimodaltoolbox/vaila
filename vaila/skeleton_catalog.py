@@ -4,7 +4,7 @@ Loads canonical JSON presets from ``vaila/skeletons/`` (excluding soccer-field
 layouts, which use the dedicated Soccer-Kiki pitch-guide path). FreeKiki
 (kiki49 review) is a special non-JSON mode listed next to Soccer-Kiki.
 
-Update Date: 28 September 2026
+Update Date: 30 September 2026
 Version: 0.4.6
 """
 
@@ -177,11 +177,18 @@ def dialog_choices() -> list[tuple[str, str]]:
     return rows
 
 
+# Not a template: opens a freekiki detect run folder (its video + label correction).
+FREEKIKI_LOAD_ID = "freekiki_load"
+FREEKIKI_LOAD_LINE = "L = FreeKiki Load (freekiki run folder -> video + label correction)"
+
+
 def format_template_dialog_prompt() -> str:
     """Multi-line prompt for ``show_input_dialog`` (one option per line)."""
     lines = ["Tpl — choose skeleton:"]
-    for idx, (_tid, label) in enumerate(dialog_choices()):
+    for idx, (tid, label) in enumerate(dialog_choices()):
         lines.append(f"{idx} = {label}")
+        if tid == "freekiki":
+            lines.append(FREEKIKI_LOAD_LINE)
     return "\n".join(lines)
 
 
@@ -192,6 +199,8 @@ def resolve_dialog_choice(answer: str | None) -> str | None:
     raw = str(answer).strip().lower()
     if not raw:
         return None
+    if raw in ("l", "load", FREEKIKI_LOAD_ID):
+        return FREEKIKI_LOAD_ID
     choices = dialog_choices()
     # Numeric index.
     if raw.isdigit():

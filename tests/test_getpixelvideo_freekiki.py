@@ -527,3 +527,146 @@ def test_cli_queue_ingest_split_and_evaluate_hard():
     )
     assert args.split == "hard" and args.commit is False
     assert parser.parse_args(["evaluate", "-w", "WS", "--split", "hard"]).split == "hard"
+
+
+def test_detect_output_dir_recognises_folder_and_its_csv(tmp_path):
+    run = tmp_path / "processed_freekiki_clip_1"
+    run.mkdir()
+    (run / "README.txt").write_text("FreeKiki field keypoints (vailá)\nvideo: /v.mp4\n")
+    (run / "field_kps_getpixelvideo.csv").write_text("frame\n")
+    assert freekiki.detect_output_dir(run) == run.resolve()
+    assert freekiki.detect_output_dir(run / "field_kps_getpixelvideo.csv") == run.resolve()
+    plain = tmp_path / "markers.csv"
+    plain.write_text("frame\n")
+    assert freekiki.detect_output_dir(plain) is None
+
+
+def test_save_dataset_folder_then_train_ingests_it(tmp_path, monkeypatch):
+    ws = _workspace(tmp_path / "workspace")
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "Australia vs Brazil - clip.mp4"
+    video.write_bytes(b"clip")
+    session = freekiki.new_review_session(video, 48, 32, 30)
+    _complete(session, 8)
+    freekiki.mark_reviewed(session, 8)
+    folder = tmp_path / "freekiki_corrections_clip"
+    freekiki.relocate_review_session(session, folder)
+    assert session["session_id"] == folder.name and (folder / "session.json").is_file()
+    out = freekiki.export_reviewed_session(session)
+    assert out == folder.resolve() and (folder / "data.yaml").is_file()
+    assert len(list((folder / "labels").glob("*.txt"))) == 1
+    freekiki.relocate_review_session(session, folder)  # its own folder: fine
+    other = tmp_path / "busy"
+    other.mkdir()
+    (other / "x.txt").write_text("x")
+    with pytest.raises(ValueError, match="empty folder"):
+        freekiki.relocate_review_session(session, other)
+    assert freekiki.default_match_id(session) == "australia_vs_brazil_clip"
+
+    calls = []
+    monkeypatch.setattr(freekiki, "train", lambda *a, **k: calls.append("train"))
+    real_add = freekiki.add_corrections
+    monkeypatch.setattr(
+        freekiki, "add_corrections", lambda *a, **k: calls.append("add") or real_add(*a, **k)
+    )
+    freekiki.main(["train", "-w", str(ws), "--add-dataset", str(folder), "--epochs", "1"])
+    assert calls == ["add", "train"]
+    ds = ws / "datasets/kiki49"
+    with (ds / "manifest.csv").open() as f:
+        rows = [r for r in csv.DictReader(f) if r["split"] == "train"]
+    assert [r["group"] for r in rows] == ["australia_vs_brazil_clip"]
+    with pytest.raises(ValueError, match="manifest is a fixed train list"):
+        freekiki.main(["train", "-w", str(ws), "--add-dataset", str(folder), "--manifest", "v001"])
+
+
+def test_train_stops_when_a_correction_is_incomplete(tmp_path, monkeypatch):
+    ws = _workspace(tmp_path / "workspace")
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"clip")
+    session = freekiki.new_review_session(video, 48, 32, 30)
+    _complete(session, 8)
+    freekiki.mark_reviewed(session, 8)
+    folder = tmp_path / "corr"
+    freekiki.relocate_review_session(session, folder)
+    freekiki.export_reviewed_session(session)
+    old = freekiki.load_review_session(folder / "session.json")
+    old["frames"]["8"]["points"][5] = None
+    freekiki.save_review_session(old)
+    monkeypatch.setattr(freekiki, "train", lambda *a, **k: pytest.fail("must not train"))
+    with pytest.raises(ValueError, match="incomplete"):
+        freekiki.main(["train", "-w", str(ws), "--add-dataset", str(folder)])
+
+
+def _detect_run(folder: Path, video: Path, model: str = "") -> Path:
+    folder.mkdir(parents=True)
+    text = f"FreeKiki field keypoints (vailá)\nvideo: {video}\n"
+    (folder / "README.txt").write_text(text + (f"model: {model}\n" if model else ""))
+    (folder / "field_kps_getpixelvideo.csv").write_text("frame\n")
+    return folder
+
+
+def test_detect_runs_single_file_and_batch_newest_per_video(tmp_path):
+    a, b = tmp_path / "a.mp4", tmp_path / "b.mp4"
+    a.write_bytes(b"a")
+    b.write_bytes(b"b")
+    batch = tmp_path / "processed_freekiki_batch_1"
+    old_a = _detect_run(batch / "processed_freekiki_a_20260930_060000", a)
+    new_a = _detect_run(batch / "processed_freekiki_a_20260930_070000", a)
+    run_b = _detect_run(batch / "processed_freekiki_b_20260930_060000", b)
+    (batch / "quality_summary.csv").write_text("video\n")
+    assert freekiki.detect_runs(old_a) == [(old_a.resolve(), a.resolve())]
+    assert freekiki.detect_runs(run_b / "field_kps_getpixelvideo.csv") == [
+        (run_b.resolve(), b.resolve())
+    ]
+    expected = [(new_a.resolve(), a.resolve()), (run_b.resolve(), b.resolve())]
+    assert freekiki.detect_runs(batch) == expected
+    assert freekiki.detect_runs(batch / "quality_summary.csv") == expected
+    assert freekiki.detect_runs(tmp_path / "a.mp4") == []
+
+
+def test_detect_runs_finds_freekiki_predict_and_prefers_newer_stamp(tmp_path):
+    video = tmp_path / "mirassol.mp4"
+    video.write_bytes(b"v")
+    batch = tmp_path / "processed_freekiki_batch_1"
+    old = _detect_run(batch / "processed_freekiki_mirassol_20260930_060000", video)
+    new = _detect_run(batch / "freekiki_predict_mirassol_20260930_135426", video)
+    assert freekiki.detect_runs(new) == [(new.resolve(), video.resolve())]
+    assert freekiki.detect_runs(batch) == [(new.resolve(), video.resolve())]
+    assert old.is_dir()
+
+
+def test_run_video_follows_a_moved_video_and_run_options(tmp_path):
+    ws = freekiki.init_workspace(tmp_path / "ws")
+    model = ws / "models" / "freekiki_m.pt"
+    model.parent.mkdir(parents=True, exist_ok=True)
+    model.write_bytes(b"pt")
+    moved = tmp_path / "videos" / "clip.mp4"
+    moved.parent.mkdir()
+    moved.write_bytes(b"v")
+    run = _detect_run(
+        moved.parent / "batch" / "processed_freekiki_clip_1", tmp_path / "gone" / "clip.mp4", model
+    )
+    assert freekiki.run_video(run) == moved.resolve()
+    assert freekiki.freekiki_run_options(run) == {
+        "workspace": str(ws),
+        "predictions": str(run),
+        "session": None,
+    }
+    lost = _detect_run(tmp_path / "processed_freekiki_lost_1", tmp_path / "nowhere" / "x.mp4")
+    with pytest.raises(ValueError, match="Original video not found: x.mp4"):
+        freekiki.run_video(lost)
+    assert freekiki.detect_runs(tmp_path) == []  # the lost run is skipped, not fatal
+
+
+def test_freekiki_panel_background_is_translucent():
+    import pygame
+
+    from vaila.getpixelvideo import FREEKIKI_PANEL_ALPHA, blit_translucent
+
+    screen = pygame.Surface((20, 10))
+    screen.fill((200, 200, 200))  # the video behind the panel
+    blit_translucent(screen, pygame.Rect(0, 0, 10, 10), (0, 0, 0), FREEKIKI_PANEL_ALPHA)
+    covered, free = screen.get_at((5, 5)), screen.get_at((15, 5))
+    assert 0 < covered.r < free.r == 200  # darker but the image still shows through
+    assert 0 < FREEKIKI_PANEL_ALPHA < 255

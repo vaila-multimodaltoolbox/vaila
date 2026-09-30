@@ -137,6 +137,43 @@ def test_build_select_frame_command_cuda() -> None:
     assert cmd.index("-hwaccel") < cmd.index("-i")
 
 
+def test_list_pngs_sorted_natural_order(tmp_path: Path) -> None:
+    for name in ("b2.png", "b10.png", "a.png"):
+        (tmp_path / name).write_bytes(b"\x89PNG\r\n\x1a\n")
+    (tmp_path / "note.txt").write_text("skip")
+    assert [p.name for p in ep.list_pngs_sorted(tmp_path)] == ["a.png", "b2.png", "b10.png"]
+
+
+def test_pattern_covers_contiguous_sequence(tmp_path: Path) -> None:
+    for i in range(3):
+        (tmp_path / f"{i:09d}.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    assert ep._pattern_covers_pngs(tmp_path, "%09d.png") is True
+
+
+def test_pattern_rejects_arbitrary_names_and_gaps(tmp_path: Path) -> None:
+    loose = tmp_path / "loose"
+    loose.mkdir()
+    (loose / "frame.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (loose / "img_2.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    assert ep._pattern_covers_pngs(loose, "%09d.png") is False
+
+    gap = tmp_path / "gap"
+    gap.mkdir()
+    (gap / "000000000.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    (gap / "000000002.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+    assert ep._pattern_covers_pngs(gap, "%09d.png") is False
+
+
+def test_build_png_concat_command() -> None:
+    cmd = ep.build_png_concat_command("frames.txt", "out.mp4", fps=30.0, codec="264")
+    assert cmd[0] == "ffmpeg"
+    assert "libx264" in cmd
+    assert cmd[cmd.index("-f") + 1] == "concat"
+    assert cmd[cmd.index("-safe") + 1] == "0"
+    assert cmd.index("-f") < cmd.index("-i")
+    assert cmd[-1] == "out.mp4"
+
+
 def test_build_png_to_video_nvenc() -> None:
     cmd_h264 = ep.build_png_to_video_command(
         "d/%09d.png", "out.mp4", fps=30.0, codec="264", hwaccel="cuda"

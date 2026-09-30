@@ -4,8 +4,8 @@
 
 - **Category:** Tools
 - **File:** `vaila/extractpng.py`
-- **Version:** 0.4.5
-- **Updated:** 24 September 2026
+- **Version:** 0.4.6
+- **Updated:** 30 September 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** Yes (one window, Frame C → Video and Image → C_B_r1_c1)
 
@@ -24,7 +24,9 @@
 4. **Parallel Multi-Video Batching (`-j` / `--workers`):**
    Extracts folders of multiple videos concurrently using `ThreadPoolExecutor`, fully saturating GPU NVDEC and multi-core CPU pipelines.
 5. **NVIDIA NVENC Video Creation:**
-   Builds MP4 videos from PNG sequences at 500+ FPS using `h264_nvenc` or `hevc_nvenc`.
+   Builds MP4 videos from PNG folders at 500+ FPS using `h264_nvenc` or `hevc_nvenc`.
+   A contiguous `%09d` sequence starting at 0 uses the image2 demuxer. Any other names
+   (or gaps) are encoded in natural filename order: `frame_2.png` before `frame_10.png`.
 
 ## GUI
 
@@ -61,7 +63,8 @@ uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel cuda
 ## Notes
 
 - FFmpeg `-hwaccel cuda` is an input option placed before `-i`.
-- Default PNG pattern: `%09d.png`
+- Default PNG pattern: `%09d.png` (used when extracting, and when a create folder is already that contiguous sequence from 0).
+- **PNG → Video** accepts any directory of `.png` files, or immediate subfolders that contain them. Without a contiguous pattern, every PNG in the folder is sorted by filename and joined into one MP4.
 - Batch extract writes `vaila_extractpng_<timestamp>/<stem>_png/` plus `video_info.txt` containing extraction metrics and hardware profile per video.
 
 ---

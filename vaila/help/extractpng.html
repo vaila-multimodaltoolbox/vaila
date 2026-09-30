@@ -40,8 +40,8 @@
     <div class="container">
       <h1>extractpng.py — Video ↔ PNG</h1>
       <p>
-        <strong>Version:</strong> 0.4.5<br />
-        <strong>Updated:</strong> 24 September 2026<br />
+        <strong>Version:</strong> 0.4.6<br />
+        <strong>Updated:</strong> 30 September 2026<br />
         <strong>Author:</strong> Prof. Dr. Paulo R. P. Santiago
       </p>
       <p>
@@ -54,7 +54,7 @@
         <li><strong>Fast Lossless PNG Extraction (<code>-c / --compression 0-9</code>):</strong> Defaults to fast level 1 with <code>-pred none</code>, speeding up extraction ~3x while maintaining bit-for-bit lossless pixel parity.</li>
         <li><strong>Redundant Rescaler Bypass:</strong> Skips unnecessary CPU Lanczos/bicubic resampling when target dimensions match native video.</li>
         <li><strong>Parallel Multi-Video Batching (<code>-j / --workers</code>):</strong> Multi-threaded video extraction using <code>ThreadPoolExecutor</code> to saturate NVDEC and CPU cores.</li>
-        <li><strong>NVIDIA NVENC Video Creation:</strong> Fast encoding of PNG sequences to MP4 via <code>h264_nvenc</code> and <code>hevc_nvenc</code>.</li>
+        <li><strong>NVIDIA NVENC Video Creation:</strong> Fast encoding of PNG folders to MP4 via <code>h264_nvenc</code> and <code>hevc_nvenc</code>. A contiguous <code>%09d</code> sequence starting at 0 uses the image2 demuxer; any other names are encoded in natural filename order (<code>frame_2.png</code> before <code>frame_10.png</code>).</li>
       </ul>
       <h2>GUI</h2>
       <p>Frame C → <strong>Video and Image</strong> → <strong>C_B_r1_c1 - Video&lt;--&gt;PNG</strong>, or:</p>
@@ -81,7 +81,8 @@ uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel cuda</
       <h2>Notes</h2>
       <ul>
         <li>FFmpeg <code>-hwaccel cuda</code> is placed <em>before</em> <code>-i</code> (input option).</li>
-        <li>Default PNG pattern: <code>%09d.png</code>.</li>
+        <li>Default PNG pattern: <code>%09d.png</code> (extract, and create when the folder is already that contiguous sequence from 0).</li>
+        <li><strong>PNG → Video</strong> accepts any directory of <code>.png</code> files, or immediate subfolders that contain them. Without a contiguous pattern, every PNG in the folder is sorted by filename and joined into one MP4.</li>
         <li>Batch extraction generates <code>video_info.txt</code> in each directory detailing FPS and GPU profile.</li>
       </ul>
     </div>

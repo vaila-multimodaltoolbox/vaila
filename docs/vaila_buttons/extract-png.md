@@ -4,14 +4,14 @@
 **Handler:** `extract_png_from_videos`  
 **Module:** [`vaila/extractpng.py`](../../vaila/extractpng.py)  
 **Help:** [`vaila/help/extractpng.md`](../../vaila/help/extractpng.md) · [HTML](../../vaila/help/extractpng.html)  
-**Version:** 0.3.105 · **Updated:** 13 August 2026
+**Version:** 0.4.6 · **Updated:** 30 September 2026
 
 ## Overview
 
 One simple Tkinter window (and a full CLI) to:
 
 1. **Video → PNG** — batch-extract frames from every video in a folder  
-2. **PNG → Video** — build `.mp4` from PNG sequence folders  
+2. **PNG → Video** — build `.mp4` from any folder of PNGs (contiguous `%09d` from 0, or every PNG in filename order)  
 3. **Select frames** — grab specific frame indices from one video  
 
 On GUI **Run**, the terminal prints a copy-paste CLI mirror (`>> vaila/extractpng`).
@@ -37,6 +37,6 @@ uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7
 ## Notes
 
 - FFmpeg `-hwaccel auto` is an **input** option (before `-i`). No forced `hevc_cuvid`; software decode is the fallback.
-- Default PNG pattern: `%09d.png`
+- Default PNG pattern: `%09d.png`. Create uses that pattern only when every PNG in the folder is a gap-free sequence starting at 0. Otherwise every `.png` is sorted by filename (`frame_2.png` before `frame_10.png`) and encoded.
 - Batch extract writes `vaila_extractpng_<timestamp>/<stem>_png/` plus `video_info.txt` per video.
 - Requires `ffmpeg` / `ffprobe` on `PATH`.

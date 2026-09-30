@@ -35,7 +35,37 @@
         <strong>Version:</strong> 0.4.6 · <strong>Updated:</strong> 30 September 2026
       </div>
 
-      <h2>Human reviewed video annotations (labeling for a retrain)</h2>
+      <h2>Correct and retrain (3 steps)</h2>
+      <ol>
+        <li><strong>Detect</strong>, then <strong>Correct in getpixelvideo</strong> (section 5). Or, in getpixelvideo, press
+          <strong>Tpl:</strong> and type <strong>L</strong> (FreeKiki Load). Open the run or batch folder and press Enter:
+          it finds the original video and opens it in correction mode (CLI: <code>getpixelvideo.py --freekiki-run DIR</code>). The predicted
+          labels appear, in edit mode.</li>
+        <li><strong>Fix</strong> the frames you want to use:
+          <ul>
+            <li><strong>Right-click</strong> picks a point and <strong>left-click</strong> places it.</li>
+            <li><strong>F10</strong> accepts a ghost.</li>
+            <li>A point inside the picture but not visible: <strong>Del</strong> (this frame) or
+              <strong>Del Range</strong> (many frames). Points outside the picture are ignored.</li>
+            <li><strong>F3 Frame OK</strong> accepts the frame; <strong>PgDn</strong> goes to the next draft.</li>
+            <li><strong>F9 Save dataset</strong> writes <code>images/</code>, <code>labels/</code>,
+              <code>data.yaml</code> and <code>session.json</code> into the folder you choose. Only complete frames
+              are saved.</li>
+          </ul>
+        </li>
+        <li>Section 3: <strong>Corrections → Add folder…</strong>, then <strong>Train</strong> (base
+          <code>active</code> = fine-tune).
+          <ul>
+            <li>The folders are added to train once, with the <code>ingest</code> checks, and then training
+              starts.</li>
+            <li>The optional <strong>Match id</strong> defaults to the video name.</li>
+            <li>CLI: <code>train -w WS --base active --add-dataset FOLDER [--match-id M]</code>, without
+              <code>--manifest</code>.</li>
+          </ul>
+        </li>
+      </ol>
+
+      <h2>Advanced (CLI): label queue, ingest, hard holdout</h2>
       <pre>uv run --no-sync vaila/freekiki.py detect -w WS --video /path/new_videos
 uv run --no-sync vaila/freekiki.py queue  -w WS --batch /path/new_videos/processed_freekiki_batch_&lt;ts&gt;
 uv run --no-sync vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session WS/incoming/SESSION_ID/session.json
@@ -149,9 +179,9 @@ uv run --no-sync vaila/freekiki.py evaluate -w WS --split hard --model runs/RUN/
         <tr><td>4. Evaluate → <strong>Audit dataset</strong></td><td><code>uv run vaila/freekiki.py audit -w WS</code></td></tr>
         <tr><td>5. Detect → Workspace + Video + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video match.mp4</code> (add <code>--fill-gaps 3</code> to also write the interpolated CSV)</td></tr>
         <tr><td>5. Detect → Workspace + <strong>Folder</strong> + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos</code></td></tr>
-        <tr><td>6. Label → Detect batch + <strong>Build label queue</strong></td><td><code>uv run vaila/freekiki.py queue -w WS --batch /path/processed_freekiki_batch_&lt;ts&gt;</code></td></tr>
-        <tr><td>6. Label → Session + <strong>Open review</strong></td><td><code>uv run vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session WS/incoming/SESSION/session.json</code></td></tr>
-        <tr><td>6. Label → Match id + Split + <strong>Ingest preview</strong> / <strong>Ingest commit</strong></td><td><code>uv run vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION --match-id MATCH --split train [--commit]</code></td></tr>
+        <tr><td>5. Detect → Video + Output dir + <strong>Correct in getpixelvideo</strong></td><td><code>uv run vaila/getpixelvideo.py -f VIDEO --freekiki --freekiki-workspace WS --freekiki-predictions OUTPUT_DIR</code></td></tr>
+        <tr><td>3. Train → <strong>Corrections</strong> folder(s) + <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --base active --add-dataset FOLDER [--match-id M]</code></td></tr>
+        <tr><td>(CLI only) label queue / ingest / hard holdout</td><td><code>queue -w WS --batch DIR</code>, <code>ingest -w WS --src DIR --match-id M [--split hard] [--commit]</code></td></tr>
         <tr><td>4. Evaluate → Split <code>hard</code> + <strong>Evaluate model</strong></td><td><code>uv run vaila/freekiki.py evaluate -w WS --split hard</code></td></tr>
         <tr><td><strong>Stop</strong></td><td><code>Ctrl+C</code> in the terminal</td></tr>
         <tr><td><strong>Help</strong></td><td>opens this page</td></tr>
@@ -381,9 +411,9 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
         overlay MP4 — wrong points are obvious there.</p>
 
       <h2>Detect outputs</h2>
-      <p>Folder <code>processed_freekiki_&lt;video&gt;_&lt;timestamp&gt;/</code> inside the output folder (default: the
+      <p>Folder <code>freekiki_predict_&lt;video&gt;_&lt;timestamp&gt;/</code> inside the output folder (default: the
         video's folder). A folder of videos writes <code>processed_freekiki_batch_&lt;timestamp&gt;/</code> with one
-        sub-folder per video.</p>
+        sub-folder per video. Older runs named <code>processed_freekiki_&lt;video&gt;_&lt;timestamp&gt;/</code> still open.</p>
       <table>
         <tr><th>File</th><th>Content</th></tr>
         <tr><td><code>field_kps_getpixelvideo.csv</code></td><td><code>frame,p0_x,p0_y,...,p48_x,p48_y</code> (0-based pixels;

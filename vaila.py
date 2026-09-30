@@ -358,7 +358,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 28.Sep.2026 v0.4.6 (Python 3.12.14)
+    vailá - 30.Sep.2026 v0.4.6 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -477,7 +477,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 28.Sep.2026 v0.4.6 (Python 3.12.14)")
+        self.title("vailá - 30.Sep.2026 v0.4.6 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None

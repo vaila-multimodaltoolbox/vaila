@@ -143,6 +143,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import unicodedata
 import webbrowser
 from collections import Counter
 from datetime import datetime
@@ -2227,9 +2228,35 @@ def mark_reviewed(session: dict, frame: int) -> None:
     row["reviewed_at"] = datetime.now().astimezone().isoformat()
 
 
+_DETECT_RUN_GLOBS = ("freekiki_predict_*", "processed_freekiki_*")
+_DETECT_RUN_STAMP = re.compile(r"(\d{8}_\d{6})$")
+
+
+def _detect_run_children(folder: Path) -> list[Path]:
+    """Per-video detect folders, newest timestamp first.
+
+    New runs are ``freekiki_predict_<stem>_<timestamp>``. Older runs used
+    ``processed_freekiki_<stem>_<timestamp>``.
+    """
+    children = {
+        child.resolve()
+        for pattern in _DETECT_RUN_GLOBS
+        for child in folder.glob(pattern)
+        if child.is_dir()
+    }
+    return sorted(
+        children,
+        key=lambda path: (
+            (m.group(1) if (m := _DETECT_RUN_STAMP.search(path.name)) else ""),
+            path.name,
+        ),
+        reverse=True,
+    )
+
+
 def _prediction_dir_for_video(batch_dir: Path, video: str) -> Path:
-    """Newest ``processed_freekiki_*`` child of a detect batch whose README names ``video``."""
-    for child in sorted(batch_dir.glob("processed_freekiki_*"), reverse=True):
+    """Newest detect-run child of a batch whose README names ``video``."""
+    for child in _detect_run_children(batch_dir):
         readme = child / "README.txt"
         if not readme.is_file():
             continue
@@ -2319,6 +2346,113 @@ def load_raw_review_predictions(
     return len(rows)
 
 
+DETECT_README_TITLE = "FreeKiki field keypoints"
+
+
+def detect_output_dir(path) -> Path | None:
+    """The detect output folder of ``path`` (the folder or a CSV inside it), else None."""
+    path = Path(path).expanduser()
+    folder = path if path.is_dir() else path.parent
+    readme = folder / "README.txt"
+    try:
+        head = readme.read_text(encoding="utf-8").lstrip()
+    except OSError:
+        return None
+    return folder.resolve() if head.startswith(DETECT_README_TITLE) else None
+
+
+def run_video(run_dir) -> Path:
+    """Original video of a detect run: README ``video:``, else the same name next to the run."""
+    run_dir = Path(run_dir)
+    video = _read_readme_video(run_dir)
+    if video is None:
+        raise ValueError(f"No 'video:' line in {run_dir / 'README.txt'}")
+    if video.is_file():
+        return video.resolve()
+    for folder in (run_dir.parent, run_dir.parent.parent):
+        if (folder / video.name).is_file():
+            return (folder / video.name).resolve()
+    raise ValueError(f"Original video not found: {video.name}; move it next to the run folder")
+
+
+def detect_runs(path) -> list[tuple[Path, Path]]:
+    """``(run_dir, video)`` of a detect run, or of every video of a detect batch.
+
+    ``path`` may be a run or batch folder, or any file inside one. A batch
+    gives the newest run of each video, sorted by video name. Runs whose
+    video is missing are skipped; ``[]`` when nothing is a detect output.
+    """
+    run = detect_output_dir(path)
+    if run is not None:
+        return [(run, run_video(run))]
+    path = Path(path).expanduser()
+    folder = path if path.is_dir() else path.parent
+    newest: dict[Path, Path] = {}
+    for child in _detect_run_children(folder):
+        if detect_output_dir(child) is None:
+            continue
+        try:
+            newest.setdefault(run_video(child), child.resolve())
+        except ValueError as exc:
+            _log(f"skip {child.name}: {exc}")
+    return sorted(((r, v) for v, r in newest.items()), key=lambda rv: rv[1].name)
+
+
+def freekiki_run_options(run_dir) -> dict:
+    """getpixelvideo options that open a detect run in correction mode."""
+    readme = (Path(run_dir) / "README.txt").read_text(encoding="utf-8").splitlines()
+    model = next((line[7:] for line in readme if line.startswith("model: ")), "")
+    ws = workspace_for_model_file(model) if model else None
+    return {
+        "workspace": str(ws) if ws else None,
+        "predictions": str(run_dir),
+        "session": None,
+    }
+
+
+def relocate_review_session(session: dict, folder) -> Path:
+    """Move a review session (and its future exports) into ``folder``, then save it.
+
+    ``folder`` must be empty or already hold this session; its name becomes the
+    session id (``ingest`` checks that the folder and the id agree).
+    """
+    folder = Path(folder).expanduser().resolve()
+    target = folder / "session.json"
+    if Path(session["session_path"]).resolve() != target and folder.is_dir():
+        if target.is_file():
+            other = json.loads(target.read_text(encoding="utf-8"))
+            if Path(other.get("video", "")).name != Path(session["video"]).name:
+                raise ValueError(f"{folder} holds the session of another video")
+        elif any(folder.iterdir()):
+            raise ValueError(f"Choose an empty folder for the dataset: {folder}")
+    session["session_path"] = str(target)
+    session["session_id"] = folder.name
+    return save_review_session(session)
+
+
+def default_match_id(session: dict) -> str:
+    """Match id for ``ingest`` when none is given: the video stem, lowercase ASCII."""
+    stem = unicodedata.normalize("NFKD", Path(session["video"]).stem.lower())
+    stem = "".join(c for c in stem if not unicodedata.combining(c))
+    return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", stem)).strip("_") or "match"
+
+
+def add_corrections(ws, folders, *, match_id: str | None = None) -> list[dict]:
+    """Ingest corrected-dataset folders (getpixelvideo "Save dataset") into train.
+
+    Idempotent: frames already ingested are skipped. Any incomplete frame, a
+    val/test/hard match or a near-duplicate raises before anything is copied.
+    """
+    reports = []
+    for folder in folders:
+        folder = Path(folder).expanduser().resolve()
+        session = load_review_session(folder / "session.json")
+        match = match_id or default_match_id(session)
+        _log(f"corrections: {folder} (match {match})")
+        reports.append(ingest_reviewed(ws, folder, match, split="train", commit=True))
+    return reports
+
+
 def _read_readme_video(directory: Path) -> Path | None:
     for line in (directory / "README.txt").read_text(encoding="utf-8").splitlines():
         if line.startswith("video: "):
@@ -2401,7 +2535,7 @@ def build_label_queue(
     outputs = (
         [batch]
         if (batch / "README.txt").is_file()
-        else sorted(p for p in batch.glob("processed_freekiki_*") if (p / "README.txt").is_file())
+        else [p for p in _detect_run_children(batch) if (p / "README.txt").is_file()]
     )
     if not outputs:
         raise ValueError(f"No detect output (README.txt) in {batch}")
@@ -3453,7 +3587,7 @@ def detect_video(
     )
     imgsz = predictor.imgsz
     base_out = Path(output_dir).expanduser() if output_dir else video.parent
-    out = base_out / f"processed_freekiki_{video.stem}_{datetime.now():%Y%m%d_%H%M%S}"
+    out = base_out / f"freekiki_predict_{video.stem}_{datetime.now():%Y%m%d_%H%M%S}"
     (out / "diag_frames").mkdir(parents=True, exist_ok=True)
 
     cap = cv2.VideoCapture(str(video))
@@ -3706,8 +3840,9 @@ def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
     """Detect on one video or on every video of a folder.
 
     A folder writes ``processed_freekiki_batch_<ts>/`` (inside ``output_dir``,
-    default the folder itself) with one sub-folder per video and
-    ``quality_summary.csv`` comparing them. Returns the output folder.
+    default the folder itself) with one ``freekiki_predict_<stem>_<ts>/``
+    sub-folder per video and ``quality_summary.csv`` comparing them.
+    Returns the output folder.
     """
     validate_detection_workspace(ws, kwargs.get("model", "active"))
     source = Path(source).expanduser().resolve()
@@ -3810,6 +3945,16 @@ def build_parser() -> argparse.ArgumentParser:
                 "--workers", type=int, help="Dataloader workers (default Ultralytics 8; see bench)."
             )
             p.add_argument("--manifest", help="Train on manifests/<name> (e.g. v001).")
+            p.add_argument(
+                "--add-dataset",
+                action="append",
+                default=[],
+                metavar="DIR",
+                help="Corrected dataset saved by getpixelvideo (F9); added to train first. Repeatable.",
+            )
+            p.add_argument(
+                "--match-id", help="Match of the --add-dataset folders (default: video name)."
+            )
             p.add_argument(
                 "--backend",
                 choices=("yolo", "heatmap"),
@@ -3950,6 +4095,14 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "resume":
         resume(ws, name=args.name, device=args.device, batch=batch)
     elif args.command == "train":
+        if args.add_dataset:
+            if args.manifest:
+                raise ValueError(
+                    "A manifest is a fixed train list without the new corrections: run "
+                    "'train --add-dataset ...' without --manifest, or build a new manifest after "
+                    "'ingest'."
+                )
+            add_corrections(ws, args.add_dataset, match_id=args.match_id)
         train(
             ws,
             base=args.base,
@@ -4091,10 +4244,8 @@ def run_freekiki() -> None:
         "kp_conf": tk.StringVar(value="0.5"),
         "split": tk.StringVar(value="val"),
         "fill_gaps": tk.StringVar(value="0"),
-        "label_batch": tk.StringVar(),
-        "session": tk.StringVar(),
+        "corrections": tk.StringVar(),
         "match_id": tk.StringVar(),
-        "ingest_split": tk.StringVar(value="train"),
     }
     overlay = tk.BooleanVar(value=True)
     link_output_to_input(v["video"], v["out"])
@@ -4179,6 +4330,13 @@ def run_freekiki() -> None:
             + opt("--device", "device")
             + opt("--fraction", "fraction")
             + opt("--manifest", "manifest")
+            + [
+                arg
+                for folder in v["corrections"].get().split(";")
+                if folder.strip()
+                for arg in ("--add-dataset", folder.strip())
+            ]
+            + (opt("--match-id", "match_id") if v["corrections"].get().strip() else [])
         )
 
     def smoke_preset():
@@ -4270,51 +4428,37 @@ def run_freekiki() -> None:
     def open_help():
         webbrowser.open(HELP_HTML.resolve().as_uri())
 
-    def do_queue():
-        if not v["label_batch"].get().strip():
-            messagebox.showerror("FreeKiki", "Choose a detect batch/output folder.", parent=root)
-            return
-        run_cli(["queue", "--batch", v["label_batch"].get().strip()])
-
-    def browse_session():
-        ws = v["ws"].get().strip()
-        path = filedialog.askopenfilename(
-            title="Review session (incoming/<session>/session.json)",
-            initialdir=str(Path(ws) / "incoming") if ws else None,
-            filetypes=[("Review session", "session.json"), ("JSON", "*.json")],
+    def add_corrections_folder():
+        path = filedialog.askdirectory(
+            title="Corrected dataset (getpixelvideo -> Save dataset F9)",
+            initialdir=v["out"].get() or None,
         )
         if path:
-            v["session"].set(str(Path(path).parent))
+            current = [p for p in v["corrections"].get().split(";") if p.strip()]
+            v["corrections"].set(";".join([*current, path]))
 
-    def do_open_review():
-        ws, sdir = v["ws"].get().strip(), v["session"].get().strip()
-        if not ws or not (Path(sdir) / "session.json").is_file():
-            messagebox.showerror("FreeKiki", "Choose the workspace and a session.", parent=root)
+    def do_correct():
+        video, ws = v["video"].get().strip(), v["ws"].get().strip()
+        if not video or not Path(video).exists() or not ws:
+            messagebox.showerror(
+                "FreeKiki",
+                "Choose the workspace and the video or folder (section 5), then Detect it first.",
+                parent=root,
+            )
             return
+        out = v["out"].get().strip() or str(
+            Path(video) if Path(video).is_dir() else Path(video).parent
+        )
         gpv = Path(__file__).resolve().parent / "getpixelvideo.py"
-        argv = ["--freekiki", "--freekiki-workspace", ws]
-        argv += ["--freekiki-session", str(Path(sdir) / "session.json")]
+        if Path(video).is_file():
+            argv = ["-f", video, "--freekiki", "--freekiki-workspace", ws]
+            argv += ["--freekiki-predictions", out]
+        else:  # a folder of videos: FreeKiki Load on the newest batch, one video after the other
+            batches = sorted(Path(out).glob("processed_freekiki_batch_*"))
+            argv = ["--freekiki-run", str(batches[-1] if batches else out)]
         print_gui_cli_mirror("vaila/getpixelvideo", ["uv", "run", "--no-sync", str(gpv), *argv])
         log.insert("end", f"\n>> getpixelvideo {' '.join(argv)}\n")
         subprocess.Popen([sys.executable, str(gpv), *argv])  # own window, runs alongside
-
-    def do_ingest(commit: bool):
-        sdir, match = v["session"].get().strip(), v["match_id"].get().strip()
-        if not sdir or not match:
-            messagebox.showerror("FreeKiki", "Set Session and Match id first.", parent=root)
-            return
-        split = v["ingest_split"].get()
-        if commit and not messagebox.askyesno(
-            "FreeKiki",
-            f"Append the complete reviewed frames of\n{sdir}\nto the '{split}' split "
-            f"(match {match})?",
-            parent=root,
-        ):
-            return
-        run_cli(
-            ["ingest", "--src", sdir, "--match-id", match, "--split", split]
-            + (["--commit"] if commit else [])
-        )
 
     frm = ttk.Frame(root, padding=10)
     frm.pack(fill="both", expand=True)
@@ -4391,6 +4535,15 @@ def run_freekiki() -> None:
     ttk.Button(bar, text="Build oversampling manifest", command=lambda: run_cli(["manifest"])).pack(
         side="left"
     )
+    corr = ttk.Frame(box)
+    corr.grid(row=5, column=0, columnspan=3, sticky="we", pady=2)
+    ttk.Label(corr, text="Corrections").pack(side="left", padx=(4, 2))
+    ttk.Entry(corr, textvariable=v["corrections"], width=52).pack(
+        side="left", fill="x", expand=True
+    )
+    ttk.Button(corr, text="Add folder...", command=add_corrections_folder).pack(side="left", padx=4)
+    ttk.Label(corr, text="Match id").pack(side="left", padx=(8, 2))
+    ttk.Entry(corr, textvariable=v["match_id"], width=16).pack(side="left")
     ttk.Label(
         box,
         text="Retrain = Base model 'active' (default slot), a slot (m, l) or any trained .pt: "
@@ -4457,39 +4610,16 @@ def run_freekiki() -> None:
         ttk.Label(grid, text=label).grid(row=0, column=2 * i, padx=(4, 2))
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
     ttk.Checkbutton(grid, text="Overlay MP4", variable=overlay).grid(row=0, column=10, padx=6)
-    ttk.Button(box, text="Detect", command=do_detect).grid(row=5, column=1, sticky="w", pady=2)
-
-    box = ttk.LabelFrame(frm, text="6. Label / review (more labels -> retrain)", padding=6)
-    box.pack(fill="x", pady=4)
-    row(
-        box,
-        0,
-        "Detect batch",
-        v["label_batch"],
-        lambda: browse_dir(v["label_batch"], "detect output (processed_freekiki_batch_*)"),
-    )
-    row(box, 1, "Session", v["session"], browse_session)
-    grid = ttk.Frame(box)
-    grid.grid(row=2, column=0, columnspan=3, sticky="w", pady=2)
-    ttk.Label(grid, text="Match id").grid(row=0, column=0, padx=(4, 2))
-    ttk.Entry(grid, textvariable=v["match_id"], width=22).grid(row=0, column=1)
-    ttk.Label(grid, text="Split").grid(row=0, column=2, padx=(8, 2))
-    ttk.Combobox(
-        grid, textvariable=v["ingest_split"], values=INGEST_SPLITS, width=6, state="readonly"
-    ).grid(row=0, column=3)
     bar = ttk.Frame(box)
-    bar.grid(row=3, column=1, sticky="w", pady=2)
-    ttk.Button(bar, text="Build label queue", command=do_queue).pack(side="left")
-    ttk.Button(bar, text="Open review", command=do_open_review).pack(side="left", padx=6)
-    ttk.Button(bar, text="Ingest preview", command=lambda: do_ingest(False)).pack(side="left")
-    ttk.Button(bar, text="Ingest commit", command=lambda: do_ingest(True)).pack(side="left", padx=6)
+    bar.grid(row=5, column=1, sticky="w", pady=2)
+    ttk.Button(bar, text="Detect", command=do_detect).pack(side="left")
+    ttk.Button(bar, text="Correct in getpixelvideo", command=do_correct).pack(side="left", padx=6)
     ttk.Label(
         box,
-        text="Queue = frames worth labelling (not calibratable first, then rare points p5/p29/"
-        "p39/p47 half-seen).\nReview: label EVERY visible point or hide it (Del); F10 accepts a "
-        "ghost; incomplete frames are never exported.\nSplit hard = labelled holdout of difficult "
-        "footage, never trained on (Evaluate with Split hard).",
-    ).grid(row=4, column=0, columnspan=3, sticky="w", padx=4)
+        text="Correct: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
+        "F9 Save dataset.\nThen put that folder in section 3 'Corrections' and Train "
+        "(Base 'active' = fine-tune).",
+    ).grid(row=6, column=0, columnspan=3, sticky="w", padx=4)
 
     bar = ttk.Frame(frm)
     bar.pack(fill="x", pady=4)

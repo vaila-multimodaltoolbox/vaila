@@ -1,7 +1,7 @@
 """Public vailá entry points, imported only when requested.
 
 Version: 0.4.6
-Update Date: 28 September 2026
+Update Date: 30 September 2026
 """
 
 import subprocess

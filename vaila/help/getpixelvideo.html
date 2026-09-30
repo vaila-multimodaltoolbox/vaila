@@ -1819,8 +1819,20 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
       <section id="version-history">
         <h2>11. Version History</h2>
 
-        <h3>Version 0.4.6 (30 September 2026) &mdash; AV1 videos open through an H.264 copy</h3>
+        <h3>Version 0.4.6 (30 September 2026) &mdash; FreeKiki correction from Load; AV1 videos open through an H.264 copy</h3>
         <ul>
+          <li>The FreeKiki panel and point list (bottom-left) are semi-transparent, so the pitch behind stays visible.</li>
+          <li><strong>Tpl: → L = FreeKiki Load</strong>, the panel's <strong>Load run folder</strong> button, or
+            <code>--freekiki-run DIR</code>: point at a freekiki run or batch
+            folder (open it in the browser and press Enter). It opens the original video in correction mode; a batch asks which video.
+            <strong>Load</strong> on the run's CSV does the same for the video already open. The predicted 49 points
+            become editable drafts (INSERT mode).</li>
+          <li><strong>Right-click</strong> picks a point or ghost, <strong>left-click</strong> places it, and
+            <strong>Del</strong> / <strong>Del Range</strong> mark a point inside the picture that is not visible.</li>
+          <li><strong>F10</strong> accepts a ghost, <strong>F3</strong> is Frame OK and <strong>PgDn</strong> goes to the
+            next draft.</li>
+          <li><strong>F9 Save dataset</strong> writes a YOLO-pose folder you choose; only complete frames are saved. Add
+            it in FreeKiki → Train → <strong>Corrections</strong>.</li>
           <li>OpenCV's bundled FFmpeg has no software AV1 decoder, so AV1 videos (e.g. YouTube downloads) opened
             but every frame read failed.</li>
           <li>On open, getpixelvideo checks that the first frame decodes. If it does not, a dialog offers an

@@ -2,6 +2,8 @@
 
 The **FreeKiki (49 field KPs)** button (Frame B → Soccer Tools) launches `vaila/freekiki.py`.
 
+**Version:** 0.4.6 · **Updated:** 30 September 2026
+
 ## Overview
 
 Trains, retrains and runs a YOLO-pose network that detects the 49 soccer-field keypoints of the
@@ -45,11 +47,10 @@ per-frame camera calibration.
   diagnostic frames, overlay MP4, snapshot PNG and `quality.json` (detection rate, visible kps,
   valid-homography rate, cuts, camera displacement vs residual jitter); folders also get
   `quality_summary.csv`.
-- **Label / review (section 6):** `queue` picks the frames worth labelling from a detect batch
-  (not calibratable first, then half-seen p5/p29/p39/p47). **Open review** opens them in
-  getpixelvideo with AI and homography ghosts (F10 accepts). Only complete frames (every visible
-  point labelled or hidden with Del) are exported and ingested. `--split hard` keeps a labelled
-  holdout of difficult footage that is never trained on (`evaluate --split hard`).
+- **Correct and retrain:** **Correct in getpixelvideo** (section 5), or getpixelvideo **Tpl: → L = FreeKiki
+  Load** (point at the run folder; it finds the video), opens the detected video with its labels. Right-click picks a point, left-click places it, Del / Del Range = not visible, F10 accepts a
+  ghost, F3 = frame OK, F9 = save dataset folder. Put that folder in section 3 **Corrections** and
+  Train. Only complete frames are saved. The CLI keeps `queue`, `ingest` and `--split hard`.
 
 ## Usage
 
@@ -61,8 +62,8 @@ per-frame camera calibration.
 4. **Evaluate model** on val (and **Sweep thresholds (val)** / **Compare with its slot**); keep the
    test split for the final report.
 5. **Detect** on a broadcast video or a folder of videos; check `quality_summary.csv` and snapshots.
-6. More labels: **Build label queue** → **Open review** → **Ingest preview** → **Ingest commit**
-   (train or hard) → **Build oversampling manifest** → retrain.
+6. Corrections: **Correct in getpixelvideo** → fix → **F9 Save dataset** → section 3 **Corrections**
+   → **Train** (base `active`).
 
 ## GUI ↔ CLI
 
@@ -87,9 +88,8 @@ Every button prints its `>>` command in the terminal (`WS` = workspace; CUDA mac
 | (CLI only) grow m to l | `uv run vaila/freekiki.py grow -w WS --src m --to l --out models/freekiki_l_init.pt` |
 | Audit dataset | `uv run vaila/freekiki.py audit -w WS` |
 | Detect | `uv run vaila/freekiki.py detect -w WS --video VIDEO_OR_FOLDER` |
-| Build label queue | `uv run vaila/freekiki.py queue -w WS --batch DETECT_BATCH` |
-| Open review | `uv run vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session SESSION.json` |
-| Ingest preview / commit | `uv run vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH --split train\|hard [--commit]` |
+| Correct in getpixelvideo | `uv run vaila/getpixelvideo.py -f VIDEO --freekiki --freekiki-workspace WS --freekiki-predictions OUTPUT_DIR` |
+| Train with Corrections | `uv run vaila/freekiki.py train -w WS --base active --add-dataset FOLDER` |
 
 ---
 See also: [FreeKiki Help](../../vaila/help/freekiki.html), [Field KPs (AI)](soccerfield-keypoints-ai.md)
