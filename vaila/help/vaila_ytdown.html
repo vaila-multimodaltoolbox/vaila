@@ -27,6 +27,10 @@ re-encode. getpixelvideo then offers an H.264 copy (<code>&lt;name&gt;_h264.mp4<
 </ul>
 <p>Changing the box clears the consultation (consult again). The equivalent CLI includes <code>--keep-codec</code> when
 the box is unticked.</p>
+<p><strong>File names: sanitized (default) or <code>--original-names</code>.</strong> Finished files are renamed like
+<strong>File Manager → Rename</strong>: lowercase ASCII, spaces and dashes become <code>_</code>, symbols are dropped, and a
+clash gets <code>_1</code>. Untick <strong>Sanitized names (like Rename)</strong>, or pass <code>--original-names</code>, to
+keep the YouTube title.</p>
 <pre><code>python -m vaila.vaila_ytdown --url &quot;https://www.youtube.com/watch?v=VIDEO_ID&quot; --output &quot;/data/my videos&quot; --no-gui
 python -m vaila.vaila_ytdown --file &quot;/data/my URLs.txt&quot; --output &quot;/data/my videos&quot; --no-gui
 python -m vaila.vaila_ytdown --file &quot;/data/my URLs.txt&quot; --output &quot;/data/my audio&quot; --audio-only --no-gui --debug

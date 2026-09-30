@@ -390,3 +390,23 @@ def test_keep_codec_skips_reencode_and_is_mirrored_in_cli():
     cmd = format_ytdown_cli_command(["https://y/1"], "/out", keep_codec=True, selections={1: "399"})
     assert cmd[-3:] == ["--keep-codec", "--video-format", "1=399"]
     assert "--keep-codec" not in format_ytdown_cli_command(["https://y/1"], "/out")
+
+
+def test_finished_file_gets_rename_style_name_unless_original_names(tmp_path):
+    downloader = yt.YTDownloader()
+    video = tmp_path / "001_Australia vs Brazil ｜ Highlights - Friendly.MP4"
+    video.write_bytes(b"v")
+    renamed = Path(downloader._sanitized_name(str(video)))
+    assert renamed.name == "001_australia_vs_brazil_highlights_friendly.mp4"
+    assert renamed.read_bytes() == b"v" and not video.exists()
+    clash = tmp_path / "Clip A.mp4"
+    clash.write_bytes(b"x")
+    (tmp_path / "clip_a.mp4").write_bytes(b"old")
+    assert Path(downloader._sanitized_name(str(clash))).name == "clip_a_1.mp4"
+    downloader.original_names = True
+    keep = tmp_path / "Keep Me.mp4"
+    keep.write_bytes(b"k")
+    assert downloader._sanitized_name(str(keep)) == str(keep)
+    cmd = format_ytdown_cli_command(["https://y/1"], "/out", original_names=True)
+    assert "--original-names" in cmd
+    assert "--original-names" not in format_ytdown_cli_command(["https://y/1"], "/out")

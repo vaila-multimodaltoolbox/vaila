@@ -58,6 +58,8 @@ Short options remain: -u, -f, -o, -a. --url and --file are mutually exclusive; e
 
 Changing the box clears the consultation; consult again. The equivalent CLI includes `--keep-codec` when the box is unticked.
 
+**File names: sanitized (default) or `--original-names`.** Finished MP4/MP3 files are renamed like **File Manager → Rename**: lowercase ASCII, accents removed, spaces and dashes become `_`, and other symbols are dropped. For example, `001_Australia vs Brazil ｜ Highlights.mp4` becomes `001_australia_vs_brazil_highlights.mp4`, and a name clash gets `_1`. Untick **Sanitized names (like Rename)** in the GUI, or pass `--original-names`, to keep the YouTube title.
+
 Exit codes: 0 all succeeded; 1 failure including partial failures; 2 invalid arguments; 130 cancellation without other failures. Failed items do not prevent subsequent batch items from being attempted.
 
 ## Outputs and reproducibility

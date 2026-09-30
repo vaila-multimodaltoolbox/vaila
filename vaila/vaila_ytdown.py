@@ -51,6 +51,11 @@ except ImportError:
     )
 
 try:
+    from .filemanager import _clean_filename, _unused
+except ImportError:
+    from filemanager import _clean_filename, _unused  # ty: ignore[unresolved-import]
+
+try:
     from .ffmpeg_utils import opencv_compatible_copy, opencv_reads_video
 except ImportError:
     from ffmpeg_utils import (  # ty: ignore[unresolved-import]
@@ -290,6 +295,7 @@ def format_ytdown_cli_command(
     debug: bool = False,
     url_file: Path | str | None = None,
     keep_codec: bool = False,
+    original_names: bool = False,
 ) -> list[str]:
     """Build the copy-paste CLI command that reproduces this run headlessly."""
     cmd = [
@@ -314,6 +320,8 @@ def format_ytdown_cli_command(
         for idx, fmt_id in sorted((selections or {}).items()):
             cmd.extend(["--video-format", f"{idx}={fmt_id}"])
 
+    if original_names:
+        cmd.append("--original-names")
     if debug:
         cmd.append("--debug")
 
@@ -455,6 +463,9 @@ class YTDownloader:
         # False (default) = vailá-ready MP4: OpenCV-decodable codec, H.264 re-encode
         # when needed. True = keep YouTube's best codec (often AV1), no re-encode.
         self.keep_codec = False
+        # False (default) = file names sanitized like File Manager -> Rename
+        # (lowercase ASCII, spaces/dashes -> "_"). True = keep the YouTube title.
+        self.original_names = False
 
         # Check if ffmpeg is available
         self.ffmpeg_available = self._check_ffmpeg()
@@ -632,6 +643,7 @@ class YTDownloader:
 
                 actual_filename = self._finished_filename(ydl, info, ".mp4")
                 actual_filename = self._make_vaila_readable(actual_filename)
+                actual_filename = self._sanitized_name(actual_filename)
                 file_size_mb = 0.0
                 with contextlib.suppress(OSError):
                     file_size_mb = os.path.getsize(actual_filename) / (1024 * 1024)
@@ -686,6 +698,17 @@ class YTDownloader:
             if self.status_callback:
                 self.status_callback(f"Error: {error_msg}")
             raise Exception(error_msg) from e
+
+    def _sanitized_name(self, path):
+        """Rename the finished file like File Manager -> Rename (unless ``original_names``)."""
+        path = Path(path)
+        clean = _clean_filename(path.name)
+        if self.original_names or clean == path.name or not Path(clean).stem:
+            return str(path)
+        target = _unused(path.with_name(clean), set())
+        os.replace(path, target)
+        self.feedback(f"Renamed: {path.name} -> {target.name}")
+        return str(target)
 
     def _make_vaila_readable(self, path):
         """Re-encode the MP4 to H.264 in place when OpenCV cannot decode it.
@@ -755,6 +778,7 @@ class YTDownloader:
                 self.current_video_title = info.get("title", "Unknown")
 
                 actual_filename = self._finished_filename(ydl, info, ".mp3")
+                actual_filename = self._sanitized_name(actual_filename)
                 file_size_mb = 0.0
                 with contextlib.suppress(OSError):
                     file_size_mb = os.path.getsize(actual_filename) / (1024 * 1024)
@@ -815,6 +839,7 @@ class YTDownloader:
                 debug=self.feedback.debug_enabled,
                 url_file=url_file,
                 keep_codec=self.keep_codec,
+                original_names=self.original_names,
             )
 
             format_label = (
@@ -987,6 +1012,16 @@ class DownloaderGUI:
             command=self.toggle_vaila_ready,
         )
         self.vaila_ready_button.pack(side="left", padx=12)
+        self.sanitize_names = tk.BooleanVar(root, value=not self.downloader.original_names)
+        self.sanitize_button = ttk.Checkbutton(
+            format_row,
+            text="Sanitized names (like Rename)",
+            variable=self.sanitize_names,
+            command=lambda: setattr(
+                self.downloader, "original_names", not self.sanitize_names.get()
+            ),
+        )
+        self.sanitize_button.pack(side="left", padx=12)
         self.consult_button = ttk.Button(
             frame, text="Consult qualities", command=self.consult_qualities
         )
@@ -1051,6 +1086,7 @@ class DownloaderGUI:
             self.video_button,
             self.audio_button,
             self.vaila_ready_button,
+            self.sanitize_button,
             self.debug_button,
             self.urls_text,
             self.consult_button,
@@ -1370,6 +1406,12 @@ def run_ytdown(argv=None):
         "H.264) that opens in getpixelvideo and every OpenCV-based vailá tool.",
     )
     parser.add_argument(
+        "--original-names",
+        action="store_true",
+        help="Keep the YouTube title as file name. Default: sanitized like File Manager -> "
+        "Rename (lowercase ASCII, spaces/dashes -> '_').",
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Include technical details and traceback"
     )
     # Embedded launch does not consume the parent application's command line.
@@ -1389,6 +1431,7 @@ def run_ytdown(argv=None):
         downloader = YTDownloader()
         downloader.feedback = feedback
         downloader.keep_codec = args.keep_codec
+        downloader.original_names = args.original_names
         try:
             urls = read_urls_from_file(args.file) if args.file else [args.url] if args.url else []
             if not urls:
