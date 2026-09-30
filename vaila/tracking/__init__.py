@@ -5,8 +5,8 @@ Robust kinematic tracking with linear appearance subspace modeling (Eigen-templa
 M-estimator ICLK solver with Huber loss, and Rauch-Tung-Striebel (RTS) zero-phase smoothing.
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 18 September 2026
-Version: 0.4.4
+Update Date: 30 September 2026
+Version: 0.4.6
 """
 
 from .ai_tracker import (
@@ -23,6 +23,7 @@ from .ai_tracker import (
     get_available_resnet_checkpoints,
     infill_and_smooth,
     refine_location_parabola,
+    scan_all_ai_tracker_weights,
 )
 from .rts_smoother import CWNAStateSpace, RTSSmoother
 from .subspace_tracker import (
@@ -52,4 +53,5 @@ __all__ = [
     "get_available_resnet_checkpoints",
     "infill_and_smooth",
     "refine_location_parabola",
+    "scan_all_ai_tracker_weights",
 ]

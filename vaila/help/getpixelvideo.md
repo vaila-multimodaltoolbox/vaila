@@ -6,7 +6,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.4.6
 **Date:** 22 July 2025  
-**Updated:** 28 September 2026
+**Updated:** 30 September 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -718,6 +718,18 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.6 (30 September 2026) — AV1 videos open through an H.264 copy
+
+- OpenCV's bundled FFmpeg has no software AV1 decoder, so AV1 videos (e.g.
+  YouTube downloads) opened but every frame read failed
+  (`[av1] Your platform doesn't support hardware accelerated AV1 decoding`).
+- On open, getpixelvideo checks that the first frame decodes. If it does
+  not, a dialog offers an H.264 copy beside the source
+  (`<name>_h264.mp4`, made with the system FFmpeg). It keeps every frame and
+  timestamp, copies the audio and leaves the original unchanged.
+- The copy is opened and used for the marker CSVs. An existing readable copy
+  is reused without asking.
 
 ### Version 0.4.5 (23 September 2026) — AI Track occlusion fallback; AI-Track checkpoints survive reinstall
 

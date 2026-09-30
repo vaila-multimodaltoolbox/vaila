@@ -83,7 +83,7 @@ def test_detection_checks_workspace_and_active_model_before_creating_output(tmp_
 
 def test_model_picker_can_find_its_workspace(tmp_path: Path) -> None:
     ws = fk.init_workspace(tmp_path / "workspace")
-    model = ws / "models" / "active.pt"
+    model = ws / fk.slot_file("m")
     model.touch()
     assert fk.workspace_for_model_file(model) == ws
     assert fk.workspace_for_model_file(tmp_path / "missing.pt") is None
@@ -141,14 +141,15 @@ def test_register_run_promotes_only_better(tmp_path: Path) -> None:
     assert first["promoted"] and first["best_epoch"] == "2"
     worse = fk.register_run(ws, _fake_run(ws, "r2", 0.30), base="active", epochs=2, imgsz=640)
     assert not worse["promoted"]
-    assert (ws / fk.ACTIVE_MODEL).read_bytes() == b"r1"
+    assert (ws / fk.slot_file("m")).read_bytes() == b"r1"
     better = fk.register_run(ws, _fake_run(ws, "r3", 0.55), base="active", epochs=2, imgsz=640)
     assert better["promoted"]
-    assert (ws / fk.ACTIVE_MODEL).read_bytes() == b"r3"
-    assert fk.load_settings(ws)["active"]["run"] == "r3"
+    assert (ws / fk.slot_file("m")).read_bytes() == b"r3"
+    assert fk.load_settings(ws)["models"]["m"]["run"] == "r3"
     with (ws / fk.REGISTRY_CSV).open(encoding="utf-8") as f:
         assert [r["run"] for r in csv.DictReader(f)] == ["r1", "r2", "r3"]
-    assert fk.resolve_model(ws, "active").endswith("active.pt")
+    assert fk.resolve_model(ws, "active").endswith("freekiki_m.pt")
+    assert fk.resolve_model(ws, "freekiki_m") == fk.resolve_model(ws, "m")
 
 
 def test_register_run_gate_and_never_keep_active(tmp_path: Path, monkeypatch) -> None:
@@ -158,21 +159,21 @@ def test_register_run_gate_and_never_keep_active(tmp_path: Path, monkeypatch) ->
     assert first["promoted"]  # first model of the workspace, no evaluation
     calls: list[str] = []
 
-    def fake_decision(ws_, candidate, settings):
+    def fake_decision(ws_, candidate, settings, baseline=None):
         calls.append(candidate)
         return {"promote": False, "reasons": ["p5_recall: 0.9 -> 0.1 (tolerance 0.02)"]}
 
     monkeypatch.setattr(fk, "promotion_decision", fake_decision)
     row = fk.register_run(ws, _fake_run(ws, "r2", 0.90), base="active", epochs=2, imgsz=640)
     assert not row["promoted"] and calls and calls[0].endswith("kiki49_r2.pt")
-    assert (ws / fk.ACTIVE_MODEL).read_bytes() == b"r1"  # better mAP alone is not enough
+    assert (ws / fk.slot_file("m")).read_bytes() == b"r1"  # better mAP alone is not enough
     assert (ws / "models" / "kiki49_r2.pt").is_file()  # candidate kept for later compare
 
     settings = fk.load_settings(ws)
     settings["promotion"]["mode"] = "never"
     fk.save_settings(ws, settings)
     row = fk.register_run(ws, _fake_run(ws, "r3", 0.99), base="active", epochs=2, imgsz=640)
-    assert not row["promoted"] and (ws / fk.ACTIVE_MODEL).read_bytes() == b"r1"
+    assert not row["promoted"] and (ws / fk.slot_file("m")).read_bytes() == b"r1"
     with (ws / fk.PROMOTION_LOG).open(encoding="utf-8") as f:
         log = list(csv.DictReader(f))
     assert [r["promoted"] for r in log] == ["True", "False", "False"]
@@ -202,7 +203,10 @@ def test_parser_new_subcommands() -> None:
     a = p.parse_args(["evaluate", "-w", "ws", "--split", "test", "--kp-conf", "0.3"])
     assert a.split == "test" and a.kp_conf == 0.3
     a = p.parse_args(["compare", "-w", "ws", "--candidate", "models/x.pt"])
-    assert a.baseline == "active" and not a.promote
+    assert a.baseline is None and not a.promote
+    assert p.parse_args(["models", "-w", "ws", "--default", "l"]).default == "l"
+    a = p.parse_args(["grow", "-w", "ws"])
+    assert (a.src, a.to, a.out) == ("m", "l", "models/freekiki_l_init.pt")
     a = p.parse_args(["sweep", "-w", "ws", "--eval-dir", "e"])
     assert not a.allow_test
     assert p.parse_args(["audit", "-w", "ws", "--no-hash"]).no_hash
@@ -514,7 +518,7 @@ def test_retrain_from_active_uses_low_adamw_lr(
     ds = fk.dataset_dir(ws)
     ds.mkdir(parents=True)
     (ds / "data.yaml").write_text("path: /tmp\ntrain: images/train\n", encoding="utf-8")
-    (ws / "models" / "active.pt").write_bytes(b"checkpoint")
+    (ws / fk.slot_file("m")).write_bytes(b"checkpoint")
     seen: dict = {}
 
     def fake_train(*_args, **kwargs) -> None:
@@ -554,3 +558,115 @@ def test_ultralytics_train_list_keeps_duplicate_lines(tmp_path: Path) -> None:
     dataset.fraction = 1.0
     files = BaseDataset.get_img_files(dataset, str(txt))
     assert len(files) == 2 and files[0] == files[1]
+
+
+def _schema1(ws: Path, *, with_file: bool = True) -> None:
+    raw = fk.toml.load(ws / fk.CONFIG_NAME)
+    raw.pop("models")
+    raw["active"] = {"model": fk.LEGACY_ACTIVE_MODEL, "run": "r0", "pose_map50_95": 0.8}
+    (ws / fk.CONFIG_NAME).write_text(fk.toml.dumps(raw), encoding="utf-8")
+    if with_file:
+        (ws / fk.LEGACY_ACTIVE_MODEL).write_bytes(b"old")
+
+
+def test_schema1_migration_copies_active_into_its_slot(tmp_path: Path) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    _schema1(ws)
+    settings = fk.load_settings(ws)
+    assert settings["models"]["default"] == "m"
+    assert settings["models"]["m"]["run"] == "r0"
+    assert settings["models"]["m"]["sha256"] == fk.file_sha256(ws / fk.LEGACY_ACTIVE_MODEL)
+    assert (ws / fk.slot_file("m")).read_bytes() == b"old"
+    assert (ws / fk.LEGACY_ACTIVE_MODEL).read_bytes() == b"old"  # copied, never moved
+    raw = fk.toml.load(ws / fk.CONFIG_NAME)
+    assert "active" not in raw and raw["legacy_active"]["run"] == "r0"
+    before = (ws / fk.CONFIG_NAME).read_text(encoding="utf-8")
+    assert fk.load_settings(ws)["models"] == settings["models"]  # idempotent
+    assert (ws / fk.CONFIG_NAME).read_text(encoding="utf-8") == before
+    assert fk.resolve_model(ws, "active").endswith("freekiki_m.pt")
+
+    clash = fk.init_workspace(tmp_path / "clash")
+    _schema1(clash)
+    (clash / fk.slot_file("m")).write_bytes(b"other")
+    with pytest.raises(FileExistsError, match="differs"):
+        fk.load_settings(clash)
+    assert (clash / fk.slot_file("m")).read_bytes() == b"other"
+
+    empty = fk.init_workspace(tmp_path / "empty")
+    _schema1(empty, with_file=False)
+    assert fk.load_settings(empty)["models"] == {"default": "m"}
+
+
+def test_runs_compete_only_inside_their_size_slot(tmp_path: Path) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    settings = fk.load_settings(ws)
+    settings["promotion"]["mode"] = "map"
+    fk.save_settings(ws, settings)
+    reg = fk.register_run
+    assert reg(ws, _fake_run(ws, "m1", 0.40), base="yolo26m-pose.pt", epochs=2, imgsz=640)[
+        "promoted"
+    ]  # first model of the workspace
+    low = reg(ws, _fake_run(ws, "l1", 0.30), base="yolo26l-pose.pt", epochs=2, imgsz=640)
+    assert not low["promoted"]  # empty slot, below new_slot_min_pose_map50_95
+    high = reg(ws, _fake_run(ws, "l2", 0.60), base="yolo26l-pose.pt", epochs=2, imgsz=640)
+    assert high["promoted"]
+    assert (ws / fk.slot_file("l")).read_bytes() == b"l2"
+    assert (ws / fk.slot_file("m")).read_bytes() == b"m1"
+    models = fk.load_settings(ws)["models"]
+    assert models["default"] == "m" and models["l"]["arch"] == "yolo26l-pose"
+    with (ws / fk.REGISTRY_CSV).open(encoding="utf-8") as f:
+        assert [(r["slot"], r["arch"]) for r in csv.DictReader(f)] == [
+            ("m", "yolo26m-pose"),
+            ("l", "yolo26l-pose"),
+            ("l", "yolo26l-pose"),
+        ]
+    assert [r["slot"] for r in fk.list_models(ws)] == ["m", "l"]
+    fk.list_models(ws, default="l")
+    assert fk.resolve_model(ws, "active").endswith("freekiki_l.pt")
+    with pytest.raises(ValueError, match="no model"):
+        fk.list_models(ws, default="x")
+
+
+def test_any_trained_base_is_a_continued_finetune(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    ds = fk.dataset_dir(ws)
+    ds.mkdir(parents=True)
+    (ds / "data.yaml").write_text("path: /tmp\ntrain: images/train\n", encoding="utf-8")
+    (ws / "models" / "freekiki_l_init.pt").write_bytes(b"grown")
+    seen: dict = {}
+    monkeypatch.setattr(
+        "vaila.yolotrain.train_yolo_dataset", lambda *_a, **k: seen.update(k) or None
+    )
+    monkeypatch.setattr(fk, "register_run", lambda *_a, **_k: {})
+    fk.train(ws, base="models/freekiki_l_init.pt", epochs=1, imgsz=64, batch=2, name="g")
+    assert seen["extra_train_args"]["lr0"] == 1e-4
+    assert seen["extra_train_args"]["mosaic"] == 0.0
+    seen.clear()
+    fk.train(ws, base="yolo26l-pose.pt", epochs=1, imgsz=64, batch=2, name="o")
+    assert "lr0" not in seen["extra_train_args"]
+
+
+def test_grow_m_to_l_keeps_the_function(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("ultralytics")
+    from vaila import freekiki_sizes as fs
+
+    class Like:
+        yaml = {"kpt_shape": [49, 3], "nc": 1}
+        nc = 1
+
+    src = tmp_path / "m.pt"
+    torch.save({"model": fs.build("m", Like())}, src)
+    stats = fs.grow(src, tmp_path / "l.pt")
+    assert stats["padded"] > 0 and stats["identity_blocks"] > 0
+    assert stats["max_diff"] < 1e-3
+    assert fk.checkpoint_slot(tmp_path / "l.pt") == ("l", "yolo26l-pose")
+    from ultralytics import YOLO
+
+    assert YOLO(str(tmp_path / "l.pt")).task == "pose"  # "detect" reads pose labels as corrupt
+    with pytest.raises(FileExistsError):
+        fs.grow(src, tmp_path / "l.pt")
+    with pytest.raises(ValueError, match="widths differ"):
+        fs.grow(tmp_path / "l.pt", tmp_path / "x.pt")

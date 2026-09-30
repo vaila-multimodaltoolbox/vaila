@@ -274,7 +274,7 @@ def test_heatmap_run_is_registered_but_never_promoted(tmp_path: Path) -> None:
     _heatmap_results(run / "results.csv", [0.3, 0.9])
     row = fk.register_run(ws, run, base="resnet50-imagenet", epochs=4, imgsz=64)
     assert row["backend"] == "heatmap" and row["promoted"] is False
-    assert not (ws / fk.ACTIVE_MODEL).exists()  # even the first model stays a candidate
+    assert not list((ws / "models").glob("freekiki_*.pt"))  # even the first stays a candidate
     with (ws / fk.REGISTRY_CSV).open(encoding="utf-8") as f:
         (logged,) = list(csv.DictReader(f))
     assert logged["backend"] == "heatmap" and logged["fitness"] == "0.9"
@@ -369,6 +369,6 @@ def test_workspace_heatmap_train_interrupt_and_resume(tmp_path: Path, monkeypatc
     row = fk.resume(ws, name="hm", device="cpu")
     assert row["backend"] == "heatmap" and row["promoted"] is False
     assert fk.run_state(ws, run)["state"] == "registered"
-    assert (ws / row["model"]).is_file() and not (ws / fk.ACTIVE_MODEL).exists()
+    assert (ws / row["model"]).is_file() and not list((ws / "models").glob("freekiki_*.pt"))
     with (run / "results.csv").open(encoding="utf-8") as f:
         assert [r["epoch"] for r in csv.DictReader(f)] == ["1", "2"]

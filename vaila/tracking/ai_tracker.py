@@ -9,8 +9,8 @@ into the retrained online discriminator's feature vector. Integrates bidirection
 keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 23 September 2026
-Version: 0.4.5
+Update Date: 30 September 2026
+Version: 0.4.6
 """
 
 from __future__ import annotations
@@ -165,6 +165,50 @@ def _scan_weight_files(directory: Path, variant: str) -> list[Path]:
             resolved = cand.resolve()
             key = str(resolved)
             if key not in seen and _is_valid_weight_file(resolved):
+                seen.add(key)
+                found.append(resolved)
+        except OSError:
+            pass
+    return found
+
+
+def scan_all_ai_tracker_weights(directory: Path | str | None = None) -> list[Path]:
+    """Scan all valid .pth and .pt weight files found in directory (default: vaila/models/ai_tracker/).
+
+    Returns resolved Path objects with canonical primary weights (e.g. resnet50_imagenet.pth)
+    listed first, followed by any other .pth/.pt files found in the directory.
+    """
+    target_dir = Path(directory) if directory is not None else _default_checkpoint_dir()
+    found: list[Path] = []
+    seen: set[str] = set()
+    if not target_dir.is_dir():
+        return found
+
+    # Canonical default weights first if present in target directory
+    canonical_names = [
+        "resnet50_imagenet.pth",
+        "resnet152_imagenet.pth",
+        "mobilenet_v3_small_imagenet.pth",
+        "efficientnet_b0_imagenet.pth",
+    ]
+    for cname in canonical_names:
+        cpath = target_dir / cname
+        if cpath.is_file():
+            try:
+                res = cpath.resolve()
+                k = str(res)
+                if k not in seen:
+                    seen.add(k)
+                    found.append(res)
+            except OSError:
+                pass
+
+    all_files = sorted(target_dir.glob("*.pth")) + sorted(target_dir.glob("*.pt"))
+    for cand in all_files:
+        try:
+            resolved = cand.resolve()
+            key = str(resolved)
+            if key not in seen and cand.is_file():
                 seen.add(key)
                 found.append(resolved)
         except OSError:
@@ -376,10 +420,8 @@ class AITrackerParameters:
             # default -- turning cascading on was not what was asked for.
             self.fallback_variant = ""
 
-    def to_toml(self, toml_path: str | Path) -> None:
-        """Serialize tracking parameters to a TOML file."""
-        path = Path(toml_path)
-        path.parent.mkdir(parents=True, exist_ok=True)
+    def to_toml(self, toml_path: str | Path | None = None) -> str | None:
+        """Serialize tracking parameters to a TOML file, or return as string if toml_path is None."""
         weights_line = f'deep_weights_path = "{self.deep_weights_path}"\n'
         content = (
             "# vailá AI Tracking Configuration\n"
@@ -402,16 +444,29 @@ class AITrackerParameters:
             f"fallback_threshold = {float(self.fallback_threshold):.4f}\n"
             f"{weights_line}"
         )
-        path.write_text(content, encoding="utf-8")
+        if toml_path is not None:
+            path = Path(toml_path)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+            return None
+        return content
 
     @classmethod
     def from_toml(cls, toml_path: str | Path) -> AITrackerParameters:
-        """Load tracking parameters from a TOML file."""
+        """Load tracking parameters from a TOML file path or raw TOML string."""
         import tomllib
 
-        path = Path(toml_path)
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
+        if isinstance(toml_path, str) and ("\n" in toml_path or not Path(toml_path).exists()):
+            try:
+                data = tomllib.loads(toml_path)
+            except Exception:
+                path = Path(toml_path)
+                with open(path, "rb") as f:
+                    data = tomllib.load(f)
+        else:
+            path = Path(toml_path)
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
 
         track_cfg = data.get("tracking", data)
         sw_w = int(track_cfg.get("search_window_w", 100))
@@ -564,7 +619,14 @@ class DeepFeatureExtractor:
         use_cuda: bool = True,
         weights_path: str | Path | None = None,
         variant: str = "resnet50",
+        *,
+        resnet_variant: str | None = None,
+        device: str | None = None,
     ) -> None:
+        if resnet_variant is not None:
+            variant = resnet_variant
+        if device is not None:
+            use_cuda = device.lower() == "cuda"
         self.enabled = False
         self.device = "cpu"
         self.model: Any = None
@@ -598,32 +660,45 @@ class DeepFeatureExtractor:
                 return
 
             model = tv_models.get_model(self.variant, weights=None)
-            state = torch.load(resolved, map_location="cpu", weights_only=True)
-            if isinstance(state, dict) and "state_dict" in state:
-                state = state["state_dict"]
-            # Torchvision DEFAULT checkpoint keys may include the head's own
-            # weights (e.g. "fc.*"/"classifier.*") — load then strip the head below.
-            missing_unexpected = model.load_state_dict(state, strict=False)
-            _ = missing_unexpected
-            print(f">> DeepFeatureExtractor: loaded {self.variant} weights from {resolved}")
-            self.weights_path = str(resolved)
+            try:
+                state = torch.load(resolved, map_location="cpu", weights_only=True)
+            except Exception:
+                try:
+                    state = torch.load(resolved, map_location="cpu", weights_only=False)
+                except Exception as load_err:
+                    print(
+                        f">> DeepFeatureExtractor: failed to load weights from {resolved}: {load_err}"
+                    )
+                    return
 
-            # Remove the classification head to output the pooled feature vector.
-            # Head attribute differs by family: "fc" for ResNet, "classifier" for
-            # MobileNetV3/EfficientNet.
-            setattr(model, _BACKBONE_HEAD_ATTR[self.variant], torch.nn.Identity())
-            self.feature_dim = _BACKBONE_FEATURE_DIM[self.variant]
+            if isinstance(state, torch.nn.Module):
+                model = state
+            else:
+                if isinstance(state, dict):
+                    if "state_dict" in state:
+                        state = state["state_dict"]
+                    elif "model" in state and isinstance(state["model"], (dict, torch.nn.Module)):
+                        state = state["model"]
+                if isinstance(state, torch.nn.Module):
+                    model = state
+                elif isinstance(state, dict):
+                    missing_unexpected = model.load_state_dict(state, strict=False)
+                    _ = missing_unexpected
+
+            # Remove classification head to output pooled feature vector if present
+            head_attr = _BACKBONE_HEAD_ATTR.get(self.variant, "fc")
+            if hasattr(model, head_attr):
+                setattr(model, head_attr, torch.nn.Identity())
+            self.feature_dim = _BACKBONE_FEATURE_DIM.get(self.variant, 2048)
             model.eval()
             model.to(self.device)
 
+            print(f">> DeepFeatureExtractor: loaded {self.variant} weights from {resolved}")
+            self.weights_path = str(resolved)
             self.model = model
             self.transform = tv_transforms.Compose(
                 [
                     tv_transforms.ToPILImage(),
-                    # Deliberate deviation from the official hub recipe's
-                    # Resize(256)+CenterCrop(224): tracked patches are already small,
-                    # near-square crops around the target, so a direct square resize
-                    # keeps all edge content instead of cropping useful pixels away.
                     tv_transforms.Resize((224, 224)),
                     tv_transforms.ToTensor(),
                     tv_transforms.Normalize(
@@ -641,13 +716,18 @@ class DeepFeatureExtractor:
     def _resolve_weights_path(
         weights_path: str | Path | None, variant: str = "resnet50"
     ) -> Path | None:
-        """Resolve a local weight file under ai_tracker/ (never Torch hub cache)."""
-        candidates: list[Path] = []
+        """Resolve a local weight file from explicit path or under ai_tracker/."""
         if weights_path:
-            candidates.append(Path(weights_path))
-        candidates.append(_ai_tracker_resnet_local_path(variant))
-        for extra in get_available_resnet_checkpoints(variant):
-            candidates.append(extra)
+            p = Path(weights_path)
+            if p.is_file() and p.stat().st_size > 0:
+                try:
+                    return p.resolve()
+                except OSError:
+                    pass
+        candidates: list[Path] = [
+            _ai_tracker_resnet_local_path(variant),
+            *get_available_resnet_checkpoints(variant),
+        ]
         for cand in candidates:
             if _is_valid_weight_file(cand):
                 try:

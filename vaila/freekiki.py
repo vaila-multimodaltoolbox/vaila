@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.6
 Created: 25 September 2026
-Update Date: 28 September 2026
+Update Date: 30 September 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -23,24 +23,37 @@ Description:
     another machine and pointed at for new trainings:
 
         <workspace>/
-          freekiki.toml          settings + active model (paths relative)
+          freekiki.toml          settings + [models] slots (paths relative)
           spec/                  soccerfield_kiki.csv + soccerfield_kiki49.json
           datasets/kiki49/       imported YOLO-pose dataset (data.yaml, images, labels)
           manifests/vNNN/        oversampled train lists (immutable, see ``manifest``)
           runs/<name>/           Ultralytics training runs
           models/registry.csv    every finished run with its best-epoch metrics
-          models/active.pt       best model so far (used by Detect / Retrain)
+          models/freekiki_<slot>.pt  best model per size: n s m l x (YOLO26-pose),
+                                 hm_n..hm_x (heatmap ResNet18..152)
           models/promotion_log.csv  every promotion decision and its reasons
           outputs/               evaluations, sweeps, audits, benchmarks
 
-    Retrain starts from ``models/active.pt``. That continued fine-tune uses
+    Model slots (settings schema 2): one promoted model per network size,
+    ``[models.<slot>]`` in freekiki.toml records file, backend, arch, base,
+    run, pose mAP50-95, PCK10 and SHA-256. ``active`` is an alias of
+    ``[models] default`` (``models --default l`` switches it). A schema-1
+    workspace (``[active]`` + ``models/active.pt``) is migrated on first load:
+    ``active.pt`` is copied (SHA-256 checked) to ``models/freekiki_m.pt`` and
+    kept. A finished run competes only for its own slot; an empty slot is
+    filled when the run passes ``new_slot_min_pose_map50_95``. ``grow`` deepens
+    a trained m into a function-preserving l initialisation
+    (:mod:`freekiki_sizes`); the other sizes start from ``yolo26*-pose.pt``.
+
+    Retrain starts from ``active`` (the default slot). Any non-official base
+    (a slot, a run's best.pt, a grown init) is a continued fine-tune that uses
     AdamW at ``lr0=1e-4`` (cosine down to ``1e-6``), one warmup epoch and
     ``mosaic=0``. The checkpoint already finished its previous run with mosaic
     off and a learning rate near ``2e-4``; ``lr0=0.001`` plus mosaic dropped
     pose mAP50-95 from 0.857 to 0.601 in one epoch. The backbone stays
     trainable: the set is large and already the same field domain. A new run
-    replaces ``active.pt`` only when it passes the promotion gate
-    (``[promotion]`` in freekiki.toml, mode ``gate``): candidate and active are
+    replaces its slot model only when it passes the promotion gate
+    (``[promotion]`` in freekiki.toml, mode ``gate``): candidate and slot model are
     evaluated on the same val images and thresholds; pose mAP50-95, overall
     PCK (misses count as failures), the rate of valid field homographies and
     the recall / median error of the critical keypoints must not get worse
@@ -90,10 +103,22 @@ Usage:
     uv run vaila/freekiki.py evaluate -w WORKSPACE --split test        # final report only
     uv run vaila/freekiki.py sweep  -w WORKSPACE --eval-dir outputs/processed_freekiki_eval_val_TS
     uv run vaila/freekiki.py compare -w WORKSPACE --candidate models/kiki49_RUN.pt [--promote]
+    uv run vaila/freekiki.py models -w WORKSPACE [--default l]         # slots; 'active' = default
+    uv run vaila/freekiki.py sizes  -w WORKSPACE [--src m]             # overlap with n/s/m/l/x
+    uv run vaila/freekiki.py grow   -w WORKSPACE --src m --to l        # models/freekiki_l_init.pt
     uv run vaila/freekiki.py audit  -w WORKSPACE                       # read-only dataset audit
     uv run vaila/freekiki.py bench  -w WORKSPACE --batches 2,8,16      # speed / peak VRAM
     uv run vaila/freekiki.py detect -w WORKSPACE --video match.mp4 [--output-dir DIR]
     uv run vaila/freekiki.py detect -w WORKSPACE --video FOLDER_OF_VIDEOS [--fill-gaps 3]
+    uv run vaila/freekiki.py queue  -w WORKSPACE --batch DETECT_BATCH   # frames to label
+    uv run vaila/freekiki.py ingest -w WORKSPACE --src incoming/SESSION --match-id M [--split hard] [--commit]
+    uv run vaila/freekiki.py evaluate -w WORKSPACE --split hard        # labelled holdout, report only
+
+    Labeling for a retrain: ``queue`` drafts the frames worth labelling
+    (not calibratable first, then half-seen rare points); getpixelvideo shows
+    AI and homography ghosts; only complete frames (every visible point
+    labelled or hidden) are exported/ingested, because an empty point is a
+    "not visible" label. ``--split hard`` is a labelled holdout never trained on.
 
     On NVIDIA/CUDA machines use ``uv run --no-sync`` (see CLAUDE.md).
 
@@ -143,7 +168,20 @@ USER_SETTINGS = Path.home() / ".vaila" / "freekiki.toml"
 NKP = 49
 CONFIG_NAME = "freekiki.toml"
 DATASET_NAME = "kiki49"
-ACTIVE_MODEL = "models/active.pt"
+LEGACY_ACTIVE_MODEL = "models/active.pt"  # settings schema 1 (kept on disk, never deleted)
+# Model slots (settings schema 2): one promoted model per size, per backend.
+# ``active`` is an alias of ``[models] default``.
+MODEL_SCALES = ("n", "s", "m", "l", "x")
+HEATMAP_SLOTS = {
+    "resnet18": "hm_n",
+    "resnet34": "hm_s",
+    "resnet50": "hm_m",
+    "resnet101": "hm_l",
+    "resnet152": "hm_x",
+}
+SLOTS = MODEL_SCALES + tuple(HEATMAP_SLOTS.values())
+DEFAULT_SLOT = "m"
+OFFICIAL_BASE_RE = re.compile(r"^yolo26([nsmlx])-pose\.pt$")
 REGISTRY_CSV = "models/registry.csv"
 REGISTRY_FIELDS = [
     "date",
@@ -159,6 +197,8 @@ REGISTRY_FIELDS = [
     "promoted",
     "fitness",
     "backend",
+    "slot",
+    "arch",
 ]
 # Parts of a kiki49 build needed for training; preview/, frames/ and
 # tracking_eval/ are build by-products and stay behind.
@@ -178,10 +218,11 @@ BASE_MODELS = (
     "yolo26l-pose.pt",
     "yolo26x-pose.pt",
     "active",
+    *(f"freekiki_{s}" for s in MODEL_SCALES),
 )
 DEFAULT_SETTINGS = {
     "workspace": {"schema": "soccerfield_kiki49", "dataset": f"datasets/{DATASET_NAME}"},
-    "active": {"model": ACTIVE_MODEL, "run": "", "pose_map50_95": 0.0},
+    "models": {"default": DEFAULT_SLOT},
     "train": {
         "base": "yolo26m-pose.pt",
         "epochs": 150,
@@ -190,15 +231,19 @@ DEFAULT_SETTINGS = {
         "patience": 30,
     },
     "detect": {"conf": 0.25, "kp_conf": 0.5, "imgsz": 1280},
-    "promotion": dict(diag.PROMOTION_DEFAULTS),
+    # new_slot_min_pose_map50_95: an empty size slot (e.g. the first ``l``)
+    # takes a YOLO run only above this best-epoch pose mAP50-95.
+    "promotion": dict(diag.PROMOTION_DEFAULTS) | {"new_slot_min_pose_map50_95": 0.5},
 }
-# Continued fine-tune from models/active.pt. The 150-epoch run ended with
+# Continued fine-tune from a converged/custom checkpoint (a slot model, a
+# run's best.pt or a grown ``freekiki_sizes`` init; any base that is not an
+# official yolo26*-pose.pt). The 150-epoch m run ended with
 # mosaic off and param-group lrs near 1.7e-4..5e-4 (pose mAP50-95 0.857,
 # pose precision 0.954). AdamW lr0=0.001 with mosaic=1.0 then scored 0.601 /
 # 0.871 after one epoch. Stay under that final lr and keep mosaic off; the
 # rare-point signal comes from the repeat-factor list. Backbone stays
 # trainable (large set, same domain).
-ACTIVE_FINETUNE_ARGS = {
+CONTINUE_FINETUNE_ARGS = {
     "optimizer": "AdamW",
     "lr0": 1e-4,
     "lrf": 0.01,
@@ -206,6 +251,7 @@ ACTIVE_FINETUNE_ARGS = {
     "cos_lr": True,
     "mosaic": 0.0,
 }
+ACTIVE_FINETUNE_ARGS = CONTINUE_FINETUNE_ARGS  # schema-1 name
 MAP50_COL = "metrics/mAP50(P)"
 MAP50_95_COL = "metrics/mAP50-95(P)"
 BOX_MAP50_95_COL = "metrics/mAP50-95(B)"
@@ -215,6 +261,14 @@ PROMOTION_LOG = "models/promotion_log.csv"
 # evaluate: raw predictions are kept down to this box confidence so the
 # det_conf / kp_conf thresholds can be applied (and swept) offline.
 RAW_CONF = 0.01
+# Review ghosts: AI points kept below kp_conf down to this confidence, and the
+# distance (px@1920) within which an AI ghost and a homography ghost agree.
+SUGGEST_MIN_CONF = 0.1
+SUGGEST_AGREE_PX = 15.0
+# Label queue: the rare points whose low-confidence frames are asked first.
+RARE_KPS = (5, 29, 39, 47)
+# Splits ingest can write: train, and hard = labelled holdout never trained on.
+INGEST_SPLITS = ("train", "hard")
 PRED_KEYS = (
     "images", "groups", "sources", "width", "height", "box_conf",
     "pred_xy", "pred_kc", "gt_xy", "gt_vis",
@@ -261,6 +315,8 @@ def load_settings(ws: Path) -> dict:
     if not path.is_file():
         raise FileNotFoundError(f"Not a FreeKiki workspace (no {CONFIG_NAME}): {ws}")
     settings = toml.load(path)
+    if _migrate_settings(Path(ws), settings):
+        save_settings(ws, settings)
     for section, values in DEFAULT_SETTINGS.items():
         merged = dict(values)
         merged.update(settings.get(section, {}))
@@ -270,6 +326,218 @@ def load_settings(ws: Path) -> dict:
 
 def save_settings(ws: Path, settings: dict) -> None:
     (Path(ws) / CONFIG_NAME).write_text(toml.dumps(settings), encoding="utf-8")
+
+
+# --------------------------------------------------------------------------- #
+# Model slots (settings schema 2)
+# --------------------------------------------------------------------------- #
+def slot_file(slot: str) -> str:
+    return f"models/freekiki_{slot}.pt"
+
+
+def _slot_name(name: str) -> str | None:
+    """``l`` / ``freekiki_l`` / ``hm_m`` -> slot name; anything else -> None."""
+    name = str(name).removeprefix("freekiki_")
+    return name if name in SLOTS else None
+
+
+def slot_path(ws, settings: dict, name: str = "active") -> Path:
+    """Workspace file of a slot; ``active`` is the ``[models] default`` slot."""
+    models = settings["models"]
+    slot = models["default"] if name == "active" else _slot_name(name)
+    if slot is None:
+        raise ValueError(f"Unknown model slot {name!r} (active, {', '.join(SLOTS)})")
+    return Path(ws) / models.get(slot, {}).get("file", slot_file(slot))
+
+
+def _load_checkpoint(path) -> dict | None:
+    """A torch checkpoint dict, or None for a missing/foreign/unreadable file."""
+    import torch
+
+    if not Path(path).is_file():
+        return None
+    try:
+        ckpt = torch.load(path, map_location="cpu", weights_only=False)
+    except Exception:
+        return None
+    return ckpt if isinstance(ckpt, dict) else None
+
+
+def checkpoint_slot(path) -> tuple[str, str] | None:
+    """``(slot, arch)`` from a checkpoint's own metadata; None when it cannot be read."""
+    ckpt = _load_checkpoint(path)
+    if ckpt is None:
+        return None
+    if str(ckpt.get("backend", "")).startswith("freekiki_heatmap"):
+        backbone = str(ckpt.get("backbone", ""))
+        slot = HEATMAP_SLOTS.get(backbone)
+        return (slot, f"heatmap-{backbone}") if slot else None
+    net = ckpt.get("ema") or ckpt.get("model")
+    scale = (getattr(net, "yaml", None) or {}).get("scale")
+    return (scale, f"yolo26{scale}-pose") if scale in MODEL_SCALES else None
+
+
+def base_slot(base: str, default: str = DEFAULT_SLOT) -> tuple[str, str]:
+    """``(slot, arch)`` implied by a train ``--base`` name (``active`` -> ``default``)."""
+    official = OFFICIAL_BASE_RE.match(Path(str(base)).name)
+    slot = official[1] if official else default if base == "active" else _slot_name(base)
+    slot = slot or default
+    return slot, f"yolo26{slot}-pose" if slot in MODEL_SCALES else ""
+
+
+def run_slot(run_dir, base: str, default: str = DEFAULT_SLOT) -> tuple[str, str]:
+    """Slot a finished run competes in: its best.pt metadata, else args.yaml, else ``base``."""
+    run_dir = Path(run_dir)
+    found = checkpoint_slot(run_dir / "weights" / "best.pt")
+    if found:
+        return found
+    args_yaml = run_dir / "args.yaml"
+    args = yaml.safe_load(args_yaml.read_text(encoding="utf-8")) if args_yaml.is_file() else {}
+    if (args or {}).get("backend") == "heatmap":
+        backbone = str(args.get("backbone", "resnet50"))
+        return HEATMAP_SLOTS.get(backbone, "hm_m"), f"heatmap-{backbone}"
+    return base_slot(base, default)
+
+
+def _copy_verified(src: Path, dst: Path) -> str:
+    """Copy through a temporary file; the SHA-256 of the result must match ``src``."""
+    sha = file_sha256(src)
+    tmp = dst.with_name(dst.name + ".tmp")
+    shutil.copy2(src, tmp)
+    if file_sha256(tmp) != sha:
+        tmp.unlink(missing_ok=True)
+        raise OSError(f"Copy of {src} to {dst} is corrupt (SHA-256 mismatch)")
+    tmp.replace(dst)
+    return sha
+
+
+def _migrate_settings(ws: Path, raw: dict) -> bool:
+    """Schema 1 ``[active]`` -> schema 2 ``[models]`` slots. Idempotent; copies, never moves.
+
+    ``models/active.pt`` is copied (SHA-256 checked) to ``models/freekiki_<slot>.pt``,
+    the slot read from the checkpoint (``m`` for the kiki49 YOLO26m). The old file
+    and the old ``[active]`` table (as ``[legacy_active]``) stay; the old file is
+    only read, so a training that uses it keeps running.
+    """
+    if "models" in raw:
+        return False
+    old = dict(raw.get("active") or {})
+    src = ws / str(old.get("model", LEGACY_ACTIVE_MODEL))
+    models: dict = {"default": DEFAULT_SLOT}
+    if src.is_file():
+        slot, arch = checkpoint_slot(src) or (DEFAULT_SLOT, "")
+        dst = ws / slot_file(slot)
+        if dst.is_file():
+            sha = file_sha256(dst)
+            if sha != file_sha256(src):
+                raise FileExistsError(
+                    f"{dst} exists and differs from {src}; move one of them, then reopen."
+                )
+        else:
+            sha = _copy_verified(src, dst)
+        models = {
+            "default": slot,
+            slot: {
+                "file": slot_file(slot),
+                "backend": "heatmap" if slot.startswith("hm_") else "yolo",
+                "arch": arch,
+                "base": "",
+                "run": old.get("run", ""),
+                "pose_map50_95": old.get("pose_map50_95", 0.0),
+                "pck10_all": "",
+                "sha256": sha,
+            },
+        }
+        _log(f"settings schema 2: {src.name} copied to {slot_file(slot)} (slot {slot}; kept)")
+    raw["models"] = models
+    if raw.pop("active", None) is not None:
+        raw["legacy_active"] = old
+    return True
+
+
+def _install_slot(ws: Path, settings: dict, slot: str, src: Path, info: dict) -> Path:
+    """Copy ``src`` into a slot and record it; an empty default slot moves to ``slot``."""
+    dst = ws / slot_file(slot)
+    default_empty = not slot_path(ws, settings).is_file()
+    sha = _copy_verified(src, dst)
+    backend = "heatmap" if slot.startswith("hm_") else "yolo"
+    entry: dict = {"file": slot_file(slot), "backend": backend, "arch": "", "base": "", "run": ""}
+    entry |= {"pose_map50_95": 0.0, "pck10_all": ""} | info | {"sha256": sha}
+    settings["models"][slot] = entry
+    if default_empty:
+        settings["models"]["default"] = slot
+    settings.pop("active", None)
+    save_settings(ws, settings)
+    return dst
+
+
+def list_models(ws, *, default: str | None = None) -> list[dict]:
+    """Print the model slots; ``default`` sets which slot ``active`` means."""
+    ws = Path(ws).expanduser().resolve()
+    settings = load_settings(ws)
+    models = settings["models"]
+    if default:
+        slot = _slot_name(default)
+        if slot is None or not slot_path(ws, settings, slot).is_file():
+            raise ValueError(f"Slot {default!r} has no model; it cannot be the default.")
+        models["default"] = slot
+        save_settings(ws, settings)
+    rows = []
+    for slot in SLOTS:
+        path = slot_path(ws, settings, slot)
+        entry = models.get(slot) or {}
+        if not path.is_file():
+            continue
+        rows.append({"slot": slot, "default": slot == models["default"], **entry})
+        score = entry.get("pck10_all") or entry.get("pose_map50_95")
+        _log(
+            f"{'*' if slot == models['default'] else ' '} {slot:<5} {entry.get('arch', ''):<18} "
+            f"run {entry.get('run', '')}  score {score}  {path.relative_to(ws)}"
+        )
+    if not rows:
+        _log("no promoted models yet")
+    return rows
+
+
+def _sizes():
+    """``freekiki_sizes`` (lazy: it imports torch/Ultralytics)."""
+    try:
+        from . import freekiki_sizes as fs
+    except ImportError:
+        import freekiki_sizes as fs  # ty: ignore[unresolved-import]
+    return fs
+
+
+def model_sizes(ws, src: str = "active") -> list[dict]:
+    """Print how much of every YOLO26 scale a trained model can seed (read only)."""
+    path = resolve_model(Path(ws).expanduser().resolve(), src)
+    rows = _sizes().audit(path)
+    for row in rows:
+        _log(
+            f"{row['scale']}: {row['params_m']:6.2f} M params | name+shape match {row['match']:.1%}"
+        )
+    _log("only m -> l keeps the function (grow); n/s/x train from yolo26{n,s,x}-pose.pt")
+    return rows
+
+
+def grow_model(ws, *, src: str = "m", to: str = "l", out: str = "models/freekiki_l_init.pt"):
+    """Function-preserving m -> l initialisation (see :mod:`freekiki_sizes`); no training."""
+    ws = Path(ws).expanduser().resolve()
+    source = resolve_model(ws, src)
+    target = Path(out).expanduser()
+    target = target if target.is_absolute() else ws / target
+    stats = _sizes().grow(source, target, to=to)
+    _log(
+        f"grow {stats['from_scale']} -> {stats['to_scale']}: copied {stats['copied']}, "
+        f"padded {stats['padded']}, fresh {stats['fresh']}, identity blocks "
+        f"{stats['identity_blocks']}, {stats['params_m']:.2f} M params; "
+        f"max |m(x) - l(x)| = {stats['max_diff']:.2e} -> {target}"
+    )
+    _log(
+        f"next: uv run --no-sync vaila/freekiki.py train -w {ws} --base {target} "
+        "--manifest v001 --epochs 60 --imgsz 1280"
+    )
+    return stats
 
 
 def init_workspace(ws) -> Path:
@@ -379,13 +647,24 @@ def _validate_ingest_label(path: Path) -> int:
     return visible
 
 
-def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: int = 10) -> dict:
-    """Validate an entire reviewed session, then append new rows to train only."""
+def ingest_reviewed(
+    ws, src, match_id: str, *, split: str = "train", commit: bool = False, dup_bits: int = 10
+) -> dict:
+    """Validate an entire reviewed session, then append its frames to one split.
+
+    ``split`` is ``train`` or ``hard`` (a labelled holdout of difficult footage
+    that is never trained on). A match lives in one split only: train refuses
+    matches of val/test/hard and near-duplicates of their images; hard refuses
+    matches of train/val/test and near-duplicates of their images. Every frame
+    must be complete (:func:`completeness_problem`).
+    """
     import cv2
     import numpy as np
 
     ws = Path(ws).expanduser().resolve()
     src = Path(src).expanduser().resolve()
+    if split not in INGEST_SPLITS:
+        raise ValueError(f"--split must be one of {INGEST_SPLITS}")
     if not match_id.strip() or any(c in match_id for c in "\r\n,/"):
         raise ValueError("--match-id must be a nonempty match/sequence identifier")
     session = load_review_session(src / "session.json")
@@ -413,13 +692,32 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
     for field in ("split", "image", "label", "source", "group"):
         if field not in fields:
             raise ValueError(f"Manifest lacks {field}")
+    other_splits = tuple(s for s in ("train", "val", "test", "hard") if s != split)
     reserved_groups = {
-        diag.match_key(r["source"], r["group"]) for r in existing if r["split"] in ("val", "test")
+        diag.match_key(r["source"], r["group"]) for r in existing if r["split"] in other_splits
     }
     if match_id in reserved_groups or any(
-        r["group"] == match_id and r["split"] in ("val", "test") for r in existing
+        r["group"] == match_id and r["split"] in other_splits for r in existing
     ):
-        raise ValueError(f"Match {match_id} is reserved in val/test")
+        raise ValueError(f"Match {match_id} already belongs to another split ({other_splits})")
+    problems = [
+        p
+        for row in incoming
+        if (
+            p := completeness_problem(
+                session,
+                int(row["frame"]),
+                session["frames"].get(str(row["frame"]), {"points": [None] * NKP}),
+            )
+        )
+    ]
+    if problems:
+        for p in problems[:10]:
+            _log(f"incomplete: {p}")
+        raise ValueError(
+            f"{len(problems)} incomplete frame(s): open the session in getpixelvideo, "
+            "label or hide (Del) the listed points, export again"
+        )
     existing_stems = {Path(r["image"]).stem for r in existing}
     identities = {(r.get("video", ""), r.get("frame", "")) for r in existing}
     content_pairs = {
@@ -428,11 +726,12 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
         if (ds / r["image"]).is_file() and (ds / r["label"]).is_file()
     }
     image_hashes = {pair[0] for pair in content_pairs}
-    reserved = [
-        (r, diag.dhash_image(ds / r["image"])[0]) for r in existing if r["split"] in ("val", "test")
-    ]
+    # train vs val/test/hard; a hard holdout must not repeat a trained frame either.
+    reserved_rows = [r for r in existing if r["split"] in other_splits]
+    _log(f"hashing {len(reserved_rows)} reserved images ({', '.join(other_splits)})")
+    reserved = [(r, diag.dhash_image(ds / r["image"])[0]) for r in reserved_rows]
     if any(h is None for _, h in reserved):
-        raise ValueError("Unreadable reserved val/test image; run check/audit first")
+        raise ValueError("Unreadable reserved image; run check/audit first")
     seen_stems, seen_identity, new_rows, copies = set(), set(), [], []
     extra = [
         "video",
@@ -494,11 +793,13 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
             ),
             None,
         )
-        if previous is not None and previous["group"] != match_id:
-            raise ValueError(f"Frame {frame} was already ingested under group {previous['group']}")
+        if previous is not None and (previous["group"], previous["split"]) != (match_id, split):
+            raise ValueError(
+                f"Frame {frame} was already ingested as {previous['split']}/{previous['group']}"
+            )
         if (
             previous is not None
-            and previous["split"] == "train"
+            and previous["split"] == split
             and (
                 file_sha256(img) == file_sha256(ds / previous["image"])
                 and file_sha256(lbl) == file_sha256(ds / previous["label"])
@@ -521,9 +822,9 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
         image_hashes.add(content[0])
         new_rows.append(
             {
-                "split": "train",
-                "image": f"images/train/{img.name}",
-                "label": f"labels/train/{lbl.name}",
+                "split": split,
+                "image": f"images/{split}/{img.name}",
+                "label": f"labels/{split}/{lbl.name}",
                 "source": "freekiki_review",
                 "group": match_id,
                 "origin": "human_reviewed",
@@ -533,8 +834,8 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
         )
         copies.extend(
             (
-                (img, ds / "images/train" / img.name, content[0]),
-                (lbl, ds / "labels/train" / lbl.name, content[1]),
+                (img, ds / "images" / split / img.name, content[0]),
+                (lbl, ds / "labels" / split / lbl.name, content[1]),
             )
         )
     expected_stems = {Path(r["image"]).stem for r in incoming}
@@ -550,6 +851,7 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
         "corrected_points": sum(int(r["n_corrected"] or 0) for r in new_rows),
         "sources": {"freekiki_review": len(new_rows)},
         "match_id": match_id,
+        "split": split,
         "committed": False,
     }
     _log(f"ingest preview: {report}")
@@ -582,11 +884,31 @@ def ingest_reviewed(ws, src, match_id: str, *, commit: bool = False, dup_bits: i
             f.flush()
             os.fsync(f.fileno())
         os.replace(tmp, ds / "manifest.csv")
+        if split == "hard":
+            _ensure_yaml_split(ds / "data.yaml", "hard")
         report["committed"] = True
+        _log(f"ingested and committed: {report}")
     _log(f"check: uv run --no-sync vaila/freekiki.py check -w {ws}")
     _log(f"audit: uv run --no-sync vaila/freekiki.py audit -w {ws}")
-    _log(f"train: uv run --no-sync vaila/freekiki.py train -w {ws} --base active")
+    if split == "hard":
+        _log(f"measure: uv run --no-sync vaila/freekiki.py evaluate -w {ws} --split hard --model l")
+    else:
+        _log(f"train: uv run --no-sync vaila/freekiki.py train -w {ws} --base active")
     return report
+
+
+def _ensure_yaml_split(yaml_path: Path, split: str) -> None:
+    """Add ``<split>: images/<split>`` to data.yaml (workspace copy) when missing."""
+    text = yaml_path.read_text(encoding="utf-8")
+    if re.search(rf"(?m)^{split}:", text):
+        return
+    text = text.rstrip("\n") + f"\n{split}: images/{split}\n"
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=yaml_path.parent, prefix=".data-", delete=False
+    ) as f:
+        tmp = Path(f.name)
+        f.write(text)
+    os.replace(tmp, yaml_path)
 
 
 def _yaml_kpt_names(data: dict) -> list[str] | None:
@@ -614,10 +936,10 @@ def check_dataset(ws, *, sample_labels: int = 50) -> list[str]:
         bad = [i for i, (a, b) in enumerate(zip(yaml_names, names, strict=False)) if a != b]
         issues.append(f"kpt_names differ from soccerfield_kiki.csv at {bad or 'length'}")
     ncols = 5 + NKP * 3
-    for split in ("train", "val", "test"):
+    for split in ("train", "val", "test", "hard"):
         entry = data.get(split)
         if not entry:
-            if split != "test":
+            if split in ("train", "val"):
                 issues.append(f"data.yaml has no '{split}' split")
             continue
         img_dir = root / str(entry)
@@ -710,13 +1032,14 @@ def find_eval(ws, model_path, *, split: str, like: dict | None = None) -> Path |
     return None
 
 
-def promotion_decision(ws, candidate: str, settings: dict) -> dict:
-    """Gate a candidate against the active model on the same split and thresholds."""
+def promotion_decision(ws, candidate: str, settings: dict, baseline: str | None = None) -> dict:
+    """Gate a candidate against ``baseline`` (default: the active model) on the same split
+    and thresholds."""
     gate = settings["promotion"]
     split = gate.get("split", "val")
     cand_dir = find_eval(ws, candidate, split=split) or evaluate(ws, model=candidate, split=split)
     like = json.loads((cand_dir / "eval_summary.json").read_text(encoding="utf-8"))
-    active = str(Path(ws) / settings["active"]["model"])
+    active = baseline or str(slot_path(ws, settings))
     base_dir = find_eval(ws, active, split=split, like=like) or evaluate(
         ws,
         model=active,
@@ -762,16 +1085,21 @@ def _upgrade_registry(ws) -> list[str]:
 
 
 def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
-    """Copy a run's best.pt into ``models/``, log it, promote to active if the policy allows.
+    """Copy a run's best.pt into ``models/``, log it, promote it into its size slot.
 
+    The slot (``n``..``x`` for YOLO26 scales, ``hm_n``..``hm_x`` for heatmap
+    ResNet18..152) comes from the checkpoint; the run competes only with the
+    model already in that slot (``models/freekiki_<slot>.pt``).
     ``settings['promotion']['mode']``:
-      * ``gate`` (default): candidate and active are evaluated on the same
+      * ``gate`` (default): candidate and slot model are evaluated on the same
         split (``val``) and compared with :func:`freekiki_diag.compare_evals`
         (pose mAP, PCK with misses, homography rate, critical keypoints);
       * ``map``: best-epoch validation pose mAP50-95 only (legacy);
-      * ``never``: keep the active model (use ``compare --promote`` later).
-    The first model of a workspace is always promoted. Every decision is
-    appended to ``models/promotion_log.csv``.
+      * ``never``: keep the slot model (use ``compare --promote`` later).
+    The first model of a workspace is always promoted; the first model of an
+    empty slot needs ``new_slot_min_pose_map50_95``. Heatmap runs are never
+    promoted automatically. Every decision is appended to
+    ``models/promotion_log.csv``.
     """
     ws = Path(ws)
     run_dir = Path(run_dir)
@@ -781,38 +1109,52 @@ def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
     settings = load_settings(ws)
     metrics = read_best_metrics(run_dir / "results.csv")
     backend = run_backend(run_dir)
+    slot, arch = run_slot(run_dir, base, settings["models"]["default"])
     model_rel = f"models/{DATASET_NAME}_{run_dir.name}.pt"
     shutil.copy2(best_pt, ws / model_rel)
-    active = settings["active"]
-    active_path = ws / active["model"]
-    mode = str(settings["promotion"].get("mode", "gate"))
+    entry = settings["models"].get(slot) or {}
+    current = slot_path(ws, settings, slot)
+    gate = settings["promotion"]
+    mode = str(gate.get("mode", "gate"))
     reasons: list[str] = []
     if backend == "heatmap":
-        # Never replaces the active model on its own: compare it on val first.
+        # Never replaces a slot model on its own: compare it on val first.
         mode = "heatmap"
         promoted, reasons = (
             False,
             [
                 f"heatmap backend: automatic promotion off; use compare --candidate {model_rel} "
-                "(add --promote to replace active.pt)"
+                f"(add --promote to fill slot {slot})"
             ],
         )
-    elif not active_path.is_file():
+    elif not any(slot_path(ws, settings, s).is_file() for s in SLOTS):
         promoted, reasons = True, ["first model of the workspace"]
+    elif not current.is_file():
+        floor = float(gate.get("new_slot_min_pose_map50_95", 0.5))
+        promoted = metrics["pose_map50_95"] >= floor
+        reasons = [f"empty slot {slot}: pose mAP50-95 {metrics['pose_map50_95']} vs min {floor}"]
     elif mode == "map":
-        promoted = metrics["pose_map50_95"] > float(active.get("pose_map50_95", 0.0))
-        reasons = [f"pose mAP50-95 {active.get('pose_map50_95')} -> {metrics['pose_map50_95']}"]
+        promoted = metrics["pose_map50_95"] > float(entry.get("pose_map50_95", 0.0))
+        reasons = [f"pose mAP50-95 {entry.get('pose_map50_95')} -> {metrics['pose_map50_95']}"]
     elif mode == "gate":
-        decision = promotion_decision(ws, str(ws / model_rel), settings)
+        decision = promotion_decision(ws, str(ws / model_rel), settings, str(current))
         promoted, reasons = bool(decision["promote"]), decision["reasons"] or ["gate passed"]
     else:
         promoted, reasons = False, [f"promotion mode '{mode}'"]
     if promoted:
-        shutil.copy2(best_pt, active_path)
-        active.update(
-            {"run": run_dir.name, "pose_map50_95": metrics["pose_map50_95"], "model": ACTIVE_MODEL}
+        _install_slot(
+            ws,
+            settings,
+            slot,
+            best_pt,
+            {
+                "arch": arch,
+                "base": str(base),
+                "run": run_dir.name,
+                "pose_map50_95": metrics["pose_map50_95"],
+                "pck10_all": metrics["fitness"] if backend == "heatmap" else "",
+            },
         )
-        save_settings(ws, settings)
     row = {
         "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "run": run_dir.name,
@@ -824,6 +1166,8 @@ def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
         "model": model_rel,
         "promoted": promoted,
         "backend": backend,
+        "slot": slot,
+        "arch": arch,
     }
     registry = ws / REGISTRY_CSV
     header = _upgrade_registry(ws) if registry.is_file() else REGISTRY_FIELDS
@@ -849,20 +1193,25 @@ def register_run(ws, run_dir, *, base: str, epochs: int, imgsz: int) -> dict:
         else f"pose mAP50-95={metrics['pose_map50_95']:.4f}"
     )
     _log(
-        f"run {run_dir.name}: {score} ({mode}) "
-        f"-> {'PROMOTED to ' + ACTIVE_MODEL if promoted else 'kept previous active model'}"
+        f"run {run_dir.name} (slot {slot}): {score} ({mode}) "
+        f"-> {'PROMOTED to ' + slot_file(slot) if promoted else 'kept the slot model'}"
         + ("" if promoted else " | " + "; ".join(reasons))
     )
     return row
 
 
 def resolve_model(ws, model: str) -> str:
-    """``active`` -> workspace model; a workspace-relative/absolute path; or a named YOLO .pt."""
+    """Model name -> file.
+
+    ``active`` (= the ``[models] default`` slot) or a slot (``l``, ``freekiki_l``,
+    ``hm_m``) -> its workspace model; else a workspace-relative/absolute path;
+    else a named YOLO .pt (resolved by yolotrain).
+    """
     ws = Path(ws)
-    if model == "active":
-        path = ws / load_settings(ws)["active"]["model"]
+    if model == "active" or _slot_name(model):
+        path = slot_path(ws, load_settings(ws), model)
         if not path.is_file():
-            raise FileNotFoundError(f"No active model yet ({path}). Train one first.")
+            raise FileNotFoundError(f"No {model} model yet ({path}). Train one first.")
         return str(path)
     for candidate in (Path(model).expanduser(), ws / model):
         if candidate.is_file():
@@ -953,11 +1302,11 @@ def train(
         + (f" manifest={manifest}" if manifest else "")
     )
     extra: dict = {"patience": patience, "seed": seed, "deterministic": True}
-    if base == "active":
-        extra.update(ACTIVE_FINETUNE_ARGS)
+    if Path(model_path).is_file() and not OFFICIAL_BASE_RE.match(Path(model_path).name):
+        extra.update(CONTINUE_FINETUNE_ARGS)
         _log(
-            "fine-tune from active: AdamW lr0=1e-4 lrf=0.01 warmup_epochs=1 "
-            "cos_lr mosaic=0 freeze=none"
+            f"continued fine-tune from {Path(model_path).name}: AdamW lr0=1e-4 lrf=0.01 "
+            "warmup_epochs=1 cos_lr mosaic=0 freeze=none"
         )
     if fraction < 1.0:
         extra["fraction"] = fraction
@@ -1136,6 +1485,8 @@ def write_train_manifest(
         "run": run_dir.name,
         "base": base,
         "base_sha256": file_sha256(base) if Path(base).is_file() else None,
+        # grown_from / scale / function_preserving_maxdiff of a freekiki_sizes init
+        "base_freekiki": (_load_checkpoint(base) or {}).get("freekiki"),
         "data_yaml": str(yaml_path),
         "data_yaml_sha256": file_sha256(yaml_path),
         "dataset_manifest_sha256": file_sha256(manifest_csv) if manifest_csv.is_file() else None,
@@ -1663,6 +2014,8 @@ def save_review_session(session: dict) -> Path:
 
 def load_review_session(path, video=None, width=None, height=None, fps=None) -> dict:
     path = Path(path).expanduser().resolve()
+    if path.is_dir() and (path / "session.json").is_file():
+        path = path / "session.json"
     session = json.loads(path.read_text(encoding="utf-8"))
     names, flips = load_schema()
     if (
@@ -1672,17 +2025,46 @@ def load_review_session(path, video=None, width=None, height=None, fps=None) -> 
         or session.get("flip_idx") != flips
     ):
         raise ValueError("Review session schema mismatch")
-    source = Path(video or session["video"]).expanduser().resolve()
+
+    orig_video_path = Path(session.get("video", ""))
+    target_video = Path(video).expanduser().resolve() if video is not None else None
+
+    # Resolve video source candidate
+    source = None
+    if target_video is not None:
+        source = target_video
+    elif orig_video_path.is_file():
+        source = orig_video_path.resolve()
+    elif orig_video_path.name:
+        for cand_dir in (path.parent, path.parent.parent, path.parent.parent.parent):
+            candidate = cand_dir / orig_video_path.name
+            if candidate.is_file():
+                source = candidate.resolve()
+                break
+
+    if source is None or not source.is_file():
+        raise ValueError("Review session video identity or metadata mismatch")
+
+    # Verify identity: filename and size must match, or exact path match
+    same_name = source.name == orig_video_path.name
+    same_size = source.stat().st_size == session["video_size"]
+    if not ((str(source) == session["video"] or same_name) and same_size):
+        raise ValueError("Review session video identity or metadata mismatch")
+
     if (
-        str(source) != session["video"]
-        or not source.is_file()
-        or source.stat().st_size != session["video_size"]
-        or source.stat().st_mtime_ns != session["video_mtime_ns"]
-        or (width is not None and int(width) != session["width"])
+        (width is not None and int(width) != session["width"])
         or (height is not None and int(height) != session["height"])
         or (fps is not None and not math.isclose(float(fps), session["fps"], rel_tol=1e-3))
     ):
         raise ValueError("Review session video identity or metadata mismatch")
+
+    # If video path or mtime shifted (e.g. copied to another folder/machine), update session
+    if str(source) != session["video"] or source.stat().st_mtime_ns != session.get(
+        "video_mtime_ns"
+    ):
+        session["video"] = str(source)
+        session["video_mtime_ns"] = source.stat().st_mtime_ns
+
     if any(len(r.get("points", [])) != NKP for r in session["frames"].values()):
         raise ValueError("Review session contains a frame with wrong point count")
     session["session_path"] = str(path)
@@ -1712,8 +2094,19 @@ def edit_review_point(session: dict, frame: int, index: int, point) -> None:
         raise ValueError("Kiki49 index outside 0..48")
     row = review_frame(session, frame)
     if point is not None:
-        pose_label_line([point], session["width"], session["height"])
-        point = list(map(float, point))
+        try:
+            x, y = map(float, point)
+        except (TypeError, ValueError):
+            point = None
+        else:
+            if not (math.isfinite(x) and math.isfinite(y)):
+                point = None
+            else:
+                w, h = float(session["width"]), float(session["height"])
+                x = max(0.0, min(w, x))
+                y = max(0.0, min(h, y))
+                point = [x, y]
+                pose_label_line([point], session["width"], session["height"])
     before = row["points"][index]
     row["points"][index] = point
     row["point_sources"][index] = (
@@ -1757,6 +2150,69 @@ def apply_review_prediction(
     )
 
 
+def review_completeness(session: dict, row: dict) -> dict:
+    """:func:`freekiki_diag.label_completeness` of one review frame."""
+    return diag.label_completeness(
+        row["points"], row.get("hidden", []), session["width"], session["height"]
+    )
+
+
+def completeness_problem(session: dict, frame: int, row: dict) -> str | None:
+    """Why a frame cannot become a training label, or None when it is complete."""
+    comp = review_completeness(session, row)
+    if comp["status"] == "complete":
+        return None
+    if comp["status"] == "incomplete":
+        missing = ", ".join(f"p{i} {session['names'][i]}" for i in comp["suspects"])
+        return f"frame {frame}: {missing} probably visible - label or hide (Del)"
+    return (
+        f"frame {frame}: completeness not verifiable ({comp['status']}, "
+        f"{comp['n_planar']} planar points) - label >= 4 spread pitch points"
+    )
+
+
+def review_suggestions(session: dict, frame: int, *, min_conf: float = SUGGEST_MIN_CONF) -> dict:
+    """Ghost positions for the missing points of a review frame.
+
+    For every point neither labelled nor hidden: the AI prediction kept below
+    ``kp_conf`` (conf >= ``min_conf``) and/or the projection of the labelled
+    points' field homography. When both exist and disagree by more than
+    ``SUGGEST_AGREE_PX`` px@1920 the geometry wins (the AI may have swapped
+    identities). Returns ``{"status", "suspects", "suggestions": [{index, xy,
+    source, conf}]}`` with source ai | geometry | ai+geometry.
+    """
+    row = session["frames"].get(str(frame))
+    if row is None:
+        return {"status": "few_points", "suspects": [], "suggestions": []}
+    comp = review_completeness(session, row)
+    w, h = float(session["width"]), float(session["height"])
+    scale = diag.REF_WIDTH / max(1.0, w)
+    hidden = set(row.get("hidden", []))
+    prediction = row.get("prediction") or [None] * NKP
+    suggestions = []
+    for i in range(NKP):
+        if row["points"][i] is not None or i in hidden:
+            continue
+        p = prediction[i]
+        ai = (
+            [float(p[0]), float(p[1])]
+            if p is not None and float(p[2]) >= min_conf and 0 <= p[0] <= w and 0 <= p[1] <= h
+            else None
+        )
+        geo = comp["projected"].get(i)
+        conf = float(p[2]) if p is not None and ai is not None else None
+        if ai is not None and geo is not None:
+            if math.dist(ai, geo) * scale <= SUGGEST_AGREE_PX:
+                suggestions.append({"index": i, "xy": ai, "source": "ai+geometry", "conf": conf})
+            else:
+                suggestions.append({"index": i, "xy": geo, "source": "geometry", "conf": None})
+        elif ai is not None:
+            suggestions.append({"index": i, "xy": ai, "source": "ai", "conf": conf})
+        elif geo is not None:
+            suggestions.append({"index": i, "xy": geo, "source": "geometry", "conf": None})
+    return {"status": comp["status"], "suspects": comp["suspects"], "suggestions": suggestions}
+
+
 def mark_reviewed(session: dict, frame: int) -> None:
     row = review_frame(session, frame)
     if row["state"] == "UNLABELED" or not any(p is not None for p in row["points"]):
@@ -1764,6 +2220,9 @@ def mark_reviewed(session: dict, frame: int) -> None:
     if len(row["points"]) != NKP:
         raise ValueError("Expected exactly 49 points")
     pose_label_line(row["points"], session["width"], session["height"], bbox=row["bbox"])
+    problem = completeness_problem(session, frame, row)
+    if problem:
+        raise ValueError(problem)
     row["state"] = "HUMAN_REVIEWED"
     row["reviewed_at"] = datetime.now().astimezone().isoformat()
 
@@ -1780,11 +2239,14 @@ def _prediction_dir_for_video(batch_dir: Path, video: str) -> Path:
     raise ValueError(f"No detect output for {Path(video).name} in {batch_dir}")
 
 
-def load_raw_review_predictions(session: dict, directory, *, kp_conf: float = 0.5) -> int:
+def load_raw_review_predictions(
+    session: dict, directory, *, kp_conf: float = 0.5, frames=None
+) -> int:
     """Load detect's raw CSV only after checking its README and video metadata.
 
     ``directory`` is one detect output or a detect batch folder; for a batch the
-    newest output of the session's video is used.
+    newest output of the session's video is used. ``frames`` (a set of frame
+    indices) drafts only those frames; None drafts every predicted frame.
     """
     import cv2
 
@@ -1833,6 +2295,8 @@ def load_raw_review_predictions(session: dict, directory, *, kp_conf: float = 0.
         seen.add(frame)
     for row in rows:
         frame = int(row["frame"])
+        if frames is not None and frame not in frames:
+            continue
         if review_frame(session, frame)["state"] != "UNLABELED":
             continue
         xy, conf = [], []
@@ -1855,6 +2319,138 @@ def load_raw_review_predictions(session: dict, directory, *, kp_conf: float = 0.
     return len(rows)
 
 
+def _read_readme_video(directory: Path) -> Path | None:
+    for line in (directory / "README.txt").read_text(encoding="utf-8").splitlines():
+        if line.startswith("video: "):
+            return Path(line[7:])
+    return None
+
+
+def queue_frames(status_rows, raw_rows, *, per_video: int, min_gap: int, kp_conf: float):
+    """Frames of one detect output worth labelling, in priority tiers.
+
+    Tier 0: not calibratable (homography not ok or < 4 accepted points).
+    Tier 1: a rare point (``RARE_KPS``) predicted with conf in
+    [``SUGGEST_MIN_CONF``, ``kp_conf``) - the model half-sees it.
+    Tier 2: the rest. Inside a tier the frames are spread evenly over the clip;
+    selected frames are at least ``min_gap`` apart, at most ``per_video``.
+    Returns ``[{frame, tier, reason, ...}]`` sorted by frame.
+    """
+    raw = {int(r["frame"]): r for r in raw_rows}
+    tiers: dict[int, list[dict]] = {0: [], 1: [], 2: []}
+    for st in status_rows:
+        frame = int(st["frame"])
+        rare = {}
+        for i in RARE_KPS:
+            text = raw.get(frame, {}).get(f"p{i}_conf", "")
+            if text:
+                rare[f"p{i}"] = float(text)
+        low = [k for k, c in rare.items() if SUGGEST_MIN_CONF <= c < kp_conf]
+        if st["homography"] != "ok" or int(st["n_accepted"] or 0) < 4:
+            tier, reason = 0, f"not calibratable ({st['homography']}, {st['n_accepted']} kps)"
+        elif low:
+            tier, reason = 1, "low-confidence rare " + " ".join(low)
+        else:
+            tier, reason = 2, "calibrated"
+        tiers[tier].append(
+            {
+                "frame": frame,
+                "tier": tier,
+                "reason": reason,
+                "n_accepted": st["n_accepted"],
+                "homography": st["homography"],
+                **{k: round(c, 4) for k, c in rare.items()},
+            }
+        )
+    chosen: list[dict] = []
+    for tier in (0, 1, 2):
+        cands = sorted(tiers[tier], key=lambda r: r["frame"])
+        budget = per_video - len(chosen)
+        if budget <= 0 or not cands:
+            continue
+        # Spread first (evenly spaced picks), then fill the gaps left by min_gap.
+        spread = sorted({round(x) for x in _linspace(0, len(cands) - 1, budget)})
+        order = [cands[i] for i in spread] + [c for i, c in enumerate(cands) if i not in spread]
+        for c in order:
+            if len(chosen) >= per_video:
+                break
+            if all(abs(c["frame"] - s["frame"]) >= min_gap for s in chosen):
+                chosen.append(c)
+    return sorted(chosen, key=lambda r: r["frame"])
+
+
+def _linspace(a: float, b: float, n: int) -> list[float]:
+    return [a] if n <= 1 else [a + (b - a) * k / (n - 1) for k in range(n)]
+
+
+def build_label_queue(
+    ws, batch, *, per_video: int = 25, min_gap: int = 5, kp_conf: float | None = None
+) -> list[Path]:
+    """One review session per video of a detect output/batch, drafting only queued frames.
+
+    Frames come from :func:`queue_frames`. Each session is saved under
+    ``<ws>/incoming/<session>/`` with ``queue.csv``; getpixelvideo's
+    PageUp/PageDown then walks exactly the queued frames. Which split the
+    labels feed (train or the hard holdout) is decided later, at ``ingest``.
+    """
+    import cv2
+
+    ws = Path(ws).expanduser().resolve()
+    batch = Path(batch).expanduser().resolve()
+    kp_conf = float(load_settings(ws)["detect"]["kp_conf"] if kp_conf is None else kp_conf)
+    outputs = (
+        [batch]
+        if (batch / "README.txt").is_file()
+        else sorted(p for p in batch.glob("processed_freekiki_*") if (p / "README.txt").is_file())
+    )
+    if not outputs:
+        raise ValueError(f"No detect output (README.txt) in {batch}")
+    sessions = []
+    for out in outputs:
+        video = _read_readme_video(out)
+        if video is None or not video.is_file():
+            _log(f"skip {out.name}: video not found ({video})")
+            continue
+        with (out / "field_kps_status.csv").open(encoding="utf-8") as f:
+            status_rows = list(csv.DictReader(f))
+        with (out / "field_kps_raw.csv").open(encoding="utf-8") as f:
+            raw_rows = list(csv.DictReader(f))
+        picked = queue_frames(
+            status_rows, raw_rows, per_video=per_video, min_gap=min_gap, kp_conf=kp_conf
+        )
+        cap = cv2.VideoCapture(str(video))
+        try:
+            w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            fps = float(cap.get(cv2.CAP_PROP_FPS))
+        finally:
+            cap.release()
+        session = new_review_session(video, w, h, fps, workspace=ws)
+        load_raw_review_predictions(
+            session, out, kp_conf=kp_conf, frames={r["frame"] for r in picked}
+        )
+        path = save_review_session(session)
+        diag.write_csv(path.parent / "queue.csv", picked or [{"frame": ""}])
+        tiers = Counter(r["tier"] for r in picked)
+        _log(
+            f"queue {video.name}: {len(picked)} frames "
+            f"(not calibratable {tiers[0]}, rare low-conf {tiers[1]}, other {tiers[2]}) -> {path}"
+        )
+        print_gui_cli_mirror(
+            "vaila/getpixelvideo",
+            [
+                "uv", "run", "--no-sync", "vaila/getpixelvideo.py", "--freekiki",
+                "--freekiki-workspace", str(ws), "--freekiki-session", str(path),
+            ],
+            note="Review the queued frames (then ingest --split train|hard):",
+        )  # fmt: skip
+        sessions.append(path)
+    _log(
+        "review: PageDown/PageUp = next/previous queued frame, F10 = accept ghost, "
+        "Del = hide (not visible), F3 = Mark Reviewed, F9 = export"
+    )
+    return sessions
+
+
 REVIEWED_FIELDS = (
     "image",
     "label",
@@ -1873,26 +2469,145 @@ REVIEWED_FIELDS = (
 )
 
 
+def export_dataset_yaml(session: dict, root: Path) -> Path:
+    names, flips = load_schema()
+    yaml_dict = {
+        "path": str(root.resolve()),
+        "train": "images",
+        "val": "images",
+        "test": "images",
+        "kpt_shape": [NKP, 3],
+        "flip_idx": flips,
+        "names": {0: "football_pitch"},
+        "kpt_names": {0: names},
+    }
+    yaml_path = root / "data.yaml"
+    with yaml_path.open("w", encoding="utf-8") as f:
+        yaml.safe_dump(yaml_dict, f, sort_keys=False)
+    return yaml_path
+
+
+def export_wide_markers_csv(
+    session: dict, root: Path, total_video_frames: int | None = None
+) -> list[Path]:
+    header = ["frame"]
+    for i in range(NKP):
+        header.extend([f"p{i}_x", f"p{i}_y"])
+
+    max_frame = max((int(k) for k in session.get("frames", {})), default=-1)
+    n_frames = (
+        total_video_frames
+        if total_video_frames is not None and total_video_frames > 0
+        else (max_frame + 1)
+    )
+
+    rows = []
+    for f in range(n_frames):
+        row = [str(f)]
+        frame_data = session.get("frames", {}).get(str(f))
+        pts = frame_data.get("points") if frame_data else None
+        for i in range(NKP):
+            if (
+                pts
+                and i < len(pts)
+                and pts[i] is not None
+                and pts[i][0] is not None
+                and pts[i][1] is not None
+            ):
+                x, y = pts[i][0], pts[i][1]
+                row.extend([f"{float(x):.2f}", f"{float(y):.2f}"])
+            else:
+                row.extend(["", ""])
+        rows.append(row)
+
+    written = []
+    video_stem = Path(session.get("video", "video")).stem
+    csv_paths = [
+        root / f"{video_stem}_markers.csv",
+        root / "field_kps_getpixelvideo.csv",
+    ]
+    video_path = Path(session.get("video", ""))
+    if video_path.parent.is_dir() and video_path.parent.resolve() != root.resolve():
+        csv_paths.append(video_path.parent / f"{video_stem}_markers.csv")
+
+    for cp in csv_paths:
+        try:
+            with cp.open("w", newline="", encoding="utf-8") as f_out:
+                writer = csv.writer(f_out)
+                writer.writerow(header)
+                writer.writerows(rows)
+            written.append(cp)
+        except OSError:
+            pass
+    return written
+
+
 def export_reviewed_session(session: dict) -> Path:
     """Write only human-confirmed frames into incoming/<session>/, never a split."""
     import cv2
 
     root = Path(session["session_path"]).parent
+    origin = hashlib.sha256(session["video"].encode()).hexdigest()[:10]
+
+    # Only complete frames become labels: an empty point is written as "not
+    # visible", so a partial frame teaches the network to ignore visible points.
+    # Complete manual drafts are promoted; incomplete reviewed frames go back to
+    # DRAFT_MANUAL (PageUp/PageDown finds them) and their stale export is removed.
+    incomplete = []
+    for key, row in session.get("frames", {}).items():
+        if row.get("state") not in ("DRAFT_MANUAL", "HUMAN_REVIEWED", "EXPORTED") or not any(
+            p is not None for p in row.get("points", [])
+        ):
+            continue
+        problem = completeness_problem(session, int(key), row)
+        if problem is None:
+            if row["state"] == "DRAFT_MANUAL":
+                row["state"] = "HUMAN_REVIEWED"
+                if not row.get("reviewed_at"):
+                    row["reviewed_at"] = datetime.now().astimezone().isoformat()
+            continue
+        incomplete.append({"frame": int(key), "state": row["state"], "problem": problem})
+        if row["state"] != "DRAFT_MANUAL":
+            row["state"] = "DRAFT_MANUAL"
+            row["reviewed_at"] = ""
+        stem = f"{Path(session['video']).stem}_{origin}_f{int(key):08d}"
+        (root / "images" / f"{stem}.png").unlink(missing_ok=True)
+        (root / "labels" / f"{stem}.txt").unlink(missing_ok=True)
+    incomplete.sort(key=lambda r: r["frame"])
+    if incomplete:
+        root.mkdir(parents=True, exist_ok=True)
+        diag.write_csv(root / "incomplete_frames.csv", incomplete)
+        for r in incomplete[:10]:
+            _log(f"not exported: {r['problem']}")
+        _log(
+            f"{len(incomplete)} incomplete frame(s) left as DRAFT -> {root / 'incomplete_frames.csv'}"
+        )
+    else:
+        (root / "incomplete_frames.csv").unlink(missing_ok=True)
+
     reviewed = [
         (int(k), v)
         for k, v in session["frames"].items()
         if v["state"] in ("HUMAN_REVIEWED", "EXPORTED")
     ]
     if not reviewed:
-        raise ValueError("No human-reviewed frames to export")
+        save_review_session(session)
+        raise ValueError(
+            "No complete human-reviewed frames to export"
+            + (
+                f" ({len(incomplete)} incomplete; first: {incomplete[0]['problem']})"
+                if incomplete
+                else ""
+            )
+        )
     reviewed.sort()
     cap = cv2.VideoCapture(session["video"])
     if not cap.isOpened():
         raise ValueError("Could not open review video")
+    total_video_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     (root / "images").mkdir(parents=True, exist_ok=True)
     (root / "labels").mkdir(parents=True, exist_ok=True)
     rows = []
-    origin = hashlib.sha256(session["video"].encode()).hexdigest()[:10]
     try:
         for frame, row in reviewed:
             label = pose_label_line(
@@ -1935,6 +2650,8 @@ def export_reviewed_session(session: dict) -> Path:
         writer.writerows(rows)
     save_review_session(session)
     write_review_diagnostics(session)
+    export_dataset_yaml(session, root)
+    export_wide_markers_csv(session, root, total_video_frames=total_video_frames)
     return root
 
 
@@ -2174,14 +2891,21 @@ def evaluate(
     out = ws / "outputs" / f"processed_freekiki_eval_{split}_{datetime.now():%Y%m%d_%H%M%S}"
     out.mkdir(parents=True, exist_ok=True)
     _log(f"evaluate: model={model_path} ({predictor.backend}) split={split} imgsz={imgsz} -> {out}")
-    if split == "test":
-        _log("note: test split - report only, do not choose thresholds/hyper-parameters on it")
+    if split in ("test", "hard"):
+        _log(f"note: {split} split - report only, do not choose thresholds/hyper-parameters on it")
 
     ultra: dict = {}
     if isinstance(predictor, YoloPredictor):
+        val_yaml, val_split = yaml_path, split
+        if split not in ("train", "val", "test"):
+            # Ultralytics resolves only train/val/test paths: score <split> as "val".
+            val_yaml, val_split = out / f"data_{split}.yaml", "val"
+            val_yaml.write_text(
+                yaml.safe_dump(data | {"val": str(img_dir)}, sort_keys=False), encoding="utf-8"
+            )
         val = predictor.net.val(
-            data=str(yaml_path),
-            split=split,
+            data=str(val_yaml),
+            split=val_split,
             imgsz=imgsz,
             batch=batch,
             device=device,
@@ -2319,8 +3043,8 @@ def sweep(
     ws = Path(ws).expanduser().resolve()
     eval_dir = Path(eval_dir).expanduser().resolve()
     summary = json.loads((eval_dir / "eval_summary.json").read_text(encoding="utf-8"))
-    if summary.get("split") == "test" and not allow_test:
-        raise ValueError("sweep on the test split refused: choose thresholds on val")
+    if summary.get("split") in ("test", "hard") and not allow_test:
+        raise ValueError(f"sweep on the {summary['split']} split refused: choose thresholds on val")
     pred = load_predictions(eval_dir)
     out = (
         ws
@@ -2380,11 +3104,13 @@ def _eval_for(ws, ref: str, *, split: str, like: dict | None = None) -> Path:
     return evaluate(ws, model=model, split=split, **kwargs)
 
 
-def compare(ws, *, baseline: str = "active", candidate: str, promote: bool = False) -> dict:
-    """Gate ``candidate`` against ``baseline`` (eval folders or models) on the same split.
+def compare(ws, *, baseline: str | None = None, candidate: str, promote: bool = False) -> dict:
+    """Gate ``candidate`` against ``baseline`` (eval folders, models or slots) on the same split.
 
-    With ``promote`` the candidate model is copied to ``models/active.pt`` only
-    when every gate check passes. The decision is always logged.
+    ``baseline`` defaults to the model in the candidate's size slot, or to the
+    active model while that slot is empty. With ``promote`` the candidate is
+    copied into its slot (``models/freekiki_<slot>.pt``, previous file backed up)
+    only when every gate check passes. The decision is always logged.
     """
     ws = Path(ws).expanduser().resolve()
     settings = load_settings(ws)
@@ -2392,6 +3118,11 @@ def compare(ws, *, baseline: str = "active", candidate: str, promote: bool = Fal
     split = gate.get("split", "val")
     cand_dir = _eval_for(ws, candidate, split=split)
     like = json.loads((cand_dir / "eval_summary.json").read_text(encoding="utf-8"))
+    found = checkpoint_slot(like.get("model") or "")
+    slot, arch = found or base_slot(candidate, settings["models"]["default"])
+    target = slot_path(ws, settings, slot)
+    if baseline is None:
+        baseline = str(target) if target.is_file() else "active"
     base_dir = _eval_for(ws, baseline, split=like["split"], like=like)
     decision = diag.compare_evals(base_dir, cand_dir, gate)
     (cand_dir / "promotion_decision.json").write_text(json.dumps(decision, indent=2), "utf-8")
@@ -2404,18 +3135,23 @@ def compare(ws, *, baseline: str = "active", candidate: str, promote: bool = Fal
         _log(f"  note: {note}")
     promoted = bool(promote and decision["promote"])
     if promoted:
-        active_path = ws / settings["active"]["model"]
-        backup = active_path.with_name(f"active_before_{datetime.now():%Y%m%d_%H%M%S}.pt")
-        shutil.copy2(active_path, backup)
-        shutil.copy2(decision["candidate_model"], active_path)
-        cand_map = next(
-            (c["candidate"] for c in decision["checks"] if c["check"] == "pose_map50_95"), None
+        if target.is_file():
+            shutil.copy2(
+                target, target.with_name(f"{target.stem}_before_{datetime.now():%Y%m%d_%H%M%S}.pt")
+            )
+        values = {c["check"]: c["candidate"] for c in decision["checks"]}
+        _install_slot(
+            ws,
+            settings,
+            slot,
+            Path(decision["candidate_model"]),
+            {
+                "arch": arch,
+                "run": Path(decision["candidate_model"]).stem,
+                "pose_map50_95": values.get("pose_map50_95") or 0.0,
+                "pck10_all": values.get("overall_pck10_all", ""),
+            },
         )
-        settings["active"].update(
-            {"run": Path(decision["candidate_model"]).stem, "model": ACTIVE_MODEL}
-            | ({} if cand_map is None else {"pose_map50_95": cand_map})
-        )
-        save_settings(ws, settings)
     log_promotion(
         ws,
         {
@@ -2429,7 +3165,7 @@ def compare(ws, *, baseline: str = "active", candidate: str, promote: bool = Fal
     verdict = "passes" if decision["promote"] else "FAILS"
     _log(
         f"compare ({decision['split']}): candidate {verdict} the gate"
-        + (" -> PROMOTED" if promoted else "")
+        + (f" -> PROMOTED to {slot_file(slot)}" if promoted else "")
         + ("" if decision["promote"] else " | " + "; ".join(decision["reasons"]))
     )
     return decision
@@ -2961,8 +3697,8 @@ def validate_detection_workspace(ws, model: str) -> None:
         raise FileNotFoundError("Choose a FreeKiki workspace folder containing freekiki.toml.")
     load_settings(Path(ws).expanduser())
     if not model.strip():
-        raise ValueError("Choose 'active' or a model .pt file for detection.")
-    if model == "active":
+        raise ValueError("Choose 'active', a model slot or a model .pt file for detection.")
+    if model == "active" or _slot_name(model):
         resolve_model(ws, model)
 
 
@@ -3010,21 +3746,33 @@ def build_parser() -> argparse.ArgumentParser:
     for cmd, help_text in (
         ("init", "Create the workspace layout."),
         ("import-dataset", "Copy a kiki49 YOLO-pose build into the workspace."),
-        ("ingest", "Validate reviewed frames; --commit appends them to train."),
+        ("queue", "Pick the frames worth labelling from a detect batch (review sessions)."),
+        ("ingest", "Validate complete reviewed frames; --commit appends them to train or hard."),
         ("check", "Validate the workspace dataset."),
         ("manifest", "Build an oversampled train list (manifests/vNNN) for rare keypoints."),
-        ("train", "Train or retrain (--base active) the field-keypoint network."),
+        ("train", "Train or retrain (--base active / a slot) the field-keypoint network."),
         ("status", "List training runs and which ones can be resumed."),
         ("resume", "Continue an interrupted training from its last saved epoch."),
         ("evaluate", "Measure a model on a labelled split (default val; quality report)."),
         ("sweep", "det_conf x kp_conf grid on a saved evaluation (val only by default)."),
         ("audit", "Read-only dataset audit (points, visibility, leakage, geometry)."),
         ("compare", "Gate a candidate model/evaluation against the baseline on val."),
+        ("export", "Export reviewed session frames to images, labels, data.yaml and markers CSV."),
+        ("models", "List the model slots (freekiki_n..x, freekiki_hm_*); --default sets 'active'."),
+        ("sizes", "Parameter overlap of a model with every YOLO26 scale (read only)."),
+        ("grow", "Deepen a trained m into a function-preserving l initialisation."),
         ("bench", "Short training speed / peak-VRAM benchmark (batch x workers)."),
         ("detect", "Detect field keypoints in a video or in every video of a folder."),
     ):
         p = sub.add_parser(cmd, help=help_text)
-        p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
+        if cmd == "export":
+            p.add_argument("-w", "--workspace", help="Optional FreeKiki workspace folder.")
+            p.add_argument(
+                "--session", required=True, help="Review session JSON or session folder."
+            )
+            p.add_argument("--video", help="Optional video file path if moved.")
+        else:
+            p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
         if cmd == "import-dataset":
             p.add_argument("--src", required=True, help="kiki49 dataset folder (has data.yaml).")
         elif cmd == "ingest":
@@ -3033,10 +3781,23 @@ def build_parser() -> argparse.ArgumentParser:
                 "--match-id", required=True, help="Match/sequence shared across cameras and cuts."
             )
             p.add_argument(
-                "--commit", action="store_true", help="Publish validated pairs to train."
+                "--split",
+                choices=INGEST_SPLITS,
+                default="train",
+                help="train, or hard = labelled holdout of difficult footage (never trained on).",
             )
+            p.add_argument(
+                "--commit", action="store_true", help="Publish validated pairs to the split."
+            )
+        elif cmd == "queue":
+            p.add_argument(
+                "--batch", dest="batch_dir", required=True, help="detect output or batch folder."
+            )
+            p.add_argument("--per-video", type=int, default=25, help="Max queued frames per clip.")
+            p.add_argument("--min-gap", type=int, default=5, help="Min frames between picks.")
+            p.add_argument("--kp-conf", type=float, help="Default: detect kp_conf setting.")
         elif cmd == "train":
-            p.add_argument("--base", help="yolo26*-pose.pt, 'active' or a .pt path.")
+            p.add_argument("--base", help="yolo26*-pose.pt, 'active', a slot (m, l) or a .pt.")
             p.add_argument("--epochs", type=int)
             p.add_argument("--imgsz", type=int)
             p.add_argument("--batch", type=float, help="Batch size; -1 = AutoBatch.")
@@ -3078,12 +3839,12 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--device")
             p.add_argument("--batch", type=float, help="Override batch (e.g. after OOM).")
         elif cmd == "evaluate":
-            p.add_argument("--model", default="active", help="'active' or a .pt path.")
+            p.add_argument("--model", default="active", help="'active', a slot or a .pt path.")
             p.add_argument(
                 "--split",
                 default="val",
-                choices=("val", "test", "train"),
-                help="val to choose/compare; test only for the final report.",
+                choices=("val", "test", "train", "hard"),
+                help="val to choose/compare; test and hard (labelled holdout) only to report.",
             )
             p.add_argument("--imgsz", type=int)
             p.add_argument("--batch", type=int, default=8)
@@ -3103,10 +3864,24 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--dup-bits", type=int, default=10, help="dHash near-duplicate radius.")
             p.add_argument("--no-hash", action="store_true", help="Skip the image hashing.")
         elif cmd == "compare":
-            p.add_argument("--baseline", default="active", help="Eval folder, model or 'active'.")
+            p.add_argument(
+                "--baseline", help="Eval folder, model or slot (default: the candidate's slot)."
+            )
             p.add_argument("--candidate", required=True, help="Eval folder or model .pt.")
             p.add_argument(
-                "--promote", action="store_true", help="Copy to active.pt if the gate passes."
+                "--promote",
+                action="store_true",
+                help="Install into models/freekiki_<slot>.pt if the gate passes.",
+            )
+        elif cmd == "models":
+            p.add_argument("--default", help="Slot that 'active' means (e.g. m, l, hm_m).")
+        elif cmd == "sizes":
+            p.add_argument("--src", default="active", help="'active', a slot or a .pt path.")
+        elif cmd == "grow":
+            p.add_argument("--src", default="m", help="Trained m model: slot, 'active' or .pt.")
+            p.add_argument("--to", default="l", choices=("l",), help="Target scale (m -> l only).")
+            p.add_argument(
+                "--out", default="models/freekiki_l_init.pt", help="Output (workspace-relative)."
             )
         elif cmd == "bench":
             p.add_argument("--batches", default="2,8,16")
@@ -3146,6 +3921,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in (None, "gui"):
         run_freekiki()
         return 0
+    if args.command == "export":
+        session = load_review_session(args.session, video=args.video)
+        out = export_reviewed_session(session)
+        _log(f"session exported: {out}")
+        return 0
     ws = Path(args.workspace)
     batch = getattr(args, "batch", None)
     if batch is not None and float(batch).is_integer():
@@ -3155,7 +3935,11 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "import-dataset":
         import_dataset(ws, args.src)
     elif args.command == "ingest":
-        ingest_reviewed(ws, args.src, args.match_id, commit=args.commit)
+        ingest_reviewed(ws, args.src, args.match_id, split=args.split, commit=args.commit)
+    elif args.command == "queue":
+        build_label_queue(
+            ws, args.batch_dir, per_video=args.per_video, min_gap=args.min_gap, kp_conf=args.kp_conf
+        )
     elif args.command == "check":
         return 1 if check_dataset(ws) else 0
     elif args.command == "status":
@@ -3218,6 +4002,12 @@ def main(argv: list[str] | None = None) -> int:
             ws, baseline=args.baseline, candidate=args.candidate, promote=args.promote
         )
         return 0 if decision["promote"] else 2
+    elif args.command == "models":
+        list_models(ws, default=args.default)
+    elif args.command == "sizes":
+        model_sizes(ws, args.src)
+    elif args.command == "grow":
+        grow_model(ws, src=args.src, to=args.to, out=args.out)
     elif args.command == "bench":
         bench(
             ws,
@@ -3301,6 +4091,10 @@ def run_freekiki() -> None:
         "kp_conf": tk.StringVar(value="0.5"),
         "split": tk.StringVar(value="val"),
         "fill_gaps": tk.StringVar(value="0"),
+        "label_batch": tk.StringVar(),
+        "session": tk.StringVar(),
+        "match_id": tk.StringVar(),
+        "ingest_split": tk.StringVar(value="train"),
     }
     overlay = tk.BooleanVar(value=True)
     link_output_to_input(v["video"], v["out"])
@@ -3445,7 +4239,7 @@ def run_freekiki() -> None:
                 "FreeKiki", "Set Model (section 5) to the candidate .pt to compare.", parent=root
             )
             return
-        run_cli(["compare", "--baseline", "active", "--candidate", model])
+        run_cli(["compare", "--candidate", model])
 
     def do_detect():
         if not v["video"].get().strip():
@@ -3459,7 +4253,7 @@ def run_freekiki() -> None:
             messagebox.showerror(
                 "FreeKiki",
                 "In section 5, choose the FreeKiki workspace folder containing "
-                "freekiki.toml (and models/active.pt when Model is 'active').\n\n"
+                "freekiki.toml (and a promoted model when Model is 'active' or a slot).\n\n"
                 f"{exc}",
                 parent=root,
             )
@@ -3475,6 +4269,52 @@ def run_freekiki() -> None:
 
     def open_help():
         webbrowser.open(HELP_HTML.resolve().as_uri())
+
+    def do_queue():
+        if not v["label_batch"].get().strip():
+            messagebox.showerror("FreeKiki", "Choose a detect batch/output folder.", parent=root)
+            return
+        run_cli(["queue", "--batch", v["label_batch"].get().strip()])
+
+    def browse_session():
+        ws = v["ws"].get().strip()
+        path = filedialog.askopenfilename(
+            title="Review session (incoming/<session>/session.json)",
+            initialdir=str(Path(ws) / "incoming") if ws else None,
+            filetypes=[("Review session", "session.json"), ("JSON", "*.json")],
+        )
+        if path:
+            v["session"].set(str(Path(path).parent))
+
+    def do_open_review():
+        ws, sdir = v["ws"].get().strip(), v["session"].get().strip()
+        if not ws or not (Path(sdir) / "session.json").is_file():
+            messagebox.showerror("FreeKiki", "Choose the workspace and a session.", parent=root)
+            return
+        gpv = Path(__file__).resolve().parent / "getpixelvideo.py"
+        argv = ["--freekiki", "--freekiki-workspace", ws]
+        argv += ["--freekiki-session", str(Path(sdir) / "session.json")]
+        print_gui_cli_mirror("vaila/getpixelvideo", ["uv", "run", "--no-sync", str(gpv), *argv])
+        log.insert("end", f"\n>> getpixelvideo {' '.join(argv)}\n")
+        subprocess.Popen([sys.executable, str(gpv), *argv])  # own window, runs alongside
+
+    def do_ingest(commit: bool):
+        sdir, match = v["session"].get().strip(), v["match_id"].get().strip()
+        if not sdir or not match:
+            messagebox.showerror("FreeKiki", "Set Session and Match id first.", parent=root)
+            return
+        split = v["ingest_split"].get()
+        if commit and not messagebox.askyesno(
+            "FreeKiki",
+            f"Append the complete reviewed frames of\n{sdir}\nto the '{split}' split "
+            f"(match {match})?",
+            parent=root,
+        ):
+            return
+        run_cli(
+            ["ingest", "--src", sdir, "--match-id", match, "--split", split]
+            + (["--commit"] if commit else [])
+        )
 
     frm = ttk.Frame(root, padding=10)
     frm.pack(fill="both", expand=True)
@@ -3553,8 +4393,8 @@ def run_freekiki() -> None:
     )
     ttk.Label(
         box,
-        text="Retrain = Base model 'active': AdamW lr0=1e-4, 1 warmup epoch, cosine, "
-        "mosaic off, backbone unfrozen.\n"
+        text="Retrain = Base model 'active' (default slot), a slot (m, l) or any trained .pt: "
+        "AdamW lr0=1e-4, 1 warmup epoch, cosine, mosaic off, backbone unfrozen.\n"
         "Manifest = e.g. v001 from 'Build oversampling manifest' (rare points repeated; "
         "empty = plain train split).\n"
         "Stopped / crash / power loss? Every finished epoch is saved: press Resume interrupted.\n"
@@ -3568,11 +4408,12 @@ def run_freekiki() -> None:
     bar.grid(row=0, column=0, columnspan=3, sticky="w")
     ttk.Label(bar, text="Split").pack(side="left", padx=(4, 2))
     ttk.Combobox(
-        bar, textvariable=v["split"], values=("val", "test"), width=5, state="readonly"
+        bar, textvariable=v["split"], values=("val", "test", "hard"), width=5, state="readonly"
     ).pack(side="left")
     ttk.Button(bar, text="Evaluate model", command=do_evaluate).pack(side="left", padx=6)
     ttk.Button(bar, text="Sweep thresholds (val)", command=do_sweep).pack(side="left")
-    ttk.Button(bar, text="Compare with active", command=do_compare).pack(side="left", padx=6)
+    ttk.Button(bar, text="Compare with its slot", command=do_compare).pack(side="left", padx=6)
+    ttk.Button(bar, text="Model slots", command=lambda: run_cli(["models"])).pack(side="left")
     ttk.Button(bar, text="Audit dataset", command=lambda: run_cli(["audit"])).pack(side="left")
     ttk.Label(
         box,
@@ -3617,6 +4458,38 @@ def run_freekiki() -> None:
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
     ttk.Checkbutton(grid, text="Overlay MP4", variable=overlay).grid(row=0, column=10, padx=6)
     ttk.Button(box, text="Detect", command=do_detect).grid(row=5, column=1, sticky="w", pady=2)
+
+    box = ttk.LabelFrame(frm, text="6. Label / review (more labels -> retrain)", padding=6)
+    box.pack(fill="x", pady=4)
+    row(
+        box,
+        0,
+        "Detect batch",
+        v["label_batch"],
+        lambda: browse_dir(v["label_batch"], "detect output (processed_freekiki_batch_*)"),
+    )
+    row(box, 1, "Session", v["session"], browse_session)
+    grid = ttk.Frame(box)
+    grid.grid(row=2, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(grid, text="Match id").grid(row=0, column=0, padx=(4, 2))
+    ttk.Entry(grid, textvariable=v["match_id"], width=22).grid(row=0, column=1)
+    ttk.Label(grid, text="Split").grid(row=0, column=2, padx=(8, 2))
+    ttk.Combobox(
+        grid, textvariable=v["ingest_split"], values=INGEST_SPLITS, width=6, state="readonly"
+    ).grid(row=0, column=3)
+    bar = ttk.Frame(box)
+    bar.grid(row=3, column=1, sticky="w", pady=2)
+    ttk.Button(bar, text="Build label queue", command=do_queue).pack(side="left")
+    ttk.Button(bar, text="Open review", command=do_open_review).pack(side="left", padx=6)
+    ttk.Button(bar, text="Ingest preview", command=lambda: do_ingest(False)).pack(side="left")
+    ttk.Button(bar, text="Ingest commit", command=lambda: do_ingest(True)).pack(side="left", padx=6)
+    ttk.Label(
+        box,
+        text="Queue = frames worth labelling (not calibratable first, then rare points p5/p29/"
+        "p39/p47 half-seen).\nReview: label EVERY visible point or hide it (Del); F10 accepts a "
+        "ghost; incomplete frames are never exported.\nSplit hard = labelled holdout of difficult "
+        "footage, never trained on (Evaluate with Split hard).",
+    ).grid(row=4, column=0, columnspan=3, sticky="w", padx=4)
 
     bar = ttk.Frame(frm)
     bar.pack(fill="x", pady=4)

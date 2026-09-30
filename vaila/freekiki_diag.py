@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.5
+Version: 0.4.6
 Created: 27 September 2026
-Update Date: 28 September 2026
+Update Date: 30 September 2026
 
 Description:
     Verifiable measurement helpers for ``freekiki.py`` (49-point soccer-field
@@ -53,6 +53,10 @@ Description:
       categories writes a repeated train image list plus counts and hashes;
       the dataset itself is never modified.
     * Candidate-vs-baseline promotion gate on the same evaluation split.
+    * Label completeness: the field homography of a frame's labelled points
+      lists the points projected inside the image but neither labelled nor
+      hidden (a "not visible" label on a visible point teaches the network to
+      ignore it). Used by review, export, ingest and the audit.
 
 License:
     GNU Affero General Public License v3.0 (AGPLv3).
@@ -424,6 +428,70 @@ def calibration_error(H, gt_xy, gt_vis, planar, world_xy, width) -> float | None
 # --------------------------------------------------------------------------- #
 # Offline scoring of saved predictions (evaluate + threshold sweep)
 # --------------------------------------------------------------------------- #
+# Human labels are exact up to click error and lens distortion, so the fit that
+# checks a labelled frame is looser than the one that checks a prediction.
+COMPLETENESS_LIMITS: dict[str, Any] = {"ransac_px": 15.0, "min_inliers": 4, "max_rmse_px": 15.0}
+COMPLETENESS_MARGIN = 0.02  # of the image width, kept from every border
+
+
+def label_completeness(points, hidden, width: float, height: float) -> dict:
+    """Points a human label probably misses in one frame.
+
+    A point left empty is written ``0 0 0`` ("not visible") and the pose loss
+    then pushes its confidence to 0, so a partial frame teaches the network to
+    ignore visible points. The labelled planar points give a field homography;
+    a point is a *suspect* when its projection (the ground base for flag and
+    post tops, see ``ABOVE_PAIRS``) lies inside the image while it is neither
+    labelled nor in ``hidden`` (confirmed occluded / not there).
+
+    ``status``: complete | incomplete, or the homography status (few_points,
+    degenerate, few_inliers, high_error, mirrored, ...) when the frame cannot
+    be checked. ``projected`` maps unlabelled planar indices inside the image
+    to their projected xy (pixels).
+    """
+    names, _, xyz = load_field_points()
+    planar = xyz[:, 2] == 0
+    pts = np.full((NKP, 2), np.nan)
+    for i, p in enumerate(points):
+        if p is not None:
+            pts[i] = p
+    labelled = np.isfinite(pts[:, 0])
+    use = labelled & planar
+    fit = fit_field_homography(pts[use], xyz[use, :2], width=width, **COMPLETENESS_LIMITS)
+    out: dict = {
+        "status": fit["status"],
+        "n_planar": int(use.sum()),
+        "rmse_px": fit["rmse_px"],
+        "suspects": [],
+        "projected": {},
+    }
+    if fit["status"] != "ok":
+        return out
+    ground = xyz[:, :2].copy()
+    for top, base in ABOVE_PAIRS:
+        ground[top] = xyz[base, :2]
+    ph = np.c_[ground, np.ones(NKP)] @ fit["H"].T
+    proj = ph[:, :2] / ph[:, 2:3]
+    # Points behind the camera project with the opposite sign of w.
+    front = np.sign(ph[:, 2]) == np.sign(np.median(ph[use, 2]))
+    m = COMPLETENESS_MARGIN * float(width)
+    inside = (
+        front
+        & (proj[:, 0] >= m)
+        & (proj[:, 0] <= width - m)
+        & (proj[:, 1] >= m)
+        & (proj[:, 1] <= height - m)
+    )
+    hidden = {int(i) for i in hidden or ()}
+    missing = inside & ~labelled
+    out["suspects"] = [int(i) for i in np.flatnonzero(missing) if int(i) not in hidden]
+    out["projected"] = {
+        int(i): [float(proj[i, 0]), float(proj[i, 1])] for i in np.flatnonzero(missing & planar)
+    }
+    out["status"] = "incomplete" if out["suspects"] else "complete"
+    return out
+
+
 def accepted_confidence(pred: dict, det_conf: float) -> np.ndarray:
     """Keypoint confidences with images whose best box is below ``det_conf`` set to NaN."""
     kc = np.asarray(pred["pred_kc"], dtype=float).copy()
@@ -741,7 +809,8 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
         for k, c in sorted(splits.items()):
             if len(c) > 1:
                 leaks.append(
-                    {"level": level, "key": k} | {s: c.get(s, 0) for s in ("train", "val", "test")}
+                    {"level": level, "key": k}
+                    | {s: c.get(s, 0) for s in ("train", "val", "test", "hard")}
                 )
     write_csv(out_dir / "leakage_groups.csv", leaks or [{"level": "", "key": ""}])
     summary["leakage"] = {
@@ -751,7 +820,7 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
 
     # labels
     vis_values: Counter = Counter()
-    issues, geom, outliers = [], [], []
+    issues, geom, outliers, missing = [], [], [], []
     avail = defaultdict(lambda: np.zeros(NKP, dtype=int))
     groups_kp = defaultdict(lambda: [set() for _ in range(NKP)])
     above_bad = Counter()
@@ -828,9 +897,26 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
                     outliers.append(
                         base | {"kp": f"p{i}", "name": names[i], "residual_px": round(float(e), 1)}
                     )
+        # Visible-looking points labelled "not visible" (negative supervision).
+        comp = label_completeness(
+            [p if v else None for p, v in zip(px, vis, strict=True)], (), w, h
+        )
+        for i in comp["suspects"]:
+            xy = comp["projected"].get(i, [None, None])
+            missing.append(
+                base
+                | {
+                    "group": r["group"],
+                    "kp": f"p{i}",
+                    "name": names[i],
+                    "proj_x": _num(xy[0], 1),
+                    "proj_y": _num(xy[1], 1),
+                }
+            )
     write_csv(out_dir / "label_issues.csv", issues or [{"split": "", "issue": ""}])
     write_csv(out_dir / "label_geometry.csv", geom)
     write_csv(out_dir / "label_outliers.csv", outliers or [{"image": "", "kp": ""}])
+    write_csv(out_dir / "label_missing_suspects.csv", missing or [{"image": "", "kp": ""}])
     orient = Counter((g["status"], g["orientation"]) for g in geom)
     summary["labels"] = {
         "visibility_values": {str(k): v for k, v in sorted(vis_values.items())},
@@ -846,11 +932,22 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
         "label_homography": {f"{s}/{o}": n for (s, o), n in sorted(orient.items())},
         "mirrored_label_images": sum(1 for g in geom if g["status"] == "mirrored"),
         "keypoint_outliers_gt15px": len(outliers),
+        # label_missing_suspects.csv: works as ``manifest --exclude`` (image column)
+        "missing_label_suspects": {
+            "images": len({m["image"] for m in missing}),
+            "by_kp_split": {
+                f"{kp}/{sp}": n
+                for (kp, sp), n in sorted(
+                    Counter((m["kp"], m["split"]) for m in missing).items(),
+                    key=lambda item: -item[1],
+                )
+            },
+        },
     }
     avail_rows = []
     for i in range(NKP):
         row = {"kp": f"p{i}", "name": names[i]}
-        for s in ("train", "val", "test"):
+        for s in ("train", "val", "test", "hard"):
             row[s] = int(sum(v[i] for (sp, _), v in avail.items() if sp == s))
             row[f"{s}_groups"] = len(groups_kp[s][i])
         for (sp, src), v in sorted(avail.items()):
@@ -865,7 +962,13 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
             if r["image"] in hashes:
                 by_split[r["split"]].append(r)
         dups = []
-        for a, b in (("val", "train"), ("test", "train"), ("test", "val")):
+        for a, b in (
+            ("val", "train"),
+            ("test", "train"),
+            ("test", "val"),
+            ("hard", "train"),
+            ("hard", "val"),
+        ):
             ra, rb = by_split.get(a, []), by_split.get(b, [])
             if not ra or not rb:
                 continue

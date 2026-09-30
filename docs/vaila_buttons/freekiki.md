@@ -34,13 +34,22 @@ per-frame camera calibration.
   keypoint recall/precision with an explicit distance match, error percentiles, PCK over matched
   and over all labelled points (px @1920), per-point/per-source tables, failures CSV, per-image
   homography; results are appended to `models/evaluations.csv`. **Sweep thresholds (val)**
-  re-scores saved predictions over a box/keypoint threshold grid. **Compare with active** runs the
-  promotion gate without promoting.
+  re-scores saved predictions over a box/keypoint threshold grid. **Compare with its slot** runs the
+  promotion gate against the model of the candidate's size slot without promoting.
+- **Model slots:** one promoted model per network size, `models/freekiki_{n,s,m,l,x}.pt` (YOLO26-pose)
+  and `freekiki_hm_*` (heatmap); `active` is the default slot (`models --default l`). An old
+  `models/active.pt` workspace is migrated once by copy (kept). `grow` deepens a trained m into a
+  function-preserving l initialisation; n/s/x start from `yolo26*-pose.pt`.
 - **Detect:** one video or a folder; getpixelvideo-compatible CSV (`p0..p48`), confidence, raw and
   per-point status CSVs (detected / rejected with reason), optional gap filling inside a shot,
   diagnostic frames, overlay MP4, snapshot PNG and `quality.json` (detection rate, visible kps,
   valid-homography rate, cuts, camera displacement vs residual jitter); folders also get
   `quality_summary.csv`.
+- **Label / review (section 6):** `queue` picks the frames worth labelling from a detect batch
+  (not calibratable first, then half-seen p5/p29/p39/p47). **Open review** opens them in
+  getpixelvideo with AI and homography ghosts (F10 accepts). Only complete frames (every visible
+  point labelled or hidden with Del) are exported and ingested. `--split hard` keeps a labelled
+  holdout of difficult footage that is never trained on (`evaluate --split hard`).
 
 ## Usage
 
@@ -49,9 +58,11 @@ per-frame camera calibration.
 3. **Smoke preset** → **Train** to prove the pipeline; then **Full preset** → **Train** (hours);
    later retrain with base `active`.
    If the training stops, press **Runs status** then **Resume interrupted**.
-4. **Evaluate model** on val (and **Sweep thresholds (val)** / **Compare with active**); keep the
+4. **Evaluate model** on val (and **Sweep thresholds (val)** / **Compare with its slot**); keep the
    test split for the final report.
 5. **Detect** on a broadcast video or a folder of videos; check `quality_summary.csv` and snapshots.
+6. More labels: **Build label queue** → **Open review** → **Ingest preview** → **Ingest commit**
+   (train or hard) → **Build oversampling manifest** → retrain.
 
 ## GUI ↔ CLI
 
@@ -71,9 +82,14 @@ Every button prints its `>>` command in the terminal (`WS` = workspace; CUDA mac
 | Bench batch/VRAM | `uv run vaila/freekiki.py bench -w WS --batches 2,8,16 --fraction 0.02` |
 | Evaluate model | `uv run vaila/freekiki.py evaluate -w WS --split val` |
 | Sweep thresholds (val) | `uv run vaila/freekiki.py sweep -w WS --eval-dir EVAL_DIR` |
-| Compare with active | `uv run vaila/freekiki.py compare -w WS --baseline active --candidate BEST.pt` |
+| Compare with its slot | `uv run vaila/freekiki.py compare -w WS --candidate BEST.pt` |
+| Model slots | `uv run vaila/freekiki.py models -w WS [--default l]` |
+| (CLI only) grow m to l | `uv run vaila/freekiki.py grow -w WS --src m --to l --out models/freekiki_l_init.pt` |
 | Audit dataset | `uv run vaila/freekiki.py audit -w WS` |
 | Detect | `uv run vaila/freekiki.py detect -w WS --video VIDEO_OR_FOLDER` |
+| Build label queue | `uv run vaila/freekiki.py queue -w WS --batch DETECT_BATCH` |
+| Open review | `uv run vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session SESSION.json` |
+| Ingest preview / commit | `uv run vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH --split train\|hard [--commit]` |
 
 ---
 See also: [FreeKiki Help](../../vaila/help/freekiki.html), [Field KPs (AI)](soccerfield-keypoints-ai.md)

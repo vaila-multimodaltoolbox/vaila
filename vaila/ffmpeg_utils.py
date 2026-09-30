@@ -7,8 +7,8 @@
 #
 # ffmpeg_utils.py
 #
-# Update Date: 15 July 2026
-# Version: 0.3.83
+# Update Date: 30 September 2026
+# Version: 0.4.6
 #
 # Central helper module for FFmpeg binary discovery and H.264 encoding helpers
 # shared by cutvideo, drawboxe, and related video tools.
@@ -32,6 +32,10 @@
 # Optional env:
 #   VAILA_NVENC_PRESET=p1..p7     (default p5)
 #   VAILA_FFMPEG_ENCODER=libx264|h264_nvenc|h264_videotoolbox  (force)
+#
+# OpenCV readability: opencv_reads_video() / opencv_compatible_copy() make an
+# H.264 <stem>_h264.mp4 copy of videos opencv-python cannot decode (AV1: its
+# bundled FFmpeg has no software AV1 decoder).
 #
 # Usage:
 #   from vaila.ffmpeg_utils import (
@@ -698,6 +702,55 @@ def run_ffmpeg_encode_with_fallback(
             )
 
     raise RuntimeError("FFmpeg encoding failed without producing an output file")
+
+
+def opencv_reads_video(path) -> bool:
+    """True when OpenCV decodes the first frame of ``path``.
+
+    The FFmpeg bundled in the opencv-python wheels has no software AV1 decoder
+    (only hardware ``av1``), so e.g. YouTube AV1 downloads open but never read.
+    """
+    import cv2
+
+    cap = cv2.VideoCapture(str(path))
+    try:
+        return bool(cap.isOpened() and cap.read()[0])
+    finally:
+        cap.release()
+
+
+def opencv_copy_path(path) -> Path:
+    """Where :func:`opencv_compatible_copy` writes the H.264 copy of ``path``."""
+    src = Path(path)
+    return src.with_name(f"{src.stem}_h264.mp4")
+
+
+def opencv_compatible_copy(path) -> Path:
+    """H.264 copy of ``path`` that OpenCV can read: ``<stem>_h264.mp4`` beside it.
+
+    Every frame and timestamp is kept (``-fps_mode passthrough``), audio is
+    copied. The system FFmpeg decodes (libdav1d for AV1). A readable copy from
+    an earlier run is reused; the source is never modified.
+    """
+    src = Path(path)
+    dst = opencv_copy_path(src)
+    if dst.is_file() and opencv_reads_video(dst):
+        return dst
+    partial = dst.with_name(f"{dst.stem}.partial.mp4")
+    try:
+        run_ffmpeg_encode_with_fallback(
+            [get_ffmpeg_path(), "-hide_banner", "-y", "-i", str(src)],
+            [
+                "-map", "0:v:0", "-map", "0:a?", "-fps_mode", "passthrough",
+                "-c:a", "copy", "-movflags", "+faststart", str(partial),
+            ],
+        )  # fmt: skip
+        partial.replace(dst)
+    finally:
+        partial.unlink(missing_ok=True)
+    if not opencv_reads_video(dst):
+        raise RuntimeError(f"OpenCV still cannot read the H.264 copy: {dst}")
+    return dst
 
 
 def clear_ffmpeg_encoder_cache() -> None:

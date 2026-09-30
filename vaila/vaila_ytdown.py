@@ -4,8 +4,8 @@ YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Create: 10 October 2025
-Update Date: 27 September 2026
-Version: 0.4.5
+Update Date: 30 September 2026
+Version: 0.4.6
 
 Description:
 ------------
@@ -25,9 +25,11 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox
 """
 
 import argparse
+import contextlib
 import copy
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -41,7 +43,54 @@ from pathlib import Path
 try:
     from .task_feedback import Feedback, WorkerTask, command_text, redact
 except ImportError:
-    from task_feedback import Feedback, WorkerTask, command_text, redact
+    from task_feedback import (  # ty: ignore[unresolved-import]
+        Feedback,
+        WorkerTask,
+        command_text,
+        redact,
+    )
+
+try:
+    from .ffmpeg_utils import opencv_compatible_copy, opencv_reads_video
+except ImportError:
+    from ffmpeg_utils import (  # ty: ignore[unresolved-import]
+        opencv_compatible_copy,
+        opencv_reads_video,
+    )
+
+try:
+    from .cli_highlight import print_gui_cli_mirror
+except ImportError:
+    try:
+        from vaila.cli_highlight import print_gui_cli_mirror
+    except ImportError:
+        try:
+            from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+        except ImportError:
+
+            def print_gui_cli_mirror(  # type: ignore[misc]
+                module_label: str,
+                cli: list[str] | str,
+                *,
+                note: str = "Equivalent CLI (copy/paste to repeat this run):",
+            ) -> None:
+                cli_str = (
+                    cli
+                    if isinstance(cli, str)
+                    else (
+                        subprocess.list2cmdline(cli) if sys.platform == "win32" else shlex.join(cli)
+                    )
+                )
+                header = f">> {module_label}: {note}"
+                body = f">>   {cli_str}"
+                banner = "=" * min(max(len(body), 40), 100)
+                print()
+                print(banner)
+                print(header)
+                print(body)
+                print(banner)
+                print()
+
 
 # Try to import yt-dlp
 try:
@@ -70,9 +119,21 @@ def quality_key(fmt):
     return tuple(fmt.get(key) or 0 for key in ("width", "height", "fps"))
 
 
+def codec_label(fmt):
+    vcodec = str(fmt.get("vcodec") or "").lower()
+    for prefix, name in (
+        ("avc1", "H.264"), ("h264", "H.264"), ("vp09", "VP9"), ("vp9", "VP9"),
+        ("av01", "AV1"), ("hev1", "H.265"), ("hvc1", "H.265"),
+    ):  # fmt: skip
+        if vcodec.startswith(prefix):
+            return name
+    return vcodec or "?"
+
+
 def quality_label(fmt):
     width, height, fps = quality_key(fmt)
-    return f"{width or '?'}x{height or '?'} · {f'{fps:g}' if fps else 'unknown'} FPS"
+    fps_text = f"{fps:g}" if fps else "unknown"
+    return f"{width or '?'}x{height or '?'} · {fps_text} FPS · {codec_label(fmt)}"
 
 
 def video_formats(info):
@@ -87,9 +148,35 @@ def video_formats(info):
     ]
 
 
-def quality_options(info):
-    # yt-dlp has already sorted equivalent variants; last one wins.
-    grouped = {quality_key(fmt): fmt for fmt in video_formats(info)}
+def opencv_codec_rank(fmt):
+    """2 = H.264, 1 = VP9, 0 = other (AV1): what opencv-python can decode.
+
+    Its bundled FFmpeg has no software AV1 decoder, so an AV1 download opens
+    in every vailá video tool but never returns a frame.
+    """
+    vcodec = str(fmt.get("vcodec") or "").lower()
+    if vcodec.startswith(("avc1", "h264")):
+        return 2
+    return 1 if vcodec.startswith(("vp9", "vp09")) else 0
+
+
+def quality_options(info, *, keep_codec=False):
+    """One variant per resolution/FPS, highest FPS first, then resolution.
+
+    Default (vailá-ready): the most OpenCV-decodable codec of that quality
+    (H.264 > VP9 > AV1). ``keep_codec``: YouTube's own best variant (often
+    AV1, smaller). Among equals yt-dlp's order wins (last = best). The codec
+    never lowers the resolution or FPS.
+    """
+    grouped = {}
+    for fmt in video_formats(info):
+        key = quality_key(fmt)
+        if (
+            key not in grouped
+            or keep_codec
+            or opencv_codec_rank(fmt) >= opencv_codec_rank(grouped[key])
+        ):
+            grouped[key] = fmt
     return sorted(
         grouped.values(),
         key=lambda f: (
@@ -192,6 +279,45 @@ def _make_directory(parent, prefix):
         except FileExistsError:
             candidate = base.with_name(f"{base.name}_{index}")
             index += 1
+
+
+def format_ytdown_cli_command(
+    urls: list[str],
+    destination: Path | str,
+    *,
+    audio_only: bool = False,
+    selections: dict[int, str] | None = None,
+    debug: bool = False,
+    url_file: Path | str | None = None,
+    keep_codec: bool = False,
+) -> list[str]:
+    """Build the copy-paste CLI command that reproduces this run headlessly."""
+    cmd = [
+        "uv",
+        "run",
+        "--no-sync",
+        "vaila/vaila_ytdown.py",
+        "--output",
+        str(destination),
+        "--no-gui",
+    ]
+    if url_file:
+        cmd.extend(["--file", str(url_file)])
+    elif urls:
+        cmd.extend(["--url", urls[0]])
+
+    if audio_only:
+        cmd.append("--audio-only")
+    else:
+        if keep_codec:
+            cmd.append("--keep-codec")
+        for idx, fmt_id in sorted((selections or {}).items()):
+            cmd.extend(["--video-format", f"{idx}={fmt_id}"])
+
+    if debug:
+        cmd.append("--debug")
+
+    return cmd
 
 
 @dataclass
@@ -326,6 +452,9 @@ class YTDownloader:
         self._last_gui_progress = 0
         self._final_path = None
         self.last_result = None
+        # False (default) = vailá-ready MP4: OpenCV-decodable codec, H.264 re-encode
+        # when needed. True = keep YouTube's best codec (often AV1), no re-encode.
+        self.keep_codec = False
 
         # Check if ffmpeg is available
         self.ffmpeg_available = self._check_ffmpeg()
@@ -386,7 +515,7 @@ class YTDownloader:
         # Create timestamp for unique folder
         self._check_ready()
         video_info = video_info or self.get_video_info(url)
-        options = quality_options(video_info)
+        options = quality_options(video_info, keep_codec=self.keep_codec)
         if not options:
             raise ValueError("No downloadable video qualities found")
         selected = (
@@ -397,14 +526,22 @@ class YTDownloader:
         if selected is None:
             raise ValueError(f"Video format unavailable: {format_id}")
         requested_quality = quality_key(selected)
+        selected_format_id = selected["format_id"]
         save_dir = str(_make_directory(self.output_dir, "vaila_ytdownload"))
         if self.feedback.log_file is None:
             self.feedback.log_file = Path(save_dir) / "download_log.txt"
 
+        self.feedback(f"Target folder for download: {save_dir}")
+        self.feedback(
+            f"Selected format: {quality_label(selected)} "
+            f"(format ID: {selected['format_id']}, codec: {selected.get('vcodec') or 'auto'})"
+        )
+        self.feedback("Starting video/audio stream download with yt-dlp...")
+
         def selector(context):
             # IDs come from extraction, never interpolate them into selector syntax.
             video = next(
-                (f for f in context["formats"] if f["format_id"] == selected["format_id"]), None
+                (f for f in context["formats"] if f["format_id"] == selected_format_id), None
             )
             if video is None:
                 raise ValueError("Selected video format is no longer available")
@@ -478,19 +615,26 @@ class YTDownloader:
                             raise
                         self.feedback("Media URL expired or denied; refreshing once.")
                         video_info = self.get_video_info(url)
-                        selected = next(
-                            (
-                                f
-                                for f in reversed(video_formats(video_info))
-                                if quality_key(f) == requested_quality
-                            ),
-                            None,
+                        same_quality = [
+                            f
+                            for f in reversed(video_formats(video_info))
+                            if quality_key(f) == requested_quality
+                        ]
+                        selected = (
+                            next(iter(same_quality), None)
+                            if self.keep_codec
+                            else max(same_quality, key=opencv_codec_rank, default=None)
                         )
                         if selected is None:
                             raise ValueError("Selected quality is no longer available") from error
+                        selected_format_id = selected["format_id"]
                 self.current_video_title = info.get("title", "Unknown")
 
                 actual_filename = self._finished_filename(ydl, info, ".mp4")
+                actual_filename = self._make_vaila_readable(actual_filename)
+                file_size_mb = 0.0
+                with contextlib.suppress(OSError):
+                    file_size_mb = os.path.getsize(actual_filename) / (1024 * 1024)
 
                 # Create a comprehensive information file with available resolutions and FPS
                 info_file = os.path.join(save_dir, "video_info.txt")
@@ -525,11 +669,12 @@ class YTDownloader:
                         f.write("Could not retrieve detailed format information.\n")
 
                 self._message(f"\n[green]Download successful:[/green] {self.current_video_title}")
-                self._message(f"[blue]Saved to:[/blue] {actual_filename}")
+                self._message(f"[blue]Saved to:[/blue] {actual_filename} ({file_size_mb:.2f} MB)")
                 self._message(
                     f"[blue]Resolution:[/blue] {info.get('width', 0)}x{info.get('height', 0)}"
                 )
                 self._message(f"[blue]FPS:[/blue] {info.get('fps', 0)}")
+                self.feedback(f"Video metadata written to: {info_file}")
 
                 if self.status_callback:
                     self._event("phase", f"Saved: {actual_filename}")
@@ -542,6 +687,29 @@ class YTDownloader:
                 self.status_callback(f"Error: {error_msg}")
             raise Exception(error_msg) from e
 
+    def _make_vaila_readable(self, path):
+        """Re-encode the MP4 to H.264 in place when OpenCV cannot decode it.
+
+        Skipped with ``keep_codec`` (the user keeps YouTube's codec; getpixelvideo
+        then offers an H.264 copy when opening an AV1 file).
+
+        Every vailá video tool reads frames through OpenCV, whose bundled
+        FFmpeg has no software AV1 decoder. Frames, timestamps and audio are
+        kept (see ``ffmpeg_utils.opencv_compatible_copy``); the file keeps its name.
+        """
+        if self.keep_codec or opencv_reads_video(path):
+            return path
+        self._check_cancel()
+        self.feedback(
+            f"{Path(path).name}: codec not readable by OpenCV (e.g. AV1); "
+            "re-encoding to H.264 so vailá tools can open it..."
+        )
+        if self.status_callback:
+            self._event("phase", "Converting to H.264 for vailá")
+        os.replace(opencv_compatible_copy(path), path)
+        self.feedback(f"H.264 ready: {path}")
+        return path
+
     def download_audio(self, url, output_dir=None, filename_prefix=""):
         """Download audio only from a YouTube URL as MP3."""
         if output_dir:
@@ -553,6 +721,7 @@ class YTDownloader:
         if self.feedback.log_file is None:
             self.feedback.log_file = Path(save_dir) / "download_log.txt"
 
+        self.feedback(f"Target folder for audio: {save_dir}")
         self._message(f"[blue]Downloading audio only (MP3) for: {url}[/blue]")
 
         outtmpl = os.path.join(
@@ -586,11 +755,16 @@ class YTDownloader:
                 self.current_video_title = info.get("title", "Unknown")
 
                 actual_filename = self._finished_filename(ydl, info, ".mp3")
+                file_size_mb = 0.0
+                with contextlib.suppress(OSError):
+                    file_size_mb = os.path.getsize(actual_filename) / (1024 * 1024)
 
                 self._message(
                     f"\n[green]Audio download successful:[/green] {self.current_video_title}"
                 )
-                self._message(f"[blue]Saved as MP3 to:[/blue] {actual_filename}")
+                self._message(
+                    f"[blue]Saved as MP3 to:[/blue] {actual_filename} ({file_size_mb:.2f} MB)"
+                )
 
                 if self.status_callback:
                     self._event("phase", f"Saved: {actual_filename}")
@@ -628,38 +802,54 @@ class YTDownloader:
             result = DownloadResult(str(run_dir), total=len(urls))
             self.last_result = result
             self.feedback.log_file = run_dir / "download_log.txt" if use_batch else None
-            argv = [
-                sys.executable,
-                "-m",
-                "vaila.vaila_ytdown",
-                "--no-gui",
-                "--output",
-                str(destination),
-            ]
+            url_file = None
             if use_batch:
                 url_file = run_dir / "urls.txt"
                 url_file.write_text("\n".join(urls) + "\n", encoding="utf-8")
-                argv.extend(["--file", str(url_file)])
-            else:
-                argv.extend(["--url", urls[0]])
-            if audio_only:
-                argv.append("--audio-only")
-            else:
-                for index, format_id in sorted(selections.items()):
-                    argv.extend(["--video-format", f"{index}={format_id}"])
-            if self.feedback.debug_enabled:
-                argv.append("--debug")
-            self.feedback("Equivalent CLI: " + command_text(argv))
-            self.feedback(
-                f"Starting {len(urls)} items; format={'MP3 (192 kbps)' if audio_only else 'MP4 (selected quality; default highest FPS, then resolution)'}"
+
+            cli_argv = format_ytdown_cli_command(
+                urls,
+                destination,
+                audio_only=audio_only,
+                selections=selections,
+                debug=self.feedback.debug_enabled,
+                url_file=url_file,
+                keep_codec=self.keep_codec,
             )
+
+            format_label = (
+                "Audio MP3 (192 kbps)"
+                if audio_only
+                else "Video MP4 (selected quality; default highest FPS, then resolution; "
+                + (
+                    "YouTube codec kept)"
+                    if self.keep_codec
+                    else "vailá-ready: H.264/VP9, AV1 re-encoded to H.264)"
+                )
+            )
+            self.feedback("=" * 72)
+            self.feedback(
+                f"Starting YouTube download run ({len(urls)} item{'s' if len(urls) != 1 else ''})"
+            )
+            self.feedback(f"Destination parent directory: {destination}")
+            self.feedback(f"Run output directory: {run_dir}")
+            self.feedback(f"Format: {format_label}")
+            self.feedback("=" * 72)
+            self.feedback("Equivalent CLI: " + command_text(cli_argv))
+            print_gui_cli_mirror(
+                "vaila/vaila_ytdown",
+                cli_argv,
+                note="Equivalent CLI command for this run (copy/paste):",
+            )
+
             for index, url in enumerate(urls, 1):
                 if self.cancel_event.is_set():
                     result.cancelled = True
                     break
-                self.feedback(f"Item {index}/{len(urls)}: {url}")
-                self._event("item", {"index": index, "total": len(urls), "url": redact(url)})
                 item_dir = run_dir / f"{index:03d}" if use_batch else destination
+                self.feedback(f"\n--- Item {index}/{len(urls)}: {redact(url)} ---")
+                self.feedback(f"Item destination folder: {item_dir}")
+                self._event("item", {"index": index, "total": len(urls), "url": redact(url)})
                 try:
                     download = self.download_audio if audio_only else self.download_video
                     preview = previews.get(index)
@@ -698,7 +888,26 @@ class YTDownloader:
                 )
             if self.cancel_event.is_set():
                 result.cancelled = True
+                self.feedback("Cancellation requested; completed files preserved.")
+
+            self.feedback("=" * 72)
             self.feedback(result.summary())
+            self.feedback(f"Final output directory: {result.directory}")
+            if result.files:
+                self.feedback(f"Completed files ({len(result.files)}):")
+                for f in result.files:
+                    self.feedback(f"  ✓ {f}")
+            if result.errors:
+                self.feedback(f"Failed items ({len(result.errors)}):")
+                for err in result.errors:
+                    self.feedback(f"  ✗ {err}")
+            self.feedback("=" * 72)
+
+            print_gui_cli_mirror(
+                "vaila/vaila_ytdown",
+                cli_argv,
+                note="Equivalent CLI command for this run (copy/paste):",
+            )
             self._event("summary", result)
             return result
         finally:
@@ -737,7 +946,8 @@ class DownloaderGUI:
             anchor="w"
         )
         ttk.Label(
-            frame, text="1. Review URLs -> 2. Choose destination -> 3. Consult qualities -> 4. Download"
+            frame,
+            text="1. Review URLs -> 2. Choose destination -> 3. Consult qualities -> 4. Download",
         ).pack(anchor="w", pady=6)
         self.urls_text = tk.Text(frame, height=8, wrap="word", undo=True)
         self.urls_text.pack(fill="both", expand=True)
@@ -769,6 +979,14 @@ class DownloaderGUI:
             format_row, text="Audio (MP3)", variable=self.audio_only, value=True
         )
         self.audio_button.pack(side="left", padx=12)
+        self.vaila_ready = tk.BooleanVar(root, value=not self.downloader.keep_codec)
+        self.vaila_ready_button = ttk.Checkbutton(
+            format_row,
+            text="vailá-ready MP4 (H.264; AV1 re-encoded)",
+            variable=self.vaila_ready,
+            command=self.toggle_vaila_ready,
+        )
+        self.vaila_ready_button.pack(side="left", padx=12)
         self.consult_button = ttk.Button(
             frame, text="Consult qualities", command=self.consult_qualities
         )
@@ -786,6 +1004,8 @@ class DownloaderGUI:
         ttk.Label(
             frame,
             text="MP4 default: highest FPS, then highest resolution; choose separately for each video.\n"
+            "vailá-ready (default): same resolution/FPS in a codec OpenCV reads (H.264/VP9); an AV1-only "
+            "quality is re-encoded to H.264. Untick to keep YouTube's codec (smaller, AV1).\n"
             "MP3: best audio converted to 192 kbps. "
             "Both formats require ffmpeg. Completion includes merging/conversion.",
             wraplength=760,
@@ -830,6 +1050,7 @@ class DownloaderGUI:
             self.browse_button,
             self.video_button,
             self.audio_button,
+            self.vaila_ready_button,
             self.debug_button,
             self.urls_text,
             self.consult_button,
@@ -839,6 +1060,15 @@ class DownloaderGUI:
         root.bind("<Escape>", lambda event: self.cancel())
         self.urls_text.focus_set()
         self.poll_id = root.after(75, self.poll)
+
+    def quality_options(self, info):
+        return quality_options(info, keep_codec=self.downloader.keep_codec)
+
+    def toggle_vaila_ready(self):
+        """Codec choice changes the variant of each quality: consult again."""
+        self.downloader.keep_codec = not self.vaila_ready.get()
+        self.preview_urls = []
+        self.update_count()
 
     def update_count(self, event=None):
         urls = parse_urls(self.urls_text.get("1.0", "end"))
@@ -877,6 +1107,7 @@ class DownloaderGUI:
         self.operation = "consult"
         self.downloader.feedback.debug_enabled = self.debug.get()
         self.status.configure(text="Consulting available qualities...")
+        self.downloader.feedback(f"Consulting available qualities for {len(urls)} video(s)...")
         self.set_busy()
 
         def consult():
@@ -884,11 +1115,22 @@ class DownloaderGUI:
                 if self.task.cancel.is_set():
                     break
                 try:
+                    self.downloader.feedback(
+                        f"Item {index}/{len(urls)}: fetching formats for {redact(url)}"
+                    )
                     info = self.downloader.get_video_info(url)
+                    opts = self.quality_options(info)
+                    self.downloader.feedback(
+                        f"Item {index}: found {len(opts)} format option(s) for '{info.get('title', 'Unknown')}' "
+                        f"(default: {quality_label(opts[0]) if opts else 'none'})"
+                    )
                 except DownloadCancelledError:
                     break
                 except Exception as error:
                     info = error
+                    self.downloader.feedback.error(
+                        f"Item {index} format consultation failed: {error}"
+                    )
                 self.task.emit("qualities", (index, info))
 
         self.task.start(consult)
@@ -900,7 +1142,7 @@ class DownloaderGUI:
             return
         index = int(selected[0])
         info = self.previews.get(index)
-        options = quality_options(info) if isinstance(info, dict) else []
+        options = self.quality_options(info) if isinstance(info, dict) else []
         self.quality_choice.configure(
             values=[quality_label(f) for f in options], state="readonly" if options else "disabled"
         )
@@ -914,7 +1156,7 @@ class DownloaderGUI:
         if self.task.busy or not selected or self.quality_choice.current() < 0:
             return
         index = int(selected[0])
-        fmt = quality_options(self.previews[index])[self.quality_choice.current()]
+        fmt = self.quality_options(self.previews[index])[self.quality_choice.current()]
         self.selections[index] = fmt["format_id"]
         self.quality_table.set(str(index), "quality", quality_label(fmt))
 
@@ -1061,7 +1303,7 @@ class DownloaderGUI:
                 if isinstance(info, Exception):
                     self.quality_table.set(str(index), "quality", f"Failed: {redact(info)}")
                 else:
-                    fmt = quality_options(info)[0]
+                    fmt = self.quality_options(info)[0]
                     self.selections[index] = fmt["format_id"]
                     self.quality_table.item(
                         str(index), values=(info.get("title", "Unknown"), quality_label(fmt))
@@ -1121,10 +1363,17 @@ def run_ytdown(argv=None):
         help="Select video format for a 1-based URL index; repeat for a batch",
     )
     parser.add_argument(
+        "--keep-codec",
+        action="store_true",
+        help="Keep YouTube's best codec (often AV1, smaller files) and never re-encode. "
+        "Default: vailá-ready MP4 (H.264/VP9 variant of the same quality; AV1 re-encoded to "
+        "H.264) that opens in getpixelvideo and every OpenCV-based vailá tool.",
+    )
+    parser.add_argument(
         "--debug", action="store_true", help="Include technical details and traceback"
     )
     # Embedded launch does not consume the parent application's command line.
-    embedded = TKINTER_AVAILABLE and tk._default_root is not None
+    embedded = TKINTER_AVAILABLE and getattr(tk, "_default_root", None) is not None
     args = parser.parse_args([] if argv is None and embedded else argv)
     if args.audio_only and (args.list_formats or args.video_format):
         parser.error("Video quality options cannot be combined with --audio-only")
@@ -1139,6 +1388,7 @@ def run_ytdown(argv=None):
     ):
         downloader = YTDownloader()
         downloader.feedback = feedback
+        downloader.keep_codec = args.keep_codec
         try:
             urls = read_urls_from_file(args.file) if args.file else [args.url] if args.url else []
             if not urls:
@@ -1154,7 +1404,9 @@ def run_ytdown(argv=None):
                     try:
                         info = downloader.get_video_info(url)
                         feedback(f"Item {index}: {info.get('title', 'Unknown')}")
-                        for position, fmt in enumerate(quality_options(info)):
+                        for position, fmt in enumerate(
+                            quality_options(info, keep_codec=args.keep_codec)
+                        ):
                             feedback(
                                 f"{'DEFAULT ' if position == 0 else ''}{quality_label(fmt)} | "
                                 f"--video-format {index}={fmt['format_id']}"
@@ -1175,16 +1427,24 @@ def run_ytdown(argv=None):
             feedback.error(error)
             return 1
     try:
-        parent = tk._default_root
+        parent = getattr(tk, "_default_root", None)
         root = tk.Toplevel(parent) if parent else tk.Tk()
         if parent:
             root.transient(parent)
         app = DownloaderGUI(root)
-        root.app = app
+        root.app = app  # ty: ignore[invalid-assignment]
         app.debug.set(args.debug)
         app.audio_only.set(args.audio_only)
         if args.output:
             app.output_dir_var.set(args.output)
+        if not parent:
+            print(">> vaila/vaila_ytdown: launcher CLI")
+            print_gui_cli_mirror(
+                "vaila/vaila_ytdown",
+                ["uv", "run", "--no-sync", "vaila/vaila_ytdown.py"],
+                note="Launcher CLI (opens GUI; use --no-gui with -u URL or -f FILE for CLI):",
+            )
+        print(f">> vaila/vaila_ytdown: GUI ready. Default destination: {app.output_dir_var.get()}")
         if parent:
             parent.wait_window(root)
         else:

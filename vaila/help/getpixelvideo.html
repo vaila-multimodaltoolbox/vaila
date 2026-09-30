@@ -239,7 +239,7 @@
       <div class="version-info">
         <strong>Version:</strong> 0.4.6<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 28 September 2026<br />
+        <strong>Updated:</strong> 30 September 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -1818,6 +1818,16 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.6 (30 September 2026) &mdash; AV1 videos open through an H.264 copy</h3>
+        <ul>
+          <li>OpenCV's bundled FFmpeg has no software AV1 decoder, so AV1 videos (e.g. YouTube downloads) opened
+            but every frame read failed.</li>
+          <li>On open, getpixelvideo checks that the first frame decodes. If it does not, a dialog offers an
+            H.264 copy beside the source (<code>&lt;name&gt;_h264.mp4</code>, made with the system FFmpeg).</li>
+          <li>The copy keeps every frame and timestamp, copies the audio and leaves the original unchanged.</li>
+          <li>The copy is opened and used for the marker CSVs; an existing readable copy is reused.</li>
+        </ul>
 
         <h3>Version 0.4.5 (23 September 2026) &mdash; AI Track occlusion fallback; AI-Track checkpoints survive reinstall</h3>
         <ul>

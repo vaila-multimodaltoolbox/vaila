@@ -31,19 +31,65 @@
       <div class="feature-box">
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
-        <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,audit,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.6 · <strong>Updated:</strong> 28 September 2026
+        <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,models,sizes,grow,audit,detect} -w WORKSPACE</code><br />
+        <strong>Version:</strong> 0.4.6 · <strong>Updated:</strong> 30 September 2026
       </div>
 
-      <h2>Human reviewed video annotations</h2>
-      <pre>uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS
+      <h2>Human reviewed video annotations (labeling for a retrain)</h2>
+      <pre>uv run --no-sync vaila/freekiki.py detect -w WS --video /path/new_videos
+uv run --no-sync vaila/freekiki.py queue  -w WS --batch /path/new_videos/processed_freekiki_batch_&lt;ts&gt;
+uv run --no-sync vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session WS/incoming/SESSION_ID/session.json
 uv run --no-sync vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION_ID --match-id MATCH_ID
 uv run --no-sync vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION_ID --match-id MATCH_ID --commit
-uv run --no-sync vaila/freekiki.py check -w WS</pre>
-      <p>Preview validates every PNG/TXT pair. Commit appends only reviewed frames to train and
-        publishes the manifest last. Use one match ID across related cameras and cuts. Val/test groups
-        and near duplicate frames are rejected; val/test files and data.yaml stay unchanged.
-        <code>human_vs_ai.csv</code> describes training annotations, not independent evaluation.</p>
+uv run --no-sync vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION_ID --match-id HARD_MATCH --split hard --commit
+uv run --no-sync vaila/freekiki.py check -w WS
+uv run --no-sync vaila/freekiki.py evaluate -w WS --split hard --model runs/RUN/weights/best.pt</pre>
+      <p><strong>Label every visible point, or hide it.</strong> An empty point is written as <code>0 0 0</code>
+        ("not visible"), and the pose loss then teaches the network that the point is <em>absent</em>. A frame with
+        only a few labelled points therefore makes the missed points worse.</p>
+      <p>FreeKiki checks every frame. The labelled pitch points give a field homography, and every point whose
+        projection falls inside the image must be labelled or hidden with <strong>Del</strong> (occluded or not
+        there). Frames that fail the check:</p>
+      <ul>
+        <li><strong>Mark Reviewed (F3)</strong> refuses them and names the missing points.</li>
+        <li><strong>Export (F9)</strong> leaves them as drafts and lists them in <code>incomplete_frames.csv</code>.</li>
+        <li><code>ingest</code> rejects them.</li>
+      </ul>
+      <p>The check needs at least 4 spread pitch points.</p>
+      <p><strong>Ghosts in the review window:</strong></p>
+      <ul>
+        <li>A cyan circle is a low-confidence AI point; its label shows the confidence.</li>
+        <li>A pink cross is the projection of the labelled points.</li>
+        <li><strong>F10</strong> (<em>Accept ghost</em>) copies the ghost of the selected point and moves to the
+          next missing one.</li>
+        <li>The panel line <code>missing: ...</code> turns green (<code>complete</code>) when the frame can be
+          exported.</li>
+      </ul>
+      <p><strong>Queue.</strong> <code>queue</code> picks up to 25 frames per clip, at least 5 frames apart, in this
+        order:</p>
+      <ol>
+        <li>frames that do not calibrate;</li>
+        <li>frames where p5/p29/p39/p47 are half-seen;</li>
+        <li>the rest.</li>
+      </ol>
+      <p>PageDown/PageUp walks exactly the queue. <code>queue.csv</code> says why each frame was chosen.</p>
+      <p><strong>Train or hard.</strong> <code>--split hard</code> is a labelled holdout of difficult footage. It is
+        never trained on; report it with <code>evaluate --split hard</code> and choose on val. A match lives in one
+        split only:</p>
+      <ul>
+        <li>train refuses val/test/hard matches and near-duplicates of their images;</li>
+        <li>hard refuses train/val/test matches and near-duplicates of train frames;</li>
+        <li>so a copy of a holdout clip cannot leak into training.</li>
+      </ul>
+      <p><strong>Before ingesting.</strong></p>
+      <ul>
+        <li>Preview validates every PNG/TXT pair.</li>
+        <li>Commit appends the pairs and publishes the manifest last.</li>
+        <li>Use one match ID across related cameras and cuts.</li>
+        <li>Val/test stay unchanged; a hard commit only adds <code>hard: images/hard</code> to the workspace
+          <code>data.yaml</code>.</li>
+        <li><code>human_vs_ai.csv</code> describes training annotations, not independent evaluation.</li>
+      </ul>
 
       <h2>What it does</h2>
       <p>FreeKiki teaches a YOLO-pose network to find the <strong>49 soccer-field keypoints</strong> of the kiki
@@ -70,7 +116,7 @@ uv run --no-sync vaila/freekiki.py check -w WS</pre>
         repeated from the command line. The full mapping is in <a href="#gui-cli">GUI button ↔ CLI command</a>.</p>
       <p>For detection with an existing model, use <strong>section 5 alone</strong>: select the FreeKiki
         <strong>Workspace</strong> folder containing <code>freekiki.toml</code> and
-        <code>models/active.pt</code>, select the video or folder, then press <strong>Detect</strong>.
+        a promoted model (<code>models/freekiki_&lt;slot&gt;.pt</code>; Model <code>active</code> = the default slot), select the video or folder, then press <strong>Detect</strong>.
         Sections 1 and 5 show the same Workspace field. Selecting a model file does not replace
         the workspace because detection reads its settings. Browsing to a <code>.pt</code> inside a
         workspace fills the Workspace field automatically. Init workspace, dataset import, and
@@ -95,10 +141,18 @@ uv run --no-sync vaila/freekiki.py check -w WS</pre>
         <tr><td>3. Train → <strong>Bench batch/VRAM</strong></td><td><code>uv run vaila/freekiki.py bench -w WS --batches 2,8,16 --fraction 0.02</code></td></tr>
         <tr><td>4. Evaluate → <strong>Evaluate model</strong></td><td><code>uv run vaila/freekiki.py evaluate -w WS --split val</code></td></tr>
         <tr><td>4. Evaluate → <strong>Sweep thresholds (val)</strong></td><td><code>uv run vaila/freekiki.py sweep -w WS --eval-dir outputs/processed_freekiki_eval_val_&lt;ts&gt;</code></td></tr>
-        <tr><td>4. Evaluate → <strong>Compare with active</strong></td><td><code>uv run vaila/freekiki.py compare -w WS --baseline active --candidate runs/RUN/weights/best.pt</code></td></tr>
+        <tr><td>4. Evaluate → <strong>Compare with its slot</strong></td><td><code>uv run vaila/freekiki.py compare -w WS --candidate runs/RUN/weights/best.pt</code> (baseline = the candidate's size slot)</td></tr>
+        <tr><td>4. Evaluate → <strong>Model slots</strong></td><td><code>uv run vaila/freekiki.py models -w WS</code></td></tr>
+        <tr><td>(CLI only) set which slot <code>active</code> means</td><td><code>uv run vaila/freekiki.py models -w WS --default l</code></td></tr>
+        <tr><td>(CLI only) weight overlap per size</td><td><code>uv run vaila/freekiki.py sizes -w WS --src m</code></td></tr>
+        <tr><td>(CLI only) deepen a trained m into an l init</td><td><code>uv run vaila/freekiki.py grow -w WS --src m --to l --out models/freekiki_l_init.pt</code></td></tr>
         <tr><td>4. Evaluate → <strong>Audit dataset</strong></td><td><code>uv run vaila/freekiki.py audit -w WS</code></td></tr>
         <tr><td>5. Detect → Workspace + Video + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video match.mp4</code> (add <code>--fill-gaps 3</code> to also write the interpolated CSV)</td></tr>
         <tr><td>5. Detect → Workspace + <strong>Folder</strong> + <strong>Detect</strong></td><td><code>uv run vaila/freekiki.py detect -w WS --video /path/folder_of_videos</code></td></tr>
+        <tr><td>6. Label → Detect batch + <strong>Build label queue</strong></td><td><code>uv run vaila/freekiki.py queue -w WS --batch /path/processed_freekiki_batch_&lt;ts&gt;</code></td></tr>
+        <tr><td>6. Label → Session + <strong>Open review</strong></td><td><code>uv run vaila/getpixelvideo.py --freekiki --freekiki-workspace WS --freekiki-session WS/incoming/SESSION/session.json</code></td></tr>
+        <tr><td>6. Label → Match id + Split + <strong>Ingest preview</strong> / <strong>Ingest commit</strong></td><td><code>uv run vaila/freekiki.py ingest -w WS --src WS/incoming/SESSION --match-id MATCH --split train [--commit]</code></td></tr>
+        <tr><td>4. Evaluate → Split <code>hard</code> + <strong>Evaluate model</strong></td><td><code>uv run vaila/freekiki.py evaluate -w WS --split hard</code></td></tr>
         <tr><td><strong>Stop</strong></td><td><code>Ctrl+C</code> in the terminal</td></tr>
         <tr><td><strong>Help</strong></td><td>opens this page</td></tr>
       </table>
@@ -127,8 +181,8 @@ uv run --no-sync vaila/freekiki.py check -w WS</pre>
       </table>
       <p><strong>Step 2 — continue:</strong> <strong>Resume interrupted</strong> (or <code>resume -w WS</code>) continues
         the newest interrupted run from its last completed epoch, with the same settings (base, epochs, imgsz,
-        learning-rate schedule). When it ends the run is registered and promoted to <code>models/active.pt</code> if it
-        is better — exactly as a normal Train.</p>
+        learning-rate schedule). When it ends the run is registered and promoted into its size slot
+        (<code>models/freekiki_&lt;slot&gt;.pt</code>) if it is better — exactly as a normal Train.</p>
       <ul>
         <li>Choose a specific run with <code>resume -w WS --name RUN</code>.</li>
         <li>A run started with <code>--manifest vNNN</code> resumes on the same oversampled train
@@ -145,13 +199,15 @@ uv run --no-sync vaila/freekiki.py check -w WS</pre>
 
       <h2>Portable workspace</h2>
       <pre>&lt;workspace&gt;/
-  freekiki.toml            settings + which model is active (relative paths)
+  freekiki.toml            settings + [models] slots (relative paths; default = 'active')
   spec/                    soccerfield_kiki.csv + soccerfield_kiki49.json snapshot
   datasets/kiki49/         imported YOLO-pose dataset
   runs/&lt;name&gt;/             Ultralytics training runs (weights, results.csv, plots)
   models/registry.csv      every finished training and its validation pose mAP
   models/evaluations.csv   every "Evaluate" result (compare models over time)
-  models/active.pt         best model so far (Evaluate / Detect / Retrain)
+  models/freekiki_&lt;slot&gt;.pt  best model per network size: n s m l x (YOLO26-pose),
+                           hm_n..hm_x (heatmap); the default slot is 'active'
+  models/active.pt         schema-1 file, kept after migration (never overwritten)
   outputs/                 evaluation reports</pre>
       <p>Copy the folder to another machine and point FreeKiki at it to keep training.</p>
 
@@ -184,8 +240,8 @@ uv run --no-sync vaila/freekiki.py check -w WS</pre>
               labels stay as they are).</li>
           </ul>
           <code>best.pt</code> goes to <code>models/registry.csv</code>, is evaluated on <strong>val</strong> and compared
-          with the active model; <code>models/active.pt</code> is replaced <em>only</em> when the configurable gate passes
-          (see <a href="#promotion">Model promotion</a>).</li>
+          with the model of its size slot; <code>models/freekiki_&lt;slot&gt;.pt</code> is replaced <em>only</em> when the
+          configurable gate passes (see <a href="#slots">Model slots</a> and <a href="#promotion">Model promotion</a>).</li>
         <li><strong>Evaluate model</strong> — measures a model on a labelled split: <strong>val</strong> to choose thresholds
           and compare models, <strong>test</strong> only for the final report.</li>
         <li><strong>Detect</strong> — runs the active (or any) model on <strong>one video or a whole folder</strong>.</li>
@@ -239,9 +295,49 @@ uv run --no-sync vaila/freekiki.py check -w WS</pre>
         points, <code>pck*_all</code>, share of images with a valid and a correct homography). It shows the trade-off; pick on val, never
         on test.</p>
 
-      <h3 id="promotion">Model promotion (candidate vs active)</h3>
+      <h3 id="slots">Model slots (one promoted model per network size)</h3>
+      <p><code>freekiki.toml</code> keeps one promoted model per size in <code>[models.&lt;slot&gt;]</code> (<code>file</code>,
+        <code>backend</code>, <code>arch</code>, <code>base</code>, <code>run</code>, <code>pose_map50_95</code>,
+        <code>pck10_all</code>, <code>sha256</code>). Slots are <code>n s m l x</code> (YOLO26-pose, file
+        <code>models/freekiki_&lt;slot&gt;.pt</code>) and <code>hm_n</code>..<code>hm_x</code> (heatmap backend).
+        <code>[models] default</code> says which slot the name <code>active</code> means; switch it with
+        <code>models --default l</code>. <code>models</code> lists the slots (<code>*</code> marks the default).</p>
+      <pre>[models]
+default = "m"
+
+[models.m]
+file = "models/freekiki_m.pt"
+backend = "yolo"
+arch = "yolo26m-pose"
+run = "kiki49_20260925_222907"
+pose_map50_95 = 0.8576
+sha256 = "..."</pre>
+      <ul>
+        <li><strong>Migration from the old <code>[active]</code> table.</strong> The first time a schema-1 workspace is
+          loaded, <code>models/active.pt</code> is copied to <code>models/freekiki_m.pt</code> (the SHA-256 of the copy is
+          checked) and the old table is kept as <code>[legacy_active]</code>. <code>active.pt</code> stays on disk and is
+          only read. The migration runs once; if <code>freekiki_m.pt</code> already exists with other content it stops
+          with an error instead of overwriting it.</li>
+        <li><strong>Sizes do not mix.</strong> The size (slot) of a checkpoint is read from the checkpoint itself. A run
+          competes only with the model of its own slot; an empty slot takes its first run when its best-epoch pose
+          mAP50-95 is above <code>[promotion] new_slot_min_pose_map50_95</code> (0.5). <code>sizes</code> shows why
+          weights cannot move between sizes: an m checkpoint matches 94 % of l's parameters by name and shape, but only
+          45 % of n, 57 % of s and 5 % of x, and a shape match between different widths is not a semantic match. So n, s
+          and x start from the official <code>yolo26{n,s,x}-pose.pt</code>.</li>
+        <li><strong>Grow m → l.</strong> m and l have the same width; l is deeper. <code>grow</code> copies every m tensor
+          into l, zero-pads the extra input channels of the fusion convs and starts the new attention block as the
+          identity, so the grown l computes the same function as m before training (the maximum output difference on a
+          random image is printed and stored in the checkpoint; on the kiki49 m it was 5.5e-4 px). The grown file is only
+          an initialisation: train it (<code>train --base models/freekiki_l_init.pt</code>, a continued fine-tune) and it
+          fills the <code>l</code> slot only through the gate below.</li>
+        <li>Any base that is not an official <code>yolo26*-pose.pt</code> (a slot, a run's <code>best.pt</code>, a grown
+          init) is trained as a continued fine-tune: AdamW, <code>lr0</code> 1e-4 with cosine decay, one warmup epoch,
+          <code>mosaic=0</code>.</li>
+      </ul>
+
+      <h3 id="promotion">Model promotion (candidate vs its slot)</h3>
       <p>After <code>train</code>, the new <code>best.pt</code> is evaluated on <strong>val</strong> and compared with the
-        active model on the same images (<code>compare</code>). It is copied to <code>models/active.pt</code> only if the gate
+        model of its own slot on the same images (<code>compare</code>). It is copied to <code>models/freekiki_&lt;slot&gt;.pt</code> only if the gate
         passes; every decision (both model hashes, reasons) is appended to <code>models/promotion_log.csv</code>. Candidate
         weights are always kept in <code>models/</code>. Configure it in <code>freekiki.toml</code>:</p>
       <pre>[promotion]
@@ -262,6 +358,8 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
       <p><code>audit</code> never modifies the dataset. It writes <code>kp_availability.csv</code> (labels per point,
         split, source and recording group), <code>label_issues.csv</code> (visibility, out-of-range, duplicated points,
         mirrored labels), <code>label_outliers.csv</code> (label vs the homography fitted to the other labels),
+        <code>label_missing_suspects.csv</code> (points labelled "not visible" whose projection falls inside the
+        image; usable as <code>manifest --exclude</code>, judged on val),
         <code>leakage_groups.csv</code> (recordings present in more than one split) and <code>near_duplicates.csv</code>
         (dHash across splits).</p>
 
@@ -322,17 +420,23 @@ uv run vaila/freekiki.py status   -w /path/FreeKiki                        # run
 uv run vaila/freekiki.py resume   -w /path/FreeKiki [--name RUN]           # continue after stop / power loss
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split val            # choose / compare on val
 uv run vaila/freekiki.py sweep    -w /path/FreeKiki --eval-dir /path/FreeKiki/outputs/processed_freekiki_eval_val_&lt;ts&gt;
-uv run vaila/freekiki.py compare  -w /path/FreeKiki --baseline active --candidate /path/FreeKiki/runs/RUN/weights/best.pt
+uv run vaila/freekiki.py compare  -w /path/FreeKiki --candidate /path/FreeKiki/runs/RUN/weights/best.pt   # vs its slot
+uv run vaila/freekiki.py models   -w /path/FreeKiki [--default l]          # model slots; 'active' = default
+uv run vaila/freekiki.py sizes    -w /path/FreeKiki --src m                # weight overlap with n/s/m/l/x
+uv run vaila/freekiki.py grow     -w /path/FreeKiki --src m --to l --out models/freekiki_l_init.pt
 uv run vaila/freekiki.py audit    -w /path/FreeKiki                        # read-only dataset audit
 uv run vaila/freekiki.py bench    -w /path/FreeKiki --batches 2,8,16 --workers 8 --fraction 0.02
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split test           # final report only
 uv run vaila/freekiki.py detect   -w /path/FreeKiki --video match.mp4 --stride 5
-uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_videos</pre>
+uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_videos
+uv run vaila/freekiki.py queue    -w /path/FreeKiki --batch /path/processed_freekiki_batch_&lt;ts&gt;
+uv run vaila/freekiki.py ingest   -w /path/FreeKiki --src /path/FreeKiki/incoming/SESSION --match-id MATCH [--split hard] [--commit]
+uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split hard</pre>
       <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Useful options: <code>manifest --rfs-t --cap --seed --exclude FILE --name</code>;
         <code>train --manifest v001 --batch --device 0 --name
         --patience --seed --workers --backend {yolo,heatmap} --backbone resnet50 --no-pretrained --lr</code>; <code>resume --name --device --batch</code>; <code>evaluate --model PATH.pt --split val
-        --det-conf --kp-conf --match-px --pck 5,10,25 --max-images</code>; <code>compare --promote</code> (copies to
-        <code>active.pt</code> only if the gate passes); <code>detect --model PATH.pt --start --max-frames --conf --kp-conf
+        --det-conf --kp-conf --match-px --pck 5,10,25 --max-images</code>; <code>compare --baseline SLOT --promote</code> (copies to
+        <code>models/freekiki_&lt;slot&gt;.pt</code> only if the gate passes); <code>detect --model PATH.pt --start --max-frames --conf --kp-conf
         --imgsz --no-overlay --output-dir --fill-gaps N --diag-frames N</code>.</p>
       <p>Evaluate and Detect use the <strong>image size the model was trained with</strong> (read from the
         <code>.pt</code>: 640 smoke, 1280 full); <code>--imgsz</code> overrides it from the CLI, the GUI always uses the
@@ -340,7 +444,10 @@ uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_vide
 
       <h2>Base models</h2>
       <p>Official <code>yolo26{n,s,m,l,x}-pose.pt</code> or any pose <code>.pt</code> (e.g. a public 32-keypoint pitch
-        model: only backbone/neck transfer, the 49-keypoint head is re-initialised).</p>
+        model: only backbone/neck transfer, the 49-keypoint head is re-initialised). <code>--base</code> also accepts a slot
+        name (<code>active</code>, <code>m</code>, <code>l</code>, <code>freekiki_l</code>, ...). A trained m does not seed
+        n, s or x (different widths, see <a href="#slots">Model slots</a>); the only size change that keeps the trained
+        weights is <code>grow</code> m → l.</p>
 
       <h2>Heatmap backend (<i>vailá</i>-native, no company-owned framework)</h2>
       <p><code>train --backend heatmap</code> trains a second kind of network on the <strong>same labels</strong>
@@ -361,12 +468,13 @@ uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_vide
         <tr><td><code>--base</code></td><td>only a heatmap checkpoint (continued fine-tune); a <code>yolo*.pt</code> base is ignored</td></tr>
       </table>
       <p><strong>Never promoted automatically.</strong> A heatmap run is registered (<code>backend = heatmap</code> in
-        <code>models/registry.csv</code>) but <code>active.pt</code> is not touched, even in a new workspace. Compare it
+        <code>models/registry.csv</code>) but no slot file is touched, even in a new workspace. Compare it
         with the active YOLO model on <strong>val</strong> — the FreeKiki keypoint tables (recall, precision, PCK with
         misses, median error, critical points) are computed the same way for both backends; pose mAP exists only for
         YOLO:</p>
       <pre>uv run --no-sync vaila/freekiki.py compare -w WS --baseline active \
-    --candidate models/kiki49_&lt;RUN&gt;.pt              # add --promote only after reading it</pre>
+    --candidate models/kiki49_&lt;RUN&gt;.pt              # add --promote only after reading it
+                                                    # (--promote fills its hm_* slot)</pre>
       <p><code>evaluate</code>, <code>detect</code>, <code>compare</code> and the getpixelvideo <strong>Predict</strong>
         button load either kind of <code>.pt</code> (the backend is read from the checkpoint). A heatmap model has a
         fixed input size, so <code>--imgsz</code> is ignored for it.</p>

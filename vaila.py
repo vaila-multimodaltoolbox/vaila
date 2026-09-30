@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 28 September 2026
+Update Date: 30 September 2026
 Version: 0.4.6
 
 Example of usage:
@@ -3214,10 +3214,20 @@ class Vaila(tk.Tk):
         """Runs the YouTube downloader module.
 
         This function runs the YouTube downloader module, which can be used to
-        download videos from YouTube. The module will prompt the user to select
-        the directory containing the video files and input the sample rate and start
-        and end indices for analysis.
+        download videos (MP4) or audio (MP3) from YouTube with per-video quality
+        selection.
         """
+        print(">> vaila/vaila_ytdown: launcher CLI")
+        try:
+            from vaila.cli_highlight import print_gui_cli_mirror
+        except ImportError:
+            from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
+
+        print_gui_cli_mirror(
+            "vaila/vaila_ytdown",
+            ["uv", "run", "--no-sync", "vaila/vaila_ytdown.py"],
+            note="Launcher CLI (opens GUI; use --no-gui with -u URL or -f FILE for CLI):",
+        )
         from vaila import vaila_ytdown
 
         vaila_ytdown.run_ytdown()
