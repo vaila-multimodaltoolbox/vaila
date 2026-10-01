@@ -6,7 +6,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.4.6
 **Date:** 22 July 2025  
-**Updated:** 30 September 2026
+**Updated:** 01 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -733,9 +733,10 @@ Built-in backup system for data safety:
 - The predicted 49 points appear as editable drafts, in INSERT mode.
 - **Right-click** picks a point or ghost; **left-click** places it.
 - **Del** / **Del Range** mark a point that is inside the picture but not visible.
-- **F10** accepts a ghost, **F3** is Frame OK, **PgDn** goes to the next draft.
-- **F9 Save dataset** writes a YOLO-pose folder you choose (default `freekiki_corrections_<video>`). Only complete
-  frames are saved.
+- **F9 Save dataset** (or button in FreeKiki panel) offers **Full** (default) and **Only correct** modes:
+  - **Full mode:** writes all frames (human corrections + uncorrected AI predictions) to train on full footage (default folder `freekiki_full_<video>`).
+  - **Only correct mode:** writes only human-completed frames (default folder `freekiki_corrections_<video>`).
+  - Click **Mode: Full / OnlyCorr** or right-click the Save button in the panel to switch modes quickly.
 - Add that folder in FreeKiki → Train → **Corrections** (`--add-dataset`).
 
 **AV1 videos**

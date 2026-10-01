@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 30 September 2026
+Update: 01 October 2026
 Version: 0.4.6
 Python Version: 3.12.14
 
@@ -2236,6 +2236,12 @@ def play_video_with_controls(
                     tuple(p) if p is not None else (None, None) for p in review["points"]
                 ]
                 deleted_positions[fi] = set(review.get("hidden", []))
+
+    freekiki_export_mode: str = "full"
+    if freekiki_options is not None and freekiki_options.get("export_mode"):
+        freekiki_export_mode = str(freekiki_options["export_mode"]).strip().lower()
+    elif freekiki_session is not None and freekiki_session.get("export_mode"):
+        freekiki_export_mode = str(freekiki_session["export_mode"]).strip().lower()
 
     assert coordinates is not None
     assert deleted_positions is not None
@@ -11438,10 +11444,18 @@ def play_video_with_controls(
             _review_sync(int(fi))
 
     def _review_action(action: str) -> str:
-        nonlocal selected_marker_idx, frame_count, paused
+        nonlocal selected_marker_idx, frame_count, paused, freekiki_export_mode
         if freekiki_session is None or not isinstance(coordinates, dict):
             return "FreeKiki session is not active"
         _review_sync(frame_count)
+        if action == "mode":
+            freekiki_export_mode = "only_correct" if freekiki_export_mode == "full" else "full"
+            mode_desc = (
+                "FULL (corrected + predicted)"
+                if freekiki_export_mode == "full"
+                else "ONLY CORRECT (reviewed only)"
+            )
+            return f"FreeKiki: Save dataset mode set to {mode_desc}"
         if action == "load":
             # Same as Tpl -> L: a freekiki run/batch folder opens its video to correct.
             return _freekiki_load()
@@ -11531,14 +11545,42 @@ def play_video_with_controls(
             return f"Review session saved: {path} (F9 = save dataset)"
         if action == "export":
             _review_sync_all()
+            cur_default = "1" if freekiki_export_mode == "full" else "2"
+            mode_prompt = (
+                "Save dataset mode:\n"
+                "1 = Full (all frames: corrected + uncorrected/predicted)\n"
+                "2 = Only correct (human-reviewed/corrected frames only)\n\n"
+                "Enter 1 for Full, 2 for Only correct:"
+            )
+            mode_choice = show_input_dialog(mode_prompt, cur_default)
+            if mode_choice is None or not mode_choice.strip():
+                return "Save dataset cancelled"
+            mode_str = mode_choice.strip().lower()
+            if mode_str in ("1", "full", "f", "completo", "all"):
+                freekiki_export_mode = "full"
+            elif mode_str in (
+                "2",
+                "only",
+                "only_correct",
+                "only correct",
+                "correct",
+                "c",
+                "corrigidos",
+            ):
+                freekiki_export_mode = "only_correct"
+            else:
+                return f"Save dataset cancelled: unknown mode '{mode_choice}'"
+
             if not freekiki_session.get("dataset_folder"):
                 video = Path(freekiki_session["video"])
-                default = video.parent / f"freekiki_corrections_{video.stem}"
-                answer = show_input_dialog("Save the corrected dataset in folder:", str(default))
+                suffix = "full" if freekiki_export_mode == "full" else "corrections"
+                default = video.parent / f"freekiki_{suffix}_{video.stem}"
+                prompt_folder = f"Save {'FULL' if freekiki_export_mode == 'full' else 'CORRECTED'} dataset in folder:"
+                answer = show_input_dialog(prompt_folder, str(default))
                 if not answer or not answer.strip():
                     return "Save dataset cancelled"
                 freekiki_api.relocate_review_session(freekiki_session, answer.strip())
-            root = freekiki_api.export_reviewed_session(freekiki_session)
+            root = freekiki_api.export_reviewed_session(freekiki_session, mode=freekiki_export_mode)
             with contextlib.suppress(Exception):
                 save_coordinates(
                     video_path,
@@ -11551,8 +11593,20 @@ def play_video_with_controls(
                     coord_decimals=2,
                 )
             done = sum(r["state"] == "EXPORTED" for r in freekiki_session["frames"].values())
-            left = sum(r["state"] == "DRAFT_MANUAL" for r in freekiki_session["frames"].values())
-            return f"Dataset saved: {done} frames ({left} incomplete left as draft) -> {root}"
+            if freekiki_export_mode == "full":
+                n_corr = sum(
+                    r.get("point_sources", []).count("corrected") > 0
+                    or r.get("state") == "HUMAN_REVIEWED"
+                    for r in freekiki_session["frames"].values()
+                    if r.get("state") == "EXPORTED"
+                )
+                n_ai = done - n_corr
+                return f"Full dataset saved: {done} frames ({n_corr} corrected, {n_ai} predicted/uncorrected) -> {root}"
+            else:
+                left = sum(
+                    r["state"] == "DRAFT_MANUAL" for r in freekiki_session["frames"].values()
+                )
+                return f"Dataset saved (only corrected): {done} frames ({left} incomplete left as draft) -> {root}"
         raise ValueError(action)
 
     def _coordinates_from_session() -> None:
@@ -12594,7 +12648,7 @@ def play_video_with_controls(
                 screen.blit(small.render(text, True, color), (gx + 10, gy - 16))
             review = freekiki_session["frames"].get(str(frame_count))
 
-            panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 660), 100)
+            panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 790), 100)
             blit_translucent(screen, panel, (22, 34, 42), FREEKIKI_PANEL_ALPHA)
             pygame.draw.rect(screen, (220, 220, 220), panel, 1)
             point_i = max(0, min(48, selected_marker_idx))
@@ -12636,20 +12690,28 @@ def play_video_with_controls(
                     small.render(line[:52], True, color),
                     (list_rect.x + 7, list_rect.y + 5 + (index - first) * 20),
                 )
+            export_mode_label = "Full" if freekiki_export_mode == "full" else "OnlyCorr"
             for n, (action, caption) in enumerate(
                 (
                     ("load", "Load run folder"),
                     ("review", "Frame OK (F3)"),
                     ("accept", "Accept ghost (F10)"),
                     ("next", "Next draft (PgDn)"),
-                    ("export", "Save dataset (F9)"),
+                    ("export", f"Save {export_mode_label} (F9)"),
+                    ("mode", f"Mode: {export_mode_label}"),
                 )
             ):
                 rect = pygame.Rect(panel.x + 6 + n * 129, panel.y + 54, 124, 32)
                 freekiki_buttons[action] = rect
-                blit_translucent(
-                    screen, rect, (30, 110, 60) if action == "load" else (50, 95, 115), 210
-                )
+                if action == "load":
+                    btn_color = (30, 110, 60)
+                elif action == "mode":
+                    btn_color = (40, 115, 80) if freekiki_export_mode == "full" else (115, 85, 45)
+                elif action == "export":
+                    btn_color = (35, 125, 95) if freekiki_export_mode == "full" else (50, 95, 115)
+                else:
+                    btn_color = (50, 95, 115)
+                blit_translucent(screen, rect, btn_color, 210)
                 txt = pygame.font.SysFont("verdana", 11).render(caption, True, (255, 255, 255))
                 screen.blit(txt, txt.get_rect(center=rect.center))
         pygame.display.flip()
@@ -13680,21 +13742,33 @@ def play_video_with_controls(
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 # Toolbar / control panel: primary (left) button only — ignore
-                if (
-                    freekiki_session is not None
-                    and event.button == 1
-                    and any(rect.collidepoint(x, y) for rect in freekiki_buttons.values())
-                ):
-                    action = next(
-                        name for name, rect in freekiki_buttons.items() if rect.collidepoint(x, y)
-                    )
-                    try:
-                        save_message_text = _review_action(action)
-                    except (OSError, ValueError, RuntimeError) as exc:
-                        save_message_text = f"FreeKiki: {exc}"
-                    showing_save_message = True
-                    save_message_timer = 180
-                    continue
+                if freekiki_session is not None and event.button in (1, 3):
+                    if event.button == 1 and any(
+                        rect.collidepoint(x, y) for rect in freekiki_buttons.values()
+                    ):
+                        action = next(
+                            name
+                            for name, rect in freekiki_buttons.items()
+                            if rect.collidepoint(x, y)
+                        )
+                        try:
+                            save_message_text = _review_action(action)
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            save_message_text = f"FreeKiki: {exc}"
+                        showing_save_message = True
+                        save_message_timer = 180
+                        continue
+                    elif event.button == 3 and any(
+                        name in ("export", "mode") and rect.collidepoint(x, y)
+                        for name, rect in freekiki_buttons.items()
+                    ):
+                        try:
+                            save_message_text = _review_action("mode")
+                        except (OSError, ValueError, RuntimeError) as exc:
+                            save_message_text = f"FreeKiki: {exc}"
+                        showing_save_message = True
+                        save_message_timer = 180
+                        continue
                 # middle, right, and extra buttons so they cannot fire UI actions.
                 if y >= window_height and event.button != 1:
                     pass
@@ -17967,6 +18041,7 @@ if __name__ == "__main__":
             "  --freekiki-workspace WS  Save under WS/incoming; enable active-model prediction\n"
             "  --freekiki-session SESSION.json  Reopen reviewed markers and states\n"
             "  --freekiki-predictions DIR  Load detect's field_kps_raw.csv\n"
+            "  --freekiki-export-mode MODE  Default export mode: full (all frames) or only_correct\n"
             "  --freekiki-videos DIR  Review videos in a folder\n"
             "  --freekiki-run DIR  FreeKiki Load: open a freekiki detect run/batch folder (finds the video)\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
@@ -18012,6 +18087,7 @@ if __name__ == "__main__":
             "--freekiki-workspace",
             "--freekiki-session",
             "--freekiki-predictions",
+            "--freekiki-export-mode",
             "--freekiki-videos",
         )
     ):
@@ -18020,6 +18096,7 @@ if __name__ == "__main__":
             ("--freekiki-workspace", "workspace"),
             ("--freekiki-session", "session"),
             ("--freekiki-predictions", "predictions"),
+            ("--freekiki-export-mode", "export_mode"),
         ):
             if flag in sys.argv:
                 pos = sys.argv.index(flag)

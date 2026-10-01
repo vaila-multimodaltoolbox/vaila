@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.6
 Created: 25 September 2026
-Update Date: 30 September 2026
+Update Date: 01 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -701,24 +701,29 @@ def ingest_reviewed(
         r["group"] == match_id and r["split"] in other_splits for r in existing
     ):
         raise ValueError(f"Match {match_id} already belongs to another split ({other_splits})")
-    problems = [
-        p
-        for row in incoming
-        if (
-            p := completeness_problem(
-                session,
-                int(row["frame"]),
-                session["frames"].get(str(row["frame"]), {"points": [None] * NKP}),
+    if session.get("export_mode") == "full":
+        _log(
+            f"ingest: full dataset mode ({len(incoming)} frames, including uncorrected AI predictions)"
+        )
+    else:
+        problems = [
+            p
+            for row in incoming
+            if (
+                p := completeness_problem(
+                    session,
+                    int(row["frame"]),
+                    session["frames"].get(str(row["frame"]), {"points": [None] * NKP}),
+                )
             )
-        )
-    ]
-    if problems:
-        for p in problems[:10]:
-            _log(f"incomplete: {p}")
-        raise ValueError(
-            f"{len(problems)} incomplete frame(s): open the session in getpixelvideo, "
-            "label or hide (Del) the listed points, export again"
-        )
+        ]
+        if problems:
+            for p in problems[:10]:
+                _log(f"incomplete: {p}")
+            raise ValueError(
+                f"{len(problems)} incomplete frame(s): open the session in getpixelvideo, "
+                "label or hide (Del) the listed points, export again"
+            )
     existing_stems = {Path(r["image"]).stem for r in existing}
     identities = {(r.get("video", ""), r.get("frame", "")) for r in existing}
     content_pairs = {
@@ -2162,7 +2167,13 @@ def apply_review_prediction(
     prediction = []
     points = []
     for i in range(NKP):
-        if xy is None or not all(math.isfinite(float(v)) for v in (*xy[i], conf[i])):
+        if (
+            xy is None
+            or xy[i] is None
+            or conf is None
+            or conf[i] is None
+            or not all(math.isfinite(float(v)) for v in (*xy[i], conf[i]))
+        ):
             prediction.append(None)
             points.append(None)
             continue
@@ -2709,14 +2720,24 @@ def export_wide_markers_csv(
     return written
 
 
-def export_reviewed_session(session: dict) -> Path:
-    """Write only human-confirmed frames into incoming/<session>/, never a split."""
+def export_reviewed_session(session: dict, *, mode: str = "only_correct") -> Path:
+    """Write frames into incoming/<session>/, never a split.
+
+    mode:
+      'only_correct' (default): exports only human-confirmed complete frames.
+      'full': exports all frames with keypoints (human-reviewed/corrected frames
+              plus uncorrected/predicted AI draft frames).
+    """
     import cv2
+
+    mode = str(mode).strip().lower()
+    if mode not in ("only_correct", "full"):
+        raise ValueError(f"Unknown export mode: '{mode}' (expected 'only_correct' or 'full')")
 
     root = Path(session["session_path"]).parent
     origin = hashlib.sha256(session["video"].encode()).hexdigest()[:10]
 
-    # Only complete frames become labels: an empty point is written as "not
+    # Only complete frames become labels in only_correct mode: an empty point is written as "not
     # visible", so a partial frame teaches the network to ignore visible points.
     # Complete manual drafts are promoted; incomplete reviewed frames go back to
     # DRAFT_MANUAL (PageUp/PageDown finds them) and their stale export is removed.
@@ -2737,11 +2758,12 @@ def export_reviewed_session(session: dict) -> Path:
         if row["state"] != "DRAFT_MANUAL":
             row["state"] = "DRAFT_MANUAL"
             row["reviewed_at"] = ""
-        stem = f"{Path(session['video']).stem}_{origin}_f{int(key):08d}"
-        (root / "images" / f"{stem}.png").unlink(missing_ok=True)
-        (root / "labels" / f"{stem}.txt").unlink(missing_ok=True)
+        if mode != "full":
+            stem = f"{Path(session['video']).stem}_{origin}_f{int(key):08d}"
+            (root / "images" / f"{stem}.png").unlink(missing_ok=True)
+            (root / "labels" / f"{stem}.txt").unlink(missing_ok=True)
     incomplete.sort(key=lambda r: r["frame"])
-    if incomplete:
+    if mode != "full" and incomplete:
         root.mkdir(parents=True, exist_ok=True)
         diag.write_csv(root / "incomplete_frames.csv", incomplete)
         for r in incomplete[:10]:
@@ -2752,22 +2774,33 @@ def export_reviewed_session(session: dict) -> Path:
     else:
         (root / "incomplete_frames.csv").unlink(missing_ok=True)
 
-    reviewed = [
-        (int(k), v)
-        for k, v in session["frames"].items()
-        if v["state"] in ("HUMAN_REVIEWED", "EXPORTED")
-    ]
-    if not reviewed:
-        save_review_session(session)
-        raise ValueError(
-            "No complete human-reviewed frames to export"
-            + (
-                f" ({len(incomplete)} incomplete; first: {incomplete[0]['problem']})"
-                if incomplete
-                else ""
+    if mode == "full":
+        export_frames = [
+            (int(k), v)
+            for k, v in session.get("frames", {}).items()
+            if any(p is not None for p in v.get("points", []))
+        ]
+        if not export_frames:
+            save_review_session(session)
+            raise ValueError("No frames with keypoints to export in full mode")
+    else:
+        export_frames = [
+            (int(k), v)
+            for k, v in session.get("frames", {}).items()
+            if v.get("state") in ("HUMAN_REVIEWED", "EXPORTED")
+        ]
+        if not export_frames:
+            save_review_session(session)
+            raise ValueError(
+                "No complete human-reviewed frames to export"
+                + (
+                    f" ({len(incomplete)} incomplete; first: {incomplete[0]['problem']})"
+                    if incomplete
+                    else ""
+                )
             )
-        )
-    reviewed.sort()
+
+    export_frames.sort(key=lambda r: r[0])
     cap = cv2.VideoCapture(session["video"])
     if not cap.isOpened():
         raise ValueError("Could not open review video")
@@ -2776,7 +2809,7 @@ def export_reviewed_session(session: dict) -> Path:
     (root / "labels").mkdir(parents=True, exist_ok=True)
     rows = []
     try:
-        for frame, row in reviewed:
+        for frame, row in export_frames:
             label = pose_label_line(
                 row["points"], session["width"], session["height"], bbox=row.get("bbox")
             )
@@ -2787,9 +2820,17 @@ def export_reviewed_session(session: dict) -> Path:
             stem = f"{Path(session['video']).stem}_{origin}_f{frame:08d}"
             img = root / "images" / f"{stem}.png"
             txt = root / "labels" / f"{stem}.txt"
-            if img.exists() and txt.exists() and txt.read_text(encoding="utf-8") != label:
+            if (
+                mode != "full"
+                and img.exists()
+                and txt.exists()
+                and txt.read_text(encoding="utf-8") != label
+            ):
                 raise ValueError(f"Existing export has different label: {stem}")
             write_pose_pair(img, txt, image, label)
+            point_sources = row.get("point_sources") or [
+                "predicted" if p is not None else "absent" for p in row["points"]
+            ]
             rows.append(
                 {
                     "image": f"images/{img.name}",
@@ -2801,16 +2842,17 @@ def export_reviewed_session(session: dict) -> Path:
                     "timestamp": f"{frame / session['fps']:.6f}",
                     "group": "",  # supplied as --match-id during ingest
                     "session": session["session_id"],
-                    "reviewed_at": row["reviewed_at"],
+                    "reviewed_at": row.get("reviewed_at", ""),
                     "model_sha256": row.get("model_sha256", ""),
                     "n_visible": sum(p is not None for p in row["points"]),
-                    "n_corrected": row["point_sources"].count("corrected"),
-                    "n_ai": row["point_sources"].count("predicted"),
+                    "n_corrected": point_sources.count("corrected"),
+                    "n_ai": point_sources.count("predicted"),
                 }
             )
             row["state"] = "EXPORTED"
     finally:
         cap.release()
+    session["export_mode"] = mode
     with (root / "reviewed_frames.csv").open("w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=REVIEWED_FIELDS)
         writer.writeheader()
@@ -3939,6 +3981,12 @@ def build_parser() -> argparse.ArgumentParser:
                 "--session", required=True, help="Review session JSON or session folder."
             )
             p.add_argument("--video", help="Optional video file path if moved.")
+            p.add_argument(
+                "--mode",
+                choices=("full", "only_correct"),
+                default="only_correct",
+                help="Export mode: full (all frames with keypoints) or only_correct (human-reviewed only).",
+            )
         else:
             p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
         if cmd == "import-dataset":
@@ -4101,8 +4149,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.command == "export":
         session = load_review_session(args.session, video=args.video)
-        out = export_reviewed_session(session)
-        _log(f"session exported: {out}")
+        out = export_reviewed_session(session, mode=args.mode)
+        _log(f"session exported ({args.mode}): {out}")
         return 0
     ws = Path(args.workspace)
     batch = getattr(args, "batch", None)
@@ -4650,7 +4698,7 @@ def run_freekiki() -> None:
     ttk.Label(
         box,
         text="Correct: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
-        "F9 Save dataset.\nThen put that folder in section 3 'Corrections' and Train "
+        "F9 Save dataset (Full or Only Correct mode).\nThen put that folder in section 3 'Corrections' and Train "
         "(Base 'active' = fine-tune).",
     ).grid(row=6, column=0, columnspan=3, sticky="w", padx=4)
 

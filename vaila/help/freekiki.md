@@ -5,7 +5,7 @@
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
 - **Version:** 0.4.6
-- **Updated:** 30 September 2026
+- **Updated:** 01 October 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
 - **CLI Interface:** Yes
@@ -30,9 +30,9 @@
    - A point that is inside the picture but not visible: **Del** (this frame) or **Del Range** (that point over
      many frames). Points outside the picture are ignored.
    - **F3 Frame OK** when the frame is right. **Next draft (PgDn)** goes to the next frame.
-   - **F9 Save dataset** asks for a folder (default `freekiki_corrections_<video>`) and writes a YOLO-pose
-     dataset there: `images/`, `labels/`, `data.yaml`, `session.json`. Only complete frames are saved; the others
-     stay as drafts and are listed in `incomplete_frames.csv`.
+   - **F9 Save dataset** (or panel button) offers **Full** (default) or **Only correct** mode:
+     - **Full mode:** saves the complete dataset with both human-reviewed frames and uncorrected AI predicted frames (images + labels) into `freekiki_full_<video>`, allowing the network to train on the entire footage.
+     - **Only correct mode:** writes only human-reviewed frames into `freekiki_corrections_<video>`; incomplete frames remain as drafts and are listed in `incomplete_frames.csv`.
 3. In section 3, **Corrections → Add folder…** (several videos: several folders), then **Train**.
    - Base `active` gives a fine-tune.
    - The folders are added to the train split once, with the same leakage and duplicate checks as `ingest`, and

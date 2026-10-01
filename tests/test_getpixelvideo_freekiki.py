@@ -1,7 +1,7 @@
 """FreeKiki human review, completeness gate, label queue and train/hard ingest.
 
 Version: 0.4.6
-Update Date: 30 September 2026
+Update Date: 01 October 2026
 """
 
 import csv
@@ -787,3 +787,112 @@ def test_resume_restores_editor_grid_and_cursor(tmp_path):
     assert grid[1] == [] and hidden[1] == set()
     assert grid[8][0] == tuple(session["frames"]["8"]["points"][0])
     assert hidden[8] == {5}
+
+
+def test_export_reviewed_session_full_vs_only_correct_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "match_clip.mp4"
+    video.write_bytes(b"match_clip_bytes")
+    session = freekiki.new_review_session(video, 48, 32, 30)
+
+    # Frame 2: AI draft only (uncorrected, not human-reviewed)
+    pts_ai = [[12.0, 14.0]] + [None] * 48
+    conf_ai = [0.85] + [0.0] * 48
+    freekiki.apply_review_prediction(session, 2, pts_ai, conf_ai, "test-model-sha")
+
+    # Frame 5: Complete frame reviewed by human
+    _complete(session, 5)
+    freekiki.mark_reviewed(session, 5)
+
+    folder = tmp_path / "export_corr"
+    freekiki.relocate_review_session(session, folder)
+
+    # In only_correct mode: only frame 5 is exported
+    out_corr = freekiki.export_reviewed_session(session, mode="only_correct")
+    assert out_corr == folder.resolve()
+    assert session.get("export_mode") == "only_correct"
+    exported_images_corr = sorted(p.name for p in (folder / "images").glob("*.png"))
+    assert len(exported_images_corr) == 1
+    assert "f00000005.png" in exported_images_corr[0]
+
+    with (folder / "reviewed_frames.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["frame"] == "5"
+    assert rows[0]["reviewed_at"] != ""
+
+    # In full mode: both frame 2 (AI draft) and frame 5 (human-reviewed) are exported!
+    folder_full = tmp_path / "export_full"
+    freekiki.relocate_review_session(session, folder_full)
+    out_full = freekiki.export_reviewed_session(session, mode="full")
+    assert out_full == folder_full.resolve()
+    assert session.get("export_mode") == "full"
+
+    exported_images_full = sorted(p.name for p in (folder_full / "images").glob("*.png"))
+    assert len(exported_images_full) == 2
+    assert any("f00000002.png" in name for name in exported_images_full)
+    assert any("f00000005.png" in name for name in exported_images_full)
+
+    with (folder_full / "reviewed_frames.csv").open(encoding="utf-8") as f:
+        rows_full = sorted(csv.DictReader(f), key=lambda r: int(r["frame"]))
+    assert len(rows_full) == 2
+    assert rows_full[0]["frame"] == "2"
+    assert rows_full[0]["reviewed_at"] == ""
+    assert int(rows_full[0]["n_ai"]) == 1
+    assert int(rows_full[0]["n_corrected"]) == 0
+
+    assert rows_full[1]["frame"] == "5"
+    assert rows_full[1]["reviewed_at"] != ""
+
+
+def test_ingest_reviewed_accepts_full_export_mode(tmp_path, monkeypatch):
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    ws = _workspace(tmp_path / "ws")
+    video = tmp_path / "video_full.mp4"
+    video.write_bytes(b"video_full_content")
+    session = freekiki.new_review_session(video, 48, 32, 30, workspace=ws)
+
+    # Frame 3: uncorrected AI prediction with few points (incomplete under completeness_problem)
+    pts_ai = [[10.0, 10.0], [20.0, 20.0]] + [None] * 47
+    conf_ai = [0.9, 0.9] + [0.0] * 47
+    freekiki.apply_review_prediction(session, 3, pts_ai, conf_ai, "test-model-sha")
+
+    # Frame 7: complete human reviewed frame
+    _complete(session, 7)
+    freekiki.mark_reviewed(session, 7)
+
+    folder = tmp_path / "full_session_dir"
+    freekiki.relocate_review_session(session, folder)
+    out = freekiki.export_reviewed_session(session, mode="full")
+
+    # Ingesting full mode session into train split succeeds!
+    report = freekiki.ingest_reviewed(ws, out, "MATCH_FULL", split="train", commit=True)
+    assert report["frames"] == 2
+    assert report["split"] == "train"
+    ds = freekiki.dataset_dir(ws)
+    with (ds / "manifest.csv").open(encoding="utf-8") as f:
+        manifest_rows = list(csv.DictReader(f))
+    train_frames = [r for r in manifest_rows if r.get("group") == "MATCH_FULL"]
+    assert len(train_frames) == 2
+
+
+def test_freekiki_export_cli_mode_flag(tmp_path, monkeypatch):
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "cli_vid.mp4"
+    video.write_bytes(b"cli_vid")
+    session = freekiki.new_review_session(video, 48, 32, 30)
+    _complete(session, 1)
+    freekiki.mark_reviewed(session, 1)
+    pts_ai = [[15.0, 15.0]] + [None] * 48
+    freekiki.apply_review_prediction(session, 2, pts_ai, [0.9] + [0.0] * 48, "sha")
+    folder = tmp_path / "cli_session"
+    freekiki.relocate_review_session(session, folder)
+    freekiki.save_review_session(session)
+
+    res = freekiki.main(["export", "--session", str(folder / "session.json"), "--mode", "full"])
+    assert res == 0
+    saved = freekiki.load_review_session(folder / "session.json")
+    assert saved.get("export_mode") == "full"
+    with (folder / "reviewed_frames.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 2
