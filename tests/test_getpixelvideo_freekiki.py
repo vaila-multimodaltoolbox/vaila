@@ -896,3 +896,32 @@ def test_freekiki_export_cli_mode_flag(tmp_path, monkeypatch):
     with (folder / "reviewed_frames.csv").open(encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 2
+
+
+def test_freekiki_export_mode_lite_alias(tmp_path, monkeypatch):
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "lite_vid.mp4"
+    video.write_bytes(b"lite_vid")
+    session = freekiki.new_review_session(video, 48, 32, 30)
+    _complete(session, 1)
+    freekiki.mark_reviewed(session, 1)
+    pts_ai = [[15.0, 15.0]] + [None] * 48
+    freekiki.apply_review_prediction(session, 2, pts_ai, [0.9] + [0.0] * 48, "sha")
+    folder = tmp_path / "lite_session"
+    freekiki.relocate_review_session(session, folder)
+    freekiki.save_review_session(session)
+
+    # API export with mode="lite"
+    out = freekiki.export_reviewed_session(session, mode="lite")
+    assert out == folder
+    assert session.get("export_mode") == "only_correct"
+    with (folder / "reviewed_frames.csv").open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    assert len(rows) == 1
+    assert rows[0]["frame"] == "1"
+
+    # CLI export with --mode lite
+    res = freekiki.main(["export", "--session", str(folder / "session.json"), "--mode", "lite"])
+    assert res == 0
+    saved = freekiki.load_review_session(folder / "session.json")
+    assert saved.get("export_mode") == "only_correct"

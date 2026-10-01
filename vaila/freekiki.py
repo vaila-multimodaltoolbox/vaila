@@ -2731,8 +2731,14 @@ def export_reviewed_session(session: dict, *, mode: str = "only_correct") -> Pat
     import cv2
 
     mode = str(mode).strip().lower()
-    if mode not in ("only_correct", "full"):
-        raise ValueError(f"Unknown export mode: '{mode}' (expected 'only_correct' or 'full')")
+    if mode in ("lite", "only_correct", "only", "correct"):
+        mode = "only_correct"
+    elif mode in ("full", "all"):
+        mode = "full"
+    else:
+        raise ValueError(
+            f"Unknown export mode: '{mode}' (expected 'full' or 'lite'/'only_correct')"
+        )
 
     root = Path(session["session_path"]).parent
     origin = hashlib.sha256(session["video"].encode()).hexdigest()[:10]
@@ -3983,9 +3989,9 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--video", help="Optional video file path if moved.")
             p.add_argument(
                 "--mode",
-                choices=("full", "only_correct"),
+                choices=("full", "only_correct", "lite"),
                 default="only_correct",
-                help="Export mode: full (all frames with keypoints) or only_correct (human-reviewed only).",
+                help="Export mode: full (all frames with keypoints) or only_correct/lite (human-reviewed only).",
             )
         else:
             p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")

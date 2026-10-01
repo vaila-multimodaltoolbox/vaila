@@ -2239,9 +2239,15 @@ def play_video_with_controls(
 
     freekiki_export_mode: str = "full"
     if freekiki_options is not None and freekiki_options.get("export_mode"):
-        freekiki_export_mode = str(freekiki_options["export_mode"]).strip().lower()
+        _m = str(freekiki_options["export_mode"]).strip().lower()
+        freekiki_export_mode = (
+            "only_correct" if _m in ("lite", "only", "only_correct", "correct") else "full"
+        )
     elif freekiki_session is not None and freekiki_session.get("export_mode"):
-        freekiki_export_mode = str(freekiki_session["export_mode"]).strip().lower()
+        _m = str(freekiki_session["export_mode"]).strip().lower()
+        freekiki_export_mode = (
+            "only_correct" if _m in ("lite", "only", "only_correct", "correct") else "full"
+        )
 
     assert coordinates is not None
     assert deleted_positions is not None
@@ -11547,10 +11553,10 @@ def play_video_with_controls(
             _review_sync_all()
             cur_default = "1" if freekiki_export_mode == "full" else "2"
             mode_prompt = (
-                "Save dataset mode:\n"
+                "Save dataset mode:\n\n"
                 "1 = Full (all frames: corrected + uncorrected/predicted)\n"
-                "2 = Only correct (human-reviewed/corrected frames only)\n\n"
-                "Enter 1 for Full, 2 for Only correct:"
+                "2 = Lite (human-reviewed/corrected frames only)\n\n"
+                "Enter 1 for Full, 2 for Lite:"
             )
             mode_choice = show_input_dialog(mode_prompt, cur_default)
             if mode_choice is None or not mode_choice.strip():
@@ -11560,6 +11566,8 @@ def play_video_with_controls(
                 freekiki_export_mode = "full"
             elif mode_str in (
                 "2",
+                "lite",
+                "l",
                 "only",
                 "only_correct",
                 "only correct",
@@ -11575,7 +11583,7 @@ def play_video_with_controls(
                 video = Path(freekiki_session["video"])
                 suffix = "full" if freekiki_export_mode == "full" else "corrections"
                 default = video.parent / f"freekiki_{suffix}_{video.stem}"
-                prompt_folder = f"Save {'FULL' if freekiki_export_mode == 'full' else 'CORRECTED'} dataset in folder:"
+                prompt_folder = f"Save {'FULL' if freekiki_export_mode == 'full' else 'LITE'} dataset in folder:"
                 answer = show_input_dialog(prompt_folder, str(default))
                 if not answer or not answer.strip():
                     return "Save dataset cancelled"
@@ -11601,12 +11609,17 @@ def play_video_with_controls(
                     if r.get("state") == "EXPORTED"
                 )
                 n_ai = done - n_corr
-                return f"Full dataset saved: {done} frames ({n_corr} corrected, {n_ai} predicted/uncorrected) -> {root}"
+                return (
+                    f"Full dataset saved: {done} frames "
+                    f"({n_corr} corrected, {n_ai} predicted/uncorrected) -> {root}"
+                )
             else:
                 left = sum(
                     r["state"] == "DRAFT_MANUAL" for r in freekiki_session["frames"].values()
                 )
-                return f"Dataset saved (only corrected): {done} frames ({left} incomplete left as draft) -> {root}"
+                return (
+                    f"Lite dataset saved: {done} frames ({left} incomplete left as draft) -> {root}"
+                )
         raise ValueError(action)
 
     def _coordinates_from_session() -> None:
@@ -12648,7 +12661,7 @@ def play_video_with_controls(
                 screen.blit(small.render(text, True, color), (gx + 10, gy - 16))
             review = freekiki_session["frames"].get(str(frame_count))
 
-            panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 790), 100)
+            panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 506), 100)
             blit_translucent(screen, panel, (22, 34, 42), FREEKIKI_PANEL_ALPHA)
             pygame.draw.rect(screen, (220, 220, 220), panel, 1)
             point_i = max(0, min(48, selected_marker_idx))
@@ -12690,29 +12703,29 @@ def play_video_with_controls(
                     small.render(line[:52], True, color),
                     (list_rect.x + 7, list_rect.y + 5 + (index - first) * 20),
                 )
-            export_mode_label = "Full" if freekiki_export_mode == "full" else "OnlyCorr"
+            btn_font = pygame.font.SysFont("verdana", 10)
+            btn_w = 94
+            btn_h = 30
+            btn_gap = 5
             for n, (action, caption) in enumerate(
                 (
-                    ("load", "Load run folder"),
+                    ("load", "Load run"),
                     ("review", "Frame OK (F3)"),
-                    ("accept", "Accept ghost (F10)"),
-                    ("next", "Next draft (PgDn)"),
-                    ("export", f"Save {export_mode_label} (F9)"),
-                    ("mode", f"Mode: {export_mode_label}"),
+                    ("accept", "Ghost (F10)"),
+                    ("next", "Next (PgDn)"),
+                    ("export", "Save (F9)"),
                 )
             ):
-                rect = pygame.Rect(panel.x + 6 + n * 129, panel.y + 54, 124, 32)
+                rect = pygame.Rect(panel.x + 6 + n * (btn_w + btn_gap), panel.y + 56, btn_w, btn_h)
                 freekiki_buttons[action] = rect
                 if action == "load":
                     btn_color = (30, 110, 60)
-                elif action == "mode":
-                    btn_color = (40, 115, 80) if freekiki_export_mode == "full" else (115, 85, 45)
                 elif action == "export":
-                    btn_color = (35, 125, 95) if freekiki_export_mode == "full" else (50, 95, 115)
+                    btn_color = (35, 125, 95)
                 else:
                     btn_color = (50, 95, 115)
                 blit_translucent(screen, rect, btn_color, 210)
-                txt = pygame.font.SysFont("verdana", 11).render(caption, True, (255, 255, 255))
+                txt = btn_font.render(caption, True, (255, 255, 255))
                 screen.blit(txt, txt.get_rect(center=rect.center))
         pygame.display.flip()
 
@@ -13758,16 +13771,7 @@ def play_video_with_controls(
                         showing_save_message = True
                         save_message_timer = 180
                         continue
-                    elif event.button == 3 and any(
-                        name in ("export", "mode") and rect.collidepoint(x, y)
-                        for name, rect in freekiki_buttons.items()
-                    ):
-                        try:
-                            save_message_text = _review_action("mode")
-                        except (OSError, ValueError, RuntimeError) as exc:
-                            save_message_text = f"FreeKiki: {exc}"
-                        showing_save_message = True
-                        save_message_timer = 180
+                    elif any(rect.collidepoint(x, y) for rect in freekiki_buttons.values()):
                         continue
                 # middle, right, and extra buttons so they cannot fire UI actions.
                 if y >= window_height and event.button != 1:

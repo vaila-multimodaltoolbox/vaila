@@ -733,10 +733,10 @@ Built-in backup system for data safety:
 - The predicted 49 points appear as editable drafts, in INSERT mode.
 - **Right-click** picks a point or ghost; **left-click** places it.
 - **Del** / **Del Range** mark a point that is inside the picture but not visible.
-- **F9 Save dataset** (or button in FreeKiki panel) offers **Full** (default) and **Only correct** modes:
-  - **Full mode:** writes all frames (human corrections + uncorrected AI predictions) to train on full footage (default folder `freekiki_full_<video>`).
-  - **Only correct mode:** writes only human-completed frames (default folder `freekiki_corrections_<video>`).
-  - Click **Mode: Full / OnlyCorr** or right-click the Save button in the panel to switch modes quickly.
+- **Compact review toolbar:** 5 compact buttons in the bottom panel: **Load run**, **Frame OK (F3)**, **Ghost (F10)**, **Next (PgDn)**, and **Save (F9)**.
+- **F9 Save (or panel Save button):** prompts to choose **Full** (1) or **Lite** (2):
+  - **Full mode (1):** writes all frames (human corrections + uncorrected AI predictions) to train on full footage (default folder `freekiki_full_<video>`).
+  - **Lite mode (2):** writes only human-completed frames (default folder `freekiki_corrections_<video>`).
 - Add that folder in FreeKiki → Train → **Corrections** (`--add-dataset`).
 
 **AV1 videos**
