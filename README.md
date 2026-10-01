@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.6 (see `vaila.py`). **Package version:** 0.4.6 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-09-30
+**Last updated:** 2026-10-01
 
 FreeKiki Kiki49 review: `uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS` opens a 49-point review session. After **Mark Reviewed** and **Export Reviewed**, preview with `uv run --no-sync vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH_ID`; add `--commit` to append validated frames to train. See [GetPixelVideo help](vaila/help/getpixelvideo.md) and [FreeKiki help](vaila/help/freekiki.md).
 
