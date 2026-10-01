@@ -670,3 +670,120 @@ def test_freekiki_panel_background_is_translucent():
     covered, free = screen.get_at((5, 5)), screen.get_at((15, 5))
     assert 0 < covered.r < free.r == 200  # darker but the image still shows through
     assert 0 < FREEKIKI_PANEL_ALPHA < 255
+
+
+def test_find_corrections_after_relocation_and_reopen(tmp_path):
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    run = _detect_run(tmp_path / "detect", video)
+    session = freekiki.new_review_session(video, 48, 32, 30)
+    session["prediction_source"] = str(run)
+    _complete(session, 8)
+    freekiki.edit_review_point(session, 8, 5, None)
+    session["frames"]["8"]["hidden"] = [5]
+    session["cursor"] = {"frame": 8, "point": 5}
+    freekiki.save_review_session(session)
+    folder = tmp_path / "elsewhere" / "corrections"
+    freekiki.relocate_review_session(session, folder)
+    found = freekiki.find_review_session(video, run / "field_kps_getpixelvideo.csv")
+    assert found == folder / "session.json"
+    restored = freekiki.load_review_session(found, video, 48, 32, 30)
+    assert restored["cursor"] == {"frame": 8, "point": 5}
+    assert restored["frames"]["8"]["points"][5] is None
+    assert restored["frames"]["8"]["hidden"] == [5]
+    (folder / "data.yaml").write_text("kpt_shape: [49, 3]\n")
+    assert freekiki.find_review_session(video, folder / "data.yaml") == found
+    other = tmp_path / "other.mp4"
+    other.write_bytes(b"other")
+    assert freekiki.find_review_session(other, run) is None
+
+
+def test_delete_key_executes_selected_frame_only_with_undo():
+    import ast
+    from types import SimpleNamespace
+
+    import pygame
+
+    # Execute the actual event branch without starting the interactive video loop.
+    tree = ast.parse((Path(__file__).parents[1] / "vaila/getpixelvideo.py").read_text())
+    branch = next(
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.If) and "pygame.K_DELETE" in ast.unparse(n.test)
+    )
+    undo = []
+    synced = []
+    deleted = {8: set(), 9: set()}
+    env = {
+        "pygame": pygame,
+        "event": SimpleNamespace(key=pygame.K_DELETE),
+        "freekiki_session": {},
+        "_require_insert": lambda: True,
+        "selected_marker_idx": 5,
+        "frame_count": 8,
+        "_push_undo": lambda: undo.append({f: set(v) for f, v in deleted.items()}),
+        "deleted_positions": deleted,
+        "_review_sync": synced.append,
+    }
+    code = compile(
+        ast.fix_missing_locations(ast.Module(body=branch.body, type_ignores=[])), "delete", "exec"
+    )
+    exec(code, env)
+    assert deleted == {8: {5}, 9: set()}
+    assert synced == [8] and undo == [{8: set(), 9: set()}]
+    assert env["selected_marker_idx"] == 5
+    env["_require_insert"] = lambda: False
+    exec(code, env)
+    assert len(undo) == 1
+
+
+def test_resume_restores_editor_grid_and_cursor(tmp_path):
+    import ast
+
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"video")
+    session = freekiki.new_review_session(video, 48, 32, 30)
+    _complete(session, 8)
+    session["frames"]["8"]["hidden"] = [5]
+    session["cursor"] = {"frame": 8, "point": 17}
+    path = freekiki.save_review_session(session)
+    tree = ast.parse((Path(__file__).parents[1] / "vaila/getpixelvideo.py").read_text())
+    names = {"_resume_freekiki", "_coordinates_from_session", "_enter_correction_mode"}
+    funcs = [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name in names]
+    # Lift the real closures into a shared namespace for a headless integration test.
+    for func in funcs:
+        func.body = [
+            ast.Global(names=n.names) if isinstance(n, ast.Nonlocal) else n for n in func.body
+        ]
+    grid, hidden = {1: [(999, 999)]}, {1: {0}}
+    env = {
+        "__name__": "vaila.getpixelvideo",
+        "__package__": "vaila",
+        "Path": Path,
+        "video_path": str(video),
+        "original_width": 48,
+        "original_height": 32,
+        "fps": 30,
+        "total_frames": 20,
+        "freekiki_session": {},
+        "freekiki_api": freekiki,
+        "coordinates": grid,
+        "deleted_positions": hidden,
+        "editor_mode": "insert",
+        "frame_count": 0,
+        "selected_marker_idx": 0,
+        "_review_hints": lambda: {"suspects": [5]},
+        "_refresh_restore_snapshot": lambda: None,
+    }
+    exec(
+        compile(
+            ast.fix_missing_locations(ast.Module(body=funcs, type_ignores=[])), "resume", "exec"
+        ),
+        env,
+    )
+    env["_resume_freekiki"](path)
+    assert env["frame_count"] == 8 and env["selected_marker_idx"] == 17
+    assert env["paused"] is True
+    assert grid[1] == [] and hidden[1] == set()
+    assert grid[8][0] == tuple(session["frames"]["8"]["points"][0])
+    assert hidden[8] == {5}

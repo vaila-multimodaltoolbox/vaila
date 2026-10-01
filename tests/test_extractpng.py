@@ -1,4 +1,8 @@
-"""Tests for vaila.extractpng command builders and helpers (no GUI)."""
+"""Tests for vaila.extractpng.
+
+Update Date: 30 September 2026
+Version: 0.4.6
+"""
 
 from __future__ import annotations
 
@@ -164,16 +168,6 @@ def test_pattern_rejects_arbitrary_names_and_gaps(tmp_path: Path) -> None:
     assert ep._pattern_covers_pngs(gap, "%09d.png") is False
 
 
-def test_build_png_concat_command() -> None:
-    cmd = ep.build_png_concat_command("frames.txt", "out.mp4", fps=30.0, codec="264")
-    assert cmd[0] == "ffmpeg"
-    assert "libx264" in cmd
-    assert cmd[cmd.index("-f") + 1] == "concat"
-    assert cmd[cmd.index("-safe") + 1] == "0"
-    assert cmd.index("-f") < cmd.index("-i")
-    assert cmd[-1] == "out.mp4"
-
-
 def test_build_png_to_video_nvenc() -> None:
     cmd_h264 = ep.build_png_to_video_command(
         "d/%09d.png", "out.mp4", fps=30.0, codec="264", hwaccel="cuda"
@@ -227,3 +221,203 @@ def test_extractpng_gui_builds() -> None:
         app.root.destroy()
     finally:
         root.destroy()
+
+
+def test_sample_random_frame_indices_spacing() -> None:
+    total_frames = 5000
+    num_frames = 20
+    indices = ep.sample_random_frame_indices(total_frames, num_frames=num_frames, seed=42)
+
+    assert len(indices) == num_frames
+    assert sorted(indices) == indices
+    assert len(set(indices)) == num_frames
+
+    # Verify spacing: consecutive frames must be well-spaced
+    diffs = [indices[i + 1] - indices[i] for i in range(len(indices) - 1)]
+    min_spacing = min(diffs)
+    # L = 5000 / 20 = 250, margin = 250 * 0.15 = 37, minimum distance >= 74
+    assert min_spacing >= 50
+    assert indices[0] >= 0
+    assert indices[-1] < total_frames
+
+
+def test_sample_random_frame_indices_small_video() -> None:
+    # When total frames <= requested frames, return all frames
+    assert ep.sample_random_frame_indices(10, num_frames=20) == list(range(10))
+    assert ep.sample_random_frame_indices(0, num_frames=20) == []
+    assert ep.sample_random_frame_indices(10, num_frames=0) == []
+
+
+def test_sample_random_frame_indices_seed() -> None:
+    f1 = ep.sample_random_frame_indices(20000, num_frames=20, seed=12345)
+    f2 = ep.sample_random_frame_indices(20000, num_frames=20, seed=12345)
+    f3 = ep.sample_random_frame_indices(20000, num_frames=20, seed=99999)
+    assert f1 == f2
+    assert f1 != f3
+
+
+def test_list_videos_in_dir_recursive(tmp_path: Path) -> None:
+    sub1 = tmp_path / "sub1"
+    sub2 = tmp_path / "sub2" / "nested"
+    sub1.mkdir(parents=True)
+    sub2.mkdir(parents=True)
+
+    (tmp_path / "root.mp4").write_bytes(b"x")
+    (sub1 / "clip1.avi").write_bytes(b"x")
+    (sub2 / "clip2.MP4").write_bytes(b"x")
+    (sub1 / "text.txt").write_text("skip")
+
+    non_rec = ep.list_videos_in_dir(tmp_path, recursive=False)
+    assert [p.name for p in non_rec] == ["root.mp4"]
+
+    rec = ep.list_videos_in_dir(tmp_path, recursive=True)
+    assert sorted(p.name for p in rec) == ["clip1.avi", "clip2.MP4", "root.mp4"]
+
+
+def test_build_fast_frame_command() -> None:
+    cmd = ep.build_fast_frame_command("video.mp4", 12.3456, "out/frame_100.png", hwaccel="cuda")
+    assert cmd[0] == "ffmpeg"
+    assert "-ss" in cmd
+    assert cmd[cmd.index("-ss") + 1] == "12.3456"
+    assert cmd.index("-ss") < cmd.index("-i")
+    assert "-hwaccel" in cmd
+    assert cmd[cmd.index("-hwaccel") + 1] == "cuda"
+    assert cmd[-1] == "out/frame_100.png"
+
+
+def test_sample_cli_argparser() -> None:
+    parser = ep.build_arg_parser()
+    args = parser.parse_args(
+        ["sample", "-i", "/videos", "-n", "25", "--no-recursive", "--flat", "--seed", "77"]
+    )
+    assert args.command == "sample"
+    assert args.num_frames == 25
+    assert args.recursive is False
+    assert args.flat is True
+    assert args.seed == 77
+
+
+def test_build_cli_argv_sample() -> None:
+    argv = ep.build_cli_argv(
+        "sample",
+        input_path="/videos",
+        output_path="/out",
+        num_frames=20,
+        recursive=True,
+        flat=False,
+    )
+    assert "sample" in argv
+    assert "-i" in argv
+    assert "/videos" in argv
+    assert "-o" in argv
+    assert "/out" in argv
+
+
+@pytest.mark.parametrize("quality,gop", [(0, 1), (52, 1), (18, 0), (18, 1.5)])
+def test_invalid_creation_options(quality, gop):
+    with pytest.raises(ValueError):
+        ep.build_png_to_video_command("%09d.png", "out.mp4", fps=30, quality=quality, gop=gop)
+
+
+def test_creation_cli_controls():
+    argv = ep.build_cli_argv("create", input_path="images", quality=12, gop=3)
+    args = ep.build_arg_parser().parse_args(argv[3:])
+    assert (args.quality, args.gop, args.hwaccel) == (12, 3, "auto")
+
+
+def test_nvenc_fallback_preserves_family_and_options(tmp_path, monkeypatch):
+    import subprocess
+
+    from PIL import Image
+
+    source = tmp_path / "images"
+    source.mkdir()
+    for name in ("frame 10.png", "frame 2.png"):
+        Image.new("RGB", (64, 48)).save(source / name)
+    monkeypatch.setattr(ep, "get_cuda_status", lambda: {"device_name": "test"})
+    monkeypatch.setattr(
+        ep.os, "link", lambda *args: (_ for _ in ()).throw(OSError("copy fallback"))
+    )
+    calls = []
+
+    def run(cmd):
+        calls.append(cmd)
+        pattern = Path(cmd[cmd.index("-i") + 1])
+        assert len(list(pattern.parent.glob("*.png"))) == 2
+        if len(calls) == 1:
+            raise subprocess.CalledProcessError(1, cmd)
+
+    monkeypatch.setattr(ep, "_run_ffmpeg", run)
+    dest = ep.create_video_from_png(source, codec="265_nvenc", quality=13, gop=2, hwaccel="cuda")
+    assert "hevc_nvenc" in calls[0] and "libx265" in calls[1]
+    assert calls[0][calls[0].index("-cq") + 1] == "13"
+    assert calls[1][calls[1].index("-crf") + 1] == "13"
+    assert all(cmd[cmd.index("-g") + 1] == "2" for cmd in calls)
+    assert not list(dest.glob("vaila_png_sequence_*"))
+
+
+def test_mixed_dimensions_rejected(tmp_path):
+    from PIL import Image
+
+    Image.new("RGB", (64, 48)).save(tmp_path / "1.png")
+    Image.new("RGB", (66, 48)).save(tmp_path / "2.png")
+    with pytest.raises(ValueError, match="dimensions differ"):
+        ep.create_video_from_png(tmp_path, hwaccel="cpu")
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        ["frame 10.png", "frame 2.png", "frame 1.png"],
+        ["000000000.png", "000000002.png"],
+        ["single.png"],
+    ],
+)
+@pytest.mark.parametrize(
+    "codec,hwaccel", [("264", "cpu"), ("265", "cpu"), ("264", "cuda"), ("265", "cuda")]
+)
+def test_encoded_sequence_exact_frames(tmp_path, names, codec, hwaccel):
+    import json
+    import shutil
+    import subprocess
+
+    import numpy as np
+    from PIL import Image
+
+    if not shutil.which("ffmpeg") or not shutil.which("ffprobe"):
+        pytest.skip("FFmpeg required")
+    if hwaccel == "cuda" and not ep.get_cuda_status()["has_nvidia"]:
+        pytest.skip("NVIDIA required")
+    source = tmp_path / "input"
+    source.mkdir()
+    ordered = sorted(names, key=ep._natural_sort_key)
+    for index, name in enumerate(ordered):
+        Image.new("RGB", (64, 48), (40 + index * 70,) * 3).save(source / name)
+    dest = ep.create_video_from_png(source, fps=25, codec=codec, hwaccel=hwaccel)
+    video = dest / "input.mp4"
+    probe = json.loads(
+        subprocess.check_output(
+            [
+                "ffprobe",
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_frames",
+                "-show_streams",
+                "-of",
+                "json",
+                str(video),
+            ]
+        )
+    )
+    assert len(probe["frames"]) == len(names)
+    assert all(frame["key_frame"] == 1 for frame in probe["frames"])
+    stream = probe["streams"][0]
+    assert (stream["width"], stream["height"], stream["avg_frame_rate"]) == (64, 48, "25/1")
+    decoded = subprocess.check_output(
+        ["ffmpeg", "-v", "error", "-i", str(video), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+    )
+    frames = np.frombuffer(decoded, dtype=np.uint8).reshape(len(names), 48, 64, 3)
+    for index, frame in enumerate(frames):
+        assert np.abs(frame.astype(float) - (40 + index * 70)).mean() < 4

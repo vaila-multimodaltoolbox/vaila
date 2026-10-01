@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.3.120
+- **Version:** 0.4.6
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -119,5 +119,9 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 03 September 2026
+📅 **Last Updated:** 30 September 2026
 🔗 **Part of vailá - Multimodal Toolbox**
+
+### Save current frame as PNG
+
+Press **Shift+S** while paused or playing to save the displayed frame at full resolution, with the video orientation applied and without overlays or zoom cropping. Files go beside the source video in `<video_stem>_frames/<video_stem>_frame_00000001.png` (1-based frame number). Saving the same frame again replaces its PNG. The window confirms the filename; the terminal prints the full path or any error. **S** still marks a cut start when paused.

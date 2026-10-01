@@ -603,3 +603,6 @@ model has a fixed input size, so `--imgsz` is ignored for it.
 - `vaila/help/soccerfield_calib.html` — DLT2D field calibration
 - `vaila/help/yolotrain.html` — generic YOLO training used by FreeKiki
 - `docs/fifa_workflow.md`
+
+
+FreeKiki correction: Delete marks only the selected keypoint in the current frame as not visible (Undo supported). Save the session with F4 or close normally. Reopen the original video and Load the original detect CSV/folder, or the corrected dataset/session.json: saved corrections, hidden points, review states and the last frame/keypoint are restored automatically. F9 exports reviewed frames; F4 also preserves unfinished drafts.

@@ -2010,7 +2010,40 @@ def save_review_session(session: dict) -> Path:
             tmp.unlink(missing_ok=True)
             raise
     os.replace(tmp, path)
+    if session.get("prediction_source"):
+        folder = Path(session["prediction_source"])
+        if folder.is_dir():
+            (folder / "correction_session.txt").write_text(str(path.resolve()), encoding="utf-8")
     return path
+
+
+def find_review_session(video, source=None, workspace=None) -> Path | None:
+    """Find saved corrections for a video, including relocated dataset sessions."""
+    video = Path(video).expanduser().resolve()
+    folder = Path(source).expanduser().resolve() if source else video.parent
+    if folder.is_file():
+        if folder.name == "session.json":
+            load_review_session(folder, video)
+            return folder
+        folder = folder.parent
+    candidates = [folder / "session.json"]
+    link = folder / "correction_session.txt"
+    if link.is_file():
+        candidates.append(Path(link.read_text(encoding="utf-8").strip()))
+    candidates.extend(video.parent.glob(f"{video.stem}_*/session.json"))
+    candidates.append(video.parent / f"freekiki_corrections_{video.stem}" / "session.json")
+    if workspace:
+        candidates.extend((Path(workspace) / "incoming").glob("*/session.json"))
+    valid = []
+    for candidate in set(candidates):
+        if not candidate.is_file():
+            continue
+        try:
+            load_review_session(candidate, video)
+        except (ValueError, OSError, KeyError, TypeError):
+            continue
+        valid.append(candidate)
+    return max(valid, key=lambda p: p.stat().st_mtime_ns) if valid else None
 
 
 def load_review_session(path, video=None, width=None, height=None, fps=None) -> dict:

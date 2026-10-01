@@ -2212,7 +2212,9 @@ def play_video_with_controls(
             from . import freekiki as freekiki_api
         except ImportError:
             import freekiki as freekiki_api  # ty: ignore[unresolved-import]
-        session_file = freekiki_options.get("session")
+        session_file = freekiki_options.get("session") or freekiki_api.find_review_session(
+            video_path, freekiki_options.get("predictions"), freekiki_options.get("workspace")
+        )
         if session_file:
             freekiki_session = freekiki_api.load_review_session(
                 session_file, video_path, original_width, original_height, fps
@@ -11033,7 +11035,7 @@ def play_video_with_controls(
             # Try CSV file dialog first
             csv_path = pygame_file_dialog(
                 initial_dir=initial_dir,
-                file_extensions=[".csv"],
+                file_extensions=[".csv", ".json", ".yaml"],
                 restore_size=(window_width, window_height + control_panel_height),
             )
 
@@ -11080,7 +11082,10 @@ def play_video_with_controls(
                     # CSV file
                     input_path = filedialog.askopenfilename(
                         title="Select CSV File",
-                        filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                        filetypes=[
+                            ("Markers / FreeKiki session", "*.csv *.json *.yaml"),
+                            ("All Files", "*.*"),
+                        ],
                         initialdir=initial_dir,
                     )
                 elif choice is False:
@@ -11113,6 +11118,18 @@ def play_video_with_controls(
             save_message_text = "File/folder selection cancelled."
             showing_save_message = True
             save_message_timer = 60
+            return
+
+        # A corrected dataset/session takes precedence over the original predictions.
+        source = Path(input_path)
+        folder = source if source.is_dir() else source.parent
+        if (folder / "session.json").is_file():
+            try:
+                save_message_text = _resume_freekiki(folder / "session.json")
+            except (OSError, ValueError, KeyError) as exc:
+                save_message_text = f"FreeKiki session not loaded: {exc}"
+            showing_save_message = True
+            save_message_timer = 240
             return
 
         # A freekiki detect output (folder or one of its CSVs): correction mode.
@@ -11373,6 +11390,7 @@ def play_video_with_controls(
             or not 0 <= fi < total_frames
         ):
             return
+        freekiki_session["cursor"] = {"frame": frame_count, "point": selected_marker_idx}
         pts = coordinates.get(fi, [])
         if (
             str(fi) not in freekiki_session["frames"]
@@ -11408,7 +11426,10 @@ def play_video_with_controls(
                     freekiki_api.edit_review_point(freekiki_session, fi, i, point)
                 except Exception as exc:
                     print(f"Warning: FreeKiki sync failed for frame {fi}, marker {i}: {exc}")
-        row["hidden"] = sorted(deleted_positions.get(fi, set()))
+        hidden = sorted(deleted_positions.get(fi, set()))
+        if hidden != row.get("hidden", []) and row["state"] in ("HUMAN_REVIEWED", "EXPORTED"):
+            row["state"] = "DRAFT_MANUAL"
+        row["hidden"] = hidden
 
     def _review_sync_all() -> None:
         if freekiki_session is None or not isinstance(coordinates, dict):
@@ -11564,17 +11585,47 @@ def play_video_with_controls(
         dist = math.hypot(float(best[1][0]) - vx, float(best[1][1]) - vy) * zoom_level
         return int(best[0]) if dist <= radius_px else None
 
+    def _resume_freekiki(path) -> str:
+        nonlocal freekiki_session
+        try:
+            from . import freekiki as fk
+        except ImportError:
+            import freekiki as fk
+        restored = fk.load_review_session(path, video_path, original_width, original_height, fps)
+        if freekiki_session is None:
+            _apply_template_mode("freekiki")
+        freekiki_session = restored
+        coordinates.clear()
+        coordinates.update({i: [] for i in range(total_frames)})
+        deleted_positions.clear()
+        deleted_positions.update({i: set() for i in range(total_frames)})
+        _coordinates_from_session()
+        _enter_correction_mode(len(restored["frames"]))
+        _refresh_restore_snapshot()
+        return f"Resumed corrections: frame {frame_count}, p{selected_marker_idx} ({path})"
+
     def _load_freekiki_run(folder: Path) -> str:
         """Load button on a freekiki detect output: predictions become editable drafts."""
         nonlocal freekiki_options, selected_marker_idx, sequential_mode, one_line_mode
         if freekiki_session is None:
             _apply_template_mode("freekiki")  # 49 slots + session; raises if markers would be lost
         assert freekiki_session is not None and freekiki_api is not None
+        if not (folder / "README.txt").is_file():
+            runs = freekiki_api.detect_runs(folder)
+            folder = next(
+                (run for run, video in runs if video == Path(video_path).resolve()), folder
+            )
         readme = (folder / "README.txt").read_text(encoding="utf-8").splitlines()
         model = next((line[7:] for line in readme if line.startswith("model: ")), "")
         ws = freekiki_api.workspace_for_model_file(model) if model else None
         if ws is not None:
             freekiki_options = {**(freekiki_options or {}), "workspace": str(ws)}
+        saved = freekiki_api.find_review_session(
+            video_path, folder, (freekiki_options or {}).get("workspace")
+        )
+        if saved:
+            return _resume_freekiki(saved)
+        freekiki_session["prediction_source"] = str(folder.resolve())
         kp_conf = float(freekiki_api.load_settings(ws)["detect"]["kp_conf"]) if ws else 0.5
         n = freekiki_api.load_raw_review_predictions(freekiki_session, folder, kp_conf=kp_conf)
         _coordinates_from_session()
@@ -11583,12 +11634,20 @@ def play_video_with_controls(
 
     def _enter_correction_mode(n: int) -> str:
         """INSERT + Mark mode on the first missing point; returns the how-to line."""
-        nonlocal selected_marker_idx, sequential_mode, one_line_mode
+        nonlocal selected_marker_idx, sequential_mode, one_line_mode, frame_count, paused
+        cursor = freekiki_session.get("cursor", {}).copy()
+        if cursor:
+            frame_count = max(0, min(total_frames - 1, int(cursor.get("frame", 0))))
+            paused = True
         if editor_mode != "insert":
             _toggle_editor_mode()
         sequential_mode = one_line_mode = False
         suspects = _review_hints()["suspects"]
-        selected_marker_idx = suspects[0] if suspects else 0
+        selected_marker_idx = (
+            max(0, min(48, int(cursor.get("point", 0))))
+            if cursor
+            else (suspects[0] if suspects else 0)
+        )
         return (
             f"FreeKiki run: {n} frames drafted. Left-click place · right-click pick · "
             "Del/Del Range not visible · F10 ghost · F3 frame OK · F9 save dataset"
@@ -11688,23 +11747,15 @@ def play_video_with_controls(
             return "accepted"
         return source
 
-    if (
-        freekiki_session is not None
-        and freekiki_options is not None
-        and freekiki_options.get("predictions")
-    ):
-        n_drafted = freekiki_api.load_raw_review_predictions(
-            freekiki_session,
-            freekiki_options["predictions"],
-            kp_conf=float(
-                freekiki_api.load_settings(Path(freekiki_options["workspace"]))["detect"]["kp_conf"]
-            )
-            if freekiki_options.get("workspace")
-            else 0.5,
-        )
-        _coordinates_from_session()
-        freekiki_api.save_review_session(freekiki_session)
-        save_message_text = _enter_correction_mode(n_drafted)
+    if freekiki_session is not None:
+        if (
+            freekiki_options
+            and freekiki_options.get("predictions")
+            and not freekiki_session["frames"]
+        ):
+            save_message_text = _load_freekiki_run(Path(freekiki_options["predictions"]))
+        else:
+            save_message_text = _enter_correction_mode(len(freekiki_session["frames"]))
         showing_save_message = True
         save_message_timer = 300
 
@@ -13015,6 +13066,16 @@ def play_video_with_controls(
                     save_message_text = "Measure: points and results cleared"
                     showing_save_message = True
                     save_message_timer = 30
+                elif event.key == pygame.K_DELETE and freekiki_session is not None:
+                    if _require_insert() and 0 <= selected_marker_idx < 49:
+                        _push_undo()
+                        deleted_positions.setdefault(frame_count, set()).add(selected_marker_idx)
+                        _review_sync(frame_count)
+                        save_message_text = (
+                            f"p{selected_marker_idx}: not visible in frame {frame_count}"
+                        )
+                        showing_save_message = True
+                        save_message_timer = 60
                 elif event.key == pygame.K_d:
                     # Delete all markers
                     if not _require_insert():

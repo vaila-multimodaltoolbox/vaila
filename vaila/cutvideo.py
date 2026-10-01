@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 30 September 2026
+Version: 0.4.6
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -209,6 +209,20 @@ def _draw_playback_speed_hud(surface: pygame.Surface, speed: float, viewport_wid
     y = 8
     surface.blit(bg, (x, y))
     surface.blit(text, (x + pad_x, y + 3))
+
+
+def save_frame_png(video_path: str | Path, frame: np.ndarray, frame_index: int) -> Path:
+    """Save the full-resolution displayed BGR frame; filenames use 1-based indices."""
+    video_path = Path(video_path)
+    output_dir = video_path.parent / f"{video_path.stem}_frames"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"{video_path.stem}_frame_{frame_index + 1:08d}.png"
+    # imencode + tofile also handles Unicode paths on Windows.
+    success, encoded = cv2.imencode(".png", frame)
+    if not success:
+        raise OSError("Could not encode frame as PNG")
+    encoded.tofile(output_path)
+    return output_path
 
 
 def clamp_frame_index(frame_idx: int, total_frames: int) -> int:
@@ -1679,7 +1693,7 @@ def play_video_with_cuts(video_path, *, sync_file=None):
             f"{video_filename} (FPS: {fps:.2f}) | {base_info} | "
             "A:Audio M:Mute B:BaseName N:NamesCSV 0:AutoFit +/-:Zoom | Space:Play/Pause | ←→:Frame | "
             "S:Start E:End R:Reset DEL/D:Remove | L:List | F:Load | Home/End | PgUp/PgDn | "
-            "G:Frame T:Time I/P:FPS Shift+←/→:Markers | H:Help ESC:Save"
+            "Shift+S:PNG G:Frame T:Time I/P:FPS Shift+←/→:Markers | H:Help ESC:Save"
         )
 
     def auto_fit_window():
@@ -2152,6 +2166,7 @@ def play_video_with_cuts(video_path, *, sync_file=None):
             "- C: Load cut labels only (metadata in TOML; does not rename output files)",
             "- B: Set a single output base name for all cuts (or 'Base name' button)",
             "- I or P: Input Manual FPS",
+            "- Shift+S: Save current full-resolution frame as PNG beside the video",
             "- ESC: Save cuts to TOML file and optionally generate videos",
             "",
             "Help:",
@@ -2641,6 +2656,8 @@ def play_video_with_cuts(video_path, *, sync_file=None):
 
         return True
 
+    snapshot_message = ""
+    snapshot_message_until = 0.0
     running = True
     while running:
         # Handle title-bar X early (Linux SDL2 often sends WINDOWCLOSE, not QUIT).
@@ -2706,6 +2723,7 @@ def play_video_with_cuts(video_path, *, sync_file=None):
 
         last_valid_frame = frame.copy()
         frame = check_and_rotate_frame(frame, metadata)
+        displayed_frame_index = frame_count
 
         # Base scale so that at zoom_level=1.0 the whole video fits in the window
         clamp_zoom_level()
@@ -2726,6 +2744,9 @@ def play_video_with_cuts(video_path, *, sync_file=None):
         screen.fill((0, 0, 0))
         screen.blit(frame_surface, (0, 0))
         _draw_playback_speed_hud(screen, playback_speed, window_width)
+        if time.monotonic() < snapshot_message_until:
+            notice = pygame.font.Font(None, 24).render(snapshot_message, True, (255, 220, 70))
+            screen.blit(notice, (8, 36))
 
         # Draw audio waveform panel if enabled
         if show_audio:
@@ -2895,6 +2916,15 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                     frame_count = min(frame_count + 60, total_frames - 1)
                 elif event.key == pygame.K_DOWN and paused:
                     frame_count = max(frame_count - 60, 0)
+                elif event.key == pygame.K_s and event.mod & pygame.KMOD_SHIFT:
+                    try:
+                        saved_path = save_frame_png(video_path, frame, displayed_frame_index)
+                        snapshot_message = f"PNG saved: {saved_path.name}"
+                        print(f">> Frame PNG saved: {saved_path}")
+                    except (OSError, cv2.error) as exc:
+                        snapshot_message = "Error saving PNG (see terminal)"
+                        print(f">> Error saving frame PNG: {exc}")
+                    snapshot_message_until = time.monotonic() + 4.0
                 elif event.key == pygame.K_s and paused:
                     current_start = frame_count
                     print(f"Start frame marked: {frame_count + 1}")

@@ -54,16 +54,17 @@
         <li><strong>Fast Lossless PNG Extraction (<code>-c / --compression 0-9</code>):</strong> Defaults to fast level 1 with <code>-pred none</code>, speeding up extraction ~3x while maintaining bit-for-bit lossless pixel parity.</li>
         <li><strong>Redundant Rescaler Bypass:</strong> Skips unnecessary CPU Lanczos/bicubic resampling when target dimensions match native video.</li>
         <li><strong>Parallel Multi-Video Batching (<code>-j / --workers</code>):</strong> Multi-threaded video extraction using <code>ThreadPoolExecutor</code> to saturate NVDEC and CPU cores.</li>
-        <li><strong>NVIDIA NVENC Video Creation:</strong> Fast encoding of PNG folders to MP4 via <code>h264_nvenc</code> and <code>hevc_nvenc</code>. A contiguous <code>%09d</code> sequence starting at 0 uses the image2 demuxer; any other names are encoded in natural filename order (<code>frame_2.png</code> before <code>frame_10.png</code>).</li>
+        <li><strong>NVIDIA NVENC Video Creation:</strong> Fast encoding of PNG folders to MP4 via <code>h264_nvenc</code> and <code>hevc_nvenc</code>. Every PNG uses a temporary numbered image2 sequence in natural filename order (<code>frame_2.png</code> before <code>frame_10.png</code>).</li>
+        <li><strong>Stratified Random Frame Sampling (<code>sample</code> subcommand):</strong> Extracts $N$ well-spaced, non-contiguous random frames per video (default 20) using stratified jittered sampling to guarantee uniform temporal distribution without clustering. Supports recursive directory scanning (<code>--recursive</code>).</li>
       </ul>
       <h2>GUI</h2>
       <p>Frame C → <strong>Video and Image</strong> → <strong>C_B_r1_c1 - Video&lt;--&gt;PNG</strong>, or:</p>
       <pre>uv run vaila/extractpng.py</pre>
       <ol>
         <li>Check the detected GPU hardware acceleration badge.</li>
-        <li>Choose mode: <strong>Video → PNG</strong> / <strong>PNG → Video</strong> / <strong>Select frames</strong>.</li>
+        <li>Choose mode: <strong>Video → PNG</strong> / <strong>PNG → Video</strong> / <strong>Select frames</strong> / <strong>Random sample</strong>.</li>
         <li>Browse input (output optional).</li>
-        <li>Select acceleration mode, compression speed, and parallel workers.</li>
+        <li>Select acceleration mode, compression speed, parallel workers, and sampling options.</li>
         <li>Click <strong>Run</strong> (prints copy-paste CLI mirror).</li>
       </ol>
       <h2>CLI</h2>
@@ -77,14 +78,19 @@ uv run vaila/extractpng.py extract -i /path/to/videos -o /path/to/out --hwaccel 
 uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264_nvenc --hwaccel cuda
 
 # Grab select frames with GPU acceleration:
-uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel cuda</pre>
+uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel cuda
+
+# Extract 20 well-spaced random frames per video recursively across subdirectories:
+uv run vaila/extractpng.py sample -i /path/to/videos -n 20 --recursive</pre>
       <h2>Notes</h2>
       <ul>
         <li>FFmpeg <code>-hwaccel cuda</code> is placed <em>before</em> <code>-i</code> (input option).</li>
-        <li>Default PNG pattern: <code>%09d.png</code> (extract, and create when the folder is already that contiguous sequence from 0).</li>
-        <li><strong>PNG → Video</strong> accepts any directory of <code>.png</code> files, or immediate subfolders that contain them. Without a contiguous pattern, every PNG in the folder is sorted by filename and joined into one MP4.</li>
+        <li>Default PNG pattern: <code>%09d.png</code> (extraction; creation includes every PNG in natural order).</li>
+        <li><strong>PNG → Video</strong> accepts any directory of <code>.png</code> files, or immediate subfolders that contain them. Every PNG in the folder is sorted by filename and joined into one MP4.</li>
+        <li>Random sampling writes <code>vaila_random_samples_&lt;timestamp&gt;/&lt;stem&gt;_random&lt;N&gt;/frame_&lt;number&gt;.png</code> and <code>manifest.csv</code> per video, plus <code>sampling_summary.csv</code> in the output root.</li>
         <li>Batch extraction generates <code>video_info.txt</code> in each directory detailing FPS and GPU profile.</li>
       </ul>
     </div>
-  </body>
+  <p>PNG → MP4 defaults: quality 18 (1–51, lower is better), GOP 1 (every frame independent), no B-frames. CLI: --quality 18 --gop 1. NVENC uses p7/hq VBR CQ; CPU uses slow/CRF. H.264 and H.265 preserve these settings on CPU fallback. Every PNG produces exactly one frame in natural filename order, including gaps and names with spaces. Original dimensions and chosen FPS are preserved; mixed dimensions and odd dimensions incompatible with yuv420p are rejected. MP4/yuv420p remains lossy and cannot restore detail already blurred in the PNG. GOP 1 generally produces larger files.</p>
+</body>
 </html>

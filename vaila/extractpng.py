@@ -7,7 +7,7 @@ Author: Prof. Dr. Paulo R. P. Santiago
 https://github.com/vaila-multimodaltoolbox/vaila
 
 Created: December 15, 2023
-Update: 30 September 2026
+Update Date: 30 September 2026
 Version: 0.4.6
 Python Version: 3.12.14
 
@@ -27,11 +27,13 @@ Features:
   CPU rescaling when target resolution matches native video stream dimensions.
 - Parallel Batch Processing: Multi-video extraction via ThreadPoolExecutor,
   saturating NVDEC hardware decoders and multi-core CPU pipelines.
-- PNG → video from any folder: a contiguous ``%09d`` sequence (from 0) uses the
-  image2 demuxer; otherwise every PNG is encoded in natural filename order.
+- PNG → video: every PNG in natural filename order via a temporary image2 sequence.
+  Quality 18, GOP 1 (independent frames), no B-frames; CPU fallback preserves settings.
+- Stratified Random Frame Sampling: Extracts N well-spaced, non-contiguous random frames
+  per video across entire directories (with recursive subdirectory discovery).
 - Modern Tkinter GUI with hardware acceleration status badge, compression chooser,
   parallel worker controls, and CLI mirror reproduction.
-- Full CLI supporting extract, create, and frames subcommands with headless parity.
+- Full CLI supporting extract, create, frames, and sample subcommands with headless parity.
 
 CLI::
 
@@ -39,6 +41,7 @@ CLI::
     uv run vaila/extractpng.py extract -i /path/to/videos --hwaccel auto --compression 1
     uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264 --hwaccel auto
     uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel auto
+    uv run vaila/extractpng.py sample -i /path/to/videos -n 20 --recursive
 
 GUI (no args, or from Frame C → Video↔PNG): one window — pick mode, paths, Run.
 
@@ -51,7 +54,9 @@ import argparse
 import contextlib
 import functools
 import json
+import math
 import os
+import random
 import re
 import shutil
 import subprocess
@@ -63,6 +68,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
+
+from PIL import Image
 
 try:
     from .cli_highlight import print_gui_cli_mirror
@@ -89,9 +96,15 @@ def _is_video_file(name: str) -> bool:
     return name.lower().endswith(VIDEO_EXTENSIONS)
 
 
-def list_videos_in_dir(directory: str | Path) -> list[Path]:
-    directory = Path(directory)
-    return sorted(p for p in directory.iterdir() if p.is_file() and _is_video_file(p.name))
+def list_videos_in_dir(directory: str | Path, recursive: bool = False) -> list[Path]:
+    path = Path(directory)
+    if path.is_file():
+        return [path] if _is_video_file(path.name) else []
+    if not path.is_dir():
+        return []
+    if recursive:
+        return sorted(p for p in path.rglob("*") if p.is_file() and _is_video_file(p.name))
+    return sorted(p for p in path.iterdir() if p.is_file() and _is_video_file(p.name))
 
 
 @functools.lru_cache(maxsize=1)
@@ -176,8 +189,8 @@ def get_cuda_status() -> dict[str, Any]:
     }
 
 
-def get_video_info(video_path: str | Path) -> tuple[int, int, float]:
-    """Return (width, height, fps), swapping dims for 90/270° display rotation."""
+def get_video_details(video_path: str | Path) -> dict[str, Any]:
+    """Return dict with width, height, fps, total_frames, duration, swapping dims for rotation."""
     video_path = Path(video_path)
     cmd = [
         "ffprobe",
@@ -185,6 +198,7 @@ def get_video_info(video_path: str | Path) -> tuple[int, int, float]:
         "error",
         "-print_format",
         "json",
+        "-show_format",
         "-show_streams",
         str(video_path),
     ]
@@ -201,14 +215,28 @@ def get_video_info(video_path: str | Path) -> tuple[int, int, float]:
     raw_height = int(video_stream.get("height", 0))
 
     r_frame_rate_str = video_stream.get("r_frame_rate", "0/0")
+    avg_frame_rate_str = video_stream.get("avg_frame_rate", "0/0")
     fps = 30.0
-    if "/" in r_frame_rate_str:
+
+    def parse_fps_str(val_str: str) -> float | None:
+        if "/" in val_str:
+            try:
+                num, den = map(int, val_str.split("/"))
+                if den != 0:
+                    return float(num) / den
+            except (ValueError, ZeroDivisionError):
+                return None
         try:
-            num, den = map(int, r_frame_rate_str.split("/"))
-            if den != 0:
-                fps = float(num) / den
-        except (ValueError, ZeroDivisionError):
-            pass
+            val = float(val_str)
+            if val > 0:
+                return val
+        except (ValueError, TypeError):
+            return None
+        return None
+
+    parsed_fps = parse_fps_str(avg_frame_rate_str) or parse_fps_str(r_frame_rate_str)
+    if parsed_fps and parsed_fps > 0:
+        fps = parsed_fps
 
     rotation = 0
     for sd in video_stream.get("side_data_list", []):
@@ -229,7 +257,39 @@ def get_video_info(video_path: str | Path) -> tuple[int, int, float]:
         width, height = raw_height, raw_width
     else:
         width, height = raw_width, raw_height
-    return width, height, fps
+
+    nb_frames: int | None = None
+    try:
+        raw_nb = video_stream.get("nb_frames")
+        if raw_nb not in (None, "N/A", ""):
+            nb_frames = int(raw_nb)
+    except (ValueError, TypeError):
+        nb_frames = None
+
+    duration = 0.0
+    try:
+        raw_dur = data.get("format", {}).get("duration") or video_stream.get("duration")
+        if raw_dur:
+            duration = float(raw_dur)
+    except (ValueError, TypeError):
+        duration = 0.0
+
+    if nb_frames is None or nb_frames <= 0:
+        nb_frames = int(round(duration * fps)) if duration > 0 and fps > 0 else 0
+
+    return {
+        "width": width,
+        "height": height,
+        "fps": fps,
+        "total_frames": nb_frames,
+        "duration": duration,
+    }
+
+
+def get_video_info(video_path: str | Path) -> tuple[int, int, float]:
+    """Return (width, height, fps), swapping dims for 90/270° display rotation."""
+    details = get_video_details(video_path)
+    return details["width"], details["height"], details["fps"]
 
 
 def build_extract_png_command(
@@ -335,10 +395,101 @@ def build_select_frame_command(
     return cmd
 
 
-def _png_video_encoder(codec: str, hwaccel: bool | str) -> tuple[str, list[str]]:
+def sample_random_frame_indices(
+    total_frames: int,
+    num_frames: int = 20,
+    *,
+    min_distance: int | None = None,
+    seed: int | None = None,
+) -> list[int]:
+    """Select ``num_frames`` distinct frame indices well-spaced across ``total_frames``.
+
+    Uses stratified jittered sampling to ensure frames span the entire video without
+    clustering together.
+    """
+    if num_frames <= 0 or total_frames <= 0:
+        return []
+    if total_frames <= num_frames:
+        return list(range(total_frames))
+
+    rng = random.Random(seed)
+    L = total_frames / num_frames
+
+    # Safety margin inside each stratum to avoid adjacent frames at boundary
+    if min_distance is not None and min_distance > 0:
+        margin = max(1, min_distance // 2)
+    else:
+        margin = max(1, int(L * 0.15))
+
+    frames: list[int] = []
+    for k in range(num_frames):
+        start_k = int(k * L)
+        end_k = int((k + 1) * L) - 1
+        low_k = start_k + margin
+        high_k = end_k - margin
+
+        selected = rng.randint(low_k, high_k) if low_k <= high_k else rng.randint(start_k, end_k)
+        frames.append(selected)
+
+    return sorted(set(frames))
+
+
+def build_fast_frame_command(
+    video_path: str | Path,
+    timestamp_s: float,
+    output_path: str | Path,
+    *,
+    hwaccel: bool | str = "auto",
+    compression_level: int = 1,
+) -> list[str]:
+    """Build fast-seek command for extracting a single frame at timestamp_s."""
+    cmd: list[str] = ["ffmpeg", "-y", "-hide_banner"]
+
+    if hwaccel is False or hwaccel == "cpu":
+        pass
+    elif hwaccel == "cuda":
+        cmd.extend(["-hwaccel", "cuda"])
+    elif hwaccel is True or hwaccel == "auto":
+        cuda_status = get_cuda_status()
+        if cuda_status["ffmpeg_cuda"] and cuda_status["has_nvidia"]:
+            cmd.extend(["-hwaccel", "cuda"])
+        else:
+            cmd.extend(["-hwaccel", "auto"])
+
+    cmd.extend(
+        [
+            "-ss",
+            f"{max(0.0, timestamp_s):.4f}",
+            "-i",
+            str(video_path),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "1",
+            "-pix_fmt",
+            "rgb24",
+            "-compression_level",
+            str(compression_level),
+        ]
+    )
+    if compression_level <= 2:
+        cmd.extend(["-pred", "none"])
+
+    cmd.append(str(output_path))
+    return cmd
+
+
+def _png_video_encoder(
+    codec: str, hwaccel: bool | str, quality: int = 18, gop: int = 1
+) -> tuple[str, list[str]]:
     """Return ``(vcodec, extra_args)`` for PNG → video encoding."""
+    _validate_video_options(30, quality, gop)
     use_nvenc = False
-    if hwaccel in (True, "cuda") or str(codec).endswith("_nvenc"):
+    if (
+        hwaccel is not False
+        and hwaccel != "cpu"
+        and (hwaccel in (True, "cuda") or str(codec).endswith("_nvenc"))
+    ):
         use_nvenc = True
     elif hwaccel == "auto":
         cuda_status = get_cuda_status()
@@ -350,14 +501,17 @@ def _png_video_encoder(codec: str, hwaccel: bool | str) -> tuple[str, list[str]]
             vcodec = "hevc_nvenc"
         else:
             vcodec = "h264_nvenc"
-        extra = ["-preset", "p4", "-tune", "hq"]
+        extra = ["-preset", "p7", "-tune", "hq", "-rc", "vbr", "-cq", str(quality), "-b:v", "0"]
     else:
-        if str(codec) in ("265", "hevc", "h265"):
+        if str(codec) in ("265", "hevc", "h265", "265_nvenc", "hevc_nvenc"):
             vcodec = "libx265"
             extra = ["-x265-params", "log-level=error"]
         else:
             vcodec = "libx264"
             extra = []
+    if not use_nvenc:
+        extra += ["-preset", "slow", "-crf", str(quality)]
+    extra += ["-g", str(gop), "-bf", "0"]
     return vcodec, extra
 
 
@@ -367,48 +521,24 @@ def build_png_to_video_command(
     *,
     fps: float,
     codec: str = "264",
+    quality: int = 18,
+    gop: int = 1,
     hwaccel: bool | str = False,
 ) -> list[str]:
-    vcodec, extra = _png_video_encoder(codec, hwaccel)
-    return [
-        "ffmpeg",
-        "-y",
-        "-hide_banner",
-        "-framerate",
-        str(fps),
-        "-i",
-        str(input_pattern),
-        "-c:v",
-        vcodec,
-        *extra,
-        "-pix_fmt",
-        "yuv420p",
-        str(output_video),
-    ]
-
-
-def build_png_concat_command(
-    list_file: str | Path,
-    output_video: str | Path,
-    *,
-    fps: float,
-    codec: str = "264",
-    hwaccel: bool | str = False,
-) -> list[str]:
-    """Encode a concat-demuxer list of still PNGs. Frame timing lives in the list."""
-    vcodec, extra = _png_video_encoder(codec, hwaccel)
+    _validate_video_options(fps, quality, gop)
+    vcodec, extra = _png_video_encoder(codec, hwaccel, quality, gop)
     return [
         "ffmpeg",
         "-y",
         "-hide_banner",
         "-f",
-        "concat",
-        "-safe",
+        "image2",
+        "-start_number",
         "0",
-        "-i",
-        str(list_file),
-        "-r",
+        "-framerate",
         str(fps),
+        "-i",
+        str(input_pattern),
         "-c:v",
         vcodec,
         *extra,
@@ -466,27 +596,26 @@ def _pattern_covers_pngs(directory: Path, pattern: str) -> bool:
     return indices == list(range(len(indices)))
 
 
-def _concat_quote(path: Path) -> str:
-    return str(path.resolve()).replace("'", r"'\''")
+def _validate_video_options(fps: float, quality: int, gop: int) -> None:
+    if not math.isfinite(fps) or fps <= 0:
+        raise ValueError("FPS must be finite and > 0")
+    if not isinstance(quality, int) or not 1 <= quality <= 51:
+        raise ValueError("Quality must be an integer between 1 and 51")
+    if not isinstance(gop, int) or gop < 1:
+        raise ValueError("GOP must be a positive integer")
 
 
-def _write_png_concat_list(pngs: list[Path], fps: float, dest: Path) -> Path:
-    """Concat demuxer list. The last file is repeated so FFmpeg keeps that frame."""
-    if fps <= 0:
-        raise ValueError("fps must be > 0")
-    duration = 1.0 / fps
-    lines: list[str] = []
+def _validate_png_dimensions(pngs: list[Path]) -> None:
+    expected = None
     for png in pngs:
-        quoted = _concat_quote(png)
-        lines.append(f"file '{quoted}'")
-        lines.append(f"duration {duration:.9f}")
-    if pngs:
-        lines.append(f"file '{_concat_quote(pngs[-1])}'")
-    fd, name = tempfile.mkstemp(prefix="vaila_png_concat_", suffix=".txt", dir=dest)
-    os.close(fd)
-    list_path = Path(name)
-    list_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return list_path
+        with Image.open(png) as image:
+            size = image.size
+        if expected is None:
+            expected = size
+            if any(d % 2 for d in size):
+                raise ValueError(f"yuv420p requires even dimensions: {png} has {size}")
+        elif size != expected:
+            raise ValueError(f"PNG dimensions differ: {png} has {size}, expected {expected}")
 
 
 def _run_ffmpeg(cmd: list[str]) -> None:
@@ -699,6 +828,168 @@ def extract_select_frames(
     return dest
 
 
+def extract_random_frames_from_video(
+    video_path: str | Path,
+    output_dir: str | Path,
+    *,
+    num_frames: int = 20,
+    min_distance: int | None = None,
+    seed: int | None = None,
+    hwaccel: bool | str = "auto",
+    compression: int = 1,
+    flat: bool = False,
+) -> list[Path]:
+    """Extract ``num_frames`` randomly sampled, non-contiguous frames from one video."""
+    video_path = Path(video_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    details = get_video_details(video_path)
+    fps = details["fps"]
+    total_frames = details["total_frames"]
+
+    frame_indices = sample_random_frame_indices(
+        total_frames, num_frames=num_frames, min_distance=min_distance, seed=seed
+    )
+    if not frame_indices:
+        print(f"Warning: No frames could be sampled from {video_path.name}")
+        return []
+
+    saved_paths: list[Path] = []
+    manifest_rows = ["frame_index,frame_number,timestamp_seconds,filename"]
+
+    for idx, f_num in enumerate(frame_indices):
+        ts = f_num / fps if fps > 0 else 0.0
+        if flat:
+            fname = f"{video_path.stem}_sample_{idx + 1:02d}_f{f_num:06d}.png"
+        else:
+            fname = f"frame_{f_num:06d}.png"
+        out_file = output_dir / fname
+
+        cmd = build_fast_frame_command(
+            video_path,
+            ts,
+            out_file,
+            hwaccel=hwaccel,
+            compression_level=compression,
+        )
+        try:
+            _run_ffmpeg(cmd)
+        except subprocess.CalledProcessError:
+            fallback_cmd = build_fast_frame_command(
+                video_path,
+                ts,
+                out_file,
+                hwaccel=False,
+                compression_level=compression,
+            )
+            _run_ffmpeg(fallback_cmd)
+
+        if out_file.exists():
+            saved_paths.append(out_file)
+            manifest_rows.append(f"{idx + 1},{f_num},{ts:.4f},{fname}")
+
+    if not flat:
+        manifest_path = output_dir / "manifest.csv"
+        manifest_path.write_text("\n".join(manifest_rows) + "\n", encoding="utf-8")
+
+    return saved_paths
+
+
+def extract_random_frames_from_videos(
+    src: str | Path,
+    *,
+    output_dir: str | Path | None = None,
+    num_frames: int = 20,
+    recursive: bool = True,
+    min_distance: int | None = None,
+    seed: int | None = None,
+    hwaccel: bool | str = "auto",
+    compression: int = 1,
+    workers: int | None = None,
+    flat: bool = False,
+) -> Path:
+    """Batch-extract non-contiguous random frames from all videos in ``src``."""
+    src_path = Path(src)
+    if not src_path.exists():
+        raise FileNotFoundError(f"Input path not found: {src_path}")
+
+    videos = list_videos_in_dir(src_path, recursive=recursive)
+    if not videos:
+        raise FileNotFoundError(f"No video files found in {src_path}")
+
+    base_dir = src_path if src_path.is_dir() else src_path.parent
+    dest = Path(output_dir) if output_dir else base_dir / f"vaila_random_samples_{_timestamp()}"
+    dest.mkdir(parents=True, exist_ok=True)
+
+    cuda_info = get_cuda_status()
+    use_cuda = hwaccel == "cuda" or (
+        hwaccel in (True, "auto") and cuda_info["has_nvidia"] and cuda_info["ffmpeg_cuda"]
+    )
+    hw_desc = f"NVIDIA CUDA ({cuda_info['device_name']})" if use_cuda else "CPU Software Decoder"
+
+    if workers is None or workers <= 0:
+        if use_cuda:
+            max_workers = min(len(videos), 4)
+        else:
+            cpu_cores = os.cpu_count() or 4
+            max_workers = min(len(videos), max(1, cpu_cores // 2))
+    else:
+        max_workers = min(len(videos), workers)
+
+    print(
+        "================================================================================\n"
+        f"Starting random frame sampling ({len(videos)} video(s), {num_frames} frames/video)...\n"
+        f"Hardware: {hw_desc}\n"
+        f"Mode: Stratified Random Lossless PNG | Parallel Workers: {max_workers}\n"
+        "================================================================================"
+    )
+
+    t_start = time.time()
+    summary_rows = ["video_name,video_path,sampled_frames,output_folder,status"]
+
+    def _process_one(video: Path) -> tuple[Path, int]:
+        target_dir = dest if flat else dest / f"{video.stem}_random{num_frames}"
+        try:
+            frames = extract_random_frames_from_video(
+                video,
+                target_dir,
+                num_frames=num_frames,
+                min_distance=min_distance,
+                seed=seed,
+                hwaccel=hwaccel,
+                compression=compression,
+                flat=flat,
+            )
+            print(f"  ✓ {video.name}: Extracted {len(frames)} random frames → {target_dir.name}")
+            return video, len(frames)
+        except Exception as exc:
+            print(f"  ✗ {video.name}: Failed ({exc})")
+            return video, 0
+
+    if max_workers > 1 and len(videos) > 1:
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            results = list(executor.map(_process_one, videos))
+    else:
+        results = [_process_one(v) for v in videos]
+
+    total_extracted = sum(count for _, count in results)
+    for vid, count in results:
+        v_out = str(dest if flat else dest / f"{vid.stem}_random{num_frames}")
+        status = "OK" if count > 0 else "FAILED"
+        summary_rows.append(f'"{vid.name}","{vid}",{count},"{v_out}",{status}')
+
+    summary_file = dest / "sampling_summary.csv"
+    summary_file.write_text("\n".join(summary_rows) + "\n", encoding="utf-8")
+
+    t_total = time.time() - t_start
+    print(
+        f"✓ Done. Extracted {total_extracted} frames across {len(videos)} video(s) "
+        f"in {t_total:.2f} s → {dest}"
+    )
+    return dest
+
+
 def _png_dirs_to_process(src: Path, exclude: Path | None = None) -> list[Path]:
     """Immediate subdirs of ``src`` that contain PNGs; or ``src`` itself if it does."""
     dirs: list[Path] = []
@@ -716,31 +1007,18 @@ def _png_dirs_to_process(src: Path, exclude: Path | None = None) -> list[Path]:
     return dirs
 
 
-def _png_dir_encode_command(
-    source: str | Path,
-    output_video: str | Path,
-    *,
-    fps: float,
-    codec: str,
-    hwaccel: bool | str,
-    use_sequence: bool,
-) -> list[str]:
-    if use_sequence:
-        return build_png_to_video_command(
-            source, output_video, fps=fps, codec=codec, hwaccel=hwaccel
-        )
-    return build_png_concat_command(source, output_video, fps=fps, codec=codec, hwaccel=hwaccel)
-
-
 def create_video_from_png(
     src_dir: str | Path,
     *,
     output_dir: str | Path | None = None,
     fps: float = 30.0,
     codec: str = "264",
+    quality: int = 18,
+    gop: int = 1,
     pattern: str = DEFAULT_PATTERN,
     hwaccel: bool | str = "auto",
 ) -> Path:
+    _validate_video_options(fps, quality, gop)
     src_dir = Path(src_dir)
     if not src_dir.is_dir():
         raise FileNotFoundError(f"Not a directory: {src_dir}")
@@ -753,56 +1031,51 @@ def create_video_from_png(
         raise FileNotFoundError(f"No PNG files found under {src_dir}")
 
     cuda_info = get_cuda_status()
-    use_nvenc = hwaccel == "cuda" or (
-        hwaccel in (True, "auto") and cuda_info["has_nvidia"] and cuda_info["ffmpeg_nvenc"]
-    )
+    use_nvenc = _png_video_encoder(codec, hwaccel, quality, gop)[0].endswith("_nvenc")
     enc_desc = f"NVIDIA NVENC ({cuda_info['device_name']})" if use_nvenc else "CPU Software Encoder"
 
     print(f"Creating videos from {len(png_dirs)} PNG folder(s) @ {fps} fps [{enc_desc}]...")
     for png_dir in png_dirs:
         output_video = dest / f"{png_dir.name}.mp4"
-        use_sequence = _pattern_covers_pngs(png_dir, pattern)
-        list_path: Path | None = None
-        if use_sequence:
-            source: str | Path = png_dir / pattern
-        else:
-            pngs = list_pngs_sorted(png_dir)
-            if not pngs:
-                raise FileNotFoundError(f"No PNG files in {png_dir}")
-            print(
-                f"  {png_dir.name}: {len(pngs)} PNG(s) in filename order "
-                f"(no contiguous {pattern} sequence)"
-            )
-            list_path = _write_png_concat_list(pngs, fps, dest)
-            source = list_path
-
+        pngs = list_pngs_sorted(png_dir)
+        _validate_png_dimensions(pngs)
         t0 = time.time()
-        try:
+        with tempfile.TemporaryDirectory(prefix="vaila_png_sequence_", dir=dest) as temp:
+            sequence = Path(temp)
+            for index, png in enumerate(pngs):
+                target = sequence / f"{index:09d}.png"
+                try:
+                    os.link(png, target)
+                except OSError:
+                    shutil.copy2(png, target)
+            source = sequence / DEFAULT_PATTERN
             try:
-                _run_ffmpeg(_png_dir_encode_command(
-                    source,
-                    output_video,
-                    fps=fps,
-                    codec=codec,
-                    hwaccel=hwaccel,
-                    use_sequence=use_sequence,
-                ))
+                _run_ffmpeg(
+                    build_png_to_video_command(
+                        source,
+                        output_video,
+                        fps=fps,
+                        codec=codec,
+                        hwaccel=hwaccel,
+                        quality=quality,
+                        gop=gop,
+                    )
+                )
             except subprocess.CalledProcessError:
-                if use_nvenc:
-                    print("Hardware NVENC encoding failed, falling back to CPU software encoder...")
-                    _run_ffmpeg(_png_dir_encode_command(
+                if not use_nvenc:
+                    raise
+                print("Hardware NVENC encoding failed, falling back to CPU software encoder...")
+                _run_ffmpeg(
+                    build_png_to_video_command(
                         source,
                         output_video,
                         fps=fps,
                         codec=codec,
                         hwaccel=False,
-                        use_sequence=use_sequence,
-                    ))
-                else:
-                    raise
-        finally:
-            if list_path is not None:
-                list_path.unlink(missing_ok=True)
+                        quality=quality,
+                        gop=gop,
+                    )
+                )
         dt = time.time() - t0
         print(f"  video created in {dt:.2f} s: {output_video}")
     print(f"Done. Output: {dest}")
@@ -826,7 +1099,13 @@ def build_cli_argv(
     pattern: str = DEFAULT_PATTERN,
     fps: float = 30.0,
     codec: str = "264",
+    quality: int = 18,
+    gop: int = 1,
     frames: str | None = None,
+    num_frames: int = 20,
+    recursive: bool = True,
+    seed: int | None = None,
+    flat: bool = False,
     hwaccel: str = "auto",
     compression: int = 1,
     workers: int | None = None,
@@ -834,7 +1113,7 @@ def build_cli_argv(
     argv = ["uv", "run", "vaila/extractpng.py", mode, "-i", input_path]
     if output_path:
         argv.extend(["-o", output_path])
-    if hwaccel and hwaccel != "auto":
+    if mode != "create" and hwaccel and hwaccel != "auto":
         argv.extend(["--hwaccel", hwaccel])
     if mode == "extract":
         if pattern != DEFAULT_PATTERN:
@@ -844,11 +1123,38 @@ def build_cli_argv(
         if workers:
             argv.extend(["--workers", str(workers)])
     elif mode == "create":
-        argv.extend(["--fps", str(fps), "--codec", str(codec)])
+        _validate_video_options(fps, quality, gop)
+        argv.extend(
+            [
+                "--fps",
+                str(fps),
+                "--codec",
+                str(codec),
+                "--quality",
+                str(quality),
+                "--gop",
+                str(gop),
+                "--hwaccel",
+                hwaccel,
+            ]
+        )
         if pattern != DEFAULT_PATTERN:
             argv.extend(["--pattern", pattern])
     elif mode == "frames" and frames:
         argv.extend(["--frames", frames])
+    elif mode in ("sample", "random"):
+        if num_frames != 20:
+            argv.extend(["-n", str(num_frames)])
+        if not recursive:
+            argv.append("--no-recursive")
+        if seed is not None:
+            argv.extend(["--seed", str(seed)])
+        if flat:
+            argv.append("--flat")
+        if compression != 1:
+            argv.extend(["--compression", str(compression)])
+        if workers:
+            argv.extend(["--workers", str(workers)])
     return argv
 
 
@@ -880,10 +1186,15 @@ class ExtractPngApp:
         self.pattern_var = tk.StringVar(value=DEFAULT_PATTERN)
         self.fps_var = tk.StringVar(value="30")
         self.codec_var = tk.StringVar(value="264")
+        self.quality_var = tk.StringVar(value="18")
+        self.gop_var = tk.StringVar(value="1")
         self.frames_var = tk.StringVar(value="0,3,5")
         self.hwaccel_var = tk.StringVar(value="auto")
         self.compression_var = tk.StringVar(value="1")
         self.workers_var = tk.StringVar(value="auto")
+        self.num_frames_var = tk.StringVar(value="20")
+        self.recursive_var = tk.BooleanVar(value=True)
+        self.flat_var = tk.BooleanVar(value=False)
         self.status_var = tk.StringVar(value="Choose a mode, set paths, then Run.")
 
         self._build()
@@ -922,6 +1233,7 @@ class ExtractPngApp:
             ("extract", "Video → PNG"),
             ("create", "PNG → Video"),
             ("frames", "Select frames"),
+            ("sample", "Random sample"),
         ):
             ttk.Radiobutton(
                 mode_row,
@@ -983,6 +1295,11 @@ class ExtractPngApp:
             state="readonly",
         )
 
+        self.quality_label = ttk.Label(self.options_frame, text="Quality (1–51):")
+        self.quality_entry = ttk.Entry(self.options_frame, textvariable=self.quality_var, width=8)
+        self.gop_label = ttk.Label(self.options_frame, text="GOP (1 = independent):")
+        self.gop_entry = ttk.Entry(self.options_frame, textvariable=self.gop_var, width=8)
+
         self.fps_label = ttk.Label(self.options_frame, text="FPS:")
         self.fps_entry = ttk.Entry(self.options_frame, textvariable=self.fps_var, width=8)
 
@@ -1001,6 +1318,17 @@ class ExtractPngApp:
         )
         self.frames_label = ttk.Label(self.options_frame, text="Frames (e.g. 0,3,5):")
         self.frames_entry = ttk.Entry(self.options_frame, textvariable=self.frames_var, width=28)
+
+        self.num_frames_label = ttk.Label(self.options_frame, text="Num frames:")
+        self.num_frames_entry = ttk.Entry(
+            self.options_frame, textvariable=self.num_frames_var, width=8
+        )
+        self.recursive_check = ttk.Checkbutton(
+            self.options_frame, text="Recursive subfolders", variable=self.recursive_var
+        )
+        self.flat_check = ttk.Checkbutton(
+            self.options_frame, text="Flat output folder", variable=self.flat_var
+        )
 
         btn_row = ttk.Frame(frm)
         btn_row.grid(row=6, column=0, columnspan=3, sticky="e", padx=10, pady=4)
@@ -1032,6 +1360,10 @@ class ExtractPngApp:
                 "Select a folder of videos. NVIDIA GPU acceleration and Fast Lossless extraction active."
             )
         elif mode == "create":
+            self.quality_label.grid(row=2, column=0, sticky="w", padx=4, pady=2)
+            self.quality_entry.grid(row=2, column=1, sticky="w", padx=4, pady=2)
+            self.gop_label.grid(row=2, column=2, sticky="w", padx=4, pady=2)
+            self.gop_entry.grid(row=2, column=3, sticky="w", padx=4, pady=2)
             self.fps_label.grid(row=0, column=0, sticky="w", padx=4, pady=2)
             self.fps_entry.grid(row=0, column=1, sticky="w", padx=4, pady=2)
             self.codec_label.grid(row=0, column=2, sticky="w", padx=4, pady=2)
@@ -1044,6 +1376,23 @@ class ExtractPngApp:
             self.status_var.set(
                 "Select a folder of PNGs (or subfolders). Any filenames are sorted and encoded. "
                 "NVENC GPU encoding supported."
+            )
+        elif mode == "sample":
+            self.num_frames_label.grid(row=0, column=0, sticky="w", padx=4, pady=2)
+            self.num_frames_entry.grid(row=0, column=1, sticky="w", padx=4, pady=2)
+            self.recursive_check.grid(row=0, column=2, columnspan=2, sticky="w", padx=4, pady=2)
+
+            self.hwaccel_label.grid(row=1, column=0, sticky="w", padx=4, pady=2)
+            self.hwaccel_combo.grid(row=1, column=1, sticky="w", padx=4, pady=2)
+            self.compression_label.grid(row=1, column=2, sticky="w", padx=4, pady=2)
+            self.compression_combo.grid(row=1, column=3, sticky="w", padx=4, pady=2)
+
+            self.workers_label.grid(row=2, column=0, sticky="w", padx=4, pady=2)
+            self.workers_combo.grid(row=2, column=1, sticky="w", padx=4, pady=2)
+            self.flat_check.grid(row=2, column=2, columnspan=2, sticky="w", padx=4, pady=2)
+
+            self.status_var.set(
+                "Select a directory to sample well-spaced random frames from each video (default 20 frames)."
             )
         else:
             self.frames_label.grid(row=0, column=0, sticky="w", padx=4, pady=2)
@@ -1117,6 +1466,9 @@ class ExtractPngApp:
             elif mode == "create":
                 fps = float(self.fps_var.get().strip() or "30")
                 codec = self.codec_var.get().strip() or "264"
+                quality = int(self.quality_var.get())
+                gop = int(self.gop_var.get())
+                _validate_video_options(fps, quality, gop)
                 cli = build_cli_argv(
                     "create",
                     input_path=input_path,
@@ -1124,6 +1476,8 @@ class ExtractPngApp:
                     pattern=pattern,
                     fps=fps,
                     codec=codec,
+                    quality=quality,
+                    gop=gop,
                     hwaccel=hwaccel,
                 )
                 print_gui_cli_mirror("vaila/extractpng", cli)
@@ -1132,10 +1486,49 @@ class ExtractPngApp:
                     output_dir=output_path,
                     fps=fps,
                     codec=codec,
+                    quality=quality,
+                    gop=gop,
                     pattern=pattern,
                     hwaccel=hwaccel,
                 )
                 msg = f"Video creation done:\n{dest}"
+            elif mode == "sample":
+                try:
+                    num_frames = int(self.num_frames_var.get().strip() or "20")
+                except ValueError:
+                    num_frames = 20
+                try:
+                    comp = int(self.compression_var.get().strip() or "1")
+                except ValueError:
+                    comp = 1
+                w_str = self.workers_var.get().strip()
+                workers = int(w_str) if w_str.isdigit() else None
+                recursive = self.recursive_var.get()
+                flat = self.flat_var.get()
+
+                cli = build_cli_argv(
+                    "sample",
+                    input_path=input_path,
+                    output_path=output_path,
+                    num_frames=num_frames,
+                    recursive=recursive,
+                    flat=flat,
+                    hwaccel=hwaccel,
+                    compression=comp,
+                    workers=workers,
+                )
+                print_gui_cli_mirror("vaila/extractpng", cli)
+                dest = extract_random_frames_from_videos(
+                    input_path,
+                    output_dir=output_path,
+                    num_frames=num_frames,
+                    recursive=recursive,
+                    flat=flat,
+                    hwaccel=hwaccel,
+                    compression=comp,
+                    workers=workers,
+                )
+                msg = f"Random frame sampling done:\n{dest}"
             else:
                 frames_text = self.frames_var.get().strip()
                 frames = parse_frame_list(frames_text)
@@ -1199,6 +1592,12 @@ class VideoProcessor:
         app._on_mode_change()
         app.run()
 
+    def sample_random_frames_from_videos(self):
+        app = ExtractPngApp()
+        app.mode.set("sample")
+        app._on_mode_change()
+        app.run()
+
     def run(self):
         run_extractpng_gui()
 
@@ -1248,6 +1647,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p_cr = sub.add_parser("create", help="PNG folders → videos")
     p_cr.add_argument("-i", "--input", required=True, help="Directory with PNG folders")
     p_cr.add_argument("-o", "--output", default=None, help="Output directory")
+    p_cr.add_argument("--quality", type=int, default=18, help="Quality 1–51 (lower is better)")
+    p_cr.add_argument(
+        "--gop", type=int, default=1, help="Keyframe interval (1 = every frame independent)"
+    )
     p_cr.add_argument("--fps", type=float, default=30.0, help="Output FPS")
     p_cr.add_argument(
         "--codec",
@@ -1276,6 +1679,67 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="auto",
         choices=("auto", "cuda", "cpu"),
         help="Hardware acceleration method (CUDA if available)",
+    )
+
+    p_sa = sub.add_parser(
+        "sample",
+        aliases=["random"],
+        help="Extract well-spaced random frames from videos",
+    )
+    p_sa.add_argument("-i", "--input", required=True, help="Directory or video file")
+    p_sa.add_argument("-o", "--output", default=None, help="Output directory")
+    p_sa.add_argument(
+        "-n",
+        "--num-frames",
+        type=int,
+        default=20,
+        help="Number of random frames to extract per video (default: 20)",
+    )
+    p_sa.add_argument(
+        "-r",
+        "--recursive",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Recursively scan subdirectories for video files (default: True)",
+    )
+    p_sa.add_argument(
+        "--min-distance",
+        type=int,
+        default=None,
+        help="Minimum distance (frames) between consecutive sampled frames",
+    )
+    p_sa.add_argument(
+        "--seed",
+        type=int,
+        default=None,
+        help="Random seed for reproducible frame sampling",
+    )
+    p_sa.add_argument(
+        "--flat",
+        action="store_true",
+        default=False,
+        help="Save all sampled PNGs directly in output folder with video name prefix",
+    )
+    p_sa.add_argument(
+        "--hwaccel",
+        default="auto",
+        choices=("auto", "cuda", "cpu"),
+        help="Hardware acceleration method (default auto: uses NVIDIA CUDA if available)",
+    )
+    p_sa.add_argument(
+        "-c",
+        "--compression",
+        type=int,
+        default=1,
+        choices=range(0, 10),
+        help="PNG zlib compression level 0-9 (default 1 for fastest lossless extraction)",
+    )
+    p_sa.add_argument(
+        "-j",
+        "--workers",
+        type=int,
+        default=None,
+        help="Number of parallel workers for multi-video extraction (default: auto)",
     )
 
     return parser
@@ -1308,6 +1772,8 @@ def main(argv: list[str] | None = None) -> int:
             output_dir=args.output,
             fps=args.fps,
             codec=args.codec,
+            quality=args.quality,
+            gop=args.gop,
             pattern=args.pattern,
             hwaccel=args.hwaccel,
         )
@@ -1317,6 +1783,19 @@ def main(argv: list[str] | None = None) -> int:
             parse_frame_list(args.frames),
             output_dir=args.output,
             hwaccel=args.hwaccel,
+        )
+    elif args.command in ("sample", "random"):
+        extract_random_frames_from_videos(
+            args.input,
+            output_dir=args.output,
+            num_frames=args.num_frames,
+            recursive=args.recursive,
+            min_distance=args.min_distance,
+            seed=args.seed,
+            hwaccel=args.hwaccel,
+            compression=args.compression,
+            workers=args.workers,
+            flat=args.flat,
         )
     else:
         parser.print_help()

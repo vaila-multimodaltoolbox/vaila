@@ -24,9 +24,12 @@
 4. **Parallel Multi-Video Batching (`-j` / `--workers`):**
    Extracts folders of multiple videos concurrently using `ThreadPoolExecutor`, fully saturating GPU NVDEC and multi-core CPU pipelines.
 5. **NVIDIA NVENC Video Creation:**
-   Builds MP4 videos from PNG folders at 500+ FPS using `h264_nvenc` or `hevc_nvenc`.
-   A contiguous `%09d` sequence starting at 0 uses the image2 demuxer. Any other names
-   (or gaps) are encoded in natural filename order: `frame_2.png` before `frame_10.png`.
+   Builds MP4 videos from PNG folders at high quality using `h264_nvenc` or `hevc_nvenc`.
+   Every PNG uses a temporary numbered image2 sequence, in natural filename order: `frame_2.png` before `frame_10.png`.
+6. **Stratified Random Frame Sampling (`sample` subcommand):**
+   Extracts $N$ well-spaced, non-contiguous random frames per video (default 20, configurable with `-n`)
+   using stratified jittered sampling to guarantee uniform temporal coverage across the whole timeline
+   without clumping. Supports recursive directory scanning (`--recursive`), parallel workers, and per-video manifest export.
 
 ## GUI
 
@@ -39,9 +42,9 @@ uv run vaila/extractpng.py
 One window:
 
 1. View detected GPU acceleration badge (e.g. `🚀 NVIDIA CUDA: NVIDIA GeForce RTX 4090`).
-2. Choose mode: **Video → PNG** / **PNG → Video** / **Select frames**.
+2. Choose mode: **Video → PNG** / **PNG → Video** / **Select frames** / **Random sample**.
 3. Browse input directory/file (and optional output directory).
-4. Set options (Acceleration mode, PNG Speed/Compression, Workers, Codec).
+4. Set options (Acceleration mode, PNG Speed/Compression, Workers, Codec, Num frames, Recursive).
 5. Click **Run**. Prints copy-paste CLI mirror (`>> vaila/extractpng`).
 
 ## CLI
@@ -58,16 +61,27 @@ uv run vaila/extractpng.py create -i /path/to/png_dirs --fps 30 --codec 264_nven
 
 # Grab select frames with GPU acceleration
 uv run vaila/extractpng.py frames -i VIDEO.mp4 --frames 0,3,5,7 --hwaccel cuda
+
+# Extract 20 well-spaced random frames per video recursively across subdirectories
+uv run vaila/extractpng.py sample -i /path/to/videos -n 20 --recursive
+
+# Flat folder output with custom seed
+uv run vaila/extractpng.py sample -i /path/to/videos -o /path/to/out -n 20 --flat --seed 42
 ```
 
 ## Notes
 
 - FFmpeg `-hwaccel cuda` is an input option placed before `-i`.
-- Default PNG pattern: `%09d.png` (used when extracting, and when a create folder is already that contiguous sequence from 0).
-- **PNG → Video** accepts any directory of `.png` files, or immediate subfolders that contain them. Without a contiguous pattern, every PNG in the folder is sorted by filename and joined into one MP4.
+- Default PNG pattern: `%09d.png` (used when extracting; creation always includes every PNG in natural order).
+- **PNG → Video** accepts any directory of `.png` files, or immediate subfolders that contain them. Every PNG in the folder is sorted by filename and joined into one MP4.
 - Batch extract writes `vaila_extractpng_<timestamp>/<stem>_png/` plus `video_info.txt` containing extraction metrics and hardware profile per video.
+- Random sampling writes `vaila_random_samples_<timestamp>/<stem>_random<N>/frame_<number>.png` and `manifest.csv` per video, plus `sampling_summary.csv` in the output root. Use `--flat` to output all frames into a single flat directory.
 
 ---
 
 **Part of** *vailá* — Multimodal Toolbox
 
+
+## PNG → MP4 quality and independent frames
+
+PNG → MP4 defaults: quality 18 (1–51, lower is better), GOP 1 (every frame independent), no B-frames. CLI: --quality 18 --gop 1. NVENC uses p7/hq VBR CQ; CPU uses slow/CRF. H.264 and H.265 preserve these settings on CPU fallback. Every PNG produces exactly one frame in natural filename order, including gaps and names with spaces. Original dimensions and chosen FPS are preserved; mixed dimensions and odd dimensions incompatible with yuv420p are rejected. MP4/yuv420p remains lossy and cannot restore detail already blurred in the PNG. GOP 1 generally produces larger files.

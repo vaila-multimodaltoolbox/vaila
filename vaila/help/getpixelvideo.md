@@ -932,3 +932,6 @@ Built-in backup system for data safety:
 
 - Version 0.0.7: Basic functionality with zoom and marker modes
 - Version 0.0.6: Initial implementation with video navigation
+
+
+FreeKiki correction: Delete marks only the selected keypoint in the current frame as not visible (Undo supported). Save the session with F4 or close normally. Reopen the original video and Load the original detect CSV/folder, or the corrected dataset/session.json: saved corrections, hidden points, review states and the last frame/keypoint are restored automatically. F9 exports reviewed frames; F4 also preserves unfinished drafts.

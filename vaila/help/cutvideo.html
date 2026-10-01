@@ -25,8 +25,8 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.3.120</p>
-        <p><strong>Updated:</strong> 03 September 2026</p>
+        <p><strong>Version:</strong> 0.4.6</p>
+        <p><strong>Updated:</strong> 30 September 2026</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -41,6 +41,7 @@
 
     <div class="card">
         <h2>Key Updates</h2>
+        <p><strong>Shift+S:</strong> save the displayed frame as a full-resolution PNG with video orientation applied, without overlays or zoom cropping, while paused or playing. Saved beside the video in <code>&lt;video_stem&gt;_frames/&lt;video_stem&gt;_frame_00000001.png</code> (1-based). Saving the same frame again replaces its PNG. The window confirms the filename and the terminal prints the path or error. <strong>S</strong> still marks a cut start when paused.</p>
         <ul>
             <li><strong>Fewer confirmations on the syncvid handoff (v0.3.119):</strong> when <strong>syncvid → Save + Cut Video</strong> launches Cut Video directly, Escape no longer asks "Sync mode detected. Process all videos...?" before rendering &mdash; clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (<code>F</code> key) still asks. The redundant "Sync Processing Complete" dialog was also dropped in favor of the final Success dialog.</li>
             <li><strong>Direct syncvid handoff (v0.3.85):</strong> accepts <code>--video</code> + <code>--sync-file</code>, validates every source, and opens with the synchronized interval preloaded.</li>
@@ -142,7 +143,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 03 September 2026 (v0.3.120 - fewer confirmations on direct syncvid handoff)</p>
+        <p>📅 Last Updated: 30 September 2026 (v0.4.6 - fewer confirmations on direct syncvid handoff)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>
