@@ -2,8 +2,8 @@
 Unit tests for GetPixelVideo unified Save Menu and AI tracking weights integration.
 
 Author: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
-Update Date: 30 September 2026
-Version: 0.4.6
+Update Date: 02 October 2026
+Version: 0.4.7
 """
 
 from __future__ import annotations

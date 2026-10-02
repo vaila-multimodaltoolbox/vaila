@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
-- **Version:** 0.4.6
-- **Updated:** 01 October 2026
+- **Version:** 0.4.7
+- **Updated:** 02 October 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
 - **CLI Interface:** Yes

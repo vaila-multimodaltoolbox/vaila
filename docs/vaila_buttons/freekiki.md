@@ -2,7 +2,7 @@
 
 The **FreeKiki (49 field KPs)** button (Frame B → Soccer Tools) launches `vaila/freekiki.py`.
 
-**Version:** 0.4.6 · **Updated:** 30 September 2026
+**Version:** 0.4.7 · **Updated:** 02 October 2026
 
 ## Overview
 

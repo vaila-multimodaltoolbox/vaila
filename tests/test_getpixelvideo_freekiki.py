@@ -1,7 +1,7 @@
 """FreeKiki human review, completeness gate, label queue and train/hard ingest.
 
-Version: 0.4.6
-Update Date: 01 October 2026
+Version: 0.4.7
+Update Date: 02 October 2026
 """
 
 import csv

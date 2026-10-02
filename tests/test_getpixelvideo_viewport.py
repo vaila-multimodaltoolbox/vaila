@@ -14,10 +14,10 @@ from vaila.getpixelvideo import (
 
 
 def test_build_stamp_matches_global_release() -> None:
-    assert GETPIXELVIDEO_VERSION == "0.4.6"
-    assert GETPIXELVIDEO_UPDATE_DATE == "30 September 2026"
-    assert "0.4.6" in GETPIXELVIDEO_WINDOW_TITLE
-    assert "30 September 2026" in GETPIXELVIDEO_WINDOW_TITLE
+    assert GETPIXELVIDEO_VERSION == "0.4.7"
+    assert GETPIXELVIDEO_UPDATE_DATE == "02 October 2026"
+    assert "0.4.7" in GETPIXELVIDEO_WINDOW_TITLE
+    assert "02 October 2026" in GETPIXELVIDEO_WINDOW_TITLE
     assert GETPIXELVIDEO_WINDOW_TITLE.startswith("vailá getpixelvideo")
 
 

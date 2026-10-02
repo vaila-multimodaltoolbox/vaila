@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.6
+Version: 0.4.7
 Created: 28 September 2026
-Update Date: 29 September 2026
+Update Date: 02 October 2026
 
 Description:
     Helpers behind ``freekiki.py sizes`` / ``freekiki.py grow`` for the

@@ -4,8 +4,8 @@ YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Create: 10 October 2025
-Update Date: 30 September 2026
-Version: 0.4.6
+Update Date: 02 October 2026
+Version: 0.4.7
 
 Description:
 ------------

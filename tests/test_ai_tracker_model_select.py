@@ -4,8 +4,8 @@ Unit tests for AI Tracker model selection and directory scanning.
 Tests `scan_all_ai_tracker_weights` discovery, ordering, and DeepFeatureExtractor loading.
 
 Author: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
-Update Date: 30 September 2026
-Version: 0.4.6
+Update Date: 02 October 2026
+Version: 0.4.7
 """
 
 from __future__ import annotations

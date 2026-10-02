@@ -4,8 +4,8 @@ Loads canonical JSON presets from ``vaila/skeletons/`` (excluding soccer-field
 layouts, which use the dedicated Soccer-Kiki pitch-guide path). FreeKiki
 (kiki49 review) is a special non-JSON mode listed next to Soccer-Kiki.
 
-Update Date: 30 September 2026
-Version: 0.4.6
+Update Date: 02 October 2026
+Version: 0.4.7
 """
 
 from __future__ import annotations

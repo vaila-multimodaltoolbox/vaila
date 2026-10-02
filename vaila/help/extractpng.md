@@ -4,8 +4,8 @@
 
 - **Category:** Tools
 - **File:** `vaila/extractpng.py`
-- **Version:** 0.4.6
-- **Updated:** 30 September 2026
+- **Version:** 0.4.7
+- **Updated:** 02 October 2026
 - **Author:** Prof. Dr. Paulo R. P. Santiago
 - **GUI Interface:** Yes (one window, Frame C → Video and Image → C_B_r1_c1)
 

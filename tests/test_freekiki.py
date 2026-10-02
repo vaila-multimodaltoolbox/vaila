@@ -1,7 +1,7 @@
 """Tests for vaila/freekiki.py (workspace, dataset, registry, CSV rows, quality metrics).
 
-Update Date: 28 September 2026
-Version: 0.4.6
+Update Date: 02 October 2026
+Version: 0.4.7
 """
 
 from __future__ import annotations

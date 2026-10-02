@@ -1,7 +1,7 @@
 # YouTube Downloader
 
-**Version:** 0.4.6
-**Updated:** 2026-09-30
+**Version:** 0.4.7
+**Updated:** 2026-10-02
 
 Download video as MP4 or audio as MP3 from one editable list. Open **Video and Image → YouTube Downloader** or run the module without CLI inputs.
 

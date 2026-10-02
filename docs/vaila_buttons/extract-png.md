@@ -4,7 +4,7 @@
 **Handler:** `extract_png_from_videos`  
 **Module:** [`vaila/extractpng.py`](../../vaila/extractpng.py)  
 **Help:** [`vaila/help/extractpng.md`](../../vaila/help/extractpng.md) · [HTML](../../vaila/help/extractpng.html)  
-**Version:** 0.4.6 · **Updated:** 30 September 2026
+**Version:** 0.4.7 · **Updated:** 02 October 2026
 
 ## Overview
 

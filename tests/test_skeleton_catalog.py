@@ -1,7 +1,7 @@
 """Tests for vaila.skeleton_catalog (Tpl: pose presets).
 
-Update Date: 30 September 2026
-Version: 0.4.6
+Update Date: 02 October 2026
+Version: 0.4.7
 """
 
 from __future__ import annotations

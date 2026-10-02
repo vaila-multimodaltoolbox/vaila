@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.6
+Version: 0.4.7
 Created: 27 September 2026
-Update Date: 30 September 2026
+Update Date: 02 October 2026
 
 Description:
     Verifiable measurement helpers for ``freekiki.py`` (49-point soccer-field

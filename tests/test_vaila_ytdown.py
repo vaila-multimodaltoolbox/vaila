@@ -1,7 +1,7 @@
 """Unit tests for downloader quality selection.
 
-Version: 0.4.6
-Update Date: 30 September 2026
+Version: 0.4.7
+Update Date: 02 October 2026
 """
 
 from __future__ import annotations
