@@ -4,9 +4,9 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.4.4  
+**Versão:** 0.4.8  
 **Data:** 28 de Maio de 2026  
-**Atualizado:** 18 de Setembro de 2026  
+**Atualizado:** 07 de Outubro de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** *vailá* - Multimodal Toolbox
 
@@ -50,7 +50,7 @@ pip install opencv-python pygame pandas numpy
 ## Começando
 
 1. **Execute o script:** `uv run vaila/getpixelvideo.py` (ou `python vaila/getpixelvideo.py` se o ambiente já estiver configurado)
-2. **Selecione arquivo de vídeo:** Escolha o vídeo para processar
+2. **Selecione a mídia:** Um seletor de arquivo — vídeo, imagem parada (png, jpg, jpeg, bmp, tif, tiff, webp) ou qualquer quadro de uma pasta dessas imagens. O tipo é detectado automaticamente. JPEG, TIFF e WebP com orientação EXIF abrem na orientação da galeria.
 3. **Carregue dados existentes:** Use o botão 'Load' na interface para carregar keypoints (opcional)
 4. **Selecione formato:** Se carregando dados, escolha o formato CSV:
    - **Auto-detectar (recomendado):** Detecta automaticamente o formato

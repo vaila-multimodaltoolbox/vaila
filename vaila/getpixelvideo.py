@@ -6,13 +6,14 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 05 October 2026
-Version: 0.4.7
+Update: 07 October 2026
+Version: 0.4.8
 Python Version: 3.12.14
 
 Description:
 ------------
-Mark and save pixel coordinates on video frames or PNG sequences, with zoom,
+Mark and save pixel coordinates on video frames or still-image sequences
+(PNG, JPEG, BMP, TIFF, WebP), with zoom,
 pan, frame navigation, and multiple marker modes. CSV coordinates are saved as
 integers where applicable. Marker backups go to ``.vaila_markers_history/`` (latest
 100 per video).
@@ -93,7 +94,8 @@ Pose / ML:
 How to use:
 ------------
 1. Run ``uv run vaila/getpixelvideo.py`` (no args opens one file picker), or pass CLI paths.
-   Video / single PNG / PNG sequence are auto-detected (pick any frame in a PNG folder).
+   Video / single still image / image sequence are auto-detected (pick any frame in a
+   folder of PNG, JPEG, BMP, TIFF, or WebP).
 2. Optional: Load existing markers (Load button).
 3. Mark, TAB between slots, **Ctrl+G** to jump to a keypoint number, Save.
 
@@ -116,15 +118,16 @@ Load Track CSV (smart loader, button next to the Load Track CSV button):
     sam_tracks.csv --video VIDEO.mp4 --class-name person``.
 
 CLI (non-exhaustive; ``-h`` / ``--help`` prints a short summary):
-  ``-f, --file`` — video, single ``.png``, or directory of PNG frames (subfolder
-  with PNGs is resolved). ``-d, --dir`` / ``--sequence DIR`` — PNG sequence folder.
+  ``-f, --file`` — video, single still image (png/jpg/jpeg/bmp/tif/tiff/webp),
+  or a directory of those frames (a subfolder with images is resolved).
+  ``-d, --dir`` / ``--sequence DIR`` — still-image sequence folder.
   ``--dataset DIR``, ``--fifa``, ``--fifa-dataset [DIR]``.
 
 Examples::
 
     uv run vaila/getpixelvideo.py --help
     uv run vaila/getpixelvideo.py -f VIDEO.mp4
-    uv run vaila/getpixelvideo.py -d /path/to/png_frames
+    uv run vaila/getpixelvideo.py -d /path/to/image_frames
     uv run vaila/getpixelvideo.py -f VIDEO.mp4 --fifa-dataset /path/to/unified
 
 Key bindings (see in-app **H** help for full list):
@@ -272,7 +275,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.7"
+GETPIXELVIDEO_VERSION = "0.4.8"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 
@@ -284,7 +287,7 @@ def blit_translucent(surface, rect, rgb, alpha: int) -> None:
     surface.blit(box, rect.topleft)
 
 
-GETPIXELVIDEO_UPDATE_DATE = "05 October 2026"
+GETPIXELVIDEO_UPDATE_DATE = "07 October 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -491,14 +494,86 @@ _PYGAME_KP_DIGIT: dict[int, str] = {
 
 
 # ---------------------------------------------------------------------------
-# Frame source abstraction (video, single PNG, PNG sequence)
+# Frame source abstraction (video, single still image, image sequence)
 # ---------------------------------------------------------------------------
+
+STILL_IMAGE_EXTENSIONS = frozenset({".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"})
+_EXIF_ORIENTATION_TAG = 274
+_EXIF_TRANSPOSE_SUFFIXES = frozenset({".jpg", ".jpeg", ".tif", ".tiff", ".webp"})
+
+
+def _is_still_image(name: str) -> bool:
+    """True when ``name`` is a still OpenCV can open (png/jpg/jpeg/bmp/tif/tiff/webp)."""
+    return Path(name).suffix.lower() in STILL_IMAGE_EXTENSIONS
+
+
+def _still_image_dialog_globs() -> str:
+    """Space-separated ``*.ext`` patterns, both cases, for file dialogs."""
+    parts: list[str] = []
+    for ext in sorted(STILL_IMAGE_EXTENSIONS):
+        parts.append(f"*{ext}")
+        parts.append(f"*{ext.upper()}")
+    return " ".join(parts)
+
+
+def _natural_sort_key(s):
+    """Sort key for natural ordering (e.g. 000000001.png, 000000010.jpg)."""
+    parts = re.split(r"(\d+)", str(s))
+    return [int(p) if p.isdigit() else p.lower() for p in parts if p]
+
+
+def _list_still_images(directory: str | Path) -> list[Path]:
+    """Natural-sorted still images directly inside ``directory``."""
+    directory = Path(directory)
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return []
+    return sorted(
+        (directory / name for name in names if _is_still_image(name)),
+        key=_natural_sort_key,
+    )
+
+
+def _imread_exif_oriented(path: Path):
+    """BGR array when EXIF orientation must be applied, else None."""
+    try:
+        from PIL import Image, ImageOps
+    except ImportError:
+        return None
+    try:
+        with Image.open(path) as im:
+            orientation = im.getexif().get(_EXIF_ORIENTATION_TAG)
+            if not orientation or int(orientation) == 1:
+                return None
+            rgb = ImageOps.exif_transpose(im)
+            if rgb is None:
+                return None
+            rgb = rgb.convert("RGB")
+            return cv2.cvtColor(np.asarray(rgb), cv2.COLOR_RGB2BGR)
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def _imread_still(path: str | Path):
+    """Read a still image as BGR.
+
+    PNG and images without a rotated EXIF orientation use ``cv2.imread``.
+    JPEG, TIFF, and WebP with Orientation other than 1 are transposed with
+    Pillow so phone photos match the gallery before measurement.
+    """
+    path = Path(path)
+    if path.suffix.lower() in _EXIF_TRANSPOSE_SUFFIXES:
+        oriented = _imread_exif_oriented(path)
+        if oriented is not None:
+            return oriented
+    return cv2.imread(str(path))
 
 
 class FrameSource:
     """Abstract interface compatible with cv2.VideoCapture for frame access.
 
-    Implementations: video (VideoCapture), single PNG, PNG sequence directory.
+    Implementations: video (VideoCapture), single still image, image sequence directory.
     """
 
     def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
@@ -545,11 +620,11 @@ class VideoFrameSource(FrameSource):
 
 
 class SinglePngFrameSource(FrameSource):
-    """Single PNG file as one-frame source."""
+    """Single still image (png/jpg/jpeg/bmp/tif/tiff/webp) as one-frame source."""
 
     def __init__(self, image_path):
         self._path = Path(image_path)
-        self._frame = cv2.imread(str(self._path))
+        self._frame = _imread_still(self._path)
         self._current = 0
         self._opened = self._frame is not None
 
@@ -582,21 +657,12 @@ class SinglePngFrameSource(FrameSource):
         self._opened = False
 
 
-def _natural_sort_key(s):
-    """Sort key for natural ordering (e.g. 000000001.png, 000000010.png)."""
-    parts = re.split(r"(\d+)", str(s))
-    return [int(p) if p.isdigit() else p.lower() for p in parts if p]
-
-
 class PngSequenceFrameSource(FrameSource):
-    """Directory of PNG files as a frame sequence."""
+    """Directory of still images (png/jpg/jpeg/bmp/tif/tiff/webp) as a frame sequence."""
 
     def __init__(self, directory, start_index: int = 0):
         self._dir = Path(directory)
-        paths = sorted(
-            [self._dir / f for f in os.listdir(self._dir) if f.lower().endswith(".png")],
-            key=_natural_sort_key,
-        )
+        paths = _list_still_images(self._dir)
         self._paths = [str(p) for p in paths]
         n = len(self._paths)
         if n:
@@ -608,7 +674,7 @@ class PngSequenceFrameSource(FrameSource):
         self._height = 0
         if self._paths:
             # Probe dimensions from the start frame (not always frame 0).
-            probe = cv2.imread(self._paths[self._current])
+            probe = _imread_still(self._paths[self._current])
             if probe is not None:
                 self._height, self._width = probe.shape[:2]
 
@@ -618,7 +684,7 @@ class PngSequenceFrameSource(FrameSource):
     def read(self):
         if not self._opened or self._current >= len(self._paths):
             return False, None
-        frame = cv2.imread(self._paths[self._current])
+        frame = _imread_still(self._paths[self._current])
         if frame is None:
             return False, None
         self._current += 1  # Advance so next read() returns next frame (like VideoCapture)
@@ -649,7 +715,8 @@ def create_frame_source(path, source_type, start_index: int = 0):
     """Create a FrameSource from path and source_type.
 
     source_type: "video" | "single_png" | "png_sequence"
-    start_index: initial frame for PNG sequences (ignored otherwise).
+    start_index: initial frame for still-image sequences (ignored otherwise).
+    ``single_png`` / ``png_sequence`` also cover jpg, jpeg, bmp, tif, tiff, and webp.
     """
     if source_type == "video":
         return VideoFrameSource(path)
@@ -661,13 +728,10 @@ def create_frame_source(path, source_type, start_index: int = 0):
 
 
 def _png_sequence_index_for_file(directory: str | Path, selected_file: str | Path) -> int:
-    """Natural-sorted index of ``selected_file`` within PNG frames in ``directory``."""
+    """Natural-sorted index of ``selected_file`` within still frames in ``directory``."""
     directory = Path(directory)
     selected = Path(selected_file)
-    paths = sorted(
-        [directory / f for f in os.listdir(directory) if f.lower().endswith(".png")],
-        key=_natural_sort_key,
-    )
+    paths = _list_still_images(directory)
     selected_name = selected.name
     for i, p in enumerate(paths):
         if p.name == selected_name:
@@ -687,13 +751,15 @@ def _png_sequence_index_for_file(directory: str | Path, selected_file: str | Pat
 
 
 def get_image_sequence_metadata(path, source_type):
-    """Get metadata dict for single PNG or PNG sequence (same shape as get_precise_video_metadata).
+    """Get metadata for a single still or an image sequence (same shape as video metadata).
 
     source_type: "single_png" | "png_sequence"
+    ``codec`` stays ``"png"`` for every still so image-source paths (measure, no audio)
+    stay on for JPEG and the other still extensions.
     """
     path = Path(path)
     if source_type == "single_png":
-        img = cv2.imread(str(path))
+        img = _imread_still(path)
         if img is None:
             return {"fps": 1.0, "width": 0, "height": 0, "nb_frames": 0}
         h, w = img.shape[:2]
@@ -705,11 +771,8 @@ def get_image_sequence_metadata(path, source_type):
             "duration": None,
             "codec": "png",
         }
-    # png_sequence: directory
-    paths = sorted(
-        [path / f for f in os.listdir(path) if f.lower().endswith(".png")],
-        key=_natural_sort_key,
-    )
+    # png_sequence: directory of still images
+    paths = _list_still_images(path)
     nb_frames = len(paths)
     width = height = 0
     fps = 30.0
@@ -731,7 +794,7 @@ def get_image_sequence_metadata(path, source_type):
         except (ValueError, OSError):
             pass
     if (width == 0 or height == 0) and paths:
-        first = cv2.imread(str(paths[0]))
+        first = _imread_still(paths[0])
         if first is not None:
             height, width = first.shape[:2]
     return {
@@ -13319,15 +13382,16 @@ def play_video_with_controls(
                     # Load dataset folder (next Save will append to it; multi-video)
                     load_dataset_folder()
                 elif event.key == pygame.K_F8:
-                    # Open another video (keep dataset if set; no need to close app)
+                    # Open another video or still image (keep dataset if set)
                     start_dir = (
                         os.path.dirname(video_path) if video_path else os.path.expanduser("~")
                     )
+                    still_exts = sorted(STILL_IMAGE_EXTENSIONS)
                     if sys.platform == "linux":
                         new_path = show_file_browser(
                             start_dir,
-                            title="Select another video",
-                            extensions=[".mp4", ".avi", ".mkv", ".mov", ".webm"],
+                            title="Select another video or still image",
+                            extensions=[".mp4", ".avi", ".mkv", ".mov", ".webm", *still_exts],
                         )
                     else:
                         new_path = None
@@ -13337,11 +13401,13 @@ def play_video_with_controls(
                             root = Tk()
                             root.withdraw()
                             root.attributes("-topmost", True)
+                            still_globs = _still_image_dialog_globs()
                             new_path = filedialog.askopenfilename(
-                                title="Select another video",
+                                title="Select another video or still image",
                                 initialdir=start_dir,
                                 filetypes=[
                                     ("Video", "*.mp4 *.avi *.mkv *.mov *.webm"),
+                                    ("Still image", still_globs),
                                     ("All files", "*.*"),
                                 ],
                             )
@@ -17749,16 +17815,15 @@ def _write_pose_data_yaml(
 
 
 def _dir_contains_png_files(directory: str) -> bool:
+    """True when ``directory`` holds at least one still image (historical name)."""
     try:
-        return os.path.isdir(directory) and any(
-            f.lower().endswith(".png") for f in os.listdir(directory)
-        )
+        return os.path.isdir(directory) and any(_is_still_image(f) for f in os.listdir(directory))
     except OSError:
         return False
 
 
 def _resolve_png_sequence_directory(directory: str, *, max_subdirs: int = 500) -> str | None:
-    """Use directory if it contains PNGs, else first immediate subdirectory that does."""
+    """Use directory if it contains stills, else first immediate subdirectory that does."""
     if not directory or not os.path.isdir(directory):
         return None
     if _dir_contains_png_files(directory):
@@ -17780,14 +17845,17 @@ def _resolve_png_sequence_directory(directory: str, *, max_subdirs: int = 500) -
 
 
 def classify_media_path(path: str) -> tuple[str | None, str | None, int]:
-    """Auto-detect video / single PNG / PNG sequence from a file or directory path.
+    """Auto-detect video / single still / image sequence from a file or directory path.
+
+    Still extensions: png, jpg, jpeg, bmp, tif, tiff, webp. Source types stay
+    ``single_png`` and ``png_sequence`` for every still extension.
 
     Rules:
-    - Directory → PNG sequence (this dir or first child with PNGs), start frame 0.
-    - ``.png`` with sibling PNGs (>1) → PNG sequence of the parent folder, starting
+    - Directory → image sequence (this dir or first child with stills), start frame 0.
+    - A still with sibling stills (>1) → image sequence of the parent folder, starting
       at the selected file's natural-sorted index (not always the alphabetically
-      first frame).
-    - Lone ``.png`` → single PNG.
+      first frame). Mixed extensions in one folder share that list.
+    - Lone still → single image.
     - Any other existing file → video.
 
     Returns:
@@ -17800,24 +17868,24 @@ def classify_media_path(path: str) -> tuple[str | None, str | None, int]:
     if os.path.isdir(path):
         resolved = _resolve_png_sequence_directory(path)
         if resolved:
-            count = sum(1 for f in os.listdir(resolved) if f.lower().endswith(".png"))
-            print(f"PNG sequence selected: {resolved} ({count} images)")
+            count = sum(1 for f in os.listdir(resolved) if _is_still_image(f))
+            print(f"Image sequence selected: {resolved} ({count} images)")
             return (resolved, "png_sequence", 0)
-        print(f"Directory has no PNG frames: {path}")
+        print(f"Directory has no still images: {path}")
         return (None, None, 0)
     if not os.path.isfile(path):
         print(f"Path not found: {path}")
         return (None, None, 0)
-    if path.lower().endswith(".png"):
+    if _is_still_image(path):
         parent = os.path.dirname(path)
         try:
-            png_count = sum(1 for f in os.listdir(parent) if f.lower().endswith(".png"))
+            still_count = sum(1 for f in os.listdir(parent) if _is_still_image(f))
         except OSError:
-            png_count = 1
-        if png_count > 1:
+            still_count = 1
+        if still_count > 1:
             start_idx = _png_sequence_index_for_file(parent, path)
             print(
-                f"PNG sequence detected from frame: {parent} ({png_count} images); "
+                f"Image sequence detected from frame: {parent} ({still_count} images); "
                 f"start index {start_idx} ({Path(path).name})"
             )
             return (parent, "png_sequence", start_idx)
@@ -17830,7 +17898,7 @@ def classify_media_path(path: str) -> tuple[str | None, str | None, int]:
 def _get_media_path_linux():
     """Linux-native media selection using zenity to avoid Tkinter/Pygame conflicts.
 
-    Single file dialog — source type is auto-detected (pick any PNG in a sequence folder).
+    Single file dialog — source type is auto-detected (pick any still in a sequence folder).
 
     Returns:
         tuple: (path, source_type, start_frame) or (None, None, 0) if cancelled.
@@ -17840,14 +17908,16 @@ def _get_media_path_linux():
     except (subprocess.CalledProcessError, FileNotFoundError):
         return _get_media_path_terminal()
 
+    still_globs = _still_image_dialog_globs()
+    video_globs = "*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM"
     result = subprocess.run(
         [
             "zenity",
             "--file-selection",
-            "--title=Select video, PNG, or any frame from a PNG sequence folder",
-            "--file-filter=Video files|*.mp4 *.avi *.mov *.mkv *.webm *.MP4 *.AVI *.MOV *.MKV *.WEBM",
-            "--file-filter=PNG image|*.png *.PNG",
-            "--file-filter=All supported|*.mp4 *.avi *.mov *.mkv *.webm *.png",
+            "--title=Select video, still image, or any frame from an image sequence folder",
+            f"--file-filter=Video files|{video_globs}",
+            f"--file-filter=Still image|{still_globs}",
+            f"--file-filter=All supported|{video_globs} {still_globs}",
         ],
         capture_output=True,
         text=True,
@@ -17862,7 +17932,7 @@ def _get_media_path_terminal():
     """Terminal fallback when no GUI dialog is available."""
     try:
         print("\nOpen media - Terminal mode (zenity not available)")
-        print("Enter path to a video, PNG file, or PNG sequence folder (q = cancel)")
+        print("Enter path to a video, still image, or image-sequence folder (q = cancel)")
         path = input("Path: ").strip()
     except EOFError:
         print("No interactive terminal. Install zenity for GUI: sudo apt install zenity")
@@ -17927,11 +17997,11 @@ def ensure_decodable_video(path: str) -> str | None:
 
 
 def get_media_path():
-    """Open one file picker; auto-detect video, single PNG, or PNG sequence.
+    """Open one file picker; auto-detect video, single still, or image sequence.
 
     On Linux, uses zenity to avoid Tkinter/Pygame display conflicts.
-    For a PNG sequence, select any frame in the folder (or pass the folder path
-    via CLI / terminal). The selected PNG becomes the starting frame index.
+    For an image sequence, select any frame in the folder (or pass the folder path
+    via CLI / terminal). The selected still becomes the starting frame index.
 
     Returns:
         tuple: (path, source_type, start_frame) where source_type is
@@ -17949,13 +18019,14 @@ def get_media_path():
         root.attributes("-topmost", True)
         root.update_idletasks()
 
+        still_globs = _still_image_dialog_globs()
         file_types = [
             ("Video Files", "*.mp4 *.MP4 *.avi *.AVI *.mov *.MOV *.mkv *.MKV *.webm *.WEBM"),
-            ("PNG Image", "*.png *.PNG"),
-            ("All supported", "*.mp4 *.avi *.mov *.mkv *.webm *.png"),
+            ("Still image", still_globs),
+            ("All supported", f"*.mp4 *.avi *.mov *.mkv *.webm {still_globs}"),
         ]
         path = filedialog.askopenfilename(
-            title="Select video, PNG, or any frame from a PNG sequence folder",
+            title="Select video, still image, or any frame from an image sequence folder",
             filetypes=file_types,
         )
         root.destroy()
@@ -18000,7 +18071,7 @@ def run_getpixelvideo(
         media_path, source_type = initial_media_path, initial_source_type
         print(f"Using CLI media: {media_path} ({source_type})")
         if source_type == "png_sequence" and start_frame:
-            print(f"PNG sequence start frame index: {start_frame}")
+            print(f"Image sequence start frame index: {start_frame}")
     else:
         media_path, source_type, start_frame = get_media_path()
     if not media_path or not source_type:
@@ -18121,9 +18192,9 @@ if __name__ == "__main__":
     if "-h" in sys.argv or "--help" in sys.argv:
         print(
             "Usage: uv run vaila/getpixelvideo.py [options]\n"
-            "  -f, --file PATH     Video, single PNG, or folder of PNG frames (auto-detect)\n"
-            "  -d, --dir DIR       Folder of PNG frames (same as --sequence; subfolders ok)\n"
-            "  --sequence DIR      Folder of PNG frames\n"
+            "  -f, --file PATH     Video, single still image, or folder of frames (auto-detect)\n"
+            "  -d, --dir DIR       Folder of still images (png/jpg/jpeg/bmp/tif/tiff/webp)\n"
+            "  --sequence DIR      Folder of still images (same as --dir; subfolders ok)\n"
             "  --dataset DIR       YOLO / multi-video dataset root\n"
             "  --fifa / --fifa-dataset [DIR]  FIFA labeling mode\n"
             "  --freekiki  Manual Kiki49 review session\n"
@@ -18231,9 +18302,9 @@ if __name__ == "__main__":
                 initial_source_type = "png_sequence"
                 initial_start_frame = 0
                 if resolved != os.path.abspath(seq_dir):
-                    print(f"PNG sequence: using subdirectory with frames: {resolved}")
+                    print(f"Image sequence: using subdirectory with frames: {resolved}")
             else:
-                print(f"Error: --sequence path has no folder with PNGs: {seq_dir}")
+                print(f"Error: --sequence path has no folder with still images: {seq_dir}")
 
     if initial_media_path is None and ("-d" in sys.argv or "--dir" in sys.argv):
         opt = "-d" if "-d" in sys.argv else "--dir"
@@ -18246,9 +18317,9 @@ if __name__ == "__main__":
                 initial_source_type = "png_sequence"
                 initial_start_frame = 0
                 if resolved != os.path.abspath(seq_dir):
-                    print(f"PNG sequence: using subdirectory with frames: {resolved}")
+                    print(f"Image sequence: using subdirectory with frames: {resolved}")
             else:
-                print(f"Error: {opt} path has no folder with PNGs: {seq_dir}")
+                print(f"Error: {opt} path has no folder with still images: {seq_dir}")
 
     if initial_media_path is None and ("-f" in sys.argv or "--file" in sys.argv):
         opt = "-f" if "-f" in sys.argv else "--file"
