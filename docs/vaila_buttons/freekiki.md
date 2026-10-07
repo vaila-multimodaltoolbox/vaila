@@ -2,7 +2,7 @@
 
 The **FreeKiki (49 field KPs)** button (Frame B → Soccer Tools) launches `vaila/freekiki.py`.
 
-**Version:** 0.4.7 · **Updated:** 02 October 2026
+**Version:** 0.4.7 · **Updated:** 06 October 2026
 
 ## Overview
 
@@ -47,10 +47,28 @@ per-frame camera calibration.
   diagnostic frames, overlay MP4, snapshot PNG and `quality.json` (detection rate, visible kps,
   valid-homography rate, cuts, camera displacement vs residual jitter); folders also get
   `quality_summary.csv`.
+- **Field geometry (Geometry: fill / fix / off in section 5):**
+  - A camera is fitted to the accepted points per frame: a homography; a DLT3D when flags or post
+    tops are seen; otherwise a pinhole camera recovered from the homography.
+  - `fill` adds missing points the network half-sees (G); `fix` also replaces points that disagree
+    with the camera (Gx).
+  - Output: `field_kps_geom_*.csv`. `evaluate` reports network vs fill vs fix on the same labels.
+  - Per-frame calibration: `<video>.dlt2d` (ground homography, for `rec2d.py`) and
+    `<video>.dlt3d` (11 DLT coefficients, for `rec3d.py`), in pitch metres. A blank row means no
+    camera in that frame.
+- **Mining (CLI):** `queue --need p5,p29,p39,p47 --montage` picks, across many detected videos, the
+  frames whose field camera puts those points in the picture (missed by the network first), a few per
+  video. It builds one review video (`montage.mp4` + `montage_frames.csv`); `ingest` then takes one
+  match per source video.
 - **Correct and retrain:** **Correct in getpixelvideo** (section 5), or getpixelvideo **Tpl: → L = FreeKiki
   Load** (point at the run folder; it finds the video), opens the detected video with its labels. Right-click picks a point, left-click places it, Del / Del Range = not visible, F10 accepts a
   ghost, F3 = frame OK, F9 = save dataset folder. Put that folder in section 3 **Corrections** and
   Train. Only complete frames are saved. The CLI keeps `queue`, `ingest` and `--split hard`.
+- **External datasets (`extend`):** converts Roboflow Universe keypoint projects, SoccerNet-GSR and the
+  rejected SoccerNet-calibration images into 49-point labels. A Roboflow project's own keypoint layout is
+  aligned by network votes plus pitch geometry (`mapping.csv`, editable). Frames are staged in
+  `incoming/external_*`, then `--commit` appends them to train only, dropping val/test/hard groups and
+  near-duplicates.
 
 ## Usage
 
@@ -85,6 +103,8 @@ Every button prints its `>>` command in the terminal (`WS` = workspace; CUDA mac
 | Sweep thresholds (val) | `uv run vaila/freekiki.py sweep -w WS --eval-dir EVAL_DIR` |
 | Compare with its slot | `uv run vaila/freekiki.py compare -w WS --candidate BEST.pt` |
 | Model slots | `uv run vaila/freekiki.py models -w WS [--default l]` |
+| External data → Stage | `uv run vaila/freekiki.py extend -w WS --source roboflow --search "class:pitch"` |
+| External data → Preview / Commit | `uv run vaila/freekiki.py extend -w WS --src STAGING [--commit]` |
 | (CLI only) grow m to l | `uv run vaila/freekiki.py grow -w WS --src m --to l --out models/freekiki_l_init.pt` |
 | Audit dataset | `uv run vaila/freekiki.py audit -w WS` |
 | Detect | `uv run vaila/freekiki.py detect -w WS --video VIDEO_OR_FOLDER` |

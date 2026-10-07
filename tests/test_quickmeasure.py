@@ -30,6 +30,7 @@ from vaila.quickmeasure import (
     QuickMeasureError,
     QuickMeasureSession,
     Ref3dCalibrationDraft,
+    draw_calibration_overlay,
     finish_calibration_draft,
     format_hover_coords,
     format_result,
@@ -385,6 +386,27 @@ def test_calibration_draft_line_flow():
     assert math.isclose(calib.scale, 0.5, abs_tol=1e-12)
 
 
+def test_calibration_draft_visual_semantics_and_review_feedback():
+    line = CalibrationDraft(mode="line")
+    assert line.point_roles == ("START", "END")
+    assert line.edge_semantics == ((0, 1, "LENGTH"),)
+    assert line.guide_lines()[1] == "Next: 1 START"
+    line.add_point(0, 0)
+    assert line.guide_lines()[1] == "Next: 2 END"
+    line.add_point(10, 0)
+    assert "Geometry complete" in line.guide_lines()[1]
+    assert "press Enter" in line.instructions()
+
+    plane = CalibrationDraft(mode="plane")
+    assert plane.point_roles == ("ORIGIN", "WIDTH", "OPPOSITE", "CLOSE")
+    assert plane.edge_semantics == (
+        (0, 1, "WIDTH"),
+        (1, 2, "HEIGHT"),
+        (2, 3, "WIDTH"),
+        (3, 0, "HEIGHT"),
+    )
+
+
 def test_calibration_draft_plane_requires_four_points_and_two_measures():
     draft = CalibrationDraft(mode="plane")
     assert draft.required_points == 4
@@ -418,6 +440,49 @@ def test_finish_calibration_draft_prompts_and_builds():
     assert calib is not None
     assert math.isclose(calib.scale, 0.01, abs_tol=1e-12)
     assert "Line calibration" in message
+
+
+def test_finish_plane_calibration_prompts_name_the_labeled_edges():
+    draft = CalibrationDraft(mode="plane", unit_label="m")
+    for point in [(0, 0), (100, 0), (100, 50), (0, 50)]:
+        draft.add_point(*point)
+    prompts = []
+
+    def answer(prompt, default):
+        prompts.append(prompt)
+        return "2" if len(prompts) == 1 else "1"
+
+    calib, _message = finish_calibration_draft(draft, answer)
+    assert calib is not None
+    assert "WIDTH of edges 1-2 and 4-3" in prompts[0]
+    assert "HEIGHT of edges 2-3 and 1-4" in prompts[1]
+
+
+def test_draw_calibration_overlay_supports_every_line_and_plane_stage():
+    pygame = pytest.importorskip("pygame")
+    pygame.font.init()
+    font = pygame.font.Font(None, 18)
+
+    for mode, points in (
+        ("line", [(100, 120), (300, 120)]),
+        ("plane", [(100, 120), (300, 120), (300, 280), (100, 280)]),
+    ):
+        draft = CalibrationDraft(mode=mode)
+        for stage in range(len(points) + 1):
+            surface = pygame.Surface((800, 500))
+            surface.fill((0, 0, 0))
+            draw_calibration_overlay(
+                surface,
+                draft,
+                1.0,
+                0,
+                0,
+                font,
+                cursor_pos=(420, 320),
+            )
+            assert surface.get_bounding_rect().width > 0
+            if stage < len(points):
+                draft.add_point(*points[stage])
 
 
 def test_finish_calibration_draft_cancel_and_invalid_and_incomplete():

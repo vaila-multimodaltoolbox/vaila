@@ -1,7 +1,7 @@
 """Unit tests for getpixelvideo VISUAL/INSERT undo and restore helpers.
 
 Version: 0.4.7
-Update Date: 02 October 2026
+Update Date: 05 October 2026
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from vaila.getpixelvideo import (
 
 def test_version_stamp_0_4_7() -> None:
     assert GETPIXELVIDEO_VERSION == "0.4.7"
-    assert GETPIXELVIDEO_UPDATE_DATE == "02 October 2026"
+    assert GETPIXELVIDEO_UPDATE_DATE == "05 October 2026"
 
 
 def test_clone_marker_editor_state_is_deep() -> None:

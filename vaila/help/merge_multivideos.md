@@ -6,8 +6,8 @@
 - **File:** `vaila\merge_multivideos.py`
 - **Lines:** 2172
 - **Size:** 89274 characters
-- **Version:** 0.4.5
-- **Updated:** 24 September 2026
+- **Version:** 0.4.7
+- **Updated:** 04 October 2026
 - **Author:** Paulo R. P. Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -41,6 +41,7 @@ Key Features:
 - Preview of selected videos and their order
 - Ability to reorder videos before processing
 - Detailed console output for tracking progress and handling errorrs
+- When the merge ends, the window stays on **Finished** (full bar, output path) or **Failed**, and the terminal prints a `>> vaila/merge_multivideos: DONE` or `FAILED` banner
 - Crea...
 
 ## 🔧 Main Functions

@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.7
 Created: 25 September 2026
-Update Date: 02 October 2026
+Update Date: 06 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -232,6 +232,9 @@ DEFAULT_SETTINGS = {
         "patience": 30,
     },
     "detect": {"conf": 0.25, "kp_conf": 0.5, "imgsz": 1280},
+    # Field geometry (freekiki_geom.GEOM_DEFAULTS has every parameter): detect
+    # fills / fixes keypoints with the camera fitted to the accepted ones.
+    "geometry": {"mode": "fill"},
     # new_slot_min_pose_map50_95: an empty size slot (e.g. the first ``l``)
     # takes a YOLO run only above this best-epoch pose mAP50-95.
     "promotion": dict(diag.PROMOTION_DEFAULTS) | {"new_slot_min_pose_map50_95": 0.5},
@@ -624,8 +627,12 @@ def _validate_ingest_label(path: Path) -> int:
     if any(not math.isfinite(v) for v in values):
         raise ValueError(f"{path}: non-finite label value")
     cx, cy, bw, bh = values[:4]
+    eps = 1e-7  # labels keep 8 decimals: a box touching the border can overshoot by 5e-9
     if not (
-        0 < bw <= 1 and 0 < bh <= 1 and bw / 2 <= cx <= 1 - bw / 2 and bh / 2 <= cy <= 1 - bh / 2
+        0 < bw <= 1
+        and 0 < bh <= 1
+        and bw / 2 - eps <= cx <= 1 - bw / 2 + eps
+        and bh / 2 - eps <= cy <= 1 - bh / 2 + eps
     ):
         raise ValueError(f"{path}: invalid bbox")
     visible = 0
@@ -648,8 +655,29 @@ def _validate_ingest_label(path: Path) -> int:
     return visible
 
 
+def montage_rows(src) -> dict[int, dict] | None:
+    """``{montage_frame: row}`` of a montage session's ``montage_frames.csv``, or None."""
+    path = Path(src) / MONTAGE_CSV
+    if not path.is_file():
+        return None
+    with path.open(encoding="utf-8") as f:
+        rows = {int(r["montage_frame"]): r for r in csv.DictReader(f)}
+    for k, r in rows.items():
+        group = (r.get("match") or "").strip()
+        if not group or any(c in group for c in "\r\n,/"):
+            raise ValueError(f"{path}: invalid match {group!r} for montage frame {k}")
+        r["match"] = group
+    return rows
+
+
 def ingest_reviewed(
-    ws, src, match_id: str, *, split: str = "train", commit: bool = False, dup_bits: int = 10
+    ws,
+    src,
+    match_id: str | None,
+    *,
+    split: str = "train",
+    commit: bool = False,
+    dup_bits: int = 10,
 ) -> dict:
     """Validate an entire reviewed session, then append its frames to one split.
 
@@ -657,7 +685,9 @@ def ingest_reviewed(
     that is never trained on). A match lives in one split only: train refuses
     matches of val/test/hard and near-duplicates of their images; hard refuses
     matches of train/val/test and near-duplicates of their images. Every frame
-    must be complete (:func:`completeness_problem`).
+    must be complete (:func:`completeness_problem`). A montage session
+    (``montage_frames.csv``) needs no ``match_id``: each frame takes the match
+    of its source video from that file (``match_id`` overrides it).
     """
     import cv2
     import numpy as np
@@ -666,8 +696,20 @@ def ingest_reviewed(
     src = Path(src).expanduser().resolve()
     if split not in INGEST_SPLITS:
         raise ValueError(f"--split must be one of {INGEST_SPLITS}")
-    if not match_id.strip() or any(c in match_id for c in "\r\n,/"):
+    montage = montage_rows(src)
+    if match_id is None and montage is None:
+        raise ValueError("--match-id is required (only a montage session has a match per frame)")
+    if match_id is not None and (not match_id.strip() or any(c in match_id for c in "\r\n,/")):
         raise ValueError("--match-id must be a nonempty match/sequence identifier")
+
+    def group_of(frame: int) -> str:
+        if match_id is not None:
+            return match_id
+        assert montage is not None
+        if frame not in montage:
+            raise ValueError(f"Montage frame {frame} is missing from {MONTAGE_CSV}")
+        return montage[frame]["match"]
+
     session = load_review_session(src / "session.json")
     if session["session_id"] != src.name:
         raise ValueError("Session directory identity mismatch")
@@ -696,11 +738,10 @@ def ingest_reviewed(
     other_splits = tuple(s for s in ("train", "val", "test", "hard") if s != split)
     reserved_groups = {
         diag.match_key(r["source"], r["group"]) for r in existing if r["split"] in other_splits
-    }
-    if match_id in reserved_groups or any(
-        r["group"] == match_id and r["split"] in other_splits for r in existing
-    ):
-        raise ValueError(f"Match {match_id} already belongs to another split ({other_splits})")
+    } | {r["group"] for r in existing if r["split"] in other_splits}
+    for group in sorted({group_of(int(r["frame"])) for r in incoming}):
+        if group in reserved_groups:
+            raise ValueError(f"Match {group} already belongs to another split ({other_splits})")
     if session.get("export_mode") == "full":
         _log(
             f"ingest: full dataset mode ({len(incoming)} frames, including uncorrected AI predictions)"
@@ -749,6 +790,8 @@ def ingest_reviewed(
         "n_corrected",
         "n_ai",
     ]
+    if montage is not None:
+        extra += ["source_video", "source_frame"]
     for row in incoming:
         frame = int(row["frame"])
         state = session["frames"].get(str(frame), {}).get("state")
@@ -799,7 +842,10 @@ def ingest_reviewed(
             ),
             None,
         )
-        if previous is not None and (previous["group"], previous["split"]) != (match_id, split):
+        if previous is not None and (previous["group"], previous["split"]) != (
+            group_of(frame),
+            split,
+        ):
             raise ValueError(
                 f"Frame {frame} was already ingested as {previous['split']}/{previous['group']}"
             )
@@ -832,12 +878,17 @@ def ingest_reviewed(
                 "image": f"images/{split}/{img.name}",
                 "label": f"labels/{split}/{lbl.name}",
                 "source": "freekiki_review",
-                "group": match_id,
+                "group": group_of(frame),
                 "origin": "human_reviewed",
                 "n_visible": str(n_vis),
                 **{k: row.get(k, "") for k in extra},
             }
         )
+        if montage is not None:
+            new_rows[-1] |= {
+                "source_video": montage[frame]["video"],
+                "source_frame": montage[frame]["frame"],
+            }
         copies.extend(
             (
                 (img, ds / "images" / split / img.name, content[0]),
@@ -856,40 +907,16 @@ def ingest_reviewed(
         "ai_points": sum(int(r["n_ai"] or 0) for r in new_rows),
         "corrected_points": sum(int(r["n_corrected"] or 0) for r in new_rows),
         "sources": {"freekiki_review": len(new_rows)},
-        "match_id": match_id,
+        "match_id": match_id if match_id is not None else "per montage frame",
+        "groups": dict(sorted(Counter(r["group"] for r in new_rows).items())),
         "split": split,
         "committed": False,
     }
     _log(f"ingest preview: {report}")
     if commit:
-        for source, target, expected_sha in copies:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                if file_sha256(target) != expected_sha:
-                    raise ValueError(f"Interrupted copy conflicts with {target}")
-                continue
-            with tempfile.NamedTemporaryFile(
-                dir=target.parent, prefix=".ingest-", delete=False
-            ) as f:
-                tmp = Path(f.name)
-            try:
-                shutil.copy2(source, tmp)
-                if file_sha256(tmp) != expected_sha:
-                    raise ValueError(f"Source changed during ingest: {source}")
-                os.link(tmp, target)  # fails if target appeared; never overwrite it
-            finally:
-                tmp.unlink(missing_ok=True)
-        all_fields = fields + [key for key in extra if key not in fields]
-        with tempfile.NamedTemporaryFile(
-            "w", newline="", encoding="utf-8", dir=ds, prefix=".manifest-", delete=False
-        ) as f:
-            tmp = Path(f.name)
-            writer = csv.DictWriter(f, fieldnames=all_fields, extrasaction="ignore")
-            writer.writeheader()
-            writer.writerows(existing + new_rows)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp, ds / "manifest.csv")
+        _publish_rows(
+            ds, fields + [k for k in extra if k not in fields], existing, new_rows, copies
+        )
         if split == "hard":
             _ensure_yaml_split(ds / "data.yaml", "hard")
         report["committed"] = True
@@ -900,6 +927,467 @@ def ingest_reviewed(
         _log(f"measure: uv run --no-sync vaila/freekiki.py evaluate -w {ws} --split hard --model l")
     else:
         _log(f"train: uv run --no-sync vaila/freekiki.py train -w {ws} --base active")
+    return report
+
+
+def _publish_rows(ds: Path, fields: list[str], existing: list[dict], new_rows, copies) -> None:
+    """Copy ``(source, target, sha256)`` files without ever overwriting, then
+    atomically rewrite ``manifest.csv`` as ``existing + new_rows``.
+
+    Safe to re-run after an interruption: a target already holding the
+    expected bytes is kept; any other existing target aborts.
+    """
+    for source, target, expected_sha in copies:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            if file_sha256(target) != expected_sha:
+                raise ValueError(f"Interrupted copy conflicts with {target}")
+            continue
+        with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".ingest-", delete=False) as f:
+            tmp = Path(f.name)
+        try:
+            shutil.copy2(source, tmp)
+            if file_sha256(tmp) != expected_sha:
+                raise ValueError(f"Source changed during ingest: {source}")
+            os.link(tmp, target)  # fails if target appeared; never overwrite it
+        finally:
+            tmp.unlink(missing_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", newline="", encoding="utf-8", dir=ds, prefix=".manifest-", delete=False
+    ) as f:
+        tmp = Path(f.name)
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(existing + list(new_rows))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, ds / "manifest.csv")
+
+
+# --------------------------------------------------------------------------- #
+# External datasets (super-dataset): stage, then commit to train
+# --------------------------------------------------------------------------- #
+EXTERNAL_SOURCES = ("roboflow", "gsr", "soccernet-rescue")
+EXTERNAL_ROWS = "rows.csv"
+EXTERNAL_FIELDS = (
+    "split",
+    "image",
+    "label",
+    "source",
+    "group",
+    "origin",
+    "n_visible",
+    "aux3d",
+    "qa_score",
+)
+_ORIGIN_COLORS = {1: (0, 255, 0), 2: (255, 200, 0), 3: (0, 165, 255)}  # BGR
+
+
+def _kiki49_build():
+    """``kiki49_build`` package (lazy: scipy / cv2)."""
+    try:
+        from . import kiki49_build as kb
+        from .kiki49_build import external
+    except ImportError:
+        import kiki49_build as kb  # ty: ignore[unresolved-import]
+        from kiki49_build import external  # ty: ignore[unresolved-import]
+    return kb, external
+
+
+def roboflow_api_key() -> str:
+    """``ROBOFLOW_API_KEY`` from the environment or the repository ``.env``."""
+    key = os.environ.get("ROBOFLOW_API_KEY", "").strip()
+    env = Path(__file__).resolve().parent.parent / ".env"
+    if not key and env.is_file():
+        for line in env.read_text(encoding="utf-8").splitlines():
+            name, _, value = line.partition("=")
+            if name.strip() == "ROBOFLOW_API_KEY":
+                key = value.strip().strip("\"'")
+    if not key:
+        raise ValueError("Set ROBOFLOW_API_KEY (environment or the vaila .env file)")
+    return key
+
+
+def _roboflow_get(path: str, key: str, **params) -> dict:
+    import urllib.parse
+    import urllib.request
+
+    query = urllib.parse.urlencode({"api_key": key, **params})
+    with urllib.request.urlopen(f"https://api.roboflow.com/{path}?{query}", timeout=60) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def roboflow_projects(key: str, search=(), projects=()) -> list[tuple[str, int | None]]:
+    """``[(workspace/project, version or None)]`` from ``--project`` and ``--search`` queries."""
+    _, ext = _kiki49_build()
+    out: dict[str, int | None] = {}
+    for item in projects or ():
+        name, _, ver = str(item).partition("@")
+        out[name.strip("/")] = int(ver) if ver else None
+    for query in [search] if isinstance(search, str) else list(search or ()):
+        for page in range(1, 11):
+            data = _roboflow_get("universe/search", key, q=query, page=page)
+            results = data.get("results") or []
+            for r in results:
+                if ext.is_soccer_project(r):
+                    out.setdefault(r["url"].split("universe.roboflow.com/")[-1].strip("/"), None)
+            if len(results) < int(data.get("page_size") or 12):
+                break
+    return list(out.items())
+
+
+def _latest_version(key: str, project: str) -> int:
+    data = _roboflow_get(project, key)
+    versions = [int(str(v.get("id", "")).rsplit("/", 1)[-1]) for v in data.get("versions", [])]
+    if not versions:
+        raise ValueError(f"{project}: no generated version")
+    return max(versions)
+
+
+def _draw_external_preview(img, kps, origin, path: Path) -> None:
+    import cv2
+
+    canvas = img.copy()
+    r = max(3, canvas.shape[1] // 320)
+    for k in range(len(kps)):
+        if kps[k, 2] > 0:
+            x, y = int(round(kps[k, 0])), int(round(kps[k, 1]))
+            cv2.circle(canvas, (x, y), r, _ORIGIN_COLORS.get(int(origin[k]), (255, 255, 255)), -1)
+            cv2.putText(
+                canvas,
+                str(k),
+                (x + r, y - r),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.4 * r / 3,
+                (255, 255, 255),
+                1,
+                cv2.LINE_AA,
+            )
+    cv2.imwrite(str(path), canvas, [cv2.IMWRITE_JPEG_QUALITY, 85])
+
+
+def stage_external(
+    ws,
+    source: str,
+    *,
+    projects=(),
+    search=(),
+    limit: int | None = None,
+    model: str = "l",
+    kp_conf: float | None = None,
+    root=None,
+) -> Path:
+    """Convert an external dataset into kiki49 labels in a staging folder.
+
+    Writes ``<ws>/incoming/external_<source>_<ts>/`` with ``images/``,
+    ``labels/``, ``rows.csv`` (manifest rows, split train), ``report.md``,
+    ``preview/`` and, for Roboflow, one ``mapping_<project>.csv`` per project.
+    Nothing touches the dataset: ``extend --src <folder> --commit`` does.
+    """
+    import cv2
+    import numpy as np
+
+    if source not in EXTERNAL_SOURCES:
+        raise ValueError(f"--source must be one of {EXTERNAL_SOURCES}")
+    ws = Path(ws).expanduser().resolve()
+    settings = load_settings(ws)
+    kp_conf = float(settings["detect"]["kp_conf"] if kp_conf is None else kp_conf)
+    kb, ext = _kiki49_build()
+    opts = kb.Options()
+    out = ws / "incoming" / f"external_{source.replace('-', '_')}_{datetime.now():%Y%m%d_%H%M%S}"
+    for d in ("images", "labels", "preview"):
+        (out / d).mkdir(parents=True, exist_ok=True)
+    predictor = None
+
+    def predict(img):
+        nonlocal predictor
+        if predictor is None:
+            path = resolve_model(ws, model)
+            _log(f"model: {describe_model(ws, model, path)}")
+            predictor = load_predictor(str(path), fallback_imgsz=settings["detect"]["imgsz"])
+        _, xy, kc = predictor.predict(img)
+        return xy, kc
+
+    rows: list[dict] = []
+    rejects: Counter = Counter()
+    per_group: Counter = Counter()
+    vis_counts = np.zeros(NKP, dtype=int)
+    previews = 0
+    notes: list[str] = []
+
+    def keep(sample, img) -> None:
+        nonlocal previews
+        if isinstance(sample, ext.Reject):
+            rejects[sample.reason] += 1
+            return
+        name = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{sample.source}__{sample.uid}")
+        points = [(float(x), float(y)) if v > 0 else None for x, y, v in np.asarray(sample.kps)]
+        try:
+            line = pose_label_line(points, sample.width, sample.height)
+        except ValueError:
+            rejects["invalid_label"] += 1
+            return
+        img_path, lbl_path = out / "images" / f"{name}.jpg", out / "labels" / f"{name}.txt"
+        if img is None:  # unchanged source image: keep its bytes
+            shutil.copy2(sample.image, img_path)
+        else:  # resized by the loader (e.g. a stretched Roboflow export)
+            cv2.imwrite(str(img_path), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        lbl_path.write_text(line + "\n", encoding="utf-8")
+        n_vis = _validate_ingest_label(lbl_path)
+        vis = np.asarray(sample.kps)[:, 2] > 0
+        vis_counts[vis] += 1
+        per_group[sample.group] += 1
+        rows.append(
+            {
+                "split": "train",
+                "image": f"images/{img_path.name}",
+                "label": f"labels/{lbl_path.name}",
+                "source": sample.source,
+                "group": sample.group,
+                "origin": "".join(str(int(o)) for o in sample.origin),
+                "n_visible": str(n_vis),
+                "aux3d": str(int(bool(sample.aux3d))),
+                "qa_score": f"{float(sample.qa):.4f}",
+            }
+        )
+        rare = any(vis[k] for k in ext.RARE_POINTS)
+        if previews < 16 or (rare and previews < 32):
+            canvas = img if img is not None else cv2.imread(str(img_path))
+            if canvas is not None:
+                _draw_external_preview(
+                    canvas, np.asarray(sample.kps), sample.origin, out / "preview" / f"{name}.jpg"
+                )
+            previews += 1
+
+    if source == "roboflow":
+        key = roboflow_api_key()
+        base = Path(root) if root else kb.DATASET_ROOT / "roboflow"
+        try:
+            from . import fifa_dataset_builder as fdb
+        except ImportError:
+            import fifa_dataset_builder as fdb  # ty: ignore[unresolved-import]
+        for project, version in roboflow_projects(key, search, projects):
+            try:
+                version = version or _latest_version(key, project)
+                export = base / f"{project.replace('/', '__')}__v{version}"
+                _log(f"roboflow: {project} v{version} -> {export}")
+                fdb._download_roboflow_universe(
+                    project, export, api_key=key, version=version, fmt="coco"
+                )
+            except Exception as exc:  # one bad project must not stop the others
+                notes.append(f"- `{project}`: download failed ({exc})")
+                continue
+            items, names = ext.read_coco_clicks(export)
+            if not items:
+                notes.append(f"- `{project}` v{version}: no keypoint annotations")
+                continue
+            mapping_csv = out / f"mapping_{project.replace('/', '__')}.csv"
+            saved = export / ext.MAPPING_CSV
+            aspect, why = ext.pick_aspect(export, items)
+            if saved.is_file():
+                mapping = ext.read_mapping(saved)
+                shutil.copy2(saved, mapping_csv)
+            else:
+                sub = items[:: max(1, len(items) // 150)][:150]
+                xs, ks, wd, cl = [], [], [], []
+                for it in sub:
+                    img, sx = ext.load_image(it, aspect)
+                    if img is None:
+                        continue
+                    xy, kc = predict(img)
+                    if xy is not None:
+                        xy = np.asarray(xy, dtype=float).copy()
+                        xy[:, 0] /= sx
+                    xs.append(xy)
+                    ks.append(kc)
+                    wd.append(it.width * sx)
+                    cl.append(it.clicks)
+                mapping, table = ext.vote_mapping(cl, xs, ks, wd, kp_conf=kp_conf)
+                mapping = ext.geometric_votes([it.clicks for it in items], mapping, table)
+                ext.write_mapping(mapping_csv, table, names)
+                shutil.copy2(mapping_csv, saved)  # reused (and editable) next time
+            if len(mapping) < ext.MIN_MAPPED:
+                notes.append(
+                    f"- `{project}` v{version}: only {len(mapping)} keypoints aligned, skipped"
+                )
+                continue
+            before = len(rows)
+            run = items[:limit] if limit else items
+            for sample, img in ext.roboflow_samples(project, run, mapping, aspect, opts):
+                keep(sample, img)
+            notes.append(
+                f"- `{project}` v{version}: {len(items)} images, {len(mapping)}/{len(names)} "
+                f"keypoints aligned, aspect {aspect:.3f} ({why}), {len(rows) - before} accepted"
+            )
+    elif source == "gsr":
+        base = Path(root) if root else kb.DATASET_ROOT / "soccernet_gsr_2024"
+        clips = ext.gsr_clips(base)
+        if not clips:
+            raise FileNotFoundError(f"No GSR clips (*/SNGS-*/Labels-GameState.json) in {base}")
+        for n, clip in enumerate(clips[:limit] if limit else clips, 1):
+            for sample, img in ext.gsr_samples(clip, opts):
+                keep(sample, img)
+            if n % 10 == 0:
+                _log(f"  {n}/{len(clips)} clips, {len(rows)} frames")
+        notes.append(
+            "- GSR files give a game index, not the SoccerNet match name: the group is "
+            "`gsr:<split>:game<id>` and near-duplicate dedupe is the leakage guard."
+        )
+    else:
+        base = (
+            Path(root)
+            if root
+            else kb.DATASET_ROOT / "soccernet_calibration_2023" / "calibration-2023"
+        )
+        tasks = ext.rescue_tasks(base, limit)
+        for n, task in enumerate(tasks, 1):
+            got = ext.rescue_sample(task, predict, opts, kp_conf=kp_conf)
+            if got is not None:
+                keep(*got)
+            if n % 1000 == 0:
+                _log(f"  {n}/{len(tasks)} images, {len(rows)} rescued")
+
+    with (out / EXTERNAL_ROWS).open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=EXTERNAL_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    names_kp, _ = load_schema()
+    rare = {f"p{k}": int(vis_counts[k]) for k in ext.RARE_POINTS}
+    lines = [
+        f"# External dataset staging: {source}",
+        "",
+        f"Created: {datetime.now():%Y-%m-%d %H:%M:%S}",
+        f"Accepted frames: {len(rows)} | rejected: {sum(rejects.values())} | groups: {len(per_group)}",
+        "",
+        "Rare points: " + ", ".join(f"{k} {v}" for k, v in rare.items()),
+        "",
+        "## Notes",
+        "",
+        *(notes or ["- none"]),
+        "",
+        "## Rejected (reason: count)",
+        "",
+        *[f"- {r}: {c}" for r, c in rejects.most_common()],
+        "",
+        "## Visible keypoints",
+        "",
+        "| kp | name | frames |",
+        "|---|---|---|",
+        *[
+            f"| {'**' if k in ext.RARE_POINTS else ''}p{k}{'**' if k in ext.RARE_POINTS else ''} "
+            f"| {names_kp[k]} | {int(vis_counts[k])} |"
+            for k in range(NKP)
+        ],
+        "",
+        "Labels: annotated (green) points are human; the rest are projected by the fitted "
+        "plane / camera (orange = plane, blue = camera) and passed the line-support gate. "
+        "Licences: see each Roboflow project page (CC BY 4.0 / MIT) and the SoccerNet terms. "
+        "Converters ported from mkvis3d `openbiomech/soccer_field`.",
+    ]
+    (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+    _log(
+        f"extend {source}: {len(rows)} frames staged ({sum(rejects.values())} rejected) | "
+        + " ".join(f"{k}={v}" for k, v in rare.items())
+        + f" -> {out}"
+    )
+    _log(f"commit: uv run --no-sync vaila/freekiki.py extend -w {ws} --src {out} --commit")
+    return out
+
+
+def commit_external(ws, src, *, commit: bool = False, dup_bits: int = 10) -> dict:
+    """Append a staging folder (``stage_external``) to **train**.
+
+    Frames are dropped (not fatal: external data is bulk) when their group is
+    held by val/test/hard, when they are near-duplicates of a val/test/hard
+    image, of a train image or of an earlier staged frame, or identical to a
+    registered image. Without ``commit`` this is a preview.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    import numpy as np
+
+    ws = Path(ws).expanduser().resolve()
+    src = Path(src).expanduser().resolve()
+    ds = dataset_dir(ws)
+    with (src / EXTERNAL_ROWS).open(encoding="utf-8") as f:
+        incoming = list(csv.DictReader(f))
+    with (ds / "manifest.csv").open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fields = list(reader.fieldnames or [])
+        existing = list(reader)
+    dropped: Counter = Counter()
+    reserved_groups = {r["group"] for r in existing if r["split"] != "train"}
+    registered = {Path(r["image"]).name for r in existing}
+    candidates = []
+    for row in incoming:
+        if row["split"] != "train":
+            raise ValueError(f"{src}: external rows must target train")
+        name = Path(row["image"]).name
+        if row["group"] in reserved_groups:
+            dropped["group_reserved_by_val_test_hard"] += 1
+        elif name in registered:
+            dropped["already_registered"] += 1
+        else:
+            _validate_ingest_label(src / row["label"])
+            candidates.append(row)
+    _log(f"hashing {len(existing)} dataset images and {len(candidates)} staged frames")
+    with ThreadPoolExecutor(max_workers=min(16, (os.cpu_count() or 4))) as pool:
+        old_h = list(pool.map(lambda r: diag.dhash_image(ds / r["image"])[0], existing))
+        new_h = list(pool.map(lambda r: diag.dhash_image(src / r["image"])[0], candidates))
+    if any(h is None for h in old_h):
+        raise ValueError("Unreadable dataset image; run check/audit first")
+    reserved = np.array([h for h, r in zip(old_h, existing, strict=True) if r["split"] != "train"])
+    trained = np.array([h for h, r in zip(old_h, existing, strict=True) if r["split"] == "train"])
+    ok = np.array([h is not None for h in new_h], dtype=bool)
+    if not ok.all():
+        dropped["unreadable_image"] += int((~ok).sum())
+    new = np.array([h if h is not None else np.zeros(4, np.uint64) for h in new_h]).reshape(-1, 4)
+    for label, ref in (("near_dup_val_test_hard", reserved), ("near_dup_train", trained)):
+        if len(ref) and len(new):
+            for i, _, _ in diag._near_duplicates(new, ref, dup_bits):
+                if ok[i]:
+                    ok[i] = False
+                    dropped[label] += 1
+    kept_idx: list[int] = []
+    for start in range(0, len(new), 512):  # greedy: the first of near-duplicate staged frames wins
+        for i in range(start, min(start + 512, len(new))):
+            if not ok[i]:
+                continue
+            if kept_idx:
+                d = np.bitwise_count(new[kept_idx] ^ new[i]).sum(axis=1)
+                if int(d.min()) <= dup_bits:
+                    ok[i] = False
+                    dropped["near_dup_staged"] += 1
+                    continue
+            kept_idx.append(i)
+    image_shas = {file_sha256(ds / r["image"]) for r in existing if r["split"] != "train"}
+    new_rows, copies = [], []
+    for i in kept_idx:
+        row = candidates[i]
+        img, lbl = src / row["image"], src / row["label"]
+        isha, lsha = file_sha256(img), file_sha256(lbl)
+        if isha in image_shas:
+            dropped["identical_reserved_image"] += 1
+            continue
+        target = {"image": f"images/train/{img.name}", "label": f"labels/train/{lbl.name}"}
+        new_rows.append({k: row.get(k, "") for k in EXTERNAL_FIELDS} | target)
+        copies += [(img, ds / target["image"], isha), (lbl, ds / target["label"], lsha)]
+    report = {
+        "staged": len(incoming),
+        "frames": len(new_rows),
+        "dropped": dict(dropped.most_common()),
+        "sources": dict(Counter(r["source"] for r in new_rows)),
+        "groups": len({r["group"] for r in new_rows}),
+        "committed": False,
+    }
+    _log(f"extend preview: {report}")
+    if commit and new_rows:
+        _publish_rows(
+            ds, fields + [k for k in EXTERNAL_FIELDS if k not in fields], existing, new_rows, copies
+        )
+        report["committed"] = True
+        _log(f"extend committed: {len(new_rows)} frames -> train")
+        _log(f"check: uv run --no-sync vaila/freekiki.py check -w {ws}")
     return report
 
 
@@ -1223,6 +1711,42 @@ def resolve_model(ws, model: str) -> str:
         if candidate.is_file():
             return str(candidate.resolve())
     return model  # named Ultralytics weights, resolved by yolotrain
+
+
+def describe_model(ws, model: str, path: str | Path | None = None) -> str:
+    """One line saying exactly which network ``model`` is (slot, run, arch, score, SHA-256).
+
+    ``active`` and slot names are resolved through ``[models]`` in freekiki.toml;
+    a file path gets its run name (``runs/<run>/weights``) and its SHA-256.
+    """
+    ws = Path(ws)
+    path = Path(path or resolve_model(ws, model))
+    settings = load_settings(ws)
+    models = settings["models"]
+    slot = models["default"] if model == "active" else _slot_name(str(model))
+    if slot is None:  # a file: is it a slot model or a run checkpoint?
+        slot = next(
+            (
+                name
+                for name in SLOTS
+                if isinstance(models.get(name), dict)
+                and (ws / models[name].get("file", slot_file(name))).resolve() == path.resolve()
+            ),
+            None,
+        )
+    if slot is not None and isinstance(models.get(slot), dict):
+        entry = models[slot]
+        alias = "active -> " if model == "active" else ""
+        default = " (default)" if slot == models["default"] else ""
+        return (
+            f"{alias}slot {slot}{default} = {entry.get('file', slot_file(slot))} | run "
+            f"{entry.get('run') or '?'} | {entry.get('arch') or entry.get('backend', '?')} | "
+            f"val pose mAP50-95 {entry.get('pose_map50_95') or '?'} | "
+            f"sha256 {str(entry.get('sha256', ''))[:12] or '?'}"
+        )
+    run = path.parent.parent.name if path.parent.name == "weights" else "-"
+    sha = file_sha256(path)[:12] if path.is_file() else "?"
+    return f"file {path} | run {run} | sha256 {sha} (not a promoted slot)"
 
 
 def train(
@@ -2230,6 +2754,19 @@ def review_suggestions(session: dict, frame: int, *, min_conf: float = SUGGEST_M
     if row is None:
         return {"status": "few_points", "suspects": [], "suggestions": []}
     comp = review_completeness(session, row)
+    projected = dict(comp["projected"])
+    if comp["status"] in ("complete", "incomplete"):
+        # Flags / post tops: the camera of the labelled points places them too.
+        G = _geom()
+        pts = [p if p is not None else (math.nan, math.nan) for p in row["points"]]
+        labelled = [p is not None for p in row["points"]]
+        model = G.fit_field_camera(pts, labelled, session["width"], session["height"])
+        if model["status"] == "ok" and model.get("P") is not None:
+            proj, inside = G.project_field(model, session["width"], session["height"])
+            _, planar = G._field()
+            for i in range(NKP):
+                if not planar[i] and inside[i] and row["points"][i] is None:
+                    projected[i] = [float(proj[i, 0]), float(proj[i, 1])]
     w, h = float(session["width"]), float(session["height"])
     scale = diag.REF_WIDTH / max(1.0, w)
     hidden = set(row.get("hidden", []))
@@ -2244,7 +2781,7 @@ def review_suggestions(session: dict, frame: int, *, min_conf: float = SUGGEST_M
             if p is not None and float(p[2]) >= min_conf and 0 <= p[0] <= w and 0 <= p[1] <= h
             else None
         )
-        geo = comp["projected"].get(i)
+        geo = projected.get(i)
         conf = float(p[2]) if p is not None and ai is not None else None
         if ai is not None and geo is not None:
             if math.dist(ai, geo) * scale <= SUGGEST_AGREE_PX:
@@ -2256,6 +2793,41 @@ def review_suggestions(session: dict, frame: int, *, min_conf: float = SUGGEST_M
         elif geo is not None:
             suggestions.append({"index": i, "xy": geo, "source": "geometry", "conf": None})
     return {"status": comp["status"], "suspects": comp["suspects"], "suggestions": suggestions}
+
+
+def discard_review_frame(session: dict, frame: int) -> str:
+    """Toggle a bad frame out of the dataset (state ``DISCARDED``) and back.
+
+    Discarding clears its points; the frame is never exported, PageDown and
+    *Next draft* skip it, and an earlier export of it is removed from the
+    session folder (derived files only; the video is untouched). Pressed
+    again, the frame returns to the network draft (``AI_DRAFT``) or to
+    ``UNLABELED``. Returns the new state.
+    """
+    row = review_frame(session, frame)
+    if row["state"] == "DISCARDED":
+        prediction = row.get("prediction")
+        row["points"] = [
+            [p[0], p[1]] if p is not None and p[2] >= row.get("kp_conf", 0.5) else None
+            for p in (prediction or [None] * NKP)
+        ]
+        row["point_sources"] = ["predicted" if p is not None else "absent" for p in row["points"]]
+        row["state"] = "AI_DRAFT" if prediction else "UNLABELED"
+        return row["state"]
+    if row["state"] == "EXPORTED":
+        root = Path(session["session_path"]).parent
+        origin = hashlib.sha256(session["video"].encode()).hexdigest()[:10]
+        stem = f"{Path(session['video']).stem}_{origin}_f{int(frame):08d}"
+        (root / "images" / f"{stem}.png").unlink(missing_ok=True)
+        (root / "labels" / f"{stem}.txt").unlink(missing_ok=True)
+    row.update(
+        state="DISCARDED",
+        points=[None] * NKP,
+        point_sources=["absent"] * NKP,
+        hidden=[],
+        reviewed_at="",
+    )
+    return "DISCARDED"
 
 
 def mark_reviewed(session: dict, frame: int) -> None:
@@ -2469,16 +3041,20 @@ def relocate_review_session(session: dict, folder) -> Path:
                 raise ValueError(f"{folder} holds the session of another video")
         elif any(folder.iterdir()):
             raise ValueError(f"Choose an empty folder for the dataset: {folder}")
+    old_folder = Path(session["session_path"]).resolve().parent
     session["session_path"] = str(target)
     session["session_id"] = folder.name
-    return save_review_session(session)
+    if session.get("dataset_folder"):
+        session["dataset_folder"] = str(folder)
+    path = save_review_session(session)
+    if old_folder != folder and (old_folder / MONTAGE_CSV).is_file():
+        shutil.copy2(old_folder / MONTAGE_CSV, folder / MONTAGE_CSV)  # keeps match per frame
+    return path
 
 
 def default_match_id(session: dict) -> str:
     """Match id for ``ingest`` when none is given: the video stem, lowercase ASCII."""
-    stem = unicodedata.normalize("NFKD", Path(session["video"]).stem.lower())
-    stem = "".join(c for c in stem if not unicodedata.combining(c))
-    return re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", stem)).strip("_") or "match"
+    return _match_from_name(Path(session["video"]).stem)
 
 
 def add_corrections(ws, folders, *, match_id: str | None = None) -> list[dict]:
@@ -2491,8 +3067,9 @@ def add_corrections(ws, folders, *, match_id: str | None = None) -> list[dict]:
     for folder in folders:
         folder = Path(folder).expanduser().resolve()
         session = load_review_session(folder / "session.json")
-        match = match_id or default_match_id(session)
-        _log(f"corrections: {folder} (match {match})")
+        is_montage = (folder / MONTAGE_CSV).is_file()
+        match = match_id or (None if is_montage else default_match_id(session))
+        _log(f"corrections: {folder} (match {match or 'per montage frame'})")
         reports.append(ingest_reviewed(ws, folder, match, split="train", commit=True))
     return reports
 
@@ -2502,6 +3079,44 @@ def _read_readme_video(directory: Path) -> Path | None:
         if line.startswith("video: "):
             return Path(line[7:])
     return None
+
+
+def parse_keypoints(text) -> tuple[int, ...]:
+    """``"p5,p29,39"`` -> ``(5, 29, 39)``; rejects indices outside p0..p48."""
+    out = []
+    for tok in str(text).replace(" ", "").split(","):
+        if not tok:
+            continue
+        num = tok.lower().removeprefix("p")
+        if not num.isdigit() or not 0 <= int(num) < NKP:
+            raise ValueError(f"Unknown keypoint {tok!r} (use p0..p{NKP - 1})")
+        out.append(int(num))
+    if not out:
+        raise ValueError("No keypoint given (e.g. --need p5,p29,p39,p47)")
+    return tuple(dict.fromkeys(out))
+
+
+def _linspace(a: float, b: float, n: int) -> list[float]:
+    return [a] if n <= 1 else [a + (b - a) * k / (n - 1) for k in range(n)]
+
+
+def _pick_spread(tiers: dict[int, list[dict]], per_video: int, min_gap: int) -> list[dict]:
+    """Up to ``per_video`` frames, best tier first, spread over the clip, ``min_gap`` apart."""
+    chosen: list[dict] = []
+    for tier in sorted(tiers):
+        cands = sorted(tiers[tier], key=lambda r: r["frame"])
+        budget = per_video - len(chosen)
+        if budget <= 0 or not cands:
+            continue
+        # Spread first (evenly spaced picks), then fill the gaps left by min_gap.
+        spread = sorted({round(x) for x in _linspace(0, len(cands) - 1, budget)})
+        order = [cands[i] for i in spread] + [c for i, c in enumerate(cands) if i not in spread]
+        for c in order:
+            if len(chosen) >= per_video:
+                break
+            if all(abs(c["frame"] - s["frame"]) >= min_gap for s in chosen):
+                chosen.append(c)
+    return sorted(chosen, key=lambda r: r["frame"])
 
 
 def queue_frames(status_rows, raw_rows, *, per_video: int, min_gap: int, kp_conf: float):
@@ -2540,79 +3155,408 @@ def queue_frames(status_rows, raw_rows, *, per_video: int, min_gap: int, kp_conf
                 **{k: round(c, 4) for k, c in rare.items()},
             }
         )
-    chosen: list[dict] = []
-    for tier in (0, 1, 2):
-        cands = sorted(tiers[tier], key=lambda r: r["frame"])
-        budget = per_video - len(chosen)
-        if budget <= 0 or not cands:
+    return _pick_spread(tiers, per_video, min_gap)
+
+
+def _raw_frame(row: dict):
+    """``(xy (49, 2), conf (49,), box_conf)`` of one ``field_kps_raw.csv`` row, or None."""
+    import numpy as np
+
+    if not row or row.get("p0_x", "") == "":
+        return None
+    xy = np.array([[float(row[f"p{i}_x"]), float(row[f"p{i}_y"])] for i in range(NKP)])
+    kc = np.array([float(row[f"p{i}_conf"]) for i in range(NKP)])
+    box = float(row["box_conf"]) if row.get("box_conf") else float("nan")
+    return xy, kc, box
+
+
+def queue_need_frames(
+    status_rows,
+    raw_rows,
+    need,
+    width: float,
+    height: float,
+    *,
+    per_video: int,
+    min_gap: int,
+    settings: dict | None = None,
+    half_seen: bool = False,
+):
+    """Frames where the needed keypoints are in the picture, for labelling.
+
+    The field camera of each frame (``freekiki_geom``, fitted to the points
+    the network accepted) says whether a needed point lies inside the image,
+    even when the network does not find it:
+      tier 0  camera: needed point inside the image, network misses it;
+      tier 1  no camera, but the network half-sees a needed point
+              (conf >= ``SUGGEST_MIN_CONF``);
+      tier 2  camera: needed point inside, network already accepts it.
+    Frames with none of the needed points are skipped, and tier 1 only comes
+    with ``half_seen`` (reviewers discarded 105 of 105 such frames: without a
+    camera they are mostly adverts, replays and close-ups). Selection as
+    :func:`queue_frames` (spread, ``min_gap`` apart, at most ``per_video``).
+    """
+    G = _geom()
+    names, _ = load_schema()
+    raw = {int(r["frame"]): r for r in raw_rows}
+    tiers: dict[int, list[dict]] = {0: [], 1: [], 2: []}
+    for st in status_rows:
+        frame = int(st["frame"])
+        parsed = _raw_frame(raw.get(frame, {}))
+        if parsed is None:
             continue
-        # Spread first (evenly spaced picks), then fill the gaps left by min_gap.
-        spread = sorted({round(x) for x in _linspace(0, len(cands) - 1, budget)})
-        order = [cands[i] for i in spread] + [c for i, c in enumerate(cands) if i not in spread]
-        for c in order:
-            if len(chosen) >= per_video:
-                break
-            if all(abs(c["frame"] - s["frame"]) >= min_gap for s in chosen):
-                chosen.append(c)
-    return sorted(chosen, key=lambda r: r["frame"])
+        xy, kc, _ = parsed
+        codes = [st.get(f"p{i}", "") for i in range(NKP)]
+        model = G.fit_field_camera(xy, [c == "D" for c in codes], width, height, settings)
+        has_camera = model["status"] == "ok"
+        inside = G.project_field(model, width, height)[1] if has_camera else [False] * NKP
+        seen = [i for i in need if inside[i]]
+        missing = [i for i in seen if codes[i] != "D"]
+        half = [i for i in need if codes[i] != "D" and kc[i] >= SUGGEST_MIN_CONF]
+
+        def label(idx):
+            return " ".join(f"p{i}" for i in idx)
+
+        if missing:
+            tier, reason = 0, f"camera: {label(missing)} in picture, network misses"
+        elif not has_camera and half:
+            if not half_seen:
+                continue
+            tier, reason = 1, f"no camera; network half-sees {label(half)}"
+        elif seen:
+            tier, reason = 2, f"camera: {label(seen)} in picture, network accepts"
+        else:
+            continue
+        tiers[tier].append(
+            {
+                "frame": frame,
+                "tier": tier,
+                "reason": reason,
+                "camera": model["source"] if has_camera else model["status"],
+                "need_inside": label(seen),
+                "need_missing": label(missing),
+                "n_accepted": st.get("n_accepted", ""),
+                **{f"p{i}_conf": round(float(kc[i]), 4) for i in need},
+                "names": " | ".join(names[i] for i in (missing or seen or half)),
+            }
+        )
+    return _pick_spread(tiers, per_video, min_gap)
 
 
-def _linspace(a: float, b: float, n: int) -> list[float]:
-    return [a] if n <= 1 else [a + (b - a) * k / (n - 1) for k in range(n)]
+MONTAGE_CSV = "montage_frames.csv"
+MONTAGE_FPS = 5.0  # montage frames are independent pictures; the rate only sets timestamps
+
+
+def _match_from_name(name: str) -> str:
+    """Match id from a file stem: lowercase ASCII, ``_`` separated.
+
+    Cuts of one video (``<stem>_frame_<a>_to_<b>``, vailá Cut Video) share
+    the match of their source.
+    """
+    stem = unicodedata.normalize("NFKD", str(name).lower())
+    stem = "".join(c for c in stem if not unicodedata.combining(c))
+    stem = re.sub(r"_+", "_", re.sub(r"[^a-z0-9]+", "_", stem)).strip("_")
+    return re.sub(r"_frame_\d+_to_\d+$", "", stem) or "match"
+
+
+class _MontageWriter:
+    """H.264 all-intra writer (exact frame seeking, high quality) with an OpenCV fallback."""
+
+    def __init__(self, path: Path, width: int, height: int, fps: float):
+        import cv2
+
+        self.path, self.proc, self.cv = Path(path), None, None
+        try:
+            try:
+                from .ffmpeg_utils import get_ffmpeg_path
+            except ImportError:
+                from ffmpeg_utils import get_ffmpeg_path  # ty: ignore[unresolved-import]
+            cmd = [
+                get_ffmpeg_path(), "-hide_banner", "-loglevel", "error", "-y",
+                "-f", "rawvideo", "-pix_fmt", "bgr24", "-s", f"{width}x{height}",
+                "-r", f"{fps:g}", "-i", "-", "-an", "-c:v", "libx264", "-preset", "medium",
+                "-crf", "14", "-g", "1", "-bf", "0", "-pix_fmt", "yuv420p", str(self.path),
+            ]  # fmt: skip
+            self.proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+        except (OSError, RuntimeError, FileNotFoundError):
+            self.cv = cv2.VideoWriter(
+                str(self.path),
+                cv2.VideoWriter_fourcc(*"mp4v"),  # ty: ignore[unresolved-attribute]
+                fps,
+                (width, height),
+            )
+
+    def write(self, frame) -> None:
+        if self.proc is not None:
+            assert self.proc.stdin is not None
+            self.proc.stdin.write(frame.tobytes())
+        elif self.cv is not None:
+            self.cv.write(frame)
+
+    def close(self) -> None:
+        if self.proc is not None:
+            assert self.proc.stdin is not None
+            self.proc.stdin.close()
+            if self.proc.wait() != 0:
+                raise RuntimeError(f"ffmpeg could not write the montage: {self.path}")
+        elif self.cv is not None:
+            self.cv.release()
+
+
+def build_montage(ws, items, *, kp_conf: float, folder=None) -> Path:
+    """One review video made of the queued frames of many videos.
+
+    ``items``: ``[(detect_run_dir, video, picked_rows)]``. Every frame is read
+    in order (exact indices), letterboxed to the most common size, and written
+    to ``<folder>/montage.mp4`` (H.264, every frame a key frame). The
+    network predictions are moved to montage pixels and drafted in
+    ``session.json``; ``montage_frames.csv`` maps each montage frame to its
+    source video, frame and ``match`` (one match per source video by default:
+    edit that column to merge clips of the same match). ``ingest`` then
+    groups the frames by that column. Returns the session path.
+    """
+    import cv2
+    import numpy as np
+
+    ws = Path(ws).expanduser().resolve()
+    items = [(Path(r), Path(v), picked) for r, v, picked in items if picked]
+    if not items:
+        raise ValueError("No queued frame to put in a montage")
+    if folder is None:
+        folder = ws / "incoming" / f"montage_{datetime.now():%Y%m%d_%H%M%S}"
+        n = 1
+        while folder.exists():  # two montages in the same second
+            folder = folder.with_name(f"{folder.name.split('-')[0]}-{n}")
+            n += 1
+    folder = Path(folder).expanduser().resolve()
+    folder.mkdir(parents=True, exist_ok=False)
+    sizes: Counter = Counter()
+    for _, video, picked in items:
+        cap = cv2.VideoCapture(str(video))
+        sizes[
+            (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)))
+        ] += len(picked)
+        cap.release()
+    W, H = sizes.most_common(1)[0][0]
+    W, H = W + W % 2, H + H % 2  # H.264 4:2:0 needs even sizes
+    out_video = folder / "montage.mp4"
+    writer = _MontageWriter(out_video, W, H, MONTAGE_FPS)
+    rows, drafts = [], []
+    try:
+        for run, video, picked in items:
+            with (run / "field_kps_raw.csv").open(encoding="utf-8") as f:
+                raw = {int(r["frame"]): r for r in csv.DictReader(f)}
+            readme = (run / "README.txt").read_text(encoding="utf-8").splitlines()
+            sha = next((ln[14:] for ln in readme if ln.startswith("model_sha256: ")), "")
+            info = {int(r["frame"]): r for r in picked}
+            cap = cv2.VideoCapture(str(video))
+            fps = cap.get(cv2.CAP_PROP_FPS) or 0.0
+            idx = 0
+            try:
+                for target in sorted(info):
+                    while idx < target and cap.grab():
+                        idx += 1
+                    ok, img = cap.read() if idx == target else (False, None)
+                    idx += 1
+                    if not ok or img is None:
+                        _log(f"montage: skip {video.name} frame {target} (not readable)")
+                        continue
+                    h0, w0 = img.shape[:2]
+                    scale = min(W / w0, H / h0)
+                    nw, nh = round(w0 * scale), round(h0 * scale)
+                    ox, oy = (W - nw) // 2, (H - nh) // 2
+                    canvas = np.zeros((H, W, 3), np.uint8)
+                    canvas[oy : oy + nh, ox : ox + nw] = (
+                        img
+                        if (nw, nh) == (w0, h0)
+                        else cv2.resize(
+                            img,
+                            (nw, nh),
+                            interpolation=cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC,
+                        )
+                    )
+                    writer.write(canvas)
+                    k = len(rows)
+                    drafts.append((k, _raw_frame(raw.get(target, {})), scale, ox, oy, sha))
+                    rows.append(
+                        {
+                            "montage_frame": k,
+                            "match": _match_from_name(video.stem),
+                            "video": str(video),
+                            "frame": target,
+                            "time_s": round(target / fps, 3) if fps else "",
+                            "scale": round(scale, 6),
+                            "offset_x": ox,
+                            "offset_y": oy,
+                            "tier": info[target].get("tier", ""),
+                            "reason": info[target].get("reason", ""),
+                            "run": str(run),
+                        }
+                    )
+            finally:
+                cap.release()
+    finally:
+        writer.close()
+    cap = cv2.VideoCapture(str(out_video))
+    n_written = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    if n_written != len(rows):
+        raise RuntimeError(f"Montage has {n_written} frames, expected {len(rows)}: {out_video}")
+    session = new_review_session(out_video, W, H, MONTAGE_FPS, session_path=folder / "session.json")
+    session["dataset_folder"] = str(folder)  # F9 exports here, next to montage_frames.csv
+    for k, parsed, scale, ox, oy, sha in drafts:
+        if parsed is None:
+            continue
+        xy, kc, box = parsed
+        apply_review_prediction(
+            session,
+            k,
+            xy * scale + (ox, oy),
+            kc,
+            sha,
+            kp_conf=kp_conf,
+            box_conf=None if not math.isfinite(box) else box,
+        )
+    diag.write_csv(folder / MONTAGE_CSV, rows)
+    return save_review_session(session)
+
+
+def already_queued(ws) -> set[tuple[Path, int]]:
+    """Source ``(video, frame)`` pairs already labelled or put in a montage.
+
+    Read from the dataset manifest (``source_video`` / ``source_frame``,
+    ``video`` / ``frame``) and from every ``incoming/*/montage_frames.csv``,
+    so a new queue never offers the same picture twice.
+    """
+    ws = Path(ws)
+    out: set[tuple[Path, int]] = set()
+
+    def add(video, frame):
+        if video and str(frame).strip().lstrip("-").isdigit():
+            out.add((Path(video).expanduser().resolve(), int(frame)))
+
+    manifest = dataset_dir(ws) / "manifest.csv"
+    if manifest.is_file():
+        with manifest.open(encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                add(r.get("source_video"), r.get("source_frame", ""))
+                add(r.get("video"), r.get("frame", ""))
+    for path in (ws / "incoming").glob(f"*/{MONTAGE_CSV}"):
+        with path.open(encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                add(r.get("video"), r.get("frame", ""))
+    return out
 
 
 def build_label_queue(
-    ws, batch, *, per_video: int = 25, min_gap: int = 5, kp_conf: float | None = None
+    ws,
+    batch,
+    *,
+    per_video: int | None = None,
+    min_gap: int | None = None,
+    kp_conf: float | None = None,
+    need=None,
+    montage: bool = False,
+    half_seen: bool = False,
 ) -> list[Path]:
-    """One review session per video of a detect output/batch, drafting only queued frames.
+    """Review sessions with only the frames worth labelling drafted.
 
-    Frames come from :func:`queue_frames`. Each session is saved under
-    ``<ws>/incoming/<session>/`` with ``queue.csv``; getpixelvideo's
-    PageUp/PageDown then walks exactly the queued frames. Which split the
-    labels feed (train or the hard holdout) is decided later, at ``ingest``.
+    ``batch``: one or more detect outputs / batch folders. Without ``need``
+    the frames come from :func:`queue_frames` (default 25 per video); with
+    ``need`` (keypoint indices, e.g. 5, 29, 39, 47) from
+    :func:`queue_need_frames` (default 5 per video: many videos, few frames
+    each). One session per video under ``<ws>/incoming/<session>/`` with
+    ``queue.csv``, or with ``montage`` a single session of all the frames
+    (:func:`build_montage`). getpixelvideo's PageUp/PageDown walks exactly
+    the queued frames; the split (train or the hard holdout) is chosen at
+    ``ingest``.
     """
     import cv2
 
     ws = Path(ws).expanduser().resolve()
-    batch = Path(batch).expanduser().resolve()
-    kp_conf = float(load_settings(ws)["detect"]["kp_conf"] if kp_conf is None else kp_conf)
-    outputs = (
-        [batch]
-        if (batch / "README.txt").is_file()
-        else [p for p in _detect_run_children(batch) if (p / "README.txt").is_file()]
-    )
+    batches = [batch] if isinstance(batch, (str, Path)) else list(batch)
+    settings = load_settings(ws)
+    kp_conf = float(settings["detect"]["kp_conf"] if kp_conf is None else kp_conf)
+    need = None if need is None else tuple(need)
+    per_video = int(per_video or (5 if need else 25))
+    min_gap = int(min_gap if min_gap is not None else (30 if need else 5))
+    taken = already_queued(ws)  # (video, frame) labelled or in an earlier montage
+    outputs = []
+    for b in batches:
+        b = Path(b).expanduser().resolve()
+        outputs += (
+            [b]
+            if (b / "README.txt").is_file()
+            else [p for p in _detect_run_children(b) if (p / "README.txt").is_file()]
+        )
     if not outputs:
-        raise ValueError(f"No detect output (README.txt) in {batch}")
-    sessions = []
+        raise ValueError(f"No detect output (README.txt) in {', '.join(map(str, batches))}")
+    names, _ = load_schema()
+    sessions, items, done = [], [], set()
     for out in outputs:
         video = _read_readme_video(out)
         if video is None or not video.is_file():
             _log(f"skip {out.name}: video not found ({video})")
             continue
+        if video.resolve() in done:
+            _log(f"skip {out.name}: a newer run of {video.name} is already queued")
+            continue
+        done.add(video.resolve())
         with (out / "field_kps_status.csv").open(encoding="utf-8") as f:
             status_rows = list(csv.DictReader(f))
         with (out / "field_kps_raw.csv").open(encoding="utf-8") as f:
             raw_rows = list(csv.DictReader(f))
-        picked = queue_frames(
-            status_rows, raw_rows, per_video=per_video, min_gap=min_gap, kp_conf=kp_conf
-        )
         cap = cv2.VideoCapture(str(video))
         try:
             w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = float(cap.get(cv2.CAP_PROP_FPS))
         finally:
             cap.release()
+        skip = {f for v, f in taken if v == video.resolve()}
+        if skip:
+            status_rows = [r for r in status_rows if int(r["frame"]) not in skip]
+        if need:
+            picked = queue_need_frames(
+                status_rows, raw_rows, need, w, h, per_video=per_video, min_gap=min_gap,
+                settings=settings["geometry"], half_seen=half_seen,
+            )  # fmt: skip
+            tiers = Counter(r["tier"] for r in picked)
+            summary = (
+                f"camera-visible & missed {tiers[0]}, no camera & half-seen {tiers[1]}, "
+                f"already accepted {tiers[2]}"
+            )
+        else:
+            picked = queue_frames(
+                status_rows, raw_rows, per_video=per_video, min_gap=min_gap, kp_conf=kp_conf
+            )
+            tiers = Counter(r["tier"] for r in picked)
+            summary = f"not calibratable {tiers[0]}, rare low-conf {tiers[1]}, other {tiers[2]}"
+        if not picked:
+            _log(f"queue {video.name}: no frame to label")
+            continue
+        if montage:
+            items.append((out, video, picked))
+            _log(f"queue {video.name}: {len(picked)} frames ({summary}) -> montage")
+            continue
         session = new_review_session(video, w, h, fps, workspace=ws)
         load_raw_review_predictions(
             session, out, kp_conf=kp_conf, frames={r["frame"] for r in picked}
         )
         path = save_review_session(session)
-        diag.write_csv(path.parent / "queue.csv", picked or [{"frame": ""}])
-        tiers = Counter(r["tier"] for r in picked)
+        diag.write_csv(path.parent / "queue.csv", picked)
+        _log(f"queue {video.name}: {len(picked)} frames ({summary}) -> {path}")
+        sessions.append(path)
+    if montage and items:
+        items.sort(key=lambda item: item[1].name)
+        path = build_montage(ws, items, kp_conf=kp_conf)
         _log(
-            f"queue {video.name}: {len(picked)} frames "
-            f"(not calibratable {tiers[0]}, rare low-conf {tiers[1]}, other {tiers[2]}) -> {path}"
+            f"montage: {sum(len(p) for _, _, p in items)} frames from {len(items)} videos -> "
+            f"{path.parent / 'montage.mp4'} (map: {path.parent / MONTAGE_CSV})"
         )
+        sessions.append(path)
+    if need:
+        _log("needed keypoints: " + ", ".join(f"p{i} {names[i]}" for i in need))
+    for path in sessions:
         print_gui_cli_mirror(
             "vaila/getpixelvideo",
             [
@@ -2621,11 +3565,16 @@ def build_label_queue(
             ],
             note="Review the queued frames (then ingest --split train|hard):",
         )  # fmt: skip
-        sessions.append(path)
     _log(
         "review: PageDown/PageUp = next/previous queued frame, F10 = accept ghost, "
-        "Del = hide (not visible), F3 = Mark Reviewed, F9 = export"
+        "Del = hide (not visible), F3 = Frame OK, F9 = save dataset"
     )
+    if montage and items:
+        _log(
+            f"ingest: uv run --no-sync vaila/freekiki.py ingest -w {ws} --src {sessions[-1].parent} "
+            f"(one match per source video from {MONTAGE_CSV}; edit its 'match' column to merge "
+            "clips of the same match)"
+        )
     return sessions
 
 
@@ -3073,6 +4022,7 @@ def evaluate(
     match_px: float = 25.0,
     pck: tuple = (5, 10, 25),
     max_images: int = 0,
+    geom_settings: dict | None = None,
 ) -> Path:
     """Measure a model on a labelled split (default ``val``; ``test`` is for final reports).
 
@@ -3093,6 +4043,7 @@ def evaluate(
     det_conf = float(settings["detect"]["conf"] if det_conf is None else det_conf)
     kp_conf = float(settings["detect"]["kp_conf"] if kp_conf is None else kp_conf)
     model_path = resolve_model(ws, model)
+    _log(f"model: {describe_model(ws, model, model_path)}")
     predictor = load_predictor(
         model_path, imgsz=imgsz, fallback_imgsz=settings["detect"]["imgsz"], device=device
     )
@@ -3142,6 +4093,10 @@ def evaluate(
     )
     scores["images"] = pred["images"].tolist()
     write_scores(out, scores)
+    geometry = evaluate_geometry(
+        pred, out, det_conf=det_conf, kp_conf=kp_conf, match_px=match_px, pck=pck,
+        settings=settings["geometry"] | dict(geom_settings or {}),
+    )  # fmt: skip
     overall, calib = (
         scores["overall"],
         {k: v for k, v in scores["calib"].items() if k != "per_image"},
@@ -3164,6 +4119,7 @@ def evaluate(
         "ultralytics": ultra,
         "keypoints": overall,
         "calib": calib,
+        "geometry": geometry,
         "definitions": METRIC_DEFINITIONS,
     }
     (out / "eval_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -3215,8 +4171,50 @@ def evaluate(
             f"median_err={k['err_median']} swaps(mirror/rot180/other)="
             f"{k['swap_mirror']}/{k['swap_rot180']}/{k['swap_other']}"
         )
+    critical = ("p5", "p29", "p39", "p47")
+    net_kp = {k["kp"]: k for k in scores["per_keypoint"]}
+    _log(
+        "field geometry (same labels; tune min_conf / fix_px on val only): "
+        "recall / precision / PCK10 | p5 p29 p39 p47 recall"
+    )
+    for name, block, per_kp in [("network", overall, net_kp)] + [
+        (mode, geometry[mode]["keypoints"], geometry[mode]["per_keypoint"])
+        for mode in ("fill", "fix")
+    ]:
+        _log(
+            f"  {name:<8s} {block['recall']} / {block['precision']} / {block.get('pck10_all')} | "
+            + " ".join(str(per_kp[k]["recall"]) for k in critical)
+            + ("" if name == "network" else f" | camera {geometry[name]['camera_ok_rate']:.0%}")
+        )
     _log(f"evaluate done -> {out}")
     return out
+
+
+def evaluate_geometry(pred, out: Path, *, det_conf, kp_conf, match_px, pck, settings) -> dict:
+    """Score the network output after field-geometry fill and fix (``freekiki_geom``).
+
+    Writes ``per_keypoint_geom_<mode>.csv``; returns, per mode, the overall
+    keypoint table, a per-keypoint recall/precision map and the camera stats.
+    """
+    G = _geom()
+    result: dict = {"settings": G.GEOM_DEFAULTS | dict(settings)}
+    for mode in ("fill", "fix"):
+        gpred, stats = G.refine_predictions(
+            pred, det_conf=det_conf, kp_conf=kp_conf, mode=mode, settings=settings
+        )
+        gscores = diag.score_predictions(
+            gpred, det_conf=det_conf, kp_conf=kp_conf, match_px=match_px, pck=pck
+        )
+        diag.write_csv(out / f"per_keypoint_geom_{mode}.csv", gscores["per_keypoint"])
+        result[mode] = stats | {
+            "keypoints": gscores["overall"],
+            "calib": {k: v for k, v in gscores["calib"].items() if k != "per_image"},
+            "per_keypoint": {
+                k["kp"]: {"recall": k["recall"], "precision": k["precision"], "n_ref": k["n_ref"]}
+                for k in gscores["per_keypoint"]
+            },
+        }
+    return result
 
 
 def _append_csv(path: Path, row: dict) -> None:
@@ -3486,6 +4484,31 @@ def bench(
     return out
 
 
+def _geom():
+    """``freekiki_geom`` (lazy: it pulls the DLT modules only when needed)."""
+    try:
+        from . import freekiki_geom
+    except ImportError:
+        import freekiki_geom  # ty: ignore[unresolved-import]
+    return freekiki_geom
+
+
+GEOM_ACCEPTED = ("D", "Dg", "G", "Gx")  # codes written to the geometry CSV
+
+
+def _draw_geom(frame, xy, gcodes: list[str]):
+    """Geometry points on top of the overlay: G yellow (filled), Gx orange (replaced)."""
+    import cv2
+
+    colors = {"G": (0, 255, 255), "Gx": (0, 140, 255)}
+    for i, code in enumerate(gcodes):
+        if code in colors and all(map(math.isfinite, xy[i])):
+            p = (int(xy[i][0]), int(xy[i][1]))
+            cv2.circle(frame, p, 6, colors[code], 2)
+            cv2.putText(frame, f"p{i}{code[1:]}", (p[0] + 6, p[1] + 14), 0, 0.4, colors[code], 1)
+    return frame
+
+
 def keypoints_row(frame: int, xy, kconf, kp_conf: float) -> list:
     """One getpixelvideo row: ``frame, p0_x, p0_y, ...``; blanks below ``kp_conf``/NaN."""
     row: list = [frame]
@@ -3643,6 +4666,7 @@ def detect_video(
     fill_gaps: int = 0,
     diag_frames: int = 12,
     cut_threshold: float = 0.4,
+    geom: str | None = None,
 ) -> Path:
     """Detect the 49 field keypoints in a video; returns the output folder.
 
@@ -3651,18 +4675,26 @@ def detect_video(
     rejection reason, per-frame issues (cut, homography status), label-free
     ``quality.json`` and a few annotated ``diag_frames/``. ``fill_gaps`` > 0
     writes separate ``field_kps_filled_*`` CSVs with short gaps (same shot
-    only) linearly interpolated and marked ``I``.
+    only) linearly interpolated and marked ``I``. ``geom`` (fill | fix | off,
+    default from settings) adds the field-geometry CSVs (``freekiki_geom``):
+    the network CSVs above are never changed by it.
     """
     import cv2
     import numpy as np
 
     ws = Path(ws).expanduser().resolve()
     video = Path(video).expanduser().resolve()
-    defaults = load_settings(ws)["detect"]
+    all_settings = load_settings(ws)
+    defaults = all_settings["detect"]
+    geom_settings = all_settings["geometry"]
+    geom_mode = str(geom or geom_settings.get("mode", "fill"))
+    G = _geom() if geom_mode != "off" else None
     conf = float(defaults["conf"] if conf is None else conf)
     kp_conf = float(defaults["kp_conf"] if kp_conf is None else kp_conf)
     stride = max(1, int(stride))
     model_path = resolve_model(ws, model)
+    model_info = describe_model(ws, model, model_path)
+    _log(f"model: {model_info}")
     predictor = load_predictor(
         model_path, imgsz=imgsz, fallback_imgsz=defaults["imgsz"], device=device
     )
@@ -3699,6 +4731,11 @@ def detect_video(
     frames, raw_rows, status_rows, issue_rows = [], [], [], []
     pix_rows, conf_rows, xy_seq, kc_seq, cuts, calib = [], [], [], [], [], []
     all_codes: Counter = Counter()
+    geom_rows, geom_status, geom_kps, dlt2d_rows, dlt3d_rows = [], [], [], [], []
+    geom_codes: Counter = Counter()
+    geom_sources: Counter = Counter()
+    geom_fills: Counter = Counter()
+    geom_fixes: Counter = Counter()
     prev_sig = None
     frame_idx, processed, cut_shots = start, 0, 0
     try:
@@ -3721,6 +4758,42 @@ def detect_video(
             kc_acc = None if kc is None or box_conf < conf else np.where(acc, kc, np.nan)
             xy_acc = None if kc_acc is None else xy
             fit = diag.frame_homography(xy_acc, kc_acc, kp_conf, planar, world, width)
+            gxy, gcodes = None, []
+            if G is not None:
+                gxy, gkc, gcodes, gmodel = (
+                    G.refine_keypoints(
+                        xy, kc, codes, width, height, mode=geom_mode, kp_conf=kp_conf,
+                        settings=geom_settings,
+                    )
+                    if xy is not None and kc_acc is not None
+                    else (xy, kc, list(codes), None)
+                )  # fmt: skip
+                gacc = np.array([c in GEOM_ACCEPTED for c in gcodes])
+                gkc_acc = None if gxy is None else np.where(gacc, gkc, np.nan)
+                geom_rows.append(keypoints_row(frame_idx, gxy, gkc_acc, kp_conf))
+                src = gmodel["source"] if gmodel and gmodel["status"] == "ok" else "none"
+                geom_status.append(
+                    [
+                        frame_idx,
+                        src,
+                        "" if gmodel is None else gmodel["focal_px"] or "",
+                        "" if gmodel is None else gmodel["cam_height_m"] or "",
+                        "" if gmodel is None else gmodel["rmse_px"] or "",
+                    ]
+                    + gcodes
+                )
+                d2, d3 = G.dlt_coefficients(gmodel)
+                dlt2d_rows.append(
+                    [frame_idx] + ([""] * 8 if d2 is None else [f"{v:.10g}" for v in d2])
+                )
+                dlt3d_rows.append(
+                    [frame_idx] + ([""] * 11 if d3 is None else [f"{v:.10g}" for v in d3])
+                )
+                geom_codes.update(gcodes)
+                geom_sources[src] += 1
+                geom_fills.update(f"p{i}" for i, c in enumerate(gcodes) if c == "G")
+                geom_fixes.update(f"p{i}" for i, c in enumerate(gcodes) if c == "Gx")
+                geom_kps.append(int(gacc.sum()))
             frames.append(frame_idx)
             xy_seq.append(xy_acc)
             kc_seq.append(kc_acc)
@@ -3791,6 +4864,8 @@ def detect_video(
                 )
             if writer is not None or processed == snapshot_at:
                 drawn = _draw_overlay(frame, xy_acc, kc_acc, kp_conf, bones)
+                if G is not None and gxy is not None:
+                    drawn = _draw_geom(drawn, gxy, gcodes)
                 if writer is not None:
                     writer.write(drawn)
                 if processed == snapshot_at:
@@ -3826,6 +4901,17 @@ def detect_video(
         status_rows,
     )
     diag.write_csv(out / "frame_issues.csv", issue_rows or [{"frame": "", "issues": ""}])
+    if G is not None:
+        write_rows("field_kps_geom_getpixelvideo.csv", getpixelvideo_header(), geom_rows)
+        write_rows(
+            "field_kps_geom_status.csv",
+            ["frame", "camera", "focal_px", "cam_height_m", "rmse_px"]
+            + [f"p{i}" for i in range(NKP)],
+            geom_status,
+        )
+        # Per-frame field calibration for rec2d.py / rec3d.py (blank row = no camera).
+        write_rows(f"{video.stem}.dlt2d", ["frame"] + [f"p{j}" for j in range(1, 9)], dlt2d_rows)
+        write_rows(f"{video.stem}.dlt3d", ["frame"] + [f"p{j}" for j in range(1, 12)], dlt3d_rows)
     if fill_gaps > 0:
         pts = (
             np.stack(
@@ -3861,9 +4947,10 @@ def detect_video(
     (out / "README.txt").write_text(
         "FreeKiki field keypoints (vailá)\n"
         f"video: {video}\nmodel: {model_path}\nmodel_sha256: {file_sha256(model_path)}\n"
+        f"model_info: {model_info}\n"
         f"dimensions: {width}x{height}\nframes: {processed} (start={start}, "
         f"stride={stride})\ndetection (box) conf: {conf}\nkeypoint conf: {kp_conf}\n"
-        f"imgsz: {imgsz}\nfill gaps: {fill_gaps} frames\n"
+        f"imgsz: {imgsz}\nfill gaps: {fill_gaps} frames\ngeometry: {geom_mode}\n"
         "schema: vaila/models/soccerfield_kiki.csv (p0..p48, 0-based)\n\n"
         "field_kps_getpixelvideo.csv  accepted points only (status D)\n"
         "field_kps_conf.csv           keypoint conf of the accepted box (blank: no box)\n"
@@ -3871,9 +4958,22 @@ def detect_video(
         "field_kps_status.csv         per point code, cut flag, homography status\n"
         "frame_issues.csv             frames with a cut / no box / no valid homography\n"
         "diag_frames/                 annotated frames (green accepted, red rejected)\n"
-        "quality.json                 label-free indicators - NOT accuracy\n\n"
-        "status codes:\n"
+        "quality.json                 label-free indicators - NOT accuracy\n"
+        + (
+            ""
+            if G is None
+            else "field_kps_geom_getpixelvideo.csv  network points + field-geometry fills/fixes\n"
+            "field_kps_geom_status.csv    camera (dlt3d | homography | planar | none), focal,\n"
+            "                             camera height, fit RMSE and per-point codes G/Gx/Dg\n"
+            f"{video.stem}.dlt2d / .dlt3d   per-frame field calibration (8 / 11 DLT coefficients;\n"
+            "                             blank = no camera) for rec2d.py / rec3d.py. World: metres,\n"
+            "                             origin centre spot, x right goal, y top touchline, z up\n"
+            "geometry: a camera fitted to the accepted points says where every keypoint\n"
+            "must be; a geometry point may be occluded (see freekiki_geom.py).\n"
+        )
+        + "\nstatus codes:\n"
         + "".join(f"  {k:<3s} {v}\n" for k, v in POINT_CODES.items())
+        + ("" if G is None else "".join(f"  {k:<3s} {v}\n" for k, v in G.GEOM_CODES.items()))
         + "\nhomography: world (metres, z = 0 points) -> image, RANSAC; ok needs >= 6 inliers,\n"
         "field spread >= 1 m on the minor axis, RMSE <= 6 px@1920 and the non-mirrored\n"
         "orientation (see freekiki_diag.fit_field_homography).\n",
@@ -3884,6 +4984,21 @@ def detect_video(
         | video_quality(xy_seq, kc_seq, kp_conf, width=width, cuts=cuts, calib=calib)
         | {"point_codes": dict(sorted(all_codes.items())), "note": "label-free, not accuracy"}
     )
+    if G is not None:
+        n_geom = max(1, len(geom_kps))
+        quality |= {
+            "geom_mode": geom_mode,
+            "geom_camera_ok_rate": round(
+                sum(v for k, v in geom_sources.items() if k != "none") / n_geom, 4
+            ),
+            "geom_camera_sources": dict(sorted(geom_sources.items())),
+            "geom_mean_kps": round(sum(geom_kps) / n_geom, 2),
+            "geom_fills": dict(geom_fills.most_common()),
+            "geom_fixes": dict(geom_fixes.most_common()),
+            "geom_flagged": geom_codes.get("Dg", 0),
+            "geom_dlt2d_rate": round(sum(r[1] != "" for r in dlt2d_rows) / n_geom, 4),
+            "geom_dlt3d_rate": round(sum(r[1] != "" for r in dlt3d_rows) / n_geom, 4),
+        }
     (out / "quality.json").write_text(json.dumps(quality, indent=2), encoding="utf-8")
     _log(
         f"detect done: {processed} frames | detected {quality['detection_rate']:.0%} | "
@@ -3892,6 +5007,15 @@ def detect_video(
         f"cuts {quality['cuts']} | residual median {quality['residual_median_px']} px@1920 "
         f"(camera-motion removed) -> {out}"
     )
+    if G is not None:
+        rare = " ".join(f"p{i}={geom_fills.get(f'p{i}', 0)}" for i in (5, 29, 39, 47))
+        _log(
+            f"geometry {geom_mode}: camera {quality['geom_camera_ok_rate']:.0%} "
+            f"{quality['geom_camera_sources']} | kps/frame {quality['geom_mean_kps']} | "
+            f"filled {sum(geom_fills.values())} ({rare}) | fixed {sum(geom_fixes.values())} | "
+            f"flagged {quality['geom_flagged']} | DLT2D {quality['geom_dlt2d_rate']:.0%} "
+            f"DLT3D {quality['geom_dlt3d_rate']:.0%} -> {video.stem}.dlt2d/.dlt3d"
+        )
     return out
 
 
@@ -3937,16 +5061,29 @@ def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
     batch.mkdir(parents=True, exist_ok=True)
     _log(f"batch: {len(videos)} videos -> {batch}")
     rows = []
+    failed = []
     for video in videos:
-        out = detect_video(ws, video, output_dir=batch, **kwargs)
+        try:
+            out = detect_video(ws, video, output_dir=batch, **kwargs)
+        except (OSError, ValueError, RuntimeError) as exc:
+            # One bad video must not lose the others (hours of GPU on a long batch).
+            _log(f"ERROR on {video.name}: {type(exc).__name__}: {exc} - continuing")
+            failed.append({"video": video.name, "error": f"{type(exc).__name__}: {exc}"})
+            continue
         rows.append(json.loads((out / "quality.json").read_text(encoding="utf-8")))
-    with (batch / "quality_summary.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(
-            {k: json.dumps(v) if isinstance(v, dict) else v for k, v in r.items()} for r in rows
-        )
-    _log(f"batch done: {len(videos)} videos, summary -> {batch / 'quality_summary.csv'}")
+    if failed:
+        diag.write_csv(batch / "failed_videos.csv", failed)
+    if rows:
+        with (batch / "quality_summary.csv").open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=list(rows[0]))
+            writer.writeheader()
+            writer.writerows(
+                {k: json.dumps(v) if isinstance(v, dict) else v for k, v in r.items()} for r in rows
+            )
+    _log(
+        f"batch done: {len(rows)}/{len(videos)} videos, summary -> {batch / 'quality_summary.csv'}"
+        + (f" | {len(failed)} failed -> {batch / 'failed_videos.csv'}" if failed else "")
+    )
     return batch
 
 
@@ -3964,6 +5101,11 @@ def build_parser() -> argparse.ArgumentParser:
         ("import-dataset", "Copy a kiki49 YOLO-pose build into the workspace."),
         ("queue", "Pick the frames worth labelling from a detect batch (review sessions)."),
         ("ingest", "Validate complete reviewed frames; --commit appends them to train or hard."),
+        (
+            "extend",
+            "Convert an external field dataset (Roboflow, SoccerNet-GSR, SoccerNet rescue) to "
+            "kiki49 labels in a staging folder; --src <staging> --commit appends it to train.",
+        ),
         ("check", "Validate the workspace dataset."),
         ("manifest", "Build an oversampled train list (manifests/vNNN) for rare keypoints."),
         ("train", "Train or retrain (--base active / a slot) the field-keypoint network."),
@@ -4000,7 +5142,9 @@ def build_parser() -> argparse.ArgumentParser:
         elif cmd == "ingest":
             p.add_argument("--src", required=True, help="Exported review session directory.")
             p.add_argument(
-                "--match-id", required=True, help="Match/sequence shared across cameras and cuts."
+                "--match-id",
+                help="Match/sequence shared across cameras and cuts (a montage session takes one "
+                "match per frame from montage_frames.csv).",
             )
             p.add_argument(
                 "--split",
@@ -4011,12 +5155,60 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--commit", action="store_true", help="Publish validated pairs to the split."
             )
+        elif cmd == "extend":
+            p.add_argument("--source", choices=EXTERNAL_SOURCES, help="Dataset to convert.")
+            p.add_argument(
+                "--project",
+                action="append",
+                default=[],
+                help="Roboflow workspace/project[@version] (repeatable).",
+            )
+            p.add_argument(
+                "--search",
+                action="append",
+                default=[],
+                help='Roboflow Universe query, e.g. "class:pitch" (repeatable).',
+            )
+            p.add_argument("--limit", type=int, help="Cap images per project / clips / images.")
+            p.add_argument("--model", default="l", help="Network for alignment / rescue.")
+            p.add_argument("--kp-conf", type=float, help="Keypoint acceptance (default: settings).")
+            p.add_argument(
+                "--root", help="Folder of the downloaded source (default: FIFA sources)."
+            )
+            p.add_argument("--src", help="Staging folder to append to train (with --commit).")
+            p.add_argument("--commit", action="store_true", help="Publish the staged frames.")
         elif cmd == "queue":
             p.add_argument(
-                "--batch", dest="batch_dir", required=True, help="detect output or batch folder."
+                "--batch",
+                dest="batch_dir",
+                nargs="+",
+                required=True,
+                help="detect output or batch folder(s).",
             )
-            p.add_argument("--per-video", type=int, default=25, help="Max queued frames per clip.")
-            p.add_argument("--min-gap", type=int, default=5, help="Min frames between picks.")
+            p.add_argument(
+                "--need",
+                help="Keypoints the frames must show, e.g. p5,p29,p39,p47 (the field camera "
+                "says when they are in the picture).",
+            )
+            p.add_argument(
+                "--half-seen",
+                action="store_true",
+                help="With --need, also frames without a field camera where the network half-sees "
+                "a needed point (rarely useful: mostly adverts, replays, close-ups).",
+            )
+            p.add_argument(
+                "--montage",
+                action="store_true",
+                help="One review video of all queued frames (montage.mp4 + montage_frames.csv).",
+            )
+            p.add_argument(
+                "--per-video",
+                type=int,
+                help="Max queued frames per clip (default 25; 5 with --need).",
+            )
+            p.add_argument(
+                "--min-gap", type=int, help="Min frames between picks (default 5; 30 with --need)."
+            )
             p.add_argument("--kp-conf", type=float, help="Default: detect kp_conf setting.")
         elif cmd == "train":
             p.add_argument("--base", help="yolo26*-pose.pt, 'active', a slot (m, l) or a .pt.")
@@ -4086,6 +5278,14 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--match-px", type=float, default=25.0, help="Match radius, px@1920.")
             p.add_argument("--pck", default="5,10,25", help="PCK radii, px@1920.")
             p.add_argument("--max-images", type=int, default=0, help="0 = all images.")
+            p.add_argument(
+                "--geom-min-conf",
+                type=float,
+                help="Geometry fill needs this raw network conf (default 0.05; tune on val).",
+            )
+            p.add_argument(
+                "--geom-fix-px", type=float, help="Geometry fix distance, px@1920 (default 20)."
+            )
         elif cmd == "sweep":
             p.add_argument("--eval-dir", required=True, help="Folder written by evaluate.")
             p.add_argument("--det-confs", default="0.05,0.1,0.25,0.5")
@@ -4141,6 +5341,12 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Interpolate gaps <= N frames inside one shot (separate CSV, marked I).",
             )
             p.add_argument("--diag-frames", type=int, default=12, help="Annotated frames saved.")
+            p.add_argument(
+                "--geom",
+                choices=("fill", "fix", "off"),
+                help="Field geometry (default: settings, fill): fill missing points / also fix "
+                "points that disagree with the camera / off. Writes field_kps_geom_*.csv.",
+            )
     return parser
 
 
@@ -4168,9 +5374,32 @@ def main(argv: list[str] | None = None) -> int:
         import_dataset(ws, args.src)
     elif args.command == "ingest":
         ingest_reviewed(ws, args.src, args.match_id, split=args.split, commit=args.commit)
+    elif args.command == "extend":
+        if args.src:
+            commit_external(ws, args.src, commit=args.commit)
+        elif args.source:
+            stage_external(
+                ws,
+                args.source,
+                projects=args.project,
+                search=args.search,
+                limit=args.limit,
+                model=args.model,
+                kp_conf=args.kp_conf,
+                root=args.root,
+            )
+        else:
+            raise SystemExit("extend needs --source (stage) or --src (commit a staging folder)")
     elif args.command == "queue":
         build_label_queue(
-            ws, args.batch_dir, per_video=args.per_video, min_gap=args.min_gap, kp_conf=args.kp_conf
+            ws,
+            args.batch_dir,
+            per_video=args.per_video,
+            min_gap=args.min_gap,
+            kp_conf=args.kp_conf,
+            need=parse_keypoints(args.need) if args.need else None,
+            montage=args.montage,
+            half_seen=args.half_seen,
         )
     elif args.command == "check":
         return 1 if check_dataset(ws) else 0
@@ -4225,6 +5454,11 @@ def main(argv: list[str] | None = None) -> int:
             match_px=args.match_px,
             pck=_floats(args.pck),
             max_images=args.max_images,
+            geom_settings={
+                k: v
+                for k, v in (("min_conf", args.geom_min_conf), ("fix_px", args.geom_fix_px))
+                if v is not None
+            },
         )
     elif args.command == "sweep":
         sweep(
@@ -4274,6 +5508,7 @@ def main(argv: list[str] | None = None) -> int:
             overlay=not args.no_overlay,
             fill_gaps=args.fill_gaps,
             diag_frames=args.diag_frames,
+            geom=args.geom,
         )
     return 0
 
@@ -4331,7 +5566,11 @@ def run_freekiki() -> None:
         "kp_conf": tk.StringVar(value="0.5"),
         "split": tk.StringVar(value="val"),
         "fill_gaps": tk.StringVar(value="0"),
+        "geom": tk.StringVar(value="fill"),
         "corrections": tk.StringVar(),
+        "ext_source": tk.StringVar(value="roboflow"),
+        "ext_query": tk.StringVar(value="class:pitch"),
+        "ext_src": tk.StringVar(),
         "match_id": tk.StringVar(),
     }
     overlay = tk.BooleanVar(value=True)
@@ -4507,7 +5746,7 @@ def run_freekiki() -> None:
         args += opt("--output-dir", "out") + opt("--stride", "stride")
         args += opt("--max-frames", "max_frames") + opt("--conf", "conf")
         args += opt("--kp-conf", "kp_conf") + opt("--device", "device")
-        args += opt("--fill-gaps", "fill_gaps")
+        args += opt("--fill-gaps", "fill_gaps") + opt("--geom", "geom")
         if not overlay.get():
             args.append("--no-overlay")
         run_cli(args)
@@ -4523,6 +5762,26 @@ def run_freekiki() -> None:
         if path:
             current = [p for p in v["corrections"].get().split(";") if p.strip()]
             v["corrections"].set(";".join([*current, path]))
+
+    def do_extend_stage():
+        args = ["extend", "--source", v["ext_source"].get()]
+        if v["ext_source"].get() == "roboflow":
+            # "a/b@3" entries are projects, anything else is a Universe search query.
+            for item in (q.strip() for q in v["ext_query"].get().split(";")):
+                if item:
+                    args += ["--project" if "/" in item and " " not in item else "--search", item]
+        run_cli(args)
+
+    def do_extend_commit(commit: bool):
+        src = v["ext_src"].get().strip()
+        if not src:
+            src = filedialog.askdirectory(
+                title="Staging folder (incoming/external_*)",
+                initialdir=str(Path(v["ws"].get().strip() or ".") / "incoming"),
+            )
+            v["ext_src"].set(src or "")
+        if src:
+            run_cli(["extend", "--src", src] + (["--commit"] if commit else []))
 
     def do_correct():
         video, ws = v["video"].get().strip(), v["ws"].get().strip()
@@ -4631,6 +5890,17 @@ def run_freekiki() -> None:
     ttk.Button(corr, text="Add folder...", command=add_corrections_folder).pack(side="left", padx=4)
     ttk.Label(corr, text="Match id").pack(side="left", padx=(8, 2))
     ttk.Entry(corr, textvariable=v["match_id"], width=16).pack(side="left")
+    ext = ttk.Frame(box)
+    ext.grid(row=6, column=0, columnspan=3, sticky="we", pady=2)
+    ttk.Label(ext, text="External data").pack(side="left", padx=(4, 2))
+    ttk.Combobox(
+        ext, textvariable=v["ext_source"], values=EXTERNAL_SOURCES, width=16, state="readonly"
+    ).pack(side="left")
+    ttk.Entry(ext, textvariable=v["ext_query"], width=28).pack(side="left", padx=4)
+    ttk.Button(ext, text="Stage", command=do_extend_stage).pack(side="left")
+    ttk.Entry(ext, textvariable=v["ext_src"], width=28).pack(side="left", padx=(8, 2))
+    ttk.Button(ext, text="Preview", command=lambda: do_extend_commit(False)).pack(side="left")
+    ttk.Button(ext, text="Commit", command=lambda: do_extend_commit(True)).pack(side="left", padx=4)
     ttk.Label(
         box,
         text="Retrain = Base model 'active' (default slot), a slot (m, l) or any trained .pt: "
@@ -4697,6 +5967,10 @@ def run_freekiki() -> None:
         ttk.Label(grid, text=label).grid(row=0, column=2 * i, padx=(4, 2))
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
     ttk.Checkbutton(grid, text="Overlay MP4", variable=overlay).grid(row=0, column=10, padx=6)
+    ttk.Label(grid, text="Geometry").grid(row=0, column=11, padx=(8, 2))
+    ttk.Combobox(
+        grid, textvariable=v["geom"], values=("fill", "fix", "off"), width=5, state="readonly"
+    ).grid(row=0, column=12)
     bar = ttk.Frame(box)
     bar.grid(row=5, column=1, sticky="w", pady=2)
     ttk.Button(bar, text="Detect", command=do_detect).pack(side="left")

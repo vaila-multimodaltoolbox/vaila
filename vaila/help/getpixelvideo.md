@@ -6,7 +6,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.4.7
 **Date:** 22 July 2025  
-**Updated:** 02 October 2026
+**Updated:** 05 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -382,7 +382,7 @@ Semi-automatic point tracking powered by Normalized Cross-Correlation (NCC), sub
 Kinovea-style quick on-image measurements, implemented in the companion module `vaila/quickmeasure.py` (see [quickmeasure.md](quickmeasure.md)) and wired into `getpixelvideo.py` as a thin integration layer.
 
 1. Press **Q** or click toolbar **QMeas** to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).
-2. **Calibration comes first.** Choose **1** Line, **2** Plane, **3** REF3D (`.ref3d` mode1/2/3 + drop X/Y/Z + pixel CSV or guided clicks with scheme overlay), or **0** Skip (pixels). Then type the unit (default `m`).
+2. **Calibration comes first.** Choose **1** Line, **2** Plane, **3** REF3D (`.ref3d` mode1/2/3 + drop X/Y/Z + pixel CSV or guided clicks with scheme overlay), or **0** Skip (pixels). Then type the unit (default `m`). Line and Plane show a persistent guide, named points, a live edge preview, and `LENGTH`/`WIDTH`/`HEIGHT` labels. After the last point, review the complete geometry and press **Enter** to type the real measures; right-click still undoes the last point.
 3. **Live measure modes (digit keys on the video):** **1** distance (2 clicks), **2** area (≥3 clicks + Enter), **3** angle (3 clicks), **4** velocity (2 frames, needs FPS), **5** acceleration (3 frames, needs FPS), **6–0** reserved. Each completed set draws its value on the image.
 4. FPS is detected automatically. Override it when needed with **I** or the **FPS … Hz** toolbar button; enter a positive decimal or fraction such as `60000/1001`. The manual value is used by velocity/acceleration. Right-click undoes the last draft point.
 5. **Enter** closes an area polygon, or opens the submenu (**S** save, **C**/**R** calibration, **X** clear).
@@ -392,8 +392,8 @@ Kinovea-style quick on-image measurements, implemented in the companion module `
 
 | Mode | Input | Notes |
 |------|--------|-------|
-| Line | 2 clicks + length | Isotropic scale; origin at first click. |
-| Plane | 4 clicks + width/height | DLT2D homography. |
+| Line | `1 START → 2 END`, Enter, then length | Segment is labeled `LENGTH`; isotropic scale; origin at first click. |
+| Plane | `1 ORIGIN → 2 WIDTH → 3 OPPOSITE → 4 CLOSE`, Enter, then width/height | Edges are labeled `WIDTH` or `HEIGHT`; DLT2D homography. |
 | REF3D | `.ref3d` + drop axis + CSV or guide | Planar DLT2D via `rec2d`; duplicates after axis drop are deduped. |
 
 **Point-set convention** (fixed, not user-configurable, so results are reproducible from clicks alone):
@@ -718,6 +718,15 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.7 (05 October 2026) — Guided Line and Plane calibration
+
+- CALIB modes **1 Line** and **2 Plane** now show named points, a live next-edge
+  preview, and persistent instructions directly over the video.
+- Completed calibration edges identify `LENGTH`, `WIDTH`, and `HEIGHT`, so the
+  values requested by the dialogs map visibly to the drawing.
+- The completed geometry remains editable until **Enter** confirms it; right-click
+  undoes the last point, and cancelled or invalid measurements keep the draft.
 
 ### Version 0.4.6 (30 September 2026) — FreeKiki correction from Load; AV1 videos open through an H.264 copy
 
