@@ -30,8 +30,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/quickmeasure.py</p>
-            <p><strong>Version:</strong> 0.4.3</p>
-            <p><strong>Updated:</strong> 16 September 2026</p>
+            <p><strong>Version:</strong> 0.4.7</p>
+            <p><strong>Updated:</strong> 05 October 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> Yes (<code>python -m vaila.quickmeasure</code>)</p>
         </div>
@@ -42,7 +42,7 @@
         MEASURE classifies clicks as <strong>Distance</strong>, <strong>Area</strong>, <strong>Angle</strong>,
         <strong>Velocity</strong>, or <strong>Acceleration</strong>.</p>
 
-        <h2>CALIB + MEASURE (v0.4.3)</h2>
+        <h2>CALIB + MEASURE (v0.4.7)</h2>
         <p><strong>CALIB</strong> builds or loads planar calibrations. The chooser dialog lists
         each mode on its own line (column layout) so options fit the pygame window. Scope:
         <em>default (whole video)</em> or <em>this frame only</em> (also one option per line).
@@ -56,6 +56,16 @@
             <tr><td><strong>Load</strong> (<code>L</code>)</td><td><code>.dlt2d</code> / REF2D / REF3D</td><td>Reuse existing files.</td></tr>
             <tr><td><strong>Clear</strong> (<code>0</code>)</td><td>—</td><td>Stay in pixels (<code>px</code>).</td></tr>
         </table>
+        <p>Line and Plane use a persistent on-image guide. The next edge follows the
+        cursor, every point has a role, and completed edges identify the dimension:</p>
+        <ul>
+            <li><strong>Line:</strong> <code>1 START → 2 END</code>, with the segment marked <code>LENGTH</code>.</li>
+            <li><strong>Plane:</strong> <code>1 ORIGIN → 2 WIDTH → 3 OPPOSITE → 4 CLOSE</code>;
+            edges 1–2 and 4–3 are <code>WIDTH</code>, while 2–3 and 1–4 are <code>HEIGHT</code>.</li>
+        </ul>
+        <p>After the final click, inspect the complete geometry. Right-click removes the
+        last point; <code>Enter</code> confirms the drawing and opens the real measurement
+        fields. Cancelling or entering an invalid value keeps the points for correction or retry.</p>
         <h3>Live measure modes (digit keys after MEASURE)</h3>
         <table>
             <tr><th>Key</th><th>Mode</th><th>Clicks</th><th>On-image</th></tr>
@@ -97,7 +107,7 @@
             <tr><td>Left-click</td><td>Add a calibration point (CALIB) or a measure point (MEASURE)</td></tr>
             <tr><td>Right-click</td><td>Undo the last point</td></tr>
             <tr><td>Middle-click</td><td>Pan (unchanged)</td></tr>
-            <tr><td><code>Enter</code></td><td>While calibrating: finish typed measures. In MEASURE: close area or open save menu (<code>S</code> save, <code>X</code> clear)</td></tr>
+            <tr><td><code>Enter</code></td><td>In CALIB after all points: confirm the visible geometry and enter real measures. In MEASURE: close area or open save menu (<code>S</code> save, <code>X</code> clear)</td></tr>
             <tr><td><code>Backspace</code></td><td>Clear all measure points/results</td></tr>
         </table>
         <p><code>Esc</code> in the main tool always means save-and-quit the whole application — press <code>Q</code> / <code>Shift+Q</code> again to leave MEASURE / CALIB.</p>

@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 02 October 2026
+Update: 05 October 2026
 Version: 0.4.7
 Python Version: 3.12.14
 
@@ -39,7 +39,7 @@ Template Marker Mode (toolbar Template / ``Tpl:`` button):
   - **FreeKiki** — kiki49 (49 field KPs) correction session. **Load** a freekiki
     detect output (its CSV or folder) to edit its predictions. Right-click picks a
     point, left-click places it, Del / Del Range = "not visible", F10 accept ghost,
-    F3 frame OK, PgDn next draft, F9 save dataset folder (F2 predict, F4 save
+    F3 frame OK, X discard a bad frame (hidden from navigation; Shift+X shows them), PgDn next draft, F9 save dataset folder (F2 predict, F4 save
     session). **Tpl: → L = FreeKiki Load** / ``--freekiki-run DIR``: point at a
     freekiki detect run or batch folder; the original video opens in correction mode. Ghosts: cyan circle = AI point below kp_conf,
     pink cross = field-homography projection. Only complete frames (every visible
@@ -67,6 +67,9 @@ Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
   **CALIB** first (optional): Line (2 clicks + length), Plane (4 clicks +
   width/height → DLT2D), REF3D (``.ref3d`` + drop axis → planar ``rec2d``),
   load file, or skip. Scope: **default** (whole video) or **this frame**.
+  Line/Plane clicks show named points, live edge previews, and dimension labels;
+  after the last click, review the completed geometry and press ``Enter`` to
+  type the real measurement(s), or right-click to correct a point.
   Future DLT3D (11 params) is reserved. **MEASURE** then uses digit keys:
   ``1`` distance, ``2`` area, ``3`` angle, ``4`` velocity, ``5`` acceleration
   (``6``–``0`` reserved); each completed set is drawn on the image with its
@@ -281,7 +284,7 @@ def blit_translucent(surface, rect, rgb, alpha: int) -> None:
     surface.blit(box, rect.topleft)
 
 
-GETPIXELVIDEO_UPDATE_DATE = "02 October 2026"
+GETPIXELVIDEO_UPDATE_DATE = "05 October 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -11465,6 +11468,19 @@ def play_video_with_controls(
         if action == "load":
             # Same as Tpl -> L: a freekiki run/batch folder opens its video to correct.
             return _freekiki_load()
+        if action == "discard":
+            # X: a bad frame (wrong camera, blur, replay graphics) leaves the dataset.
+            state = freekiki_api.discard_review_frame(freekiki_session, frame_count)
+            row = freekiki_api.review_frame(freekiki_session, frame_count)
+            coordinates[frame_count] = [
+                tuple(p) if p is not None else (None, None) for p in row["points"]
+            ]
+            deleted_positions[frame_count] = set()
+            freekiki_api.save_review_session(freekiki_session)
+            if state != "DISCARDED":
+                return f"Frame {frame_count} restored ({state}); X again discards it"
+            nxt = _review_action("next")
+            return f"Frame {frame_count} discarded (not in the dataset; X restores) | {nxt}"
         if action == "next":
             pending = sorted(
                 int(f)
@@ -11783,6 +11799,25 @@ def play_video_with_controls(
         return f"Opening {video.name} for correction..."
 
     review_hints_memo: dict = {"key": None, "hints": None}
+    # Discarded review frames (X) are hidden from navigation; Shift+X shows them again.
+    review_nav: dict = {"show_discarded": False, "last_frame": frame_count}
+
+    def _is_discarded(fi: int) -> bool:
+        if freekiki_session is None:
+            return False
+        return freekiki_session["frames"].get(str(fi), {}).get("state") == "DISCARDED"
+
+    def _skip_discarded(prev: int, cur: int) -> int:
+        """First non-discarded frame from ``cur`` in the direction of travel."""
+        if review_nav["show_discarded"] or not _is_discarded(cur):
+            return cur
+        for step in ((1 if cur >= prev else -1), (-1 if cur >= prev else 1)):
+            fi = cur
+            while 0 <= fi < total_frames and _is_discarded(fi):
+                fi += step
+            if 0 <= fi < total_frames:
+                return fi
+        return cur  # every frame is discarded
 
     def _review_hints() -> dict:
         """Ghosts + completeness of the current frame, recomputed when its markers change."""
@@ -12482,6 +12517,9 @@ def play_video_with_controls(
 
         # Calibration-first overlay: clicked calibration points + next step.
         if calib_mode and quick_measure_calibrating and quickmeasure_draft is not None:
+            calib_cursor = pygame.mouse.get_pos()
+            if calib_cursor[1] >= window_height:
+                calib_cursor = None
             quickmeasure.draw_calibration_overlay(
                 screen,
                 quickmeasure_draft,
@@ -12491,6 +12529,7 @@ def play_video_with_controls(
                 font,
                 pad_x=pad_x,
                 pad_y=pad_y,
+                cursor_pos=calib_cursor,
             )
 
         _mx_scr, _my_scr = pygame.mouse.get_pos()
@@ -12566,8 +12605,19 @@ def play_video_with_controls(
                 )
                 msg_bg.set_alpha(200)
                 msg_bg.fill((0, 100, 0))
-                screen.blit(msg_bg, (window_width // 2 - msg_bg.get_width() // 2, 10))
-                screen.blit(msg_surface, (window_width // 2 - msg_surface.get_width() // 2, 15))
+                message_y = (
+                    86
+                    if calib_mode and quick_measure_calibrating and quickmeasure_draft is not None
+                    else 10
+                )
+                screen.blit(
+                    msg_bg,
+                    (window_width // 2 - msg_bg.get_width() // 2, message_y),
+                )
+                screen.blit(
+                    msg_surface,
+                    (window_width // 2 - msg_surface.get_width() // 2, message_y + 5),
+                )
 
         # ---------------------------------------------------------------
         # Guide panel + upper-right reference map (visual only).
@@ -12636,6 +12686,19 @@ def play_video_with_controls(
         freekiki_buttons = {}
         if freekiki_session is not None:
             hints = _review_hints()
+            if _is_discarded(frame_count):
+                blit_translucent(
+                    screen, pygame.Rect(0, 0, window_width, window_height), (0, 0, 0), 190
+                )
+                big = pygame.font.SysFont("verdana", 34, bold=True)
+                msg = big.render("DISCARDED - not in the dataset", True, (255, 80, 80))
+                screen.blit(msg, msg.get_rect(center=(window_width // 2, window_height // 2 - 20)))
+                tip = pygame.font.SysFont("verdana", 16).render(
+                    "X restores this frame  ·  Shift+X hides discarded frames again",
+                    True,
+                    (230, 230, 230),
+                )
+                screen.blit(tip, tip.get_rect(center=(window_width // 2, window_height // 2 + 22)))
             small = pygame.font.SysFont("verdana", 11)
             # Ghosts of missing points: circle = AI below kp_conf, cross = field homography.
             for ghost in hints["suggestions"]:
@@ -12661,7 +12724,7 @@ def play_video_with_controls(
                 screen.blit(small.render(text, True, color), (gx + 10, gy - 16))
             review = freekiki_session["frames"].get(str(frame_count))
 
-            panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 506), 100)
+            panel = pygame.Rect(10, max(0, window_height - 106), min(window_width - 20, 605), 100)
             blit_translucent(screen, panel, (22, 34, 42), FREEKIKI_PANEL_ALPHA)
             pygame.draw.rect(screen, (220, 220, 220), panel, 1)
             point_i = max(0, min(48, selected_marker_idx))
@@ -12713,6 +12776,7 @@ def play_video_with_controls(
                     ("review", "Frame OK (F3)"),
                     ("accept", "Ghost (F10)"),
                     ("next", "Next (PgDn)"),
+                    ("discard", "Discard (X)"),
                     ("export", "Save (F9)"),
                 )
             ):
@@ -12722,6 +12786,8 @@ def play_video_with_controls(
                     btn_color = (30, 110, 60)
                 elif action == "export":
                     btn_color = (35, 125, 95)
+                elif action == "discard":
+                    btn_color = (140, 50, 50)
                 else:
                     btn_color = (50, 95, 115)
                 blit_translucent(screen, rect, btn_color, 210)
@@ -12769,12 +12835,29 @@ def play_video_with_controls(
                     pygame.display.set_caption(GETPIXELVIDEO_WINDOW_TITLE)
 
             elif event.type == pygame.KEYDOWN:
-                if freekiki_session is not None and event.key in (
+                if (
+                    freekiki_session is not None
+                    and event.key == pygame.K_x
+                    and pygame.key.get_mods() & pygame.KMOD_SHIFT
+                ):
+                    review_nav["show_discarded"] = not review_nav["show_discarded"]
+                    n_disc = sum(
+                        r["state"] == "DISCARDED" for r in freekiki_session["frames"].values()
+                    )
+                    save_message_text = (
+                        f"Showing {n_disc} discarded frames (X restores one)"
+                        if review_nav["show_discarded"]
+                        else f"{n_disc} discarded frames hidden from navigation"
+                    )
+                    showing_save_message = True
+                    save_message_timer = 120
+                elif freekiki_session is not None and event.key in (
                     pygame.K_F2,
                     pygame.K_F3,
                     pygame.K_F4,
                     pygame.K_F9,
                     pygame.K_F10,
+                    pygame.K_x,
                 ):
                     action = {
                         pygame.K_F2: "predict",
@@ -12782,6 +12865,7 @@ def play_video_with_controls(
                         pygame.K_F4: "save",
                         pygame.K_F9: "export",
                         pygame.K_F10: "accept",
+                        pygame.K_x: "discard",
                     }[event.key]
                     try:
                         save_message_text = _review_action(action)
@@ -14107,10 +14191,7 @@ def play_video_with_controls(
                             except quickmeasure.QuickMeasureError as exc:
                                 save_message_text = f"Calibration: {exc}"
                             else:
-                                if quickmeasure_draft.is_complete:
-                                    save_message_text = _finish_quickmeasure_calibration()
-                                else:
-                                    save_message_text = quickmeasure_draft.instructions()
+                                save_message_text = quickmeasure_draft.instructions()
                             showing_save_message = True
                             save_message_timer = 90
                         elif event.button == 3:  # Right click: undo calibration point
@@ -14829,6 +14910,10 @@ def play_video_with_controls(
                             if ret_nav and frame_nav is not None:
                                 last_valid_frame = frame_nav
                                 _perform_live_ai_tracking(frame_count, frame_nav)
+
+        if freekiki_session is not None and frame_count != review_nav["last_frame"]:
+            frame_count = _skip_discarded(review_nav["last_frame"], frame_count)
+        review_nav["last_frame"] = frame_count
 
         if paused:
             # Se pausado, não limitamos a taxa de FPS para que a interface seja responsiva

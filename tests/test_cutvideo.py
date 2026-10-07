@@ -73,6 +73,37 @@ def test_build_cut_output_filenames_uses_per_cut_names(tmp_path):
     ]
 
 
+def test_nav_hold_waits_then_repeats_left_right_faster_than_up_down():
+    assert cutvideo.nav_hold_should_step(200, 0, 0, vertical=False) is False
+    assert cutvideo.nav_hold_should_step(250, 0, 0, vertical=False) is True
+    assert cutvideo.nav_hold_should_step(294, 0, 250, vertical=False) is False
+    assert cutvideo.nav_hold_should_step(295, 0, 250, vertical=False) is True
+    assert cutvideo.nav_hold_should_step(339, 0, 250, vertical=True) is False
+    assert cutvideo.nav_hold_should_step(340, 0, 250, vertical=True) is True
+
+
+def test_step_paused_frame_edges():
+    assert cutvideo.step_paused_frame(0, 100, "left") == 0
+    assert cutvideo.step_paused_frame(99, 100, "right") == 99
+    assert cutvideo.step_paused_frame(10, 100, "right") == 11
+    assert cutvideo.step_paused_frame(10, 100, "up") == 70
+    assert cutvideo.step_paused_frame(10, 100, "down") == 0
+    assert cutvideo.step_paused_frame(90, 100, "up") == 99
+
+
+def test_visible_source_rect_zoom_one_covers_frame_and_ten_is_a_crop():
+    x0, y0, x1, y1, dest_w, dest_h = cutvideo.visible_source_rect(
+        1920, 1080, 960, 540, 1.0, 0.0, 0.0
+    )
+    assert (x0, y0) == (0, 0)
+    assert x1 == 1920 and y1 == 1080
+    assert dest_w <= 960 and dest_h <= 540
+    zx0, zy0, zx1, zy1, _, _ = cutvideo.visible_source_rect(1920, 1080, 960, 540, 10.0, 0.0, 0.0)
+    assert (zx1 - zx0) < 1920
+    assert (zy1 - zy0) < 1080
+    assert zx0 == 0 and zy0 == 0
+
+
 def test_playback_speed_steps_include_normal_speed():
     assert cutvideo._step_playback_speed(0.5, 1) == 1.0
     assert cutvideo._step_playback_speed(2.0, -1) == 1.0

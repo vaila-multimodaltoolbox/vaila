@@ -1,7 +1,7 @@
 """FIFA Dataset Builder — unified 32-pt soccer-pitch keypoint dataset.
 
-Update Date: 17 September 2026
-Version: 0.4.3
+Update Date: 06 October 2026
+Version: 0.4.7
 
 Goal
 ----
@@ -540,37 +540,48 @@ def _download_github(url: str, dst: Path, *, branch: str | None = None) -> None:
     subprocess.run(cmd, check=True)
 
 
-def _download_roboflow_universe(url: str, dst: Path, *, api_key: str, version: int = 1) -> None:
-    """Download a Roboflow Universe project as YOLO v8 Pose.
+def _download_roboflow_universe(
+    url: str, dst: Path, *, api_key: str, version: int = 1, fmt: str = "yolov8"
+) -> None:
+    """Download a Roboflow Universe project version (default YOLO v8 Pose).
 
-    ``url`` is expected as ``<workspace>/<project>``; we pick the latest
-    version when possible. We use the Roboflow Inference HTTP endpoint so this
-    works without the ``roboflow`` PyPI package (which we don't add by
-    default).
+    ``url`` is expected as ``<workspace>/<project>``. ``fmt`` is a Roboflow
+    export format (``yolov8``, ``coco``, ...). We use the Roboflow REST API so
+    this works without the ``roboflow`` PyPI package (which we don't add by
+    default). An export that Roboflow is still generating is polled; a folder
+    already extracted (``.extracted_ok``) is left as is.
     """
+    import time
+    import zipfile
+
     workspace, _, project = url.partition("/")
     if not workspace or not project:
         raise ValueError(f"invalid roboflow project '{url}'; expected 'workspace/project'")
     _ensure_dir(dst)
-    fmt = "yolov8"
+    if (dst / ".extracted_ok").exists():
+        return
     api_url = (
         f"https://api.roboflow.com/{workspace}/{project}/{version}"
         f"/{fmt}?api_key={urllib.parse.quote(api_key)}"
     )
-    # Use urllib so we don't add a hard requests dependency here.
-    with urllib.request.urlopen(api_url, timeout=120) as resp:
-        meta = json.loads(resp.read().decode("utf-8"))
-    export_url = meta.get("export", {}).get("link")
+    export_url = None
+    for _ in range(60):  # large exports are generated on demand
+        # Use urllib so we don't add a hard requests dependency here.
+        with urllib.request.urlopen(api_url, timeout=120) as resp:
+            meta = json.loads(resp.read().decode("utf-8"))
+        export_url = (meta.get("export") or {}).get("link")
+        if export_url:
+            break
+        time.sleep(5)
     if not export_url:
-        raise RuntimeError(f"Roboflow API did not return an export link: {meta}")
+        raise RuntimeError(f"Roboflow API did not return an export link for {url}/{version}")
     archive = dst / "export.zip"
     urllib.request.urlretrieve(export_url, archive)
     # Extract using stdlib so we don't need 7z.
-    import zipfile
-
     with zipfile.ZipFile(archive) as zf:
         zf.extractall(dst)
     archive.unlink(missing_ok=True)
+    (dst / ".extracted_ok").write_text("ok\n", encoding="utf-8")
 
 
 def _download_kaggle_dataset(slug: str, dst: Path) -> None:

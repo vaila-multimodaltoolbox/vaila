@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.3
+Version: 0.4.7
 Created: 06 September 2026
-Last Updated: 16 September 2026
+Last Updated: 05 October 2026
 ================================================================================
 Description:
     Kinovea-style on-image calibration and measurements for `getpixelvideo.py`.
@@ -640,6 +640,25 @@ class CalibrationDraft:
         return len(self.points) >= self.required_points
 
     @property
+    def point_roles(self) -> tuple[str, ...]:
+        """Human-readable meaning of each click, in required click order."""
+        if self.mode == "line":
+            return ("START", "END")
+        return ("ORIGIN", "WIDTH", "OPPOSITE", "CLOSE")
+
+    @property
+    def edge_semantics(self) -> tuple[tuple[int, int, str], ...]:
+        """Edges and dimension labels used by the on-image calibration guide."""
+        if self.mode == "line":
+            return ((0, 1, "LENGTH"),)
+        return (
+            (0, 1, "WIDTH"),
+            (1, 2, "HEIGHT"),
+            (2, 3, "WIDTH"),
+            (3, 0, "HEIGHT"),
+        )
+
+    @property
     def remaining(self) -> int:
         return max(0, self.required_points - len(self.points))
 
@@ -657,22 +676,33 @@ class CalibrationDraft:
 
     def instructions(self) -> str:
         """Status line telling the user exactly what to click next."""
-        if self.mode == "line":
-            steps = ("click the START of a segment of known length", "click its END")
-        else:
-            steps = (
-                "click corner 1 (origin) of a known rectangle",
-                "click corner 2 (defines the width direction)",
-                "click corner 3 (opposite corner)",
-                "click corner 4 (closes the rectangle)",
-            )
         if self.is_complete:
             wanted = " and ".join(self.required_measures)
-            return f"CALIBRATION ({self.mode}): all points clicked — type the real {wanted}."
+            return (
+                f"CALIBRATION ({self.mode}): geometry complete — review it, right-click to undo, "
+                f"or press Enter to type the real {wanted}."
+            )
         idx = len(self.points)
         return (
-            f"CALIBRATION ({self.mode}) {idx + 1}/{self.required_points}: {steps[idx]} "
-            f"(right-click undo, Q leaves the mode)"
+            f"CALIBRATION ({self.mode}) {idx + 1}/{self.required_points}: "
+            f"click point {idx + 1} {self.point_roles[idx]} "
+            "(right-click undo, middle-click pan, Q leaves the mode)"
+        )
+
+    def guide_lines(self) -> tuple[str, ...]:
+        """Short lines for the persistent calibration feedback panel."""
+        mode_number = 1 if self.mode == "line" else 2
+        if self.is_complete:
+            return (
+                f"CALIB {mode_number} - {self.mode.upper()} | {self.required_points}/{self.required_points}",
+                "Geometry complete - review the points and dimension labels",
+                "Right click: undo | Enter: enter real measurements | Q: exit",
+            )
+        next_index = len(self.points)
+        return (
+            f"CALIB {mode_number} - {self.mode.upper()} | Point {next_index + 1} of {self.required_points}",
+            f"Next: {next_index + 1} {self.point_roles[next_index]}",
+            "Left click: add | Right click: undo | Middle click: pan | Q: exit",
         )
 
     def build(self, measures: Sequence[float]) -> QuickMeasureCalibration:
@@ -1915,40 +1945,87 @@ def draw_calibration_overlay(
     font,
     pad_x=0,
     pad_y=0,
+    cursor_pos: tuple[int, int] | None = None,
 ) -> None:
-    """Draw the calibration clicks collected so far plus the next-step
-    instruction banner. Called every frame while calibration is pending.
-    """
+    """Draw calibration points, dimension edges, cursor preview, and guidance."""
     import pygame
 
     color = (0, 255, 255)  # Cyan: distinct from magenta measure points.
+    text_color = (235, 255, 255)
+    panel_bg = (12, 35, 42)
     screen_pts = []
     points = draft.pixel_points if isinstance(draft, Ref3dCalibrationDraft) else draft.points
     for px, py in points:
         screen_pts.append(
             (int((px * zoom_level) - crop_x + pad_x), int((py * zoom_level) - crop_y + pad_y))
         )
-    if len(screen_pts) >= 2:
-        closed = isinstance(draft, CalibrationDraft) and draft.mode == "plane" and draft.is_complete
-        pygame.draw.lines(screen, color, closed, screen_pts, 2)
+
+    def _badge(text: str, center: tuple[int, int]) -> None:
+        rendered = font.render(text, True, text_color)
+        box = pygame.Surface((rendered.get_width() + 8, rendered.get_height() + 4), pygame.SRCALPHA)
+        box.fill((*panel_bg, 220))
+        box.blit(rendered, (4, 2))
+        rect = box.get_rect(center=center)
+        rect.clamp_ip(screen.get_rect())
+        screen.blit(box, rect)
+
+    if isinstance(draft, CalibrationDraft):
+        # Draw committed edges and identify the real-world dimension each one represents.
+        for start_i, end_i, meaning in draft.edge_semantics:
+            if start_i >= len(screen_pts) or end_i >= len(screen_pts):
+                continue
+            # The final plane edge (point 4 back to point 1) exists only after completion.
+            if draft.mode == "plane" and start_i == 3 and not draft.is_complete:
+                continue
+            start = screen_pts[start_i]
+            end = screen_pts[end_i]
+            pygame.draw.line(screen, color, start, end, 3)
+            midpoint = ((start[0] + end[0]) // 2, (start[1] + end[1]) // 2)
+            _badge(meaning, midpoint)
+
+        # Preview the next edge before the next point is committed.
+        if cursor_pos is not None and not draft.is_complete:
+            if screen_pts:
+                pygame.draw.line(screen, (120, 220, 220), screen_pts[-1], cursor_pos, 1)
+            pygame.draw.circle(screen, (120, 220, 220), cursor_pos, 5, 1)
+            next_i = len(screen_pts)
+            _badge(
+                f"{next_i + 1} {draft.point_roles[next_i]}",
+                (cursor_pos[0] + 42, cursor_pos[1] - 14),
+            )
+    elif len(screen_pts) >= 2:
+        pygame.draw.lines(screen, color, False, screen_pts, 2)
+
     for i, (sx, sy) in enumerate(screen_pts):
-        pygame.draw.circle(screen, color, (sx, sy), 6, 2)
-        label = (
-            f"p{draft.kept_labels[i]}"
-            if isinstance(draft, Ref3dCalibrationDraft) and i < len(draft.kept_labels)
-            else f"C{i + 1}"
-        )
-        screen.blit(font.render(label, True, color), (sx + 8, sy - 16))
+        pygame.draw.circle(screen, panel_bg, (sx, sy), 8)
+        pygame.draw.circle(screen, color, (sx, sy), 7, 3)
+        if isinstance(draft, Ref3dCalibrationDraft) and i < len(draft.kept_labels):
+            label = f"p{draft.kept_labels[i]}"
+        elif isinstance(draft, CalibrationDraft):
+            label = f"{i + 1} {draft.point_roles[i]}"
+        else:
+            label = f"C{i + 1}"
+        label_x = sx + max(30, font.size(label)[0] // 2 + 10)
+        _badge(label, (label_x, sy - 16))
 
     if isinstance(draft, Ref3dCalibrationDraft):
         draw_ref3d_scheme_panel(screen, draft, font)
 
-    banner = font.render(draft.instructions(), True, (0, 0, 0))
-    pad = 6
-    box = pygame.Surface((banner.get_width() + 2 * pad, banner.get_height() + 2 * pad))
-    box.fill(color)
-    box.blit(banner, (pad, pad))
-    screen.blit(box, (10, 10))
+    guide_lines = (
+        draft.guide_lines()
+        if isinstance(draft, CalibrationDraft)
+        else (draft.instructions(), "Left click: add | Right click: undo | Middle click: pan")
+    )
+    rendered_lines = [font.render(line, True, text_color) for line in guide_lines]
+    line_h = font.get_linesize()
+    panel_w = max(line.get_width() for line in rendered_lines) + 20
+    panel_h = len(rendered_lines) * line_h + 16
+    panel = pygame.Surface((panel_w, panel_h), pygame.SRCALPHA)
+    panel.fill((*panel_bg, 225))
+    pygame.draw.rect(panel, color, panel.get_rect(), 2)
+    for i, rendered in enumerate(rendered_lines):
+        panel.blit(rendered, (10, 8 + i * line_h))
+    screen.blit(panel, (10, 10))
 
 
 def draw_ref3d_scheme_panel(
@@ -2014,7 +2091,19 @@ def finish_calibration_draft(
         )
     values: list[float] = []
     for name in draft.required_measures:
-        answer = ask_text(f"Real {name} of the clicked {draft.mode} (in {draft.unit_label})", "")
+        if draft.mode == "line":
+            prompt = f"Real LENGTH of segment 1 START -> 2 END (in {draft.unit_label})"
+        elif name == "width":
+            prompt = (
+                f"Real WIDTH of edges 1-2 and 4-3 (in {draft.unit_label})\n"
+                "These are the edges marked WIDTH on the image"
+            )
+        else:
+            prompt = (
+                f"Real HEIGHT of edges 2-3 and 1-4 (in {draft.unit_label})\n"
+                "These are the edges marked HEIGHT on the image"
+            )
+        answer = ask_text(prompt, "")
         if answer is None or not str(answer).strip():
             return None, "Calibration cancelled."
         try:

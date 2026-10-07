@@ -26,7 +26,7 @@
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
         <p><strong>Version:</strong> 0.4.7</p>
-        <p><strong>Updated:</strong> 02 October 2026</p>
+        <p><strong>Updated:</strong> 04 October 2026</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -49,6 +49,8 @@
             <li><strong>TOML cuts</strong>: Saves/loads <code>{basename}_cuts.toml</code> with 1-based frames, .6f precision, <code>frame_count = end - start + 1</code>, plus <code>output_dir</code> and per-cut <code>output_file</code>. Paths stored as POSIX.</li>
             <li><strong>Audio waveform</strong>: Panel with orange waveform, sync playback; <code>A</code> toggle, <code>M</code> mute.</li>
             <li><strong>Loop control</strong>: Loop button stacked above Help / Base name (right side of control bar).</li>
+            <li><strong>Hold arrows</strong>: while paused, hold Left/Right to step one frame (repeat after 250 ms, then every 45 ms) and Up/Down to jump 60 frames (every 90 ms), same timing as <code>getpixelvideo</code>. Shift+Left/Right stays a one-shot marker jump.</li>
+            <li><strong>Zoom 10×</strong>: <code>+</code>/<code>-</code> and the wheel zoom from 0.1× to 10×. 1× still fits the whole video; only the visible crop is scaled.</li>
             <li><strong>Auto-fit</strong>: Hotkey <code>0</code>; zoom/pan with +/-, wheel, middle-mouse drag.</li>
             <li><strong>Marker navigation</strong>: Shift+Left/Right cycles previous/next cut marker with wraparound, matching <code>getpixelvideo</code>; PageUp/PageDown and Home/End remain available.</li>
             <li><strong>Cut timeline feedback</strong>: clickable/draggable strip above the scrub slider, matching <code>getpixelvideo</code>. Blue = range, green = start, orange = end, yellow = pending start, white = playhead. Marker columns snap to cut points.</li>
@@ -95,9 +97,9 @@
         </ul>
         <h3>Keyboard</h3>
         <ul>
-            <li><strong>Playback:</strong> Space, <code>[</code> / <code>]</code> (slower/faster), →/←, Shift+→/← (previous/next cut marker with wraparound), ↑/↓ (±60), slider click, cut-strip click/drag with marker snap.</li>
+            <li><strong>Playback:</strong> Space, <code>[</code> / <code>]</code> (slower/faster), →/← (hold to repeat), Shift+→/← (previous/next cut marker with wraparound), ↑/↓ (±60, hold to repeat), slider click, cut-strip click/drag with marker snap.</li>
             <li><strong>Audio:</strong> <code>A</code> panel, <code>M</code> mute.</li>
-            <li><strong>Window:</strong> <code>0</code> auto-fit; +/- / wheel zoom; MMB pan.</li>
+            <li><strong>Window:</strong> <code>0</code> auto-fit; +/- / wheel zoom 0.1×–10×; MMB pan.</li>
             <li><strong>Cuts:</strong> S, E, R, D/Delete, L, C (labels CSV).</li>
             <li><strong>Markers:</strong> Shift+Left/Right, PageUp/PageDown, Home/End.</li>
             <li><strong>Jump:</strong> G (frame), T (time), I/P (FPS).</li>
@@ -143,7 +145,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 02 October 2026 (v0.4.7; v0.4.6 — fewer confirmations on direct syncvid handoff)</p>
+        <p>📅 Last Updated: 04 October 2026 (v0.4.7; hold arrows and zoom 10×)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

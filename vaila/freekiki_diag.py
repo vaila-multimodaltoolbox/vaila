@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.7
 Created: 27 September 2026
-Update Date: 02 October 2026
+Update Date: 05 October 2026
 
 Description:
     Verifiable measurement helpers for ``freekiki.py`` (49-point soccer-field
@@ -309,9 +309,12 @@ def write_csv(path: Path, rows: list[dict]) -> None:
 # --------------------------------------------------------------------------- #
 def _orientation(H: np.ndarray, world_xy: np.ndarray) -> int:
     """Sign of the Jacobian determinant of world -> image at the points' centroid."""
+    if len(world_xy) == 0:
+        return 0
     c = world_xy.mean(axis=0)
     w = H[2, 0] * c[0] + H[2, 1] * c[1] + H[2, 2]
-    return int(np.sign(np.linalg.det(H) * w))
+    sign = np.sign(np.linalg.det(H) * w)
+    return int(sign) if np.isfinite(sign) else 0
 
 
 def _project(H: np.ndarray, pts: np.ndarray) -> np.ndarray:
@@ -379,9 +382,12 @@ def fit_field_homography(
     if H is None or not np.all(np.isfinite(H)) or abs(np.linalg.det(H)) < 1e-12:
         out["status"] = "ransac_fail"
         return out
-    inl = mask.ravel().astype(bool)
+    inl = mask.ravel().astype(bool) if mask is not None else np.zeros(len(img_xy), dtype=bool)
     wi, ii = world_xy[inl], img_xy[inl]
     out.update({"H": H, "inliers": inl, "n_inliers": int(inl.sum())})
+    if inl.sum() < 4:  # RANSAC can return an H that no point supports
+        out["status"] = "few_inliers"
+        return out
     ev = _spread(wi)
     out["minor_std_m"] = _num(ev[0], 3)
     out["orientation"] = _orientation(H, wi)
@@ -768,6 +774,15 @@ def _near_duplicates(ha: np.ndarray, hb: np.ndarray, max_bits: int, chunk: int =
     return out
 
 
+def _geom_module():
+    """``freekiki_geom`` (imports this module, so it is loaded lazily)."""
+    try:
+        from . import freekiki_geom
+    except ImportError:
+        import freekiki_geom  # ty: ignore[unresolved-import]
+    return freekiki_geom
+
+
 def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = True, log=print):
     """Read-only integrity + leakage audit of a kiki49 dataset. Returns the summary dict."""
     import yaml
@@ -895,8 +910,20 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
             for i, e in zip(np.flatnonzero(use), res, strict=True):
                 if e > 15.0:
                     outliers.append(
-                        base | {"kp": f"p{i}", "name": names[i], "residual_px": round(float(e), 1)}
+                        base
+                        | {
+                            "kp": f"p{i}",
+                            "name": names[i],
+                            "residual_px": round(float(e), 1),
+                            "kind": "planar",
+                        }
                     )
+        # Flag / post-top labels vs the camera of the other labels (leave-one-out).
+        if (vis & ~planar).any():
+            for i, e in _geom_module().nonplanar_label_outliers(px, vis, w, h):
+                outliers.append(
+                    base | {"kp": f"p{i}", "name": names[i], "residual_px": e, "kind": "geom3d"}
+                )
         # Visible-looking points labelled "not visible" (negative supervision).
         comp = label_completeness(
             [p if v else None for p, v in zip(px, vis, strict=True)], (), w, h
@@ -932,6 +959,7 @@ def audit_dataset(ds_dir, out_dir, *, dup_bits: int = 10, hash_images: bool = Tr
         "label_homography": {f"{s}/{o}": n for (s, o), n in sorted(orient.items())},
         "mirrored_label_images": sum(1 for g in geom if g["status"] == "mirrored"),
         "keypoint_outliers_gt15px": len(outliers),
+        "geom3d_label_outliers": sum(o.get("kind") == "geom3d" for o in outliers),
         # label_missing_suspects.csv: works as ``manifest --exclude`` (image column)
         "missing_label_suspects": {
             "images": len({m["image"] for m in missing}),

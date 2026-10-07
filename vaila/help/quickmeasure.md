@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/quickmeasure.py` |
-| **Version** | 0.4.3 |
-| **Updated** | 16 September 2026 |
+| **Version** | 0.4.7 |
+| **Updated** | 05 October 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes (embedded in `getpixelvideo.py`) |
 | **CLI** | Yes (`python -m vaila.quickmeasure --points-csv ...`) |
@@ -38,6 +38,17 @@ options fit the pygame window.
 | **DLT3D** (`4`) | — | Reserved (coming soon): extract 11 DLT3D params; if one world axis is held at 0, usable as planar 2D. |
 | **Load** (`L`) | `.dlt2d` / REF2D+CSV / REF3D | Reuse existing files. |
 | **Clear** (`0`) | — | Stay in pixels (`px`). |
+
+Line and Plane use a persistent on-image guide. Points are named in click order,
+the next edge follows the cursor, and completed edges show their dimension:
+
+- **Line:** `1 START → 2 END`, with the segment marked `LENGTH`.
+- **Plane:** `1 ORIGIN → 2 WIDTH → 3 OPPOSITE → 4 CLOSE`; edges `1–2` and
+  `4–3` are `WIDTH`, while `2–3` and `1–4` are `HEIGHT`.
+
+After the final click, inspect the complete geometry. Right-click removes the
+last point; **Enter** confirms the drawing and opens the real measurement fields.
+Cancelling or entering an invalid value keeps the points for correction or retry.
 
 ### Scope (default vs this frame)
 
@@ -91,7 +102,7 @@ Single-video sessions stay **DLT2D**. Stereo **DLT3D** reconstruction remains a 
 | **Q** / **MEASURE** | Toggle MEASURE mode (no calibration-first gate) |
 | Left-click | Add a calibration point (CALIB) or a measure point (MEASURE) |
 | Right-click | Undo the last point |
-| **Enter** | While calibrating: finish typed measures. In MEASURE: close area or open save menu |
+| **Enter** | In CALIB after all points: confirm the visible geometry and enter real measures. In MEASURE: close area or open save menu |
 | **Backspace** | Clear all measure points/results |
 | **I** / **FPS** | Set video FPS for velocity/accel |
 

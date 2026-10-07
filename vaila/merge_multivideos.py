@@ -8,8 +8,8 @@ Please see AUTHORS for contributors.
 Licensed under GNU Lesser General Public License v3.0
 
 Created: 25 February 2025
-Update: 24 September 2026
-Version updated: 0.4.5
+Update: 04 October 2026
+Version updated: 0.4.7
 
 Description:
 This script allows users to merge multiple video files into a single video in a specified order.
@@ -26,6 +26,7 @@ Key Features:
 - Preview of selected videos and their order
 - Ability to reorder videos before processing
 - Detailed console output for tracking progress and handling errors
+- A visible Finished or Failed state in the window, plus a `>>` terminal banner
 - Creation of a timestamped output directory for organized file management
 
 Usage:
@@ -45,7 +46,9 @@ Installation of FFmpeg (for video processing):
 - **macOS:** `brew install ffmpeg`
 """
 
+import contextlib
 import os
+import queue
 import subprocess
 import threading
 import tkinter as tk
@@ -63,12 +66,37 @@ except ImportError:
     )
 
 
+def format_merge_banner(success: bool, message: str) -> str:
+    """Terminal lines for a finished multi-video merge.
+
+    Success ``message`` is ``"<output>\\n\\nFrame report: <report>"``.
+    Failure ``message`` is the reason shown in the GUI.
+    """
+    if success:
+        output_path, _, report = message.partition("\n\nFrame report: ")
+        lines = [
+            ">> vaila/merge_multivideos: DONE",
+            f">> Output: {output_path.strip()}",
+        ]
+        report = report.strip()
+        if report:
+            lines.append(f">> Frame report: {report}")
+        return "\n".join(lines)
+    reason = message.strip() or "unknown error"
+    return f">> vaila/merge_multivideos: FAILED\n>> {reason}"
+
+
 class VideoMergeApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Merge Multiple Videos")
         self.root.geometry("800x600")
         self.root.minsize(700, 500)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+        self._ui_queue: queue.Queue[tuple] = queue.Queue()
+        self._ui_polling = False
+        self._ui_after_id: str | None = None
 
         self.video_files = []  # List to store the selected video paths
         self.output_dir = ""  # Output directory
@@ -193,7 +221,9 @@ class VideoMergeApp:
             self.progress_bar = ttk.Progressbar(
                 self.progress_frame, length=100, mode="indeterminate"
             )
-            self.progress_label = ttk.Label(self.progress_frame, text="")
+            self.progress_label = ttk.Label(
+                self.progress_frame, text="", wraplength=760, justify=tk.LEFT
+            )
             print("DEBUG: Progress bar and label initialized")
         except Exception as e:
             print(f"ERROR: Failed to initialize progress bar: {str(e)}")
@@ -574,6 +604,65 @@ class VideoMergeApp:
             # Use config(bg=...) instead of configure(style=...) for tk.Frame
             self.video_frames[self.selected_index].config(bg="#e6f2ff", relief=tk.RAISED)
 
+    def _window_alive(self) -> bool:
+        try:
+            return bool(self.root.winfo_exists())
+        except tk.TclError:
+            return False
+
+    def _post_status(self, text: str) -> None:
+        """Queue a progress-label update. Safe to call from the merge thread."""
+        self._ui_queue.put(("status", text))
+
+    def _post_done(self, success: bool, message: str) -> None:
+        """Print the terminal banner, then queue the GUI completion update."""
+        print(format_merge_banner(success, message))
+        self._ui_queue.put(("done", success, message))
+
+    def _drain_ui_queue(self) -> None:
+        if not self._window_alive():
+            return
+        try:
+            while True:
+                item = self._ui_queue.get_nowait()
+                kind = item[0]
+                if kind == "status" and self._window_alive():
+                    self.progress_label.configure(text=item[1])
+                elif kind == "done":
+                    self.merge_complete(bool(item[1]), str(item[2]))
+        except queue.Empty:
+            pass
+        if self._ui_polling and self._window_alive():
+            self._ui_after_id = self.root.after(50, self._drain_ui_queue)
+
+    def _start_ui_poll(self) -> None:
+        self._ui_polling = True
+        self._drain_ui_queue()
+
+    def _stop_ui_poll(self) -> None:
+        self._ui_polling = False
+        after_id = self._ui_after_id
+        self._ui_after_id = None
+        if after_id is not None and self._window_alive():
+            with contextlib.suppress(tk.TclError):
+                self.root.after_cancel(after_id)
+
+    def _stop_progress_bar(self) -> None:
+        bar = getattr(self, "progress_bar", None)
+        if bar is None:
+            return
+        try:
+            if bar.winfo_exists():
+                bar.stop()
+        except tk.TclError:
+            pass
+
+    def _on_close(self) -> None:
+        self._stop_ui_poll()
+        self._stop_progress_bar()
+        with contextlib.suppress(tk.TclError):
+            self.root.destroy()
+
     def start_merge(self):
         """Start the video merging process"""
         try:
@@ -620,6 +709,7 @@ class VideoMergeApp:
             output_video_path = os.path.join(output_subdir, f"{output_filename}.mp4")
 
             # Ensure progress bar and label are configured correctly
+            self.merge_button.configure(state="disabled")
             self.progress_bar.configure(mode="indeterminate", maximum=100, value=0)
             self.progress_label.configure(text="Preparing to merge videos...")
 
@@ -627,6 +717,7 @@ class VideoMergeApp:
             self.progress_bar.pack(fill=tk.X, pady=(5, 0))
             self.progress_label.pack(fill=tk.X, pady=(5, 0))
             self.progress_bar.start(10)  # Atualizar a cada 10ms
+            self._start_ui_poll()
 
             print("DEBUG: Progress bar started")
 
@@ -643,6 +734,10 @@ class VideoMergeApp:
 
             print(f"Error starting merge process: {str(e)}")
             print(traceback.format_exc())
+            self._stop_ui_poll()
+            self._stop_progress_bar()
+            with contextlib.suppress(tk.TclError):
+                self.merge_button.configure(state="normal")
             messagebox.showerror("Error", f"Failed to start merge process: {str(e)}")
 
     def do_merge(self, output_video_path, output_subdir):
@@ -668,7 +763,7 @@ class VideoMergeApp:
             print(traceback.format_exc())
             # Capture error message as string to avoid issues with 'e' variable
             error_message = str(e)
-            self.root.after(0, lambda msg=error_message: self.merge_complete(False, msg))
+            self._post_done(False, error_message)
 
     def do_precise_merge(self, output_video_path, output_subdir):
         """Execute precise merging that ensures all frames are included"""
@@ -678,7 +773,7 @@ class VideoMergeApp:
             os.makedirs(temp_dir, exist_ok=True)
 
             # Update progress
-            self.root.after(0, lambda: self.progress_label.config(text="Analyzing videos..."))
+            self._post_status("Analyzing videos...")
 
             # First pass: analyze videos to determine optimal parameters
             highest_res = [0, 0]
@@ -722,31 +817,14 @@ class VideoMergeApp:
                 # Update target FPS (use highest for best quality)
                 target_fps = max(target_fps, fps)
 
-                # Use captured values in lambda
-                current_i = i
-                current_width = width
-                current_height = height
-                current_fps = fps
-                self.root.after(
-                    0,
-                    lambda i=current_i, w=current_width, h=current_height, fps=current_fps: (
-                        self.progress_label.config(
-                            text=f"Analyzed video {i + 1}/{len(self.video_files)}: {w}x{h} at {fps:.2f} FPS"
-                        )
-                    ),
+                self._post_status(
+                    f"Analyzed video {i + 1}/{len(self.video_files)}: {width}x{height} at {fps:.2f} FPS"
                 )
 
             # Second pass: convert each video to same format
             temp_files = []
             for i, video_path in enumerate(self.video_files):
-                # Use captured values in lambda
-                current_i = i
-                self.root.after(
-                    0,
-                    lambda i=current_i: self.progress_label.config(
-                        text=f"Processing video {i + 1}/{len(self.video_files)}..."
-                    ),
-                )
+                self._post_status(f"Processing video {i + 1}/{len(self.video_files)}...")
 
                 temp_file = os.path.join(temp_dir, f"temp_{i}.mp4")
                 temp_files.append(temp_file)
@@ -782,14 +860,8 @@ class VideoMergeApp:
                 # Read output for progress updates
                 for line in process.stderr:
                     if "frame=" in line or "time=" in line:
-                        # Capture current line for lambda
-                        current_line = line.strip()
-                        current_i = i
-                        self.root.after(
-                            0,
-                            lambda i=current_i, l=current_line: self.progress_label.config(
-                                text=f"Processing video {i + 1}/{len(self.video_files)}: {l}"
-                            ),
+                        self._post_status(
+                            f"Processing video {i + 1}/{len(self.video_files)}: {line.strip()}"
                         )
 
                 process.wait()
@@ -805,10 +877,7 @@ class VideoMergeApp:
                     f.write(f"file '{rel_path}'\n")
 
             # Final merge using the preprocessed files
-            self.root.after(
-                0,
-                lambda: self.progress_label.config(text="Merging preprocessed videos..."),
-            )
+            self._post_status("Merging preprocessed videos...")
 
             concat_cmd = [
                 "ffmpeg",
@@ -834,12 +903,7 @@ class VideoMergeApp:
 
             for line in process.stderr:
                 if "frame=" in line or "time=" in line:
-                    # Capture current line for lambda
-                    current_line = line.strip()
-                    self.root.after(
-                        0,
-                        lambda l=current_line: self.progress_label.config(text=f"Merging: {l}"),
-                    )
+                    self._post_status(f"Merging: {line.strip()}")
 
             process.wait()
             if process.returncode != 0:
@@ -948,10 +1012,7 @@ class VideoMergeApp:
             # If process succeeded, clean up temp files and show success message
             if process.returncode == 0:
                 # Clean up temp files automatically to save disk space
-                self.root.after(
-                    0,
-                    lambda: self.progress_label.config(text="Cleaning up temporary files..."),
-                )
+                self._post_status("Cleaning up temporary files...")
 
                 for temp_file in temp_files:
                     try:
@@ -965,33 +1026,17 @@ class VideoMergeApp:
                 except Exception as e:
                     print(f"Error removing temp directory: {str(e)}")
 
-                # Pass the output video path directly to the lambda
-                output_path = output_video_path
-                report_path = frame_report_path
-                self.root.after(
-                    0,
-                    lambda path=output_path, report=report_path: self.merge_complete(
-                        True, f"{path}\n\nFrame report: {report}"
-                    ),
-                )
+                self._post_done(True, f"{output_video_path}\n\nFrame report: {frame_report_path}")
+
             else:
-                # Capturar o código de retorno para a lambda
-                return_code = process.returncode
-                self.root.after(
-                    0,
-                    lambda code=return_code: self.merge_complete(
-                        False, f"FFmpeg error: return code {code}"
-                    ),
-                )
+                self._post_done(False, f"FFmpeg error: return code {process.returncode}")
 
         except Exception as e:
             import traceback
 
             print(f"ERROR in precise mode: {str(e)}")
             print(traceback.format_exc())
-            # Capture error message as string to avoid issues with 'e' variable
-            error_message = str(e)
-            self.root.after(0, lambda msg=error_message: self.merge_complete(False, msg))
+            self._post_done(False, str(e))
 
     def do_fast_merge(self, output_video_path, output_subdir):
         """Execute fast merging using direct concat with copy codec"""
@@ -1037,14 +1082,7 @@ class VideoMergeApp:
                     print(f"ERROR: Error checking video {i + 1}: {str(probe_error)}")
                     raise
 
-                # Update progress with captured value
-                current_i = i
-                self.root.after(
-                    0,
-                    lambda i=current_i: self.progress_label.config(
-                        text=f"Checking video {i + 1}/{len(self.video_files)}..."
-                    ),
-                )
+                self._post_status(f"Checking video {i + 1}/{len(self.video_files)}...")
 
             # Create a filelist for concat
             temp_dir = os.path.join(output_subdir, "temp")
@@ -1074,14 +1112,7 @@ class VideoMergeApp:
 
                 print(f"DEBUG: Copying video {i + 1} to temporary directory: {' '.join(copy_cmd)}")
 
-                # Update progress
-                current_i = i
-                self.root.after(
-                    0,
-                    lambda i=current_i: self.progress_label.config(
-                        text=f"Preparing video {i + 1}/{len(self.video_files)}..."
-                    ),
-                )
+                self._post_status(f"Preparing video {i + 1}/{len(self.video_files)}...")
 
                 result = subprocess.run(copy_cmd, capture_output=True, text=True)
 
@@ -1119,13 +1150,7 @@ class VideoMergeApp:
 
             print(f"DEBUG: Comando FFmpeg: {' '.join(ffmpeg_command)}")
 
-            # Update progress
-            self.root.after(
-                0,
-                lambda: self.progress_label.config(
-                    text="Executando mesclagem rápida (sem recodificação)..."
-                ),
-            )
+            self._post_status("Executando mesclagem rápida (sem recodificação)...")
 
             # Execute the command and capture output
             try:
@@ -1146,14 +1171,7 @@ class VideoMergeApp:
                 for line in process.stderr:
                     stderr_output.append(line)
                     if "frame=" in line or "time=" in line:
-                        # Capturar a linha atual para a lambda
-                        current_line = line.strip()
-                        self.root.after(
-                            0,
-                            lambda l=current_line: self.progress_label.config(
-                                text=f"Mesclando: {l}"
-                            ),
-                        )
+                        self._post_status(f"Mesclando: {line.strip()}")
 
                 process.wait()
 
@@ -1311,29 +1329,18 @@ class VideoMergeApp:
             # If process succeeded, show success message
             if process.returncode == 0:
                 print("DEBUG: Fast merge completed successfully!")
-                # Pass the output video path directly to the lambda
-                output_path = output_video_path
-                report_path = frame_report_path
-                self.root.after(
-                    0,
-                    lambda path=output_path, report=report_path: self.merge_complete(
-                        True, f"{path}\n\nFrame report: {report}"
-                    ),
-                )
+                self._post_done(True, f"{output_video_path}\n\nFrame report: {frame_report_path}")
             else:
-                # Capture the error message for the lambda
                 error_msg = f"FFmpeg error (code {process.returncode}): {' '.join([line.strip() for line in stderr_output if 'Error' in line])}"
                 print(f"ERROR: {error_msg}")
-                self.root.after(0, lambda msg=error_msg: self.merge_complete(False, msg))
+                self._post_done(False, error_msg)
 
         except Exception as e:
             import traceback
 
             print(f"ERROR: Exception in fast merge: {str(e)}")
             print(traceback.format_exc())
-            # Capture the error message as a string to avoid problems with the 'e' variable
-            error_message = str(e)
-            self.root.after(0, lambda msg=error_message: self.merge_complete(False, msg))
+            self._post_done(False, str(e))
 
     def do_frame_accurate_merge(self, output_video_path, output_subdir):
         """Execute frame-accurate merging that preserves exact frame count"""
@@ -1342,8 +1349,7 @@ class VideoMergeApp:
             temp_dir = os.path.join(output_subdir, "temp")
             os.makedirs(temp_dir, exist_ok=True)
 
-            # Update progress
-            self.root.after(0, lambda: self.progress_label.config(text="Analyzing videos..."))
+            self._post_status("Analyzing videos...")
 
             # First pass: analyze videos to determine optimal parameters
             # In this mode, we keep each video's original FPS but standardize resolution and codec
@@ -1448,18 +1454,8 @@ class VideoMergeApp:
                     total_frames += frames
                     frame_counts.append(frames)
 
-                    # Use captured values in lambda
-                    current_i = i
-                    current_width = width
-                    current_height = height
-                    current_frames = frames
-                    self.root.after(
-                        0,
-                        lambda i=current_i, w=current_width, h=current_height, f=current_frames: (
-                            self.progress_label.config(
-                                text=f"Analyzed video {i + 1}/{len(self.video_files)}: {w}x{h}, {f} frames"
-                            )
-                        ),
+                    self._post_status(
+                        f"Analyzed video {i + 1}/{len(self.video_files)}: {width}x{height}, {frames} frames"
                     )
                 except Exception as analysis_error:
                     import traceback
@@ -1474,14 +1470,7 @@ class VideoMergeApp:
 
             for i, video_path in enumerate(self.video_files):
                 try:
-                    # Use captured value in lambda
-                    current_i = i
-                    self.root.after(
-                        0,
-                        lambda i=current_i: self.progress_label.config(
-                            text=f"Processing video {i + 1}/{len(self.video_files)}..."
-                        ),
-                    )
+                    self._post_status(f"Processing video {i + 1}/{len(self.video_files)}...")
 
                     temp_file = os.path.normpath(os.path.join(temp_dir, f"temp_{i}.mp4"))
                     temp_files.append(temp_file)
@@ -1561,14 +1550,8 @@ class VideoMergeApp:
                     for line in process.stderr:
                         stderr_output.append(line)
                         if "frame=" in line or "time=" in line:
-                            # Capturar a linha atual para a lambda
-                            current_line = line.strip()
-                            current_i = i
-                            self.root.after(
-                                0,
-                                lambda i=current_i, l=current_line: self.progress_label.config(
-                                    text=f"Processing video {i + 1}/{len(self.video_files)}: {l}"
-                                ),
+                            self._post_status(
+                                f"Processing video {i + 1}/{len(self.video_files)}: {line.strip()}"
                             )
 
                     process.wait()
@@ -1632,10 +1615,7 @@ class VideoMergeApp:
                     f.write(f"file '{rel_path}'\n")
 
             # Final merge using the preprocessed files
-            self.root.after(
-                0,
-                lambda: self.progress_label.config(text="Merging preprocessed videos..."),
-            )
+            self._post_status("Merging preprocessed videos...")
 
             concat_cmd = [
                 "ffmpeg",
@@ -1668,12 +1648,7 @@ class VideoMergeApp:
             for line in process.stderr:
                 stderr_output.append(line)
                 if "frame=" in line or "time=" in line:
-                    # Capture the current line for the lambda
-                    current_line = line.strip()
-                    self.root.after(
-                        0,
-                        lambda l=current_line: self.progress_label.config(text=f"Merging: {l}"),
-                    )
+                    self._post_status(f"Merging: {line.strip()}")
 
             process.wait()
             if process.returncode != 0:
@@ -1794,29 +1769,16 @@ class VideoMergeApp:
             # If process succeeded, show success message
             if process.returncode == 0:
                 print("DEBUG: Frame Accurate merge completed successfully!")
-                # Pass the output video path directly to the lambda
-                output_path = output_video_path
-                report_path = frame_report_path
-                self.root.after(
-                    0,
-                    lambda path=output_path, report=report_path: self.merge_complete(
-                        True, f"{path}\n\nFrame report: {report}"
-                    ),
-                )
+                self._post_done(True, f"{output_video_path}\n\nFrame report: {frame_report_path}")
             else:
-                # Capture the return code for the lambda
-                return_code = process.returncode
-                self.root.after(
-                    0,
-                    lambda code=return_code: self.merge_complete(
-                        False, f"FFmpeg error: return code {code}"
-                    ),
-                )
+                self._post_done(False, f"FFmpeg error: return code {process.returncode}")
 
         except Exception as e:
-            # Capture the error message as a string to avoid problems with the 'e' variable
-            error_message = str(e)
-            self.root.after(0, lambda msg=error_message: self.merge_complete(False, msg))
+            import traceback
+
+            print(f"ERROR in frame-accurate mode: {e}")
+            print(traceback.format_exc())
+            self._post_done(False, str(e))
 
     def show_mode_help(self, mode):
         """Show help information for the selected merge mode"""
@@ -1882,37 +1844,51 @@ class VideoMergeApp:
             )
 
     def merge_complete(self, success, message):
-        """Handle completion of the merge process"""
+        """Handle completion of the merge process on the main thread."""
         try:
             print(f"DEBUG: Finalizing merge process. Success: {success}")
+            self._ui_polling = False
 
-            # Stop progress bar
-            try:
-                self.progress_bar.stop()
-                self.progress_bar.pack_forget()
-                self.progress_label.pack_forget()
-                print("DEBUG: Progress bar stopped and removed")
-            except Exception as e:
-                print(f"Error stopping progress bar: {str(e)}")
+            if not self._window_alive():
+                return
+
+            self._stop_progress_bar()
 
             if success:
+                output_path = message.split("\n\nFrame report:", 1)[0].strip()
+                name = os.path.basename(output_path) or output_path
+                self.progress_bar.configure(mode="determinate", maximum=100, value=100)
+                if not self.progress_bar.winfo_ismapped():
+                    self.progress_bar.pack(fill=tk.X, pady=(5, 0))
+                self.progress_label.configure(text=f"Finished — {name}\n{output_path}")
+                if not self.progress_label.winfo_ismapped():
+                    self.progress_label.pack(fill=tk.X, pady=(5, 0))
+                self.root.title("Merge finished")
+                self.merge_button.configure(state="normal")
                 print(f"DEBUG: Merge completed successfully: {message}")
                 messagebox.showinfo("Success", f"Videos merged successfully!\nOutput: {message}")
             else:
+                self.progress_label.configure(text=f"Failed — {message}")
+                if not self.progress_label.winfo_ismapped():
+                    self.progress_label.pack(fill=tk.X, pady=(5, 0))
+                self.root.title("Merge failed")
+                self.merge_button.configure(state="normal")
                 print(f"DEBUG: Error merging videos: {message}")
                 messagebox.showerror("Error", f"Failed to merge videos: {message}")
+        except tk.TclError as e:
+            print(f"Error finishing merge process: {e}")
         except Exception as e:
             import traceback
 
             print(f"Error finishing merge process: {str(e)}")
             print(traceback.format_exc())
-            # Try to show a basic error message
             try:
-                messagebox.showerror(
-                    "Error",
-                    f"An error occurred while completing the merge process: {str(e)}",
-                )
-            except:
+                if self._window_alive():
+                    messagebox.showerror(
+                        "Error",
+                        f"An error occurred while completing the merge process: {str(e)}",
+                    )
+            except tk.TclError:
                 print("Could not show error message")
 
     def create_mode_buttons(self):

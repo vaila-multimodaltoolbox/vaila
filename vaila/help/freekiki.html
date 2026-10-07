@@ -32,7 +32,7 @@
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
         <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,models,sizes,grow,audit,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.7 · <strong>Updated:</strong> 02 October 2026
+        <strong>Version:</strong> 0.4.7 · <strong>Updated:</strong> 06 October 2026
       </div>
 
       <h2>Correct and retrain (3 steps)</h2>
@@ -48,6 +48,9 @@
             <li>A point inside the picture but not visible: <strong>Del</strong> (this frame) or
               <strong>Del Range</strong> (many frames). Points outside the picture are ignored.</li>
             <li><strong>F3 Frame OK</strong> accepts the frame; <strong>PgDn</strong> goes to the next draft.</li>
+            <li><strong>X / Discard</strong> drops a bad frame (advert, wrong camera). It is never exported and disappears from
+              navigation (arrows, slider, playback, PgDn). <strong>Shift+X</strong> shows discarded frames again; X restores
+              one.</li>
             <li><strong>F9 Save dataset</strong> writes <code>images/</code>, <code>labels/</code>,
               <code>data.yaml</code> and <code>session.json</code> into the folder you choose. Only complete frames
               are saved.</li>
@@ -64,6 +67,29 @@
           </ul>
         </li>
       </ol>
+
+      <h2>Mine new videos for the missing keypoints (<code>queue --need</code>, one montage)</h2>
+      <pre>uv run --no-sync vaila/freekiki.py detect -w WS --video ~/data/yt_mining/vaila_batch_&lt;ts&gt; --model l --stride 5 --no-overlay --output-dir ~/data/yt_mining/detect
+uv run --no-sync vaila/freekiki.py queue -w WS --batch ~/data/yt_mining/detect/processed_freekiki_batch_&lt;ts&gt; --need p5,p29,p39,p47 --montage
+uv run --no-sync vaila/freekiki.py ingest -w WS --src WS/incoming/montage_&lt;ts&gt; [--commit]</pre>
+      <p>For each frame the field camera (fitted to the accepted points) says whether a needed keypoint is in the
+        picture, even when the network misses it. Priority:</p>
+      <ol>
+        <li>in the picture and missed by the network;</li>
+        <li>only with <code>--half-seen</code>: no camera, but half-seen (off by default: such frames were all discarded in review);</li>
+        <li>in the picture and already accepted.</li>
+      </ol>
+      <p>At most 5 frames per video (<code>--per-video</code>), <code>--min-gap</code> apart: many videos, few frames
+        each.</p>
+      <p><code>--montage</code> writes <code>WS/incoming/montage_&lt;ts&gt;/</code>:</p>
+      <ul>
+        <li><code>montage.mp4</code>: H.264 with every frame a key frame; other sizes are letterboxed;</li>
+        <li><code>session.json</code>: the drafted predictions;</li>
+        <li><code>montage_frames.csv</code>: source video, frame, time, scale/offset, reason and <code>match</code>.</li>
+      </ul>
+      <p><code>match</code> defaults to the source video name; cuts of one video share it. Edit it to merge the clips of
+        one match. <code>ingest</code> without <code>--match-id</code> uses it per frame, so the leakage checks work per
+        match.</p>
 
       <h2>Advanced (CLI): label queue, ingest, hard holdout</h2>
       <pre>uv run --no-sync vaila/freekiki.py detect -w WS --video /path/new_videos
@@ -433,7 +459,97 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
         field instance; <strong>Rb</strong> rejected, box below <em>Conf</em>; <strong>Rk</strong> rejected, keypoint below
         <em>KP conf</em>; <strong>Ro</strong> outside the image; <strong>Rd</strong> same pixel (&lt; 3 px@1920) as a
         higher-confidence index; <strong>I</strong> interpolated (filled CSV only). Gap filling never crosses a cut and never
-        extrapolates past the first/last detection.</p>
+        extrapolates past the first/last detection. Geometry CSVs add <strong>G</strong> (filled by the field camera),
+        <strong>Gx</strong> (replaced) and <strong>Dg</strong> (accepted but far from it).</p>
+
+      <h2>Field geometry (fill / fix) — AI + mathematics</h2>
+      <p>The pitch is a known 3D object (<code>soccerfield_kiki.csv</code>, metres, z up). In every frame FreeKiki fits a
+        <strong>camera</strong> to the accepted keypoints, then predicts where every other keypoint must be.</p>
+      <p>The camera:</p>
+      <ul>
+        <li>a planar <strong>homography</strong> (RANSAC) of the z = 0 points;</li>
+        <li>a <strong>DLT3D</strong> (11 parameters, as in <code>dlt3d.py</code>) when ≥ 7 points including ≥ 2 off the
+          ground (flags 1.5 m, post tops 2.44 m) are found;</li>
+        <li>otherwise a <strong>pinhole camera recovered from the homography</strong>: Zhang focal refined on the
+          points, centred principal point, square pixels.</li>
+      </ul>
+      <table>
+        <tr><th>mode</th><th>effect</th></tr>
+        <tr><td><code>fill</code> (default)</td><td>A point the network did not accept is filled (<strong>G</strong>) when
+          its projection is inside the image and the raw network conf is ≥ 0.05 (occluded points are not invented). The
+          network position is kept when it agrees (≤ 15 px@1920).</td></tr>
+        <tr><td><code>fix</code></td><td><code>fill</code>, plus an accepted point more than 20 px@1920 from the camera is
+          replaced (<strong>Gx</strong>); in <code>fill</code> mode it is only flagged (<strong>Dg</strong>).</td></tr>
+        <tr><td><code>off</code></td><td>network only</td></tr>
+      </table>
+      <p>Outputs:</p>
+      <ul>
+        <li><code>field_kps_geom_getpixelvideo.csv</code> and <code>field_kps_geom_status.csv</code> (camera source,
+          focal, camera height, RMSE and the per-point codes);</li>
+        <li><code>geom_*</code> keys in <code>quality.json</code>;</li>
+        <li>the network CSVs are not changed;</li>
+        <li>a geometry point may be occluded.</li>
+      </ul>
+      <h3>Per-frame DLT calibration for rec2d / rec3d (tracking players)</h3>
+      <ul>
+        <li><code>&lt;video&gt;.dlt2d</code> (<code>frame,p1..p8</code>): the ground homography (metres → pixels, H[2,2] = 1)
+          for <code>rec2d.py</code>. Use it for positions on the pitch: feet of pose keypoints, or the bottom of
+          detection boxes.</li>
+        <li><code>&lt;video&gt;.dlt3d</code> (<code>frame,p1..p11</code>): the full camera for <code>rec3d.py</code>. 3D needs
+          ≥ 2 cameras of the same instant.</li>
+        <li>World frame: metres, origin at the centre spot, x towards the right goal, y towards the top touchline, z up.</li>
+        <li>A blank row means there was no camera in that frame (skipped by rec2d/rec3d). Use <code>--stride 1</code> so every
+          tracked frame has a row.</li>
+        <li>Each frame is calibrated on its own. Check <code>field_kps_geom_status.csv</code> (rmse, camera height constant
+          within a match) and smooth the tracks if there is jitter.</li>
+      </ul>
+      <pre>uv run --no-sync vaila/freekiki.py detect -w WS --video match.mp4 --model l --stride 1 --output-dir OUT
+uv run --no-sync vaila/rec2d.py --dlt-file OUT/freekiki_predict_match_&lt;ts&gt;/match.dlt2d --input-dir TRACK_CSV_DIR --output-dir REC_DIR --rate 25</pre>
+      <p>Limits:</p>
+      <ul>
+        <li>The camera needs ≥ 6 consistent pitch points, so frames with 2–3 detections still need a better
+          network.</li>
+        <li><code>evaluate</code> scores network vs fill vs fix on the same labels (<code>per_keypoint_geom_*.csv</code>,
+          <code>eval_summary["geometry"]</code>). Tune <code>--geom-min-conf</code> / <code>--geom-fix-px</code> on val
+          only.</li>
+        <li><code>audit</code> reports flag and post-top labels far from the camera of the others
+          (<code>kind=geom3d</code>).</li>
+      </ul>
+
+      <h2 id="extend">External datasets (super-dataset): <code>extend</code></h2>
+      <p>More labelled frames without labelling by hand. External soccer-field datasets are converted to the
+        49 FreeKiki points and appended to <b>train</b> only (val, test and hard stay frozen, so models remain
+        comparable).</p>
+      <table>
+        <tr><th>Source</th><th>What it brings</th><th>How the 49 points are made</th></tr>
+        <tr><td><code>roboflow</code></td><td>Roboflow Universe keypoint projects (<code>--search "class:pitch"</code>
+          or <code>--project ws/proj[@ver]</code>; key <code>ROBOFLOW_API_KEY</code> in the environment or the
+          gitignored <code>.env</code>)</td><td>Each project uses its own layout. The FreeKiki network predicts the
+          49 points on up to 150 images and every project keypoint <b>votes</b> for the nearest accepted prediction
+          (12 px@1920, at least 10 votes, 70&nbsp;% agreement, one-to-one). Points the network rarely accepts (the
+          corners) are mapped by <b>geometry</b> (homography of the mapped points, within 1.5 m on the pitch).
+          Result: <code>mapping.csv</code> (editable, reused). Square "Stretch" exports are resized back to 16:9.</td></tr>
+        <tr><td><code>gsr</code></td><td>SoccerNet Game State Reconstruction (200 clips)</td><td>Human pitch-line
+          annotations. 1 frame per second, plus every 5th frame when a rare point (p5/p16/p29/p39/p47) is in
+          view.</td></tr>
+        <tr><td><code>soccernet-rescue</code></td><td>SoccerNet calibration train images the original build
+          rejected</td><td>The network's points anchor the plane; the <b>human lines must agree</b> (median
+          &le; 3 px@1280) and the projected field must sit on painted lines.</td></tr>
+      </table>
+      <p>Human points are kept; the other points in view come from the fitted plane / camera and must pass the
+        line-support gate. Code: <code>vaila/kiki49_build/</code> (ported from mkvis3d
+        <code>openbiomech/soccer_field</code>).</p>
+      <pre><code>W=/path/FreeKiki
+uv run --no-sync vaila/freekiki.py extend -w $W --source roboflow --search "class:pitch"
+uv run --no-sync vaila/freekiki.py extend -w $W --source gsr
+uv run --no-sync vaila/freekiki.py extend -w $W --source soccernet-rescue
+uv run --no-sync vaila/freekiki.py extend -w $W --src $W/incoming/external_roboflow_&lt;ts&gt;            # preview
+uv run --no-sync vaila/freekiki.py extend -w $W --src $W/incoming/external_roboflow_&lt;ts&gt; --commit   # append to train</code></pre>
+      <p>The commit drops (and counts) frames whose group belongs to val/test/hard, near-duplicates of
+        val/test/hard images, of train images or of another staged frame, and images already registered;
+        re-running it is safe. GUI: section 3, row <b>External data</b> (Source, query or
+        <code>ws/proj@ver</code> entries separated by <code>;</code>, <b>Stage</b>, staging folder,
+        <b>Preview</b>, <b>Commit</b>).</p>
 
       <h2>CLI</h2>
       <pre>uv run vaila/freekiki.py init     -w /path/FreeKiki
@@ -460,6 +576,7 @@ uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split test           # fin
 uv run vaila/freekiki.py detect   -w /path/FreeKiki --video match.mp4 --stride 5
 uv run vaila/freekiki.py detect   -w /path/FreeKiki --video /path/folder_of_videos
 uv run vaila/freekiki.py queue    -w /path/FreeKiki --batch /path/processed_freekiki_batch_&lt;ts&gt;
+uv run vaila/freekiki.py queue    -w /path/FreeKiki --batch BATCH1 BATCH2 --need p5,p29,p39,p47 --montage
 uv run vaila/freekiki.py ingest   -w /path/FreeKiki --src /path/FreeKiki/incoming/SESSION --match-id MATCH [--split hard] [--commit]
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split hard</pre>
       <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Useful options: <code>manifest --rfs-t --cap --seed --exclude FILE --name</code>;

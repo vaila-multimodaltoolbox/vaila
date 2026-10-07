@@ -23,6 +23,8 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
 - **Audio playback**: Synchronized audio playback with video; automatically loops when loop mode is enabled.
 - **Loop control**: Loop button (stacked above Help / Base name on the right) to enable/disable video and audio looping.
 - **Auto-fit window**: Hotkey `0` automatically adjusts window to maximize screen space usage while maintaining aspect ratio.
+- **Hold arrows**: while paused, hold Left/Right to step one frame (repeat after 250 ms, then every 45 ms) and Up/Down to jump 60 frames (every 90 ms), same timing as `getpixelvideo`. Shift+Left/Right stays a one-shot marker jump.
+- **Zoom 10×**: `+`/`-` and the wheel zoom from 0.1× to 10×. 1× still fits the whole video; only the visible crop is scaled.
 - **Marker navigation**: Shift+Left/Right cycles through every start/end marker with wraparound, matching `getpixelvideo`; PageUp/PageDown and Home/End remain available.
 - **Cut timeline feedback**: Clickable/draggable strip above the scrub slider mirrors `getpixelvideo`: blue ranges, green starts, orange ends, yellow pending start, white playhead. Clicking a marker column snaps to that cut point.
 - **Responsive final render**: ffmpeg/OpenCV exports show a cancellable Tk progress dialog. The dialog stays responsive while ffmpeg runs and terminates the active subprocess when cancelled. Hardware H.264 is used when available — NVIDIA `h264_nvenc` (Linux/Windows) or Apple `h264_videotoolbox` (macOS) — with automatic CPU `libx264` fallback on every OS.
@@ -78,9 +80,9 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Right (top to bottom):** **Loop**, **Help**, then a row with **Cut names** (**V** / **N**; shows **Names ✓n** when loaded) and **Base name** (**B**).
 
 ### Keyboard and mouse
-- **Playback/Navigation:** Space (play/pause), `[` / `]` (slower/faster playback: halve/double, 0.0625×–16×), →/← (frame step), Shift+→/← (next/previous cut marker with wraparound), ↑/↓ (±60 frames), mouse on slider (jump), click/drag cut strip (jump with marker snap).
+- **Playback/Navigation:** Space (play/pause), `[` / `]` (slower/faster playback: halve/double, 0.0625×–16×), →/← (frame step; hold to repeat), Shift+→/← (next/previous cut marker with wraparound), ↑/↓ (±60 frames; hold to repeat), mouse on slider (jump), click/drag cut strip (jump with marker snap).
 - **Audio Controls:** A (toggle audio waveform panel), M (mute/unmute audio).
-- **Window Controls:** 0 (auto-fit window to screen), +/- or wheel (zoom), middle-mouse drag (pan when zoomed), drag window edges (manual resize).
+- **Window Controls:** 0 (auto-fit window to screen), +/- or wheel (zoom 0.1×–10×), middle-mouse drag (pan when zoomed), drag window edges (manual resize).
 - **Markers/Cuts:** S (start), E (end), R (reset start), D or Delete (remove last cut), L (list cuts with planned output filenames), C (labels only).
 - **Navigation to markers:** Shift+Left/Right (cycle previous/next marker), PageUp/PageDown (prev/next marker), Home/End (start/end of current or first/last cut).
 - **Jump inputs:** G (go to frame), T (go to time in seconds), I or P (manual FPS input).
@@ -119,7 +121,7 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 02 October 2026
+📅 **Last Updated:** 04 October 2026
 🔗 **Part of vailá - Multimodal Toolbox**
 
 ### Save current frame as PNG

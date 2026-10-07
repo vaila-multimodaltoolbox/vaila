@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 02 October 2026
+Update Date: 04 October 2026
 Version: 0.4.7
 
 Description:
@@ -30,6 +30,7 @@ Features:
 - Added support for loop control.
 - Playback speed: `[` / `]` halve/double speed (0.0625×–16×), same as getpixelvideo.
 - Added support for auto-fit window.
+- Hold Left/Right/Up/Down while paused to repeat frame steps; zoom reaches 10×.
 - Added support for marker navigation.
 - Added clickable timeline feedback for cut ranges, start/end markers, and pending start.
 - Added Shift+Left/Right navigation across cut start/end timeline markers.
@@ -89,6 +90,7 @@ import bisect
 import contextlib
 import datetime
 import json
+import math
 import os
 import platform
 
@@ -156,7 +158,12 @@ except ImportError:
         validate_sync_leaf_filename,
     )
 
-MAX_RENDER_PIXELS = 4_000_000
+ZOOM_MIN = 0.1
+ZOOM_MAX = 10.0
+NAV_HOLD_DELAY_MS = 250
+NAV_HOLD_REPEAT_LR_MS = 45
+NAV_HOLD_REPEAT_UD_MS = 90
+NAV_JUMP_FRAMES = 60
 CUT_RANGE_COLOR = (42, 86, 112)
 CUT_START_COLOR = (70, 220, 110)
 CUT_END_COLOR = (255, 135, 70)
@@ -170,6 +177,71 @@ if hasattr(pygame, "WINDOWCLOSE"):
 
 # Discrete playback-speed ladder (always includes 1.0× so [ / ] never skip normal speed).
 PLAYBACK_SPEED_STEPS: tuple[float, ...] = (0.0625, 0.125, 0.25, 0.5, 1.0, 2.0, 4.0, 8.0, 16.0)
+
+
+def nav_hold_should_step(now_ms: int, started_ms: int, last_ms: int, *, vertical: bool) -> bool:
+    """True after the initial delay, then again each repeat interval.
+
+    Left/right use the faster interval; up/down use the slower one. Matches
+    the paused arrow-hold timing in getpixelvideo.
+    """
+    if now_ms - started_ms < NAV_HOLD_DELAY_MS:
+        return False
+    repeat_ms = NAV_HOLD_REPEAT_UD_MS if vertical else NAV_HOLD_REPEAT_LR_MS
+    return now_ms - last_ms >= repeat_ms
+
+
+def step_paused_frame(frame_count: int, total_frames: int, direction: str) -> int:
+    """One paused arrow step. direction is left, right, up, or down."""
+    last = max(0, total_frames - 1)
+    if direction == "right":
+        return min(frame_count + 1, last)
+    if direction == "left":
+        return max(frame_count - 1, 0)
+    if direction == "up":
+        return min(frame_count + NAV_JUMP_FRAMES, last)
+    if direction == "down":
+        return max(frame_count - NAV_JUMP_FRAMES, 0)
+    return frame_count
+
+
+def visible_source_rect(
+    frame_w: int,
+    frame_h: int,
+    window_w: int,
+    window_h: int,
+    zoom_level: float,
+    offset_x: float,
+    offset_y: float,
+) -> tuple[int, int, int, int, int, int]:
+    """Source x0, y0, x1, y1 and destination width, height for the visible view.
+
+    zoom_level 1.0 fits the whole frame in the window. Only the visible source
+    rectangle is returned so the caller resizes that crop, not the full frame.
+    """
+    fw = max(1, int(frame_w))
+    fh = max(1, int(frame_h))
+    ww = max(1, int(window_w))
+    wh = max(1, int(window_h))
+    scale_fit = min(ww / fw, wh / fh)
+    effective = max(1e-9, scale_fit * float(zoom_level))
+    zoomed_w = max(1, int(round(fw * effective)))
+    zoomed_h = max(1, int(round(fh * effective)))
+    max_x = max(0, zoomed_w - ww)
+    max_y = max(0, zoomed_h - wh)
+    crop_x = int(max(0.0, min(float(max_x), float(offset_x))))
+    crop_y = int(max(0.0, min(float(max_y), float(offset_y))))
+    dest_w = max(1, min(ww, zoomed_w - crop_x))
+    dest_h = max(1, min(wh, zoomed_h - crop_y))
+    x0 = int(math.floor(crop_x / effective))
+    y0 = int(math.floor(crop_y / effective))
+    x1 = int(math.ceil((crop_x + dest_w) / effective))
+    y1 = int(math.ceil((crop_y + dest_h) / effective))
+    x0 = max(0, min(fw - 1, x0))
+    y0 = max(0, min(fh - 1, y0))
+    x1 = max(x0 + 1, min(fw, x1))
+    y1 = max(y0 + 1, min(fh, y1))
+    return x0, y0, x1, y1, dest_w, dest_h
 
 
 def _playback_speed_index(speed: float) -> int:
@@ -1743,6 +1815,9 @@ def play_video_with_cuts(video_path, *, sync_file=None):
     offset_y = 0.0
     panning = False
     dragging_cut_timeline = False
+    nav_hold_key: int | None = None
+    nav_hold_started_ms = 0
+    nav_hold_last_ms = 0
 
     def clamp_pan_offsets():
         nonlocal offset_x, offset_y
@@ -1760,18 +1835,9 @@ def play_video_with_cuts(video_path, *, sync_file=None):
         offset_x = 0.0
         offset_y = 0.0
 
-    def get_max_safe_zoom():
-        scale_fit_local = min(window_width / original_width, window_height / original_height)
-        base_w = max(1.0, float(original_width) * scale_fit_local)
-        base_h = max(1.0, float(original_height) * scale_fit_local)
-        max_by_pixels = (MAX_RENDER_PIXELS / (base_w * base_h)) ** 0.5
-        return max(1.0, min(10.0, max_by_pixels))
-
     def clamp_zoom_level():
         nonlocal zoom_level
-        safe_zoom = get_max_safe_zoom()
-        if zoom_level > safe_zoom:
-            zoom_level = safe_zoom
+        zoom_level = max(ZOOM_MIN, min(ZOOM_MAX, zoom_level))
 
     # Load existing cuts or sync file if available
     cuts, using_sync_file, sync_data = load_cuts_or_sync(video_path, sync_file=sync_file)
@@ -2127,17 +2193,16 @@ def play_video_with_cuts(video_path, *, sync_file=None):
             "Navigation:",
             "- Space: Play/Pause",
             "- [ / ]: Decrease / Increase playback speed (halve / double; 0.0625×–16×)",
-            "- Right Arrow: Next Frame (when paused)",
-            "- Left Arrow: Previous Frame (when paused)",
+            "- Right Arrow: Next Frame (when paused; hold to repeat)",
+            "- Left Arrow: Previous Frame (when paused; hold to repeat)",
             "- Shift+Right / Shift+Left: Jump to next/previous cut marker",
             "    (start/end points shown in the timeline strip)",
-            "- Up Arrow: Fast Forward (60 frames)",
-            "- Down Arrow: Rewind (60 frames)",
+            "- Up Arrow: Fast Forward (60 frames; hold to repeat)",
+            "- Down Arrow: Rewind (60 frames; hold to repeat)",
+            "- + / - or mouse wheel: Zoom from 0.1× to 10× (1× fits the video)",
             "- G: Go to Frame Number (enter frame number as int)",
             "- T: Go to Time (enter time in seconds as float)",
             "- 0: Auto-fit window to screen",
-            "- + or =: Zoom In",
-            "- -: Zoom Out",
             "",
             "Audio Controls:",
             "- A: Toggle Audio Waveform Panel",
@@ -2725,18 +2790,24 @@ def play_video_with_cuts(video_path, *, sync_file=None):
         frame = check_and_rotate_frame(frame, metadata)
         displayed_frame_index = frame_count
 
-        # Base scale so that at zoom_level=1.0 the whole video fits in the window
+        # Base scale so that at zoom_level=1.0 the whole video fits in the window.
+        # Resize only the visible source crop so 10× does not allocate a full frame.
         clamp_zoom_level()
-        scale_fit = min(window_width / original_width, window_height / original_height)
-        zoomed_width = max(1, int(original_width * scale_fit * zoom_level))
-        zoomed_height = max(1, int(original_height * scale_fit * zoom_level))
         clamp_pan_offsets()
-        zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
-        crop_x = int(offset_x)
-        crop_y = int(offset_y)
-        visible_w = max(1, min(window_width, zoomed_width - crop_x))
-        visible_h = max(1, min(window_height, zoomed_height - crop_y))
-        cropped_frame = zoomed_frame[crop_y : crop_y + visible_h, crop_x : crop_x + visible_w]
+        src_x0, src_y0, src_x1, src_y1, dest_w, dest_h = visible_source_rect(
+            original_width,
+            original_height,
+            window_width,
+            window_height,
+            zoom_level,
+            offset_x,
+            offset_y,
+        )
+        cropped_frame = cv2.resize(
+            frame[src_y0:src_y1, src_x0:src_x1],
+            (dest_w, dest_h),
+            interpolation=cv2.INTER_LINEAR,
+        )
         frame_surface = pygame.surfarray.make_surface(
             cv2.cvtColor(cropped_frame, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
         )
@@ -2899,7 +2970,10 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                         else:
                             print("No markers available")
                     else:
-                        frame_count = min(frame_count + 1, total_frames - 1)
+                        frame_count = step_paused_frame(frame_count, total_frames, "right")
+                        nav_hold_key = pygame.K_RIGHT
+                        nav_hold_started_ms = pygame.time.get_ticks()
+                        nav_hold_last_ms = nav_hold_started_ms
                 elif event.key == pygame.K_LEFT and paused:
                     if pygame.key.get_mods() & pygame.KMOD_SHIFT:
                         previous_marker = adjacent_cut_marker_frame(
@@ -2911,11 +2985,20 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                         else:
                             print("No markers available")
                     else:
-                        frame_count = max(frame_count - 1, 0)
+                        frame_count = step_paused_frame(frame_count, total_frames, "left")
+                        nav_hold_key = pygame.K_LEFT
+                        nav_hold_started_ms = pygame.time.get_ticks()
+                        nav_hold_last_ms = nav_hold_started_ms
                 elif event.key == pygame.K_UP and paused:
-                    frame_count = min(frame_count + 60, total_frames - 1)
+                    frame_count = step_paused_frame(frame_count, total_frames, "up")
+                    nav_hold_key = pygame.K_UP
+                    nav_hold_started_ms = pygame.time.get_ticks()
+                    nav_hold_last_ms = nav_hold_started_ms
                 elif event.key == pygame.K_DOWN and paused:
-                    frame_count = max(frame_count - 60, 0)
+                    frame_count = step_paused_frame(frame_count, total_frames, "down")
+                    nav_hold_key = pygame.K_DOWN
+                    nav_hold_started_ms = pygame.time.get_ticks()
+                    nav_hold_last_ms = nav_hold_started_ms
                 elif event.key == pygame.K_s and event.mod & pygame.KMOD_SHIFT:
                     try:
                         saved_path = save_frame_png(video_path, frame, displayed_frame_index)
@@ -3173,6 +3256,14 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                         print(f"Jumped to time: {actual_time:.2f}s (frame: {frame_count + 1})")
                         paused = True  # Pause when jumping to time
                     pygame.display.flip()
+            elif event.type == pygame.KEYUP and event.key in (
+                pygame.K_LEFT,
+                pygame.K_RIGHT,
+                pygame.K_UP,
+                pygame.K_DOWN,
+            ):
+                if nav_hold_key == event.key:
+                    nav_hold_key = None
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
                 if event.button == 2 and y < window_height:
@@ -3257,6 +3348,26 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                         offset_x = (target_vx * new_effective) - mx
                         offset_y = (target_vy * new_effective) - my
                         clamp_pan_offsets()
+
+        if paused and nav_hold_key is not None:
+            pressed = pygame.key.get_pressed()
+            if not pressed[nav_hold_key]:
+                nav_hold_key = None
+            else:
+                now_ms = pygame.time.get_ticks()
+                vertical = nav_hold_key in (pygame.K_UP, pygame.K_DOWN)
+                if nav_hold_should_step(
+                    now_ms, nav_hold_started_ms, nav_hold_last_ms, vertical=vertical
+                ):
+                    if nav_hold_key == pygame.K_RIGHT:
+                        frame_count = step_paused_frame(frame_count, total_frames, "right")
+                    elif nav_hold_key == pygame.K_LEFT:
+                        frame_count = step_paused_frame(frame_count, total_frames, "left")
+                    elif nav_hold_key == pygame.K_UP:
+                        frame_count = step_paused_frame(frame_count, total_frames, "up")
+                    elif nav_hold_key == pygame.K_DOWN:
+                        frame_count = step_paused_frame(frame_count, total_frames, "down")
+                    nav_hold_last_ms = now_ms
 
         if paused:
             # Se pausado, não limitamos a taxa de FPS para que a interface seja responsiva

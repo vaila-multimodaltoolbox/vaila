@@ -1,7 +1,7 @@
 """FreeKiki human review, completeness gate, label queue and train/hard ingest.
 
 Version: 0.4.7
-Update Date: 02 October 2026
+Update Date: 03 October 2026
 """
 
 import csv
@@ -521,7 +521,17 @@ def test_audit_lists_missing_label_suspects(tmp_path):
 def test_cli_queue_ingest_split_and_evaluate_hard():
     parser = freekiki.build_parser()
     args = parser.parse_args(["queue", "-w", "WS", "--batch", "B", "--per-video", "30"])
-    assert (args.batch_dir, args.per_video, args.min_gap) == ("B", 30, 5)
+    assert (args.batch_dir, args.per_video, args.min_gap) == (["B"], 30, None)
+    args = parser.parse_args(
+        ["queue", "-w", "WS", "--batch", "B1", "B2", "--need", "p5,p29", "--montage"]
+    )
+    assert (args.batch_dir, args.need, args.montage, args.per_video) == (
+        ["B1", "B2"],
+        "p5,p29",
+        True,
+        None,
+    )
+    assert parser.parse_args(["ingest", "-w", "WS", "--src", "S"]).match_id is None
     args = parser.parse_args(
         ["ingest", "-w", "WS", "--src", "S", "--match-id", "M", "--split", "hard"]
     )
@@ -925,3 +935,86 @@ def test_freekiki_export_mode_lite_alias(tmp_path, monkeypatch):
     assert res == 0
     saved = freekiki.load_review_session(folder / "session.json")
     assert saved.get("export_mode") == "only_correct"
+
+
+def test_ingest_accepts_a_box_touching_the_border_after_rounding(tmp_path):
+    # Real label (freekiki_dataset2 frame 51): 8 decimals make cx + bw/2 = 1.000000005.
+    box = "0 0.53947266 0.55955556 0.92105469 0.68100000"
+    points = " 0.50000000 0.50000000 2 1.00000000 0.40000000 2" + " 0 0 0" * 47
+    label = tmp_path / "edge.txt"
+    label.write_text(box + points + "\n")
+    assert 0.53947266 + 0.92105469 / 2 > 1  # the rounding overshoot is real
+    assert freekiki._validate_ingest_label(label) == 2
+
+
+def test_montage_session_ingests_one_match_per_source_video(tmp_path, monkeypatch):
+    ws = _workspace(tmp_path / "workspace")
+    ds = ws / "datasets/kiki49"
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "montage.mp4"
+    video.write_bytes(b"montage")
+    session = freekiki.new_review_session(video, 48, 32, 5, workspace=ws)
+    for k in (10, 11, 12):  # frames 1 and 2 would repeat the val/test fixture images
+        _complete(session, k)
+        freekiki.mark_reviewed(session, k)
+    out = freekiki.export_reviewed_session(session)
+    rows = [
+        {"montage_frame": 10, "match": "match_a", "video": "/v/a.mp4", "frame": 10},
+        {"montage_frame": 11, "match": "match_b", "video": "/v/b.mp4", "frame": 20},
+        {"montage_frame": 12, "match": "match_a", "video": "/v/a2.mp4", "frame": 30},
+    ]
+    freekiki_diag.write_csv(out / freekiki.MONTAGE_CSV, rows)
+    report = freekiki.ingest_reviewed(ws, out, None, commit=True)
+    assert report["groups"] == {"match_a": 2, "match_b": 1}
+    with (ds / "manifest.csv").open() as f:
+        train = [r for r in csv.DictReader(f) if r["split"] == "train"]
+    assert sorted((r["group"], r["source_video"], r["source_frame"]) for r in train) == [
+        ("match_a", "/v/a.mp4", "10"),
+        ("match_a", "/v/a2.mp4", "30"),
+        ("match_b", "/v/b.mp4", "20"),
+    ]
+    # a montage match that is reserved in val is refused
+    rows[1]["match"] = "val"
+    freekiki_diag.write_csv(out / freekiki.MONTAGE_CSV, rows)
+    with pytest.raises(ValueError, match="Match val already belongs"):
+        freekiki.ingest_reviewed(ws, out, None)
+    (out / freekiki.MONTAGE_CSV).unlink()
+    with pytest.raises(ValueError, match="--match-id is required"):
+        freekiki.ingest_reviewed(ws, out, None)
+
+
+def test_relocated_montage_session_keeps_its_match_map(tmp_path):
+    video = tmp_path / "montage.mp4"
+    video.write_bytes(b"m")
+    session = freekiki.new_review_session(
+        video, 48, 32, 5, session_path=tmp_path / "montage_1" / "session.json"
+    )
+    freekiki.save_review_session(session)
+    freekiki_diag.write_csv(
+        tmp_path / "montage_1" / freekiki.MONTAGE_CSV, [{"montage_frame": 0, "match": "m"}]
+    )
+    freekiki.relocate_review_session(session, tmp_path / "corrections")
+    assert (tmp_path / "corrections" / freekiki.MONTAGE_CSV).is_file()
+    assert freekiki.montage_rows(tmp_path / "corrections") == {
+        0: {"montage_frame": "0", "match": "m"}
+    }
+
+
+def test_discarded_frame_leaves_the_dataset_and_can_be_restored(tmp_path, monkeypatch):
+    monkeypatch.setattr(cv2, "VideoCapture", _FrameCapture)
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"clip")
+    session = freekiki.new_review_session(video, 48, 32, 30, workspace=tmp_path)
+    for k in (10, 11):
+        _complete(session, k)
+        freekiki.mark_reviewed(session, k)
+    out = freekiki.export_reviewed_session(session)
+    assert len(list((out / "images").glob("*.png"))) == 2
+    assert freekiki.discard_review_frame(session, 11) == "DISCARDED"
+    assert session["frames"]["11"]["points"] == [None] * 49
+    assert len(list((out / "images").glob("*.png"))) == 1  # stale export removed
+    out = freekiki.export_reviewed_session(session)
+    with (out / "reviewed_frames.csv").open() as f:
+        assert [r["frame"] for r in csv.DictReader(f)] == ["10"]
+    assert freekiki.discard_review_frame(session, 11) == "AI_DRAFT"  # X again: back to the draft
+    assert sum(p is not None for p in session["frames"]["11"]["points"]) == 49
