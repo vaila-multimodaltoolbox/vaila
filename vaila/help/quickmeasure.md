@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/quickmeasure.py` |
-| **Version** | 0.4.7 |
-| **Updated** | 05 October 2026 |
+| **Version** | 0.4.9 |
+| **Updated** | 07 October 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes (embedded in `getpixelvideo.py`) |
 | **CLI** | Yes (`python -m vaila.quickmeasure --points-csv ...`) |
@@ -19,7 +19,7 @@
 Kinovea-style on-image calibration and measurement engine for `getpixelvideo.py`. The host UI splits into two toolbar modes:
 
 - **CALIB** (`Shift+Q` / **CALIB** button) — build or load planar calibrations.
-- **MEASURE** (`Q` / **MEASURE** button) — click points and classify as **Distance**, **Area**, **Angle**, **Velocity**, or **Acceleration**.
+- **MEASURE** (`Q` / **MEASURE** button) — click points and classify as **Distance**, **Area**, **Angle**, **Velocity**, or **Acceleration**. A checkbox beside **MEASURE** toggles didactic on-image badges (`#N · type · value unit`).
 
 This module owns measurement *state*, *math*, and pygame overlays. `getpixelvideo.py` only owns hotkeys, click routing, and toolbar buttons.
 

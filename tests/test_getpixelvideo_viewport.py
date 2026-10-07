@@ -7,6 +7,7 @@ from vaila.getpixelvideo import (
     GETPIXELVIDEO_VERSION,
     GETPIXELVIDEO_WINDOW_TITLE,
     compute_letterbox_pads,
+    letterbox_frame_to_canvas,
     marked_count_hud_pos,
     screen_to_video_coords,
     video_to_screen_coords,
@@ -14,10 +15,10 @@ from vaila.getpixelvideo import (
 
 
 def test_build_stamp_matches_global_release() -> None:
-    assert GETPIXELVIDEO_VERSION == "0.4.7"
-    assert GETPIXELVIDEO_UPDATE_DATE == "05 October 2026"
-    assert "0.4.7" in GETPIXELVIDEO_WINDOW_TITLE
-    assert "05 October 2026" in GETPIXELVIDEO_WINDOW_TITLE
+    assert GETPIXELVIDEO_VERSION == "0.4.9"
+    assert GETPIXELVIDEO_UPDATE_DATE == "07 October 2026"
+    assert "0.4.9" in GETPIXELVIDEO_WINDOW_TITLE
+    assert "07 October 2026" in GETPIXELVIDEO_WINDOW_TITLE
     assert GETPIXELVIDEO_WINDOW_TITLE.startswith("vailá getpixelvideo")
 
 
@@ -33,6 +34,31 @@ def test_letterbox_pads_portrait_in_landscape_window() -> None:
 def test_letterbox_pads_when_media_fills_viewport() -> None:
     assert compute_letterbox_pads(1920, 1080, 1920, 1080) == (0, 0)
     assert compute_letterbox_pads(2000, 1200, 800, 600) == (0, 0)
+
+
+def test_letterbox_frame_to_canvas_preserves_aspect() -> None:
+    import numpy as np
+
+    # Landscape 16:9 into a portrait canvas must not stretch (pillar/letterbox).
+    frame = np.full((90, 160, 3), 200, dtype=np.uint8)
+    canvas = letterbox_frame_to_canvas(frame, 108, 192)
+    assert canvas.shape == (192, 108, 3)
+    # Fitted size: scale = min(108/160, 192/90) = 108/160 = 0.675 → 108×60.75 → 108×61
+    # Non-black content should span full width with black bars top/bottom.
+    assert canvas[0, 54, 0] == 0  # top bar
+    assert canvas[96, 54, 0] == 200  # content mid
+    assert canvas[-1, 54, 0] == 0  # bottom bar
+
+
+def test_letterbox_frame_to_canvas_same_size_is_copy() -> None:
+    import numpy as np
+
+    frame = np.zeros((40, 60, 3), dtype=np.uint8)
+    frame[10, 20] = (1, 2, 3)
+    out = letterbox_frame_to_canvas(frame, 60, 40)
+    assert out.shape == (40, 60, 3)
+    assert out is not frame
+    assert tuple(out[10, 20]) == (1, 2, 3)
 
 
 def test_screen_video_roundtrip_with_letterbox() -> None:

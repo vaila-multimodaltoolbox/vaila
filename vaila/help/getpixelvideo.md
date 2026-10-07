@@ -4,7 +4,7 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.8
+**Version:** 0.4.9
 **Date:** 22 July 2025  
 **Updated:** 07 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
@@ -36,7 +36,7 @@ it does not create train/val/test splits. See the FreeKiki help page for ingest.
 
 - **VISUAL / INSERT editor modes (v0.4.2):** Opens in **VISUAL** (safe browse — no marker edits). **Ctrl+I** or the **VISUAL/INSERT** toolbar button switches to **INSERT** for normal marking. **Ctrl+Z** undoes discrete marker edits (INSERT). **Restore** reverts to session open or the last successful **Save**; discarded when you quit.
 
-- **Centered letterbox viewport:** When the fitted video is smaller than the window (common for portrait clips), the frame is centered so you can mark points in the black margins on *all* sides — left and top included, not only right/bottom. Version/date appear only in the OS window title (`vailá getpixelvideo — Update: … Version: …`), not overlaid on the video.
+- **Centered letterbox viewport:** When the fitted video is smaller than the window (common for portrait clips), the frame is centered so you can mark points in the black margins on *all* sides — left and top included, not only right/bottom. Still frames that differ in size from the session canvas are fit with black bars (never stretched). Version/date appear only in the OS window title (`vailá getpixelvideo — Update: … Version: …`), not overlaid on the video.
 
 - **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & multi-backbone deep features) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50, default, or opt-in ResNet152 / MobileNetV3-Small / EfficientNet-B0 / CUDA). Backbone weights live only under `vaila/models/ai_tracker/` (`resnet50_imagenet.pth`, `resnet152_imagenet.pth`, `mobilenet_v3_small_imagenet.pth`, `efficientnet_b0_imagenet.pth`, or a custom path). If missing, the GUI prompts to **browse** an existing `.pth`/`.pt` or **download** a clean official ImageNet checkpoint into that folder (Torch hub cache is never the permanent home; a one-time migration copies hub files into `ai_tracker/` when found). When enabled, the frozen *primary* backbone's embedding is also concatenated into the online discriminator's feature vector, so it participates in every per-click retrain without ever being backpropagated through. An optional, **off-by-default cascade fallback** (`fallback_variant` in the TOML profile, e.g. `efficientnet_b0`) re-scores a low-confidence frame with a second backbone and adopts it only if it scores higher — never affects the discriminator's feature width, only per-frame verification. Features:
   - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off. Optional **Deep** checkbox sits to the right of `AI Track` (deep features are an option of the tracker, not a separate mode).
@@ -71,7 +71,7 @@ it does not create train/val/test splits. See the FreeKiki help page for ingest.
   - **MediaPipe / YOLO:** stick-figure pose guide
   - **Other Tpl presets:** name-list reference (scrolls with selected keypoint) + skeleton lines from the JSON when markers are present
   Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).
-- **Quick Measure (`Q` / toolbar `QMeas`):** calibration first (Line / Plane / REF3D mode1–3 with plane drop + CSV or guided clicks), then free measuring; Enter classifies Distance/Area/Angle/Velocity/Acceleration and `S` saves the calibrated points/results CSVs (see `quickmeasure` help).
+- **Quick Measure (`Q` / toolbar `MEASURE`):** calibration first (Line / Plane / REF3D mode1–3 with plane drop + CSV or guided clicks), then free measuring; Enter classifies Distance/Area/Angle/Velocity/Acceleration and `S` saves the calibrated points/results CSVs (see `quickmeasure` help). A small checkbox beside **MEASURE** toggles on-image value badges (`#N · type · value unit`).
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
 - **Persistence Mode:** View marker trails across multiple frames
 - **Auto-detection:** Automatically detect CSV format or manual selection
@@ -718,6 +718,15 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.9 (07 October 2026) — Still aspect fix + measure overlay toggle
+
+- Opening a still inside a mixed-size folder (e.g. Downloads) no longer stretches
+  the image: sequence metadata uses the **selected** frame's width/height, and
+  mismatched frames are letterboxed into the session canvas (never anisotropic
+  `cv2.resize`).
+- Small checkbox beside **MEASURE** shows/hides completed measurement badges on
+  the image (`#N · type · value unit`). Draft clicks while measuring stay visible.
 
 ### Version 0.4.8 (07 October 2026) — Still images for measurement
 

@@ -237,7 +237,7 @@
       </section>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.8<br />
+        <strong>Version:</strong> 0.4.9<br />
         <strong>Date:</strong> 22 July 2025<br />
         <strong>Updated:</strong> 07 October 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
@@ -331,7 +331,7 @@
               <strong>Save</strong>; discarded when you quit.
             </li>
             <li>
-              <strong>Centered letterbox viewport:</strong> Fitted media is centered in the
+              <strong>Centered letterbox viewport:</strong> Still frames that differ in size from the session canvas are fit with black bars (never stretched). Fitted media is centered in the
               window so markers can be placed in the black margins on all sides (including left/top).
               Version/date appear only in the OS window title
               (<code>vailá getpixelvideo — Update: … Version: …</code>), not overlaid on the video.
@@ -1821,6 +1821,11 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
       <section id="version-history">
         <h2>11. Version History</h2>
 
+        <h3>Version 0.4.9 (07 October 2026) &mdash; Still aspect fix + measure overlay toggle</h3>
+        <ul>
+          <li>Opening a still inside a mixed-size folder no longer stretches the image: sequence metadata uses the selected frame size, and mismatched frames are letterboxed into the session canvas.</li>
+          <li>Checkbox beside <strong>MEASURE</strong> shows/hides completed measurement badges (<code>#N · type · value unit</code>). Draft clicks stay visible while measuring.</li>
+        </ul>
         <h3>Version 0.4.8 (07 October 2026) &mdash; Still images for measurement</h3>
         <ul>
           <li>Open a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp (file picker, F8, <code>-f</code>, <code>-d</code>, <code>--sequence</code>). CALIB and MEASURE use the same one-frame path as PNG.</li>
