@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.7
+**Version:** 0.4.8
 **Date:** 22 July 2025  
-**Updated:** 05 October 2026
+**Updated:** 07 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -20,7 +20,7 @@ FreeKiki model. `--freekiki-session SESSION.json` reopens markers and review
 states. `--freekiki-predictions DIR` loads `field_kps_raw.csv` from `freekiki
 detect` (one output folder, or a whole `processed_freekiki_batch_*` folder: each
 video takes its newest matching output); `--freekiki-videos DIR` visits videos in sorted order. `--dir` still
-means a PNG sequence.
+means a still-image sequence (png, jpg, jpeg, bmp, tif, tiff, webp).
 
 The **FreeKiki Kiki49** template has exactly 49 slots (`00` through `48`),
 named by `soccerfield_kiki.csv`. Turn on **INSERT** (`Ctrl+I`) to click or drag
@@ -100,7 +100,7 @@ Optional one-off run without syncing the whole repo: `uv run --with opencv-pytho
 ## Getting Started
 
 1. **Run the script:** `uv run vaila/getpixelvideo.py` (or `python vaila/getpixelvideo.py` if your environment is already set up)
-2. **Select media:** One file picker — choose a video, a single PNG, or any frame from a PNG sequence folder (type is auto-detected; no video-vs-PNG question). When you pick a PNG inside a multi-frame folder, that frame is the starting position (not the alphabetically first file).
+2. **Select media:** One file picker — choose a video, a single still image (png, jpg, jpeg, bmp, tif, tiff, webp), or any frame from a folder of those images (type is auto-detected). When you pick a frame inside a multi-image folder, that frame is the starting position (not the alphabetically first file). JPEG, TIFF, and WebP with an EXIF orientation tag open in the gallery orientation.
 3. **Load existing data:** Use 'Load' button in interface (optional)
 4. **Select format:** If loading data, choose CSV format:
    - **Auto-detect (recommended):** Automatically detects the format
@@ -116,8 +116,8 @@ Optional one-off run without syncing the whole repo: `uv run --with opencv-pytho
 ```bash
 uv run vaila/getpixelvideo.py --help
 uv run vaila/getpixelvideo.py -f VIDEO.mp4
-uv run vaila/getpixelvideo.py -f /path/to/png_folder      # or single .png
-uv run vaila/getpixelvideo.py -d /path/to/png_folder      # same as --sequence; subfolder with PNGs is auto-picked
+uv run vaila/getpixelvideo.py -f /path/to/image_folder    # or a single .png / .jpg / .jpeg
+uv run vaila/getpixelvideo.py -d /path/to/image_folder    # same as --sequence; subfolder with stills is auto-picked
 uv run vaila/getpixelvideo.py --sequence /path/to/frames
 uv run vaila/getpixelvideo.py -f VIDEO.mp4 --fifa-dataset /path/to/unified
 uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/vaila_dataset
@@ -718,6 +718,13 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.8 (07 October 2026) — Still images for measurement
+
+- Open a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp
+  (file picker, F8, `-f`, `-d`, `--sequence`). CALIB and MEASURE use the same
+  one-frame path as PNG.
+- JPEG, TIFF, and WebP with an EXIF orientation tag open in the gallery orientation.
 
 ### Version 0.4.7 (05 October 2026) — Guided Line and Plane calibration
 

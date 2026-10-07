@@ -237,9 +237,9 @@
       </section>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.7<br />
+        <strong>Version:</strong> 0.4.8<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 05 October 2026<br />
+        <strong>Updated:</strong> 07 October 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -435,11 +435,11 @@
 <strong># Open a video file (GUI opens automatically)</strong><br/>
 uv run vaila/getpixelvideo.py -f video.mp4<br/><br/>
 
-<strong># Open a single PNG image</strong><br/>
-uv run vaila/getpixelvideo.py -f frame.png<br/><br/>
+<strong># Open a single still image (png, jpg, jpeg, bmp, tif, tiff, webp)</strong><br/>
+uv run vaila/getpixelvideo.py -f frame.jpg<br/><br/>
 
-<strong># Open a folder of PNG frames (sequence)</strong><br/>
-uv run vaila/getpixelvideo.py --sequence /path/to/png_folder/<br/><br/>
+<strong># Open a folder of still frames (sequence)</strong><br/>
+uv run vaila/getpixelvideo.py --sequence /path/to/image_folder/<br/><br/>
 
 <strong># Start with pre-loaded keypoint CSV</strong><br/>
 uv run vaila/getpixelvideo.py -f video.mp4 -k markers.csv<br/><br/>
@@ -483,10 +483,12 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
         <h3>Step-by-Step Process:</h3>
         <ol>
           <li>
-            <strong>Select media:</strong> One file picker — video, single PNG, or
-            any frame from a PNG sequence folder (auto-detected; no video-vs-PNG
-            question). Picking a PNG inside a multi-frame folder starts on that
-            frame (not the alphabetically first file).
+            <strong>Select media:</strong> One file picker — video, a single still
+            image (png, jpg, jpeg, bmp, tif, tiff, webp), or any frame from a
+            folder of those images (auto-detected). Picking a frame inside a
+            multi-image folder starts on that frame (not the alphabetically
+            first file). JPEG, TIFF, and WebP with an EXIF orientation tag open
+            in the gallery orientation.
           </li>
           <li>
             <strong>Load Existing Data:</strong> Use 'Load' button in interface
@@ -1818,6 +1820,12 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.8 (07 October 2026) &mdash; Still images for measurement</h3>
+        <ul>
+          <li>Open a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp (file picker, F8, <code>-f</code>, <code>-d</code>, <code>--sequence</code>). CALIB and MEASURE use the same one-frame path as PNG.</li>
+          <li>JPEG, TIFF, and WebP with an EXIF orientation tag open in the gallery orientation.</li>
+        </ul>
 
         <h3>Version 0.4.7 (05 October 2026) &mdash; Guided Line and Plane calibration</h3>
         <ul>

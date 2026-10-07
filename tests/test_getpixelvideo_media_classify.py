@@ -70,6 +70,53 @@ def test_classify_media_path_video_file(tmp_path: Path) -> None:
     assert start == 0
 
 
+def test_classify_media_path_lone_jpg_is_single(tmp_path: Path) -> None:
+    jpg = tmp_path / "photo.jpg"
+    jpg.write_bytes(b"\xff\xd8\xff")
+    path, source, start = gpv.classify_media_path(str(jpg))
+    assert path == str(jpg.resolve())
+    assert source == "single_png"
+    assert start == 0
+
+
+def test_classify_media_path_jpeg_sequence_keeps_start_index(tmp_path: Path) -> None:
+    frames = tmp_path / "photos"
+    frames.mkdir()
+    first = frames / "a_frame.jpeg"
+    second = frames / "z_frame.jpeg"
+    first.write_bytes(b"\xff\xd8\xff")
+    second.write_bytes(b"\xff\xd8\xff")
+    path, source, start = gpv.classify_media_path(str(second))
+    assert path == str(frames.resolve())
+    assert source == "png_sequence"
+    assert start == 1
+
+
+def test_single_png_frame_source_reads_jpeg(tmp_path: Path) -> None:
+    import cv2
+
+    jpg = tmp_path / "measure.jpg"
+    cv2.imwrite(str(jpg), np.zeros((3, 5, 3), dtype=np.uint8))
+    src = gpv.SinglePngFrameSource(str(jpg))
+    assert src.isOpened()
+    ok, frame = src.read()
+    assert ok
+    assert frame is not None
+    assert frame.shape[:2] == (3, 5)
+
+
+def test_imread_still_applies_exif_orientation(tmp_path: Path) -> None:
+    pil_image = pytest.importorskip("PIL.Image")
+    jpg = tmp_path / "phone.jpg"
+    image = pil_image.new("RGB", (2, 4), (10, 20, 30))
+    exif = image.getexif()
+    exif[274] = 6
+    image.save(jpg, exif=exif)
+    frame = gpv._imread_still(jpg)
+    assert frame is not None
+    assert frame.shape[:2] == (2, 4)
+
+
 def test_classify_media_path_lone_png_is_single(tmp_path: Path) -> None:
     png = tmp_path / "solo.png"
     png.write_bytes(b"\x89PNG\r\n\x1a\n")
