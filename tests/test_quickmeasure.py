@@ -545,6 +545,10 @@ def test_save_session_writes_points_calibration_and_results(tmp_path):
     assert "point_N_id" in report
     assert "No list, coordinate pair, or space-delimited sequence" in report
     assert "Distance" in report
+    assert "<svg" in report
+    assert "Calibration figures" in report
+    assert "Measurement figures" in report
+    assert "Picture of this session" in report
 
 
 def test_save_session_reuses_one_directory_and_refreshes_report(tmp_path):

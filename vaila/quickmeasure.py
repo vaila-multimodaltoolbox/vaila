@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.7
+Version: 0.4.9
 Created: 06 September 2026
-Last Updated: 05 October 2026
+Last Updated: 07 October 2026
 ================================================================================
 Description:
     Kinovea-style on-image calibration and measurements for `getpixelvideo.py`.
@@ -1413,10 +1413,216 @@ class QuickMeasureSession:
         safe_stem: str,
         paths: dict[str, str],
     ) -> None:
-        """Write a standalone, human-readable guide to this session's export."""
+        """Write a didactic HTML guide with SVG figures of calib + measurements."""
 
         def esc(value: object) -> str:
             return html.escape(str(value), quote=True)
+
+        def fmt_num(value: object, digits: int = 4) -> str:
+            try:
+                return f"{float(value):.{digits}g}"
+            except (TypeError, ValueError):
+                return str(value)
+
+        def bounds_for(
+            points: Sequence[tuple[float, float]], pad: float = 48.0
+        ) -> tuple[float, float, float, float]:
+            if not points:
+                return 0.0, 0.0, 400.0, 300.0
+            xs = [float(p[0]) for p in points]
+            ys = [float(p[1]) for p in points]
+            min_x, max_x = min(xs), max(xs)
+            min_y, max_y = min(ys), max(ys)
+            span_x = max(max_x - min_x, 40.0)
+            span_y = max(max_y - min_y, 40.0)
+            return min_x - pad, min_y - pad, span_x + 2 * pad, span_y + 2 * pad
+
+        def svg_open(points: Sequence[tuple[float, float]], title: str) -> str:
+            x0, y0, w, h = bounds_for(points)
+            return (
+                f'<figure class="fig"><figcaption>{esc(title)}</figcaption>'
+                f'<svg viewBox="{x0:.2f} {y0:.2f} {w:.2f} {h:.2f}" '
+                f'role="img" aria-label="{esc(title)}">'
+                f'<rect x="{x0:.2f}" y="{y0:.2f}" width="{w:.2f}" height="{h:.2f}" '
+                f'fill="#fbfcfd" stroke="#d5d8dc"/>'
+            )
+
+        def svg_close() -> str:
+            return "</svg></figure>"
+
+        def svg_point(
+            x: float, y: float, label: str, color: str = "#1a5276", r: float = 5.0
+        ) -> str:
+            return (
+                f'<circle cx="{x:.2f}" cy="{y:.2f}" r="{r}" fill="{color}" '
+                f'stroke="#fff" stroke-width="1.5"/>'
+                f'<text x="{x + 8:.2f}" y="{y - 8:.2f}" class="svg-label">{esc(label)}</text>'
+            )
+
+        def svg_line(
+            x1: float, y1: float, x2: float, y2: float, color: str, width: float = 2.5
+        ) -> str:
+            return (
+                f'<line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
+                f'stroke="{color}" stroke-width="{width}" stroke-linecap="round"/>'
+            )
+
+        def svg_polyline(pts: Sequence[tuple[float, float]], color: str, fill: str = "none") -> str:
+            if len(pts) < 2:
+                return ""
+            d = " ".join(f"{x:.2f},{y:.2f}" for x, y in pts)
+            return (
+                f'<polyline points="{d}" fill="{fill}" stroke="{color}" '
+                f'stroke-width="2.5" stroke-linejoin="round"/>'
+            )
+
+        def mid_label(
+            x1: float, y1: float, x2: float, y2: float, text: str, color: str = "#922b21"
+        ) -> str:
+            mx, my = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+            return (
+                f'<text x="{mx:.2f}" y="{my - 10:.2f}" text-anchor="middle" '
+                f'class="svg-value" fill="{color}">{esc(text)}</text>'
+            )
+
+        def calibration_svg(calib: QuickMeasureCalibration, scope: str) -> str:
+            pixels = list(calib.calibration_pixels or [])
+            if not pixels and calib.origin_px is not None:
+                pixels = [calib.origin_px]
+            if not pixels:
+                return (
+                    f'<p class="notice">Calibration [{esc(scope)}]: {esc(calib.describe())} '
+                    "(no click points stored for drawing).</p>"
+                )
+            parts = [svg_open(pixels, f"Calibration — {scope}: {calib.kind}")]
+            if calib.kind == "line" and len(pixels) >= 2:
+                (x1, y1), (x2, y2) = pixels[0], pixels[1]
+                parts.append(svg_line(x1, y1, x2, y2, "#2874a6", 3.0))
+                length = calib.real_measures.get("length")
+                label = (
+                    f"{fmt_num(length)} {calib.unit_label}"
+                    if length is not None
+                    else calib.describe()
+                )
+                parts.append(mid_label(x1, y1, x2, y2, label))
+                parts.append(svg_point(x1, y1, "C1", "#1a5276"))
+                parts.append(svg_point(x2, y2, "C2", "#1a5276"))
+            elif calib.kind in {"plane", "ref3d", "dlt2d"} and len(pixels) >= 2:
+                closed = list(pixels) + [pixels[0]] if len(pixels) >= 3 else list(pixels)
+                parts.append(svg_polyline(closed, "#1e8449", fill="rgba(30,132,73,0.12)"))
+                width = calib.real_measures.get("width")
+                height = calib.real_measures.get("height")
+                if width is not None and height is not None:
+                    cx = sum(p[0] for p in pixels) / len(pixels)
+                    cy = sum(p[1] for p in pixels) / len(pixels)
+                    parts.append(
+                        f'<text x="{cx:.2f}" y="{cy:.2f}" text-anchor="middle" '
+                        f'class="svg-value" fill="#145a32">'
+                        f"{esc(fmt_num(width))} × {esc(fmt_num(height))} "
+                        f"{esc(calib.unit_label)}</text>"
+                    )
+                for i, (x, y) in enumerate(pixels, start=1):
+                    parts.append(svg_point(x, y, f"C{i}", "#145a32"))
+            else:
+                for i, (x, y) in enumerate(pixels, start=1):
+                    parts.append(svg_point(x, y, f"C{i}"))
+            parts.append(svg_close())
+            parts.append(f"<p><strong>{esc(calib.describe())}</strong></p>")
+            return "".join(parts)
+
+        result_colors = {
+            "distance": "#c0392b",
+            "area": "#8e44ad",
+            "angle": "#d68910",
+            "velocity": "#2471a3",
+            "acceleration": "#117a65",
+        }
+
+        def result_svg(result: dict, index: int) -> str:
+            pixels = [(float(x), float(y)) for x, y in (result.get("pixels") or [])]
+            rtype = str(result.get("type") or "measure")
+            color = result_colors.get(rtype, "#34495e")
+            value = result.get("value")
+            unit = result.get("unit") or ""
+            value_txt = f"{fmt_num(value)} {unit}".strip()
+            title = f"Result #{index}: {rtype} = {value_txt}"
+            if not pixels:
+                return f'<p class="notice">{esc(title)} — no pixel geometry stored.</p>'
+            parts = [svg_open(pixels, title)]
+            if rtype in {"distance", "velocity"} and len(pixels) >= 2:
+                (x1, y1), (x2, y2) = pixels[0], pixels[1]
+                parts.append(svg_line(x1, y1, x2, y2, color, 3.0))
+                parts.append(mid_label(x1, y1, x2, y2, value_txt, color))
+            elif rtype == "area" and len(pixels) >= 3:
+                closed = list(pixels) + [pixels[0]]
+                parts.append(svg_polyline(closed, color, fill="#8e44ad33"))
+                cx = sum(p[0] for p in pixels) / len(pixels)
+                cy = sum(p[1] for p in pixels) / len(pixels)
+                parts.append(
+                    f'<text x="{cx:.2f}" y="{cy:.2f}" text-anchor="middle" '
+                    f'class="svg-value" fill="{color}">{esc(value_txt)}</text>'
+                )
+            elif rtype == "angle" and len(pixels) >= 3:
+                (x1, y1), (vx, vy), (x2, y2) = pixels[0], pixels[1], pixels[2]
+                parts.append(svg_line(vx, vy, x1, y1, color, 2.5))
+                parts.append(svg_line(vx, vy, x2, y2, color, 2.5))
+                parts.append(
+                    f'<text x="{vx + 12:.2f}" y="{vy - 12:.2f}" class="svg-value" '
+                    f'fill="{color}">{esc(value_txt)}</text>'
+                )
+            elif rtype == "acceleration" and len(pixels) >= 3:
+                parts.append(svg_polyline(pixels, color))
+                (x1, y1), (x2, y2) = pixels[0], pixels[-1]
+                parts.append(mid_label(x1, y1, x2, y2, value_txt, color))
+            else:
+                parts.append(svg_polyline(pixels, color))
+                parts.append(
+                    f'<text x="{pixels[0][0]:.2f}" y="{pixels[0][1] - 14:.2f}" '
+                    f'class="svg-value" fill="{color}">{esc(value_txt)}</text>'
+                )
+            ids = list(result.get("point_ids") or range(1, len(pixels) + 1))
+            for (x, y), pid in zip(pixels, ids, strict=False):
+                parts.append(svg_point(x, y, f"p{pid}", color))
+            frames = list(result.get("frames") or [])
+            if frames:
+                parts.append(
+                    f'<text x="{pixels[0][0]:.2f}" y="{pixels[0][1] + 22:.2f}" '
+                    f'class="svg-label">frames: {esc(", ".join(str(f) for f in frames))}</text>'
+                )
+            parts.append(svg_close())
+            how = {
+                "distance": "Straight-line length between two clicks (calibrated units when available).",
+                "area": "Polygon area via the shoelace formula; Enter closes the polygon.",
+                "angle": "Smaller angle at the middle (vertex) click between the two rays.",
+                "velocity": "Displacement / elapsed time between two frames (needs FPS).",
+                "acceleration": "Change of segment speed / average Δt across three frames (needs FPS).",
+            }.get(rtype, "Completed Quick Measure result.")
+            parts.append(f"<p>{esc(how)}</p>")
+            return "".join(parts)
+
+        def overview_svg() -> str:
+            pts: list[tuple[float, float]] = []
+            for calib in (c for _, c in self.iter_calibrations()):
+                pts.extend(calib.calibration_pixels or [])
+            for result in self.results:
+                pts.extend((float(x), float(y)) for x, y in (result.get("pixels") or []))
+            pts.extend((p.x, p.y) for p in self.points)
+            if not pts:
+                return '<p class="notice">No geometry to draw yet.</p>'
+            parts = [svg_open(pts, "Overview — calibration + all measurements (image pixels)")]
+            for result in self.results:
+                pixels = [(float(x), float(y)) for x, y in (result.get("pixels") or [])]
+                color = result_colors.get(str(result.get("type")), "#7f8c8d")
+                if len(pixels) >= 2:
+                    parts.append(svg_polyline(pixels, color))
+            for i, p in enumerate(self.points, start=1):
+                parts.append(svg_point(p.x, p.y, str(i), "#2c3e50", r=4.0))
+            parts.append(svg_close())
+            parts.append(
+                "<p>Image coordinates: origin top-left, <em>+x</em> right, <em>+y</em> down "
+                "(same as the video frame). Labels <code>pN</code> match the points CSV.</p>"
+            )
+            return "".join(parts)
 
         measurement_rows = [
             (
@@ -1472,7 +1678,7 @@ class QuickMeasureSession:
             "results_angle": "Angle results only.",
             "results_velocity": "Velocity results only.",
             "results_acceleration": "Acceleration results only.",
-            "report": "This guide and live summary of the export.",
+            "report": "This guide with SVG figures of calibration and measurements.",
             "readme": "Compact plain-text file list and recomputation command.",
         }
         result_columns = [
@@ -1535,6 +1741,22 @@ class QuickMeasureSession:
             calibration = " | ".join(calib_parts)
         else:
             calibration = "None; pixel units"
+
+        calib_figures = []
+        if self.has_any_calibration():
+            for frame_key, calib in self.iter_calibrations():
+                scope = "default (all frames)" if frame_key is None else f"frame {frame_key}"
+                calib_figures.append(calibration_svg(calib, scope))
+        else:
+            calib_figures.append(
+                '<p class="notice">No calibration — values stay in image pixels (px).</p>'
+            )
+
+        result_figures = (
+            "".join(result_svg(result, i) for i, result in enumerate(self.results, start=1))
+            if self.results
+            else '<p class="notice">No completed measurement yet. This report will update on the next save.</p>'
+        )
         results_section = (
             table(
                 ("ID", "Type", "Value", "Unit", "Result frame", "Source frames", "Point IDs"),
@@ -1551,21 +1773,33 @@ class QuickMeasureSession:
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Quick Measure report — {esc(safe_stem)}</title>
 <style>
-body{{font-family:Arial,sans-serif;line-height:1.55;color:#17202a;background:#f4f6f7;margin:0}}
-main{{max-width:1100px;margin:24px auto;background:#fff;padding:28px;border-radius:10px}}
-h1,h2{{color:#154360}} h2{{margin-top:30px;border-bottom:2px solid #d6eaf8;padding-bottom:5px}}
+body{{font-family:Georgia,"Times New Roman",serif;line-height:1.55;color:#1c2833;background:#e8eef2;margin:0}}
+main{{max-width:1080px;margin:24px auto;background:#fff;padding:32px 36px;box-shadow:0 8px 28px rgba(28,40,51,.08)}}
+h1{{font-size:1.85rem;margin:0 0 8px;color:#0e4d64}}
+h2{{margin-top:2rem;border-bottom:2px solid #a9cce3;padding-bottom:6px;color:#1a5276}}
+h3{{margin-top:1.4rem;color:#21618c}}
 table{{border-collapse:collapse;width:100%;margin:12px 0;display:block;overflow-x:auto}}
 th,td{{border:1px solid #ccd1d1;padding:8px 10px;text-align:left;vertical-align:top}}
-th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:4px}}
-.summary,.notice{{background:#eaf2f8;padding:12px 16px;border-left:5px solid #2e86c1}}
-.warning{{background:#fef9e7;padding:12px 16px;border-left:5px solid #f1c40f}}
+th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:3px;font-family:ui-monospace,Consolas,monospace}}
+.summary,.notice{{background:#eaf2f8;padding:14px 16px;border-left:5px solid #2e86c1;margin:12px 0}}
+.warning{{background:#fef9e7;padding:14px 16px;border-left:5px solid #f1c40f;margin:12px 0}}
+.howto{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin:16px 0}}
+.howto div{{background:#f7f9f9;border:1px solid #d5d8dc;padding:12px}}
+.howto strong{{display:block;color:#1a5276;margin-bottom:4px}}
+.fig{{margin:18px 0;padding:12px;background:#f8fafb;border:1px solid #d5d8dc}}
+.fig figcaption{{font-weight:700;margin-bottom:8px;color:#1a5276}}
+.fig svg{{width:100%;max-height:360px;background:#fff}}
+.svg-label{{font-size:11px;fill:#1c2833;font-family:Arial,sans-serif}}
+.svg-value{{font-size:13px;font-weight:700;font-family:Arial,sans-serif}}
+.legend span{{display:inline-block;margin-right:14px}}
+.swatch{{display:inline-block;width:12px;height:12px;margin-right:4px;vertical-align:middle;border-radius:2px}}
 </style>
 </head>
 <body><main>
 <h1><i>vailá</i> Quick Measure report</h1>
-<p>This page documents the data in this directory. It is regenerated whenever the session is saved.</p>
+<p>Didactic summary of this export: what was calibrated, what was measured, and how to read the CSVs. Regenerated on every save.</p>
 <div class="summary">
-<strong>Video/data stem:</strong> {esc(safe_stem)}<br>
+<strong>Media stem:</strong> {esc(safe_stem)}<br>
 <strong>Generated:</strong> {esc(generated)}<br>
 <strong>Calibration:</strong> {esc(calibration)}<br>
 <strong>Coordinate unit:</strong> {esc(self.unit_label)} &nbsp;
@@ -1573,7 +1807,28 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 <strong>Saved points:</strong> {len(self.points)} &nbsp;
 <strong>Completed results:</strong> {len(self.results)}
 </div>
-<h2>Results from this session</h2>
+<div class="howto">
+<div><strong>1 · CALIB</strong>Shift+Q / CALIB button — build line, plane, or REF3D scale.</div>
+<div><strong>2 · MEASURE</strong>Q — press 1–5, click the required points; values draw on the image.</div>
+<div><strong>3 · Save</strong>Enter then S (or Save hub) writes this folder + report.</div>
+<div><strong>4 · Read</strong>Open this HTML first; CSVs hold the exact numbers.</div>
+</div>
+<h2>Picture of this session</h2>
+{overview_svg()}
+<p class="legend">
+<span><i class="swatch" style="background:#c0392b"></i>distance</span>
+<span><i class="swatch" style="background:#8e44ad"></i>area</span>
+<span><i class="swatch" style="background:#d68910"></i>angle</span>
+<span><i class="swatch" style="background:#2471a3"></i>velocity</span>
+<span><i class="swatch" style="background:#117a65"></i>acceleration</span>
+</p>
+<h2>Calibration figures</h2>
+<p>The known real-world segment or rectangle you clicked, drawn in image-pixel space.</p>
+{"".join(calib_figures)}
+<h2>Measurement figures</h2>
+<p>Each completed result with its click geometry and numeric label (same points as on the video).</p>
+{result_figures}
+<h2>Results table</h2>
 {results_section}
 <h2>What each measurement means</h2>
 {table(("Measurement", "Key", "Required input", "Meaning", "Calculation", "Output unit"), measurement_rows)}
@@ -1586,7 +1841,7 @@ th{{background:#d6eaf8}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 <h2>Points CSV column dictionary</h2>
 {table(("Column", "Meaning"), point_columns)}
 <h2>Calibration data</h2>
-<p>The calibration CSV records the known real dimensions, clicked image/reference points, scale, origin, and DLT parameters when applicable. REF3D exports may also include a planar <code>.ref2d</code>, DLT coefficients, and source metadata.</p>
+<p>The calibration CSV records the known real dimensions, clicked image/reference points, scale, origin, and DLT parameters when applicable. REF3D exports may also include a planar <code>.ref2d</code>, DLT coefficients, and source metadata. The SVG figures above show the same click geometry.</p>
 <h2>Recompute without the video</h2>
 <p>Because the points file stores both image and calibrated coordinates, metrics can be recomputed later:</p>
 <p><code>uv run python -m vaila.quickmeasure --points-csv {esc(os.path.basename(paths["points"]))} --measure distance</code></p>
@@ -1881,59 +2136,94 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 def draw_quickmeasure_overlay(
-    screen, session: QuickMeasureSession, zoom_level, crop_x, crop_y, font, pad_x=0, pad_y=0
+    screen,
+    session: QuickMeasureSession,
+    zoom_level,
+    crop_x,
+    crop_y,
+    font,
+    pad_x=0,
+    pad_y=0,
+    *,
+    show_results: bool = True,
 ):
-    """Draw completed measurements (with value labels) + in-progress draft."""
+    """Draw completed measurements (with value badges) + in-progress draft.
+
+    ``show_results`` gates completed geometry/labels (MEASURE checkbox). Draft
+    points and the live-mode banner stay visible so measuring still works.
+    """
     import pygame
 
     def _to_screen(x: float, y: float) -> tuple[int, int]:
         return int((x * zoom_level) - crop_x + pad_x), int((y * zoom_level) - crop_y + pad_y)
 
+    def _badge(text: str, anchor: tuple[int, int]) -> None:
+        rendered = font.render(text, True, (255, 255, 220))
+        box = pygame.Surface(
+            (rendered.get_width() + 10, rendered.get_height() + 6), pygame.SRCALPHA
+        )
+        box.fill((40, 10, 50, 220))
+        pygame.draw.rect(box, (255, 0, 255), box.get_rect(), 1)
+        box.blit(rendered, (5, 3))
+        rect = box.get_rect(midleft=(anchor[0] + 10, anchor[1] - 14))
+        rect.clamp_ip(screen.get_rect())
+        screen.blit(box, rect)
+
     color_done = (255, 0, 255)
     color_draft = (255, 180, 0)
-    color_label = (255, 255, 0)
 
-    for r in session.results:
-        pixels = r.get("pixels") or []
-        if not pixels:
-            continue
-        screen_pts = [_to_screen(px, py) for px, py in pixels]
-        rtype = str(r.get("type", ""))
-        if rtype == "area" and len(screen_pts) >= 3:
-            pygame.draw.polygon(screen, color_done, screen_pts, 1)
-        elif len(screen_pts) >= 2:
-            pygame.draw.lines(screen, color_done, False, screen_pts, 2)
-        for sx, sy in screen_pts:
-            pygame.draw.circle(screen, color_done, (sx, sy), 4, 1)
-        # Label near the geometric mid / vertex.
-        if rtype == "angle" and len(screen_pts) >= 3:
-            lx, ly = screen_pts[1] if len(screen_pts) == 3 else screen_pts[0]
-        elif screen_pts:
-            lx = sum(p[0] for p in screen_pts) // len(screen_pts)
-            ly = sum(p[1] for p in screen_pts) // len(screen_pts)
-        else:
-            continue
-        label = f"{r.get('value', float('nan')):.3f} {r.get('unit', '')}"
-        screen.blit(font.render(label, True, color_label), (lx + 8, ly - 18))
+    if show_results:
+        for idx, r in enumerate(session.results, start=1):
+            pixels = r.get("pixels") or []
+            if not pixels:
+                continue
+            screen_pts = [_to_screen(px, py) for px, py in pixels]
+            rtype = str(r.get("type", "") or "measure")
+            if rtype == "area" and len(screen_pts) >= 3:
+                pygame.draw.polygon(screen, color_done, screen_pts, 2)
+            elif len(screen_pts) >= 2:
+                pygame.draw.lines(screen, color_done, False, screen_pts, 3)
+            for sx, sy in screen_pts:
+                pygame.draw.circle(screen, (40, 10, 50), (sx, sy), 6)
+                pygame.draw.circle(screen, color_done, (sx, sy), 5, 2)
+            # Label near the geometric mid / vertex.
+            if rtype == "angle" and len(screen_pts) >= 3:
+                lx, ly = screen_pts[1] if len(screen_pts) == 3 else screen_pts[0]
+            elif screen_pts:
+                lx = sum(p[0] for p in screen_pts) // len(screen_pts)
+                ly = sum(p[1] for p in screen_pts) // len(screen_pts)
+            else:
+                continue
+            unit = str(r.get("unit", "") or "").strip()
+            try:
+                value = float(r.get("value", float("nan")))
+                value_txt = f"{value:.3f}"
+            except (TypeError, ValueError):
+                value_txt = str(r.get("value", "?"))
+            label = f"#{idx} · {rtype} · {value_txt}"
+            if unit:
+                label = f"{label} {unit}"
+            _badge(label, (lx, ly))
 
     # In-progress draft for the active live mode.
     if session.draft_points:
         draft_pts = [_to_screen(p.x, p.y) for p in session.draft_points]
         if len(draft_pts) >= 2:
             closed = session.active_mode == "area" and len(draft_pts) >= 3
-            pygame.draw.lines(screen, color_draft, closed, draft_pts, 1)
+            pygame.draw.lines(screen, color_draft, closed, draft_pts, 2)
         for i, (sx, sy) in enumerate(draft_pts):
             pygame.draw.circle(screen, color_draft, (sx, sy), 5, 2)
             screen.blit(font.render(str(i + 1), True, color_draft), (sx + 6, sy - 14))
 
-    # Mode banner.
-    banner_txt = session.live_mode_status()
-    banner = font.render(banner_txt, True, (0, 0, 0))
-    pad = 6
-    box = pygame.Surface((banner.get_width() + 2 * pad, banner.get_height() + 2 * pad))
-    box.fill((255, 180, 0) if session.active_mode else (200, 200, 200))
-    box.blit(banner, (pad, pad))
-    screen.blit(box, (10, screen.get_height() - box.get_height() - 10))
+    # Mode banner (only while measuring / drafting).
+    if session.active_mode is not None or session.draft_points:
+        banner_txt = session.live_mode_status()
+        banner = font.render(banner_txt, True, (0, 0, 0))
+        pad = 6
+        box = pygame.Surface((banner.get_width() + 2 * pad, banner.get_height() + 2 * pad))
+        box.fill((255, 180, 0) if session.active_mode else (200, 200, 200))
+        box.blit(banner, (pad, pad))
+        screen.blit(box, (10, screen.get_height() - box.get_height() - 10))
 
 
 def draw_calibration_overlay(

@@ -417,6 +417,33 @@ def compute_letterbox_pads(
     return pad_x, pad_y
 
 
+def letterbox_frame_to_canvas(frame: np.ndarray, canvas_w: int, canvas_h: int) -> np.ndarray:
+    """Fit ``frame`` into a ``canvas_w`` × ``canvas_h`` BGR canvas without stretching.
+
+    Uniform scale (never anisotropic). Letterbox / pillarbox with black bars when
+    the frame aspect differs from the canvas. Same-size frames are returned as a
+    copy so callers can mutate safely.
+    """
+    canvas_w = max(1, int(canvas_w))
+    canvas_h = max(1, int(canvas_h))
+    fh, fw = frame.shape[:2]
+    if fw == canvas_w and fh == canvas_h:
+        return frame.copy()
+    scale = min(canvas_w / max(1, fw), canvas_h / max(1, fh))
+    new_w = max(1, int(round(fw * scale)))
+    new_h = max(1, int(round(fh * scale)))
+    # Clamp rounding so the fitted image never exceeds the canvas.
+    new_w = min(new_w, canvas_w)
+    new_h = min(new_h, canvas_h)
+    interp = cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR
+    resized = cv2.resize(frame, (new_w, new_h), interpolation=interp)
+    canvas = np.zeros((canvas_h, canvas_w, 3), dtype=frame.dtype)
+    pad_x = (canvas_w - new_w) // 2
+    pad_y = (canvas_h - new_h) // 2
+    canvas[pad_y : pad_y + new_h, pad_x : pad_x + new_w] = resized
+    return canvas
+
+
 def marked_count_hud_pos(
     window_width: int,
     text_width: int,
@@ -705,6 +732,13 @@ class PngSequenceFrameSource(FrameSource):
         if prop == cv2.CAP_PROP_FRAME_HEIGHT:
             return self._height
         return 0
+
+    def path_at(self, index: int) -> str | None:
+        """Return the still-image path for frame ``index`` (0-based)."""
+        if not self._paths:
+            return None
+        i = max(0, min(int(index), len(self._paths) - 1))
+        return self._paths[i]
 
     def release(self):
         self._paths = []
@@ -2480,6 +2514,8 @@ def play_video_with_controls(
     # Session persists across toggling so results stay visible.
     measure_mode = False
     calib_mode = False
+    # Checkbox beside MEASURE: draw completed measurement geometry + value badges.
+    show_measure_overlay = True
     quickmeasure_session: quickmeasure.QuickMeasureSession | None = None
     # While True, left-clicks feed the active CalibrationDraft / Ref3d draft.
     quick_measure_calibrating = False
@@ -2774,6 +2810,22 @@ def play_video_with_controls(
             quickmeasure_session.fps = fps
         return quickmeasure_session
 
+    def _media_frame_file(frame_idx: int | None = None) -> str | None:
+        """Concrete PNG/JPG/video path used for save filenames (not the folder)."""
+        idx = int(frame_count if frame_idx is None else frame_idx)
+        if isinstance(cap, PngSequenceFrameSource):
+            return cap.path_at(idx)
+        if isinstance(cap, SinglePngFrameSource):
+            return str(cap._path)
+        if video_path and os.path.isfile(video_path):
+            return str(video_path)
+        return None
+
+    def _media_out_dir_and_stem(frame_idx: int | None = None) -> tuple[str, str]:
+        return resolve_media_output_dir_and_stem(
+            video_path, frame_file=_media_frame_file(frame_idx)
+        )
+
     def _ask_calib_scope() -> tuple[int | None, str] | None:
         """Ask Default (all frames) vs This frame. Returns (frame_or_None, label).
 
@@ -2798,10 +2850,10 @@ def play_video_with_controls(
         session = _ensure_quickmeasure_session()
         session.set_calibration(calib, frame=scope_frame)
         try:
-            paths = session.save_session(
-                os.path.dirname(video_path) or os.getcwd(),
-                stem=os.path.basename(video_path or "quickmeasure"),
+            out_dir, stem = _media_out_dir_and_stem(
+                scope_frame if scope_frame is not None else frame_count
             )
+            paths = session.save_session(out_dir, stem=stem)
             print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
         except quickmeasure.QuickMeasureError:
             pass
@@ -6371,6 +6423,7 @@ def play_video_with_controls(
         labeling_button_width = 58 if is_compact else 66
         calib_button_width = 48 if is_compact else 54  # CALIB — Shift+Q
         measure_button_width = 50 if is_compact else 58  # MEASURE — hotkey Q
+        measure_overlay_toggle_size = 10 if is_compact else 12
         fps_button_width = 72 if is_compact else 80  # Manual video frequency (same as hotkey I)
         guide_button_width = 56 if is_compact else 66  # Guide button (field / skeleton overlay)
         guide_toggle_size = 10 if is_compact else 12
@@ -6404,6 +6457,8 @@ def play_video_with_controls(
             + labeling_button_width
             + calib_button_width
             + measure_button_width
+            + 4
+            + measure_overlay_toggle_size
             + fps_button_width
             + guide_button_width
             + 4
@@ -6597,12 +6652,24 @@ def play_video_with_controls(
             measure_button_width,
             button_height,
         )
-        current_x += measure_button_width + button_gap
+        measure_overlay_toggle_rect = pygame.Rect(
+            measure_button_rect.right + 4,
+            measure_button_rect.centery - measure_overlay_toggle_size // 2,
+            measure_overlay_toggle_size,
+            measure_overlay_toggle_size,
+        )
+        current_x += measure_button_width + 4 + measure_overlay_toggle_size + button_gap
         measure_color = (200, 90, 40) if measure_mode else (100, 100, 100)
         pygame.draw.rect(control_surface, measure_color, measure_button_rect)
         measure_label = "Meas" if is_compact else "MEASURE"
         measure_text = _top_btn_font.render(measure_label, True, (255, 255, 255))
         control_surface.blit(measure_text, measure_text.get_rect(center=measure_button_rect.center))
+        if show_measure_overlay:
+            pygame.draw.rect(control_surface, (0, 255, 0), measure_overlay_toggle_rect)
+            pygame.draw.rect(control_surface, (255, 255, 255), measure_overlay_toggle_rect, 1)
+        else:
+            pygame.draw.rect(control_surface, (60, 60, 60), measure_overlay_toggle_rect)
+            pygame.draw.rect(control_surface, (150, 150, 150), measure_overlay_toggle_rect, 1)
 
         # 7c. Manual FPS button (same dialog as hotkey I); caption shows current Hz.
         fps_button_rect = pygame.Rect(
@@ -6916,6 +6983,7 @@ def play_video_with_controls(
             labeling_button_rect,  # Add labeling button to return
             calib_button_rect,  # CALIB (Shift+Q)
             measure_button_rect,  # MEASURE (Q)
+            measure_overlay_toggle_rect,  # Show/hide measure value overlays
             fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
@@ -9939,6 +10007,97 @@ def play_video_with_controls(
         showing_save_message = True
         save_message_timer = 180 if ok_all else 120
 
+    def _count_marked_frames() -> int:
+        if one_line_mode and one_line_markers:
+            return len(one_line_markers)
+        if not isinstance(coordinates, dict):
+            return 0
+        return sum(
+            1
+            for pts in coordinates.values()
+            if any(p is not None and p != (None, None) for p in pts)
+        )
+
+    def _coordinates_from_quickmeasure(
+        session: quickmeasure.QuickMeasureSession,
+    ) -> dict[int, list[tuple[float, float]]]:
+        """Map Quick Measure clicks into the marker CSV layout (by frame)."""
+        by_frame: dict[int, list[tuple[float, float]]] = {}
+        for point in session.points:
+            by_frame.setdefault(int(point.frame), []).append((float(point.x), float(point.y)))
+        return by_frame
+
+    def _autosave_quickmeasure_session() -> str | None:
+        """Refresh processed_quickmeasure_* when the session has anything to write."""
+        if quickmeasure_session is None:
+            return None
+        if (
+            not quickmeasure_session.points
+            and not quickmeasure_session.results
+            and not quickmeasure_session.has_any_calibration()
+        ):
+            return None
+        out_dir, stem = _media_out_dir_and_stem()
+        try:
+            paths = quickmeasure_session.save_session(out_dir, stem=stem)
+        except quickmeasure.QuickMeasureError:
+            return None
+        print(f">> vaila/quickmeasure: saved CSVs in {paths['dir']}")
+        return paths["dir"]
+
+    def _save_markers_csv_smart() -> tuple[str | None, str]:
+        """Save markers; if empty but Quick Measure has points, export those clicks.
+
+        Also refreshes the Quick Measure export folder when present so Save hub
+        does not leave an empty markers CSV while measures live only in QM.
+        """
+        coords_to_save = coordinates
+        deleted_to_save = deleted_positions
+        source_note = "markers"
+        n_marked = _count_marked_frames()
+        if (
+            n_marked == 0
+            and quickmeasure_session is not None
+            and quickmeasure_session.points
+            and not one_line_mode
+        ):
+            coords_to_save = _coordinates_from_quickmeasure(quickmeasure_session)
+            deleted_to_save = {frame: set() for frame in coords_to_save}
+            source_note = "Quick Measure points"
+            n_marked = len(coords_to_save)
+
+        frame_file = _media_frame_file()
+        output_file = None
+        if n_marked > 0 or (
+            isinstance(coords_to_save, dict)
+            and any(
+                p is not None and p != (None, None) for pts in coords_to_save.values() for p in pts
+            )
+        ):
+            output_file = save_coordinates(
+                video_path,
+                coords_to_save,
+                total_frames,
+                deleted_to_save,
+                is_sequential=sequential_mode,
+                fixed_keypoints_count=(fifa_fixed_keypoints if template_mode != "free" else None),
+                keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
+                keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
+                coord_format=coord_format,
+                coord_decimals=coord_decimals,
+                frame_file=frame_file,
+            )
+
+        qm_dir = _autosave_quickmeasure_session()
+        bits: list[str] = []
+        if output_file:
+            bits.append(f"{source_note} → {os.path.basename(output_file)}")
+        if qm_dir:
+            bits.append(f"Quick Measure → {os.path.basename(qm_dir)}")
+        if not bits:
+            return None, "Nothing to save — place markers or finish a MEASURE."
+        return output_file, "; ".join(bits)
+
     def show_save_menu_dialog() -> None:
         """Modal dialog displaying all save and export options in a unified Save & Export Hub."""
         nonlocal save_message_text, showing_save_message, save_message_timer
@@ -9965,17 +10124,13 @@ def play_video_with_controls(
             bbox_converted_to_markers, \
             freekiki_session
 
-        n_marked_frames = 0
-        if isinstance(coordinates, dict):
-            for pts in coordinates.values():
-                if any(p is not None and p != (None, None) for p in pts):
-                    n_marked_frames += 1
-        elif one_line_mode and one_line_markers:
-            n_marked_frames = len(one_line_markers)
+        n_marked_frames = _count_marked_frames()
+        qm_points = len(quickmeasure_session.points) if quickmeasure_session is not None else 0
+        qm_results = len(quickmeasure_session.results) if quickmeasure_session is not None else 0
 
         in_freekiki = freekiki_session is not None
 
-        base_v = os.path.splitext(os.path.basename(video_path))[0] if video_path else "video"
+        _media_dir, base_v = _media_out_dir_and_stem()
         csv_target = f"{base_v}_markers.csv" if not one_line_mode else f"{base_v}_1_line.csv"
 
         if in_freekiki:
@@ -9986,12 +10141,22 @@ def play_video_with_controls(
             default_desc = f"Export YOLO BBox dataset ({len(tracking_data)} frames)"
         elif one_line_mode:
             default_desc = f"Save 1-line coordinates CSV -> {csv_target} ({n_marked_frames} points)"
+        elif n_marked_frames > 0:
+            default_desc = f"Save Markers CSV -> {csv_target} ({n_marked_frames} frames marked)"
+        elif qm_points > 0:
+            default_desc = (
+                f"Export Quick Measure clicks -> {csv_target} "
+                f"({qm_points} pts, {qm_results} results) + report"
+            )
         else:
             default_desc = f"Save Markers CSV -> {csv_target} ({n_marked_frames} frames marked)"
 
-        csv_status = (
-            f"Ready ({n_marked_frames} frames)" if n_marked_frames > 0 else "Empty (0 markers)"
-        )
+        if n_marked_frames > 0:
+            csv_status = f"Ready ({n_marked_frames} frames)"
+        elif qm_points > 0:
+            csv_status = f"Empty markers — will export {qm_points} Quick Measure clicks"
+        else:
+            csv_status = "Empty (0 markers)"
         pose_status = (
             f"Ready ({n_marked_frames} frames)" if n_marked_frames > 0 else "Needs markers"
         )
@@ -10003,13 +10168,19 @@ def play_video_with_controls(
             )
         )
         freekiki_status = "Active Session" if in_freekiki else "Not active"
+        qm_status = (
+            f"Ready ({qm_results} results, {qm_points} points)"
+            if (qm_points or qm_results)
+            else "No Quick Measure data"
+        )
 
         prompt = (
             "==================================================\n"
             "             vailá – Save & Export Hub\n"
             "==================================================\n"
             f"[1] Quick Save (Default Context Action)\n"
-            f"    -> {default_desc}\n\n"
+            f"    -> {default_desc}\n"
+            f"    Quick Measure: {qm_status}\n\n"
             f"[2] Markers Coordinates CSV\n"
             f"    -> Save (x, y) coordinates to {csv_target}\n"
             f"    Status: {csv_status}\n\n"
@@ -10087,59 +10258,37 @@ def play_video_with_controls(
                 showing_save_message = True
                 save_message_timer = 90
             else:
-                save_message_text = f"Saving markers ({len(coordinates)} frames)..."
+                save_message_text = "Saving markers / Quick Measure..."
                 showing_save_message = True
                 save_message_timer = 240
                 _flush_save_message(screen, save_message_text)
-                output_file = save_coordinates(
-                    video_path,
-                    coordinates,
-                    total_frames,
-                    deleted_positions,
-                    is_sequential=sequential_mode,
-                    fixed_keypoints_count=(
-                        fifa_fixed_keypoints if template_mode != "free" else None
-                    ),
-                    keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
-                    keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
-                    coord_format=coord_format,
-                    coord_decimals=coord_decimals,
-                )
-                saved = True
+                _out, detail = _save_markers_csv_smart()
+                saved = _out is not None or "Quick Measure" in detail
                 _refresh_restore_snapshot()
                 undo_stack.clear()
-                save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                save_message_text = f"Saved: {detail}"
                 showing_save_message = True
-                save_message_timer = 90
+                save_message_timer = 120
 
         elif choice == "2":
             if one_line_mode:
                 output_file = save_1_line_coordinates(video_path, one_line_markers, deleted_markers)
+                saved = True
+                _refresh_restore_snapshot()
+                undo_stack.clear()
+                save_message_text = f"Saved to: {os.path.basename(output_file)}"
             else:
-                save_message_text = f"Saving markers ({len(coordinates)} frames)..."
+                save_message_text = "Saving markers / Quick Measure..."
                 showing_save_message = True
                 save_message_timer = 240
                 _flush_save_message(screen, save_message_text)
-                output_file = save_coordinates(
-                    video_path,
-                    coordinates,
-                    total_frames,
-                    deleted_positions,
-                    is_sequential=sequential_mode,
-                    fixed_keypoints_count=(
-                        fifa_fixed_keypoints if template_mode != "free" else None
-                    ),
-                    keypoint_start_idx=(fifa_start_keypoint if template_mode != "free" else 0),
-                    keypoint_index_base=(fifa_index_base if template_mode != "free" else 0),
-                    coord_format=coord_format,
-                    coord_decimals=coord_decimals,
-                )
-            saved = True
-            _refresh_restore_snapshot()
-            undo_stack.clear()
-            save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                _out, detail = _save_markers_csv_smart()
+                saved = _out is not None or "Quick Measure" in detail
+                _refresh_restore_snapshot()
+                undo_stack.clear()
+                save_message_text = f"Saved: {detail}"
             showing_save_message = True
-            save_message_timer = 90
+            save_message_timer = 120
 
         elif choice == "3":
             save_split_dataset_with_all_labels()
@@ -10896,8 +11045,7 @@ def play_video_with_controls(
         if not os.path.exists(video_path):
             return
 
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
-        video_dir = os.path.dirname(video_path)
+        video_dir, base_name = _media_out_dir_and_stem()
         history_root = (
             marker_history_dir_override
             if marker_history_dir_override
@@ -12061,9 +12209,14 @@ def play_video_with_controls(
         if track_ai_active and ret and frame is not None:
             _perform_live_ai_tracking(frame_count, frame)
 
-        # Apply zoom
-        zoomed_width = int(original_width * zoom_level)
-        zoomed_height = int(original_height * zoom_level)
+        # Fit frame into the session canvas without stretching (mixed-size
+        # still sequences / wrong CAP_PROP dims), then apply zoom.
+        canvas_w = max(1, int(original_width))
+        canvas_h = max(1, int(original_height))
+        if frame.shape[1] != canvas_w or frame.shape[0] != canvas_h:
+            frame = letterbox_frame_to_canvas(frame, canvas_w, canvas_h)
+        zoomed_width = int(canvas_w * zoom_level)
+        zoomed_height = int(canvas_h * zoom_level)
         zoomed_frame = cv2.resize(frame, (zoomed_width, zoomed_height))
         crop_x = int(max(0, min(zoomed_width - window_width, offset_x)))
         crop_y = int(max(0, min(zoomed_height - window_height, offset_y)))
@@ -12559,13 +12712,13 @@ def play_video_with_controls(
             if drawing_box and current_box_rect is not None:
                 pygame.draw.rect(screen, (255, 0, 0), current_box_rect, 2)
 
-        # Draw Quick Measure clicked points (persists even after the mode is
-        # toggled off, so the last measurement stays visible on screen).
+        # Draw Quick Measure geometry. Completed results honour the MEASURE
+        # checkbox; drafts / active mode banner stay visible while measuring.
         if quickmeasure_session is not None and (
-            quickmeasure_session.results
+            (show_measure_overlay and quickmeasure_session.results)
             or quickmeasure_session.draft_points
             or quickmeasure_session.active_mode is not None
-            or quickmeasure_session.points
+            or (show_measure_overlay and quickmeasure_session.points)
         ):
             quickmeasure.draw_quickmeasure_overlay(
                 screen,
@@ -12576,6 +12729,7 @@ def play_video_with_controls(
                 font,
                 pad_x=pad_x,
                 pad_y=pad_y,
+                show_results=show_measure_overlay,
             )
 
         # Calibration-first overlay: clicked calibration points + next step.
@@ -12625,6 +12779,7 @@ def play_video_with_controls(
             labeling_button_rect,  # Add labeling button to return
             calib_button_rect,  # CALIB (Shift+Q)
             measure_button_rect,  # MEASURE (Q)
+            measure_overlay_toggle_rect,  # Show/hide measure value overlays
             fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
@@ -12991,33 +13146,16 @@ def play_video_with_controls(
                         showing_save_message = True
                         save_message_timer = 90  # Show for about 3 seconds at 30fps
                     else:
-                        output_file = save_coordinates(
-                            video_path,
-                            coordinates,
-                            total_frames,
-                            deleted_positions,
-                            is_sequential=sequential_mode,
-                            fixed_keypoints_count=(
-                                fifa_fixed_keypoints if pitch_guide_fifa_mode else None
-                            ),
-                            keypoint_start_idx=(
-                                fifa_start_keypoint if pitch_guide_fifa_mode else 0
-                            ),
-                            keypoint_index_base=(fifa_index_base if pitch_guide_fifa_mode else 0),
-                            coord_format=coord_format,
-                            coord_decimals=coord_decimals,
-                        )
-                        # Save Swap Config if available
+                        output_file, detail = _save_markers_csv_smart()
                         if active_swap_rules:
-                            base_dir = os.path.dirname(video_path)
-                            base_filename = os.path.splitext(os.path.basename(video_path))[0]
-                            swap_file = os.path.join(base_dir, f"{base_filename}_swap.toml")
+                            out_dir, base_filename = _media_out_dir_and_stem()
+                            swap_file = os.path.join(out_dir, f"{base_filename}_swap.toml")
                             save_swap_toml(swap_file, active_swap_rules)
 
-                        saved = True
-                        save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                        saved = output_file is not None or "Quick Measure" in detail
+                        save_message_text = f"Saved: {detail}"
                         showing_save_message = True
-                        save_message_timer = 90  # Show for about 3 seconds at 30fps
+                        save_message_timer = 120
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
@@ -13263,13 +13401,14 @@ def play_video_with_controls(
                     and measure_mode
                     and quickmeasure_session is not None
                 ):
+                    _qm_save_dir, _qm_save_stem = _media_out_dir_and_stem()
                     save_message_text = quickmeasure.show_quickmeasure_menu(
                         screen,
                         quickmeasure_session,
                         window_width,
                         window_height,
-                        save_dir=os.path.dirname(video_path) or os.getcwd(),
-                        save_stem=os.path.basename(video_path or "quickmeasure"),
+                        save_dir=_qm_save_dir,
+                        save_stem=_qm_save_stem,
                     )
                     if quickmeasure_session.pending_ref3d_draft is not None:
                         quickmeasure_draft = quickmeasure_session.pending_ref3d_draft
@@ -14055,6 +14194,15 @@ def play_video_with_controls(
                         save_message_timer = 90
                     elif measure_button_rect.collidepoint(x, rel_y):
                         save_message_text = _toggle_measure_mode()
+                        showing_save_message = True
+                        save_message_timer = 90
+                    elif measure_overlay_toggle_rect.collidepoint(x, rel_y):
+                        show_measure_overlay = not show_measure_overlay
+                        save_message_text = (
+                            "Measure overlay ON — values drawn on image"
+                            if show_measure_overlay
+                            else "Measure overlay OFF — values hidden"
+                        )
                         showing_save_message = True
                         save_message_timer = 90
                     elif fps_button_rect.collidepoint(x, rel_y):
@@ -16807,6 +16955,43 @@ def load_coordinates_from_file(total_frames, video_width=None, video_height=None
     return {i: [] for i in range(total_frames)}, []
 
 
+def resolve_media_output_dir_and_stem(
+    media_path: str | None,
+    *,
+    frame_file: str | None = None,
+) -> tuple[str, str]:
+    """Return ``(output_dir, stem)`` for files saved next to the opened media.
+
+    Image sequences set ``video_path`` to the folder of frames. Using
+    ``os.path.dirname`` on that path wrongly points at the parent (often
+    ``$HOME``). When ``media_path`` is a directory, use the directory itself
+    as ``output_dir``, but name files from ``frame_file`` (the concrete
+    PNG/JPG/…) when provided — never from the folder name alone.
+    """
+    frame = os.path.abspath(str(frame_file)) if frame_file else None
+    if frame and not os.path.isfile(frame):
+        frame = None
+
+    if not media_path:
+        if frame:
+            parent = os.path.dirname(frame) or os.getcwd()
+            stem = os.path.splitext(os.path.basename(frame))[0] or "media"
+            return parent, stem
+        return os.getcwd(), "media"
+
+    path = os.path.abspath(str(media_path))
+    if os.path.isdir(path):
+        if frame:
+            stem = os.path.splitext(os.path.basename(frame))[0] or "media"
+        else:
+            stem = os.path.basename(path.rstrip(os.sep)) or "media"
+        return path, stem
+
+    parent = os.path.dirname(path) or os.getcwd()
+    stem = os.path.splitext(os.path.basename(path))[0] or "media"
+    return parent, stem
+
+
 def save_coordinates(
     video_path,
     coordinates,
@@ -16820,9 +17005,9 @@ def save_coordinates(
     coord_format: str = "int",
     coord_decimals: int = 1,
     output_file: str | None = None,
+    frame_file: str | None = None,
 ):
-    base_name = os.path.splitext(os.path.basename(video_path))[0]
-    video_dir = os.path.dirname(video_path)
+    video_dir, base_name = resolve_media_output_dir_and_stem(video_path, frame_file=frame_file)
 
     # Create different filenames based on the mode
     if output_file is not None:
@@ -16832,12 +17017,29 @@ def save_coordinates(
     else:
         output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
 
+    # Determina o número máximo de pontos marcados em qualquer frame.
+    max_points_detected = max((len(points) for points in (coordinates or {}).values()), default=0)
+    n_marked = sum(
+        1
+        for pts in (coordinates or {}).values()
+        for p in pts
+        if p is not None and p[0] is not None and p[1] is not None
+    )
+
+    # Never overwrite a filled markers CSV with a frame-only empty file
+    # (Escape quit used to wipe Quick Measure exports this way).
+    if n_marked == 0 and not (
+        fixed_keypoints_count is not None and int(fixed_keypoints_count) > 0
+    ):
+        print(
+            f">> vaila/getpixelvideo: skip empty markers write "
+            f"(keep existing if any): {output_file}"
+        )
+        return output_file
+
     # Initialize deleted_positions if not provided
     if deleted_positions is None:
         deleted_positions = {i: set() for i in range(total_frames)}
-
-    # Determina o número máximo de pontos marcados em qualquer frame.
-    max_points_detected = max((len(points) for points in coordinates.values()), default=0)
     if fixed_keypoints_count is not None and fixed_keypoints_count > 0:
         max_points = fixed_keypoints_count
     else:
@@ -18099,7 +18301,7 @@ def run_getpixelvideo(
     if source_type == "video":
         metadata = get_precise_video_metadata(media_path)
     else:
-        metadata = get_image_sequence_metadata(media_path, source_type)
+        metadata = get_image_sequence_metadata(media_path, source_type, start_index=start_frame)
     total_frames = metadata.get("nb_frames") or int(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
     vw = metadata.get("width") or int(frame_source.get(cv2.CAP_PROP_FRAME_WIDTH))
     vh = metadata.get("height") or int(frame_source.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -18173,7 +18375,9 @@ def run_getpixelvideo(
             if source_type == "video":
                 metadata = get_precise_video_metadata(media_path)
             else:
-                metadata = get_image_sequence_metadata(media_path, source_type)
+                metadata = get_image_sequence_metadata(
+                    media_path, source_type, start_index=start_frame
+                )
             total_frames = metadata.get("nb_frames") or int(
                 frame_source.get(cv2.CAP_PROP_FRAME_COUNT)
             )

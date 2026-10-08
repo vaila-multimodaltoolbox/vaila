@@ -168,6 +168,31 @@ def test_png_sequence_frame_source_honours_start_index(tmp_path: Path) -> None:
     assert src.get(cv2.CAP_PROP_POS_FRAMES) == 3
 
 
+def test_sequence_metadata_uses_start_frame_dimensions(tmp_path: Path) -> None:
+    """Mixed-size folder: metadata must follow the selected still, not paths[0]."""
+    import cv2
+
+    frames = tmp_path / "mixed"
+    frames.mkdir()
+    # Alphabetical first = portrait; selected second = landscape (ralo-style bug).
+    cv2.imwrite(str(frames / "a_portrait.png"), np.zeros((192, 108, 3), dtype=np.uint8))
+    cv2.imwrite(str(frames / "b_landscape.png"), np.zeros((90, 160, 3), dtype=np.uint8))
+    meta0 = gpv.get_image_sequence_metadata(str(frames), "png_sequence", start_index=0)
+    meta1 = gpv.get_image_sequence_metadata(str(frames), "png_sequence", start_index=1)
+    assert (meta0["width"], meta0["height"]) == (108, 192)
+    assert (meta1["width"], meta1["height"]) == (160, 90)
+    assert meta1["nb_frames"] == 2
+
+
+def test_measure_overlay_toggle_wired_beside_measure_button() -> None:
+    source = Path(gpv.__file__).read_text(encoding="utf-8")
+    assert "show_measure_overlay = True" in source
+    assert "measure_overlay_toggle_rect" in source
+    assert "measure_overlay_toggle_rect.collidepoint" in source
+    assert "show_results=show_measure_overlay" in source
+    assert "letterbox_frame_to_canvas" in source
+
+
 def test_classify_media_path_directory_is_sequence(tmp_path: Path) -> None:
     frames = tmp_path / "seq"
     frames.mkdir()
