@@ -32,7 +32,7 @@
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
         <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,models,sizes,grow,audit,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.7 · <strong>Updated:</strong> 06 October 2026
+        <strong>Version:</strong> 0.4.7 · <strong>Updated:</strong> 07 October 2026
       </div>
 
       <h2>Correct and retrain (3 steps)</h2>
@@ -582,7 +582,7 @@ uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split hard</pre>
       <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Useful options: <code>manifest --rfs-t --cap --seed --exclude FILE --name</code>;
         <code>train --manifest v001 --batch --device 0 --name
         --patience --seed --workers --backend {yolo,heatmap} --backbone resnet50 --no-pretrained --lr</code>; <code>resume --name --device --batch</code>; <code>evaluate --model PATH.pt --split val
-        --det-conf --kp-conf --match-px --pck 5,10,25 --max-images</code>; <code>compare --baseline SLOT --promote</code> (copies to
+        --det-conf --kp-conf --match-px --pck 5,10,25 --max-images</code>; <code>--origin 1</code> adds a table scoring only human-annotated labels (2 = plane-projected, 3 = camera-projected); <code>compare --baseline SLOT --promote</code> (copies to
         <code>models/freekiki_&lt;slot&gt;.pt</code> only if the gate passes); <code>detect --model PATH.pt --start --max-frames --conf --kp-conf
         --imgsz --no-overlay --output-dir --fill-gaps N --diag-frames N</code>.</p>
       <p>Evaluate and Detect use the <strong>image size the model was trained with</strong> (read from the

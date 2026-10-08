@@ -5,7 +5,7 @@
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
 - **Version:** 0.4.7
-- **Updated:** 06 October 2026
+- **Updated:** 07 October 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
 - **CLI Interface:** Yes
@@ -719,7 +719,9 @@ Useful options: `manifest --rfs-t --cap --seed --exclude FILE --name`;
 `train --manifest v001 --batch --device 0 --name --patience --seed --workers
 --backend {yolo,heatmap} --backbone resnet50 --no-pretrained --lr`;
 `resume --name --device --batch`;
-`evaluate --model PATH.pt --split val --det-conf --kp-conf --match-px --pck 5,10,25 --max-images`;
+`evaluate --model PATH.pt --split val --det-conf --kp-conf --match-px --pck 5,10,25 --max-images --origin 1`
+(`--origin`: extra table `per_keypoint_origin_<digits>.csv` that scores only labels of that provenance, 1 annotated,
+2 plane-projected, 3 camera-projected; a projected label may be occluded, so it is not held against the network);
 `compare --baseline SLOT --promote` (copies to `models/freekiki_<slot>.pt` only if the gate passes);
 `detect --model PATH.pt --start --max-frames --conf --kp-conf --imgsz
 --no-overlay --output-dir --fill-gaps N --diag-frames N`.
