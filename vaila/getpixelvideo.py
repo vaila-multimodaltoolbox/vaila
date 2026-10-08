@@ -7,7 +7,7 @@ Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
 Update: 07 October 2026
-Version: 0.4.9
+Version: 0.4.8
 Python Version: 3.12.14
 
 Description:
@@ -275,7 +275,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.9"
+GETPIXELVIDEO_VERSION = "0.4.8"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 
@@ -784,16 +784,12 @@ def _png_sequence_index_for_file(directory: str | Path, selected_file: str | Pat
     return 0
 
 
-def get_image_sequence_metadata(path, source_type, start_index: int = 0):
+def get_image_sequence_metadata(path, source_type):
     """Get metadata for a single still or an image sequence (same shape as video metadata).
 
     source_type: "single_png" | "png_sequence"
     ``codec`` stays ``"png"`` for every still so image-source paths (measure, no audio)
     stay on for JPEG and the other still extensions.
-
-    For ``png_sequence``, dimensions come from ``paths[start_index]`` (the frame the
-    user selected), not always ``paths[0]``. Mixed-size folders (e.g. Downloads)
-    otherwise forced a wrong aspect and stretched the selected still.
     """
     path = Path(path)
     if source_type == "single_png":
@@ -832,12 +828,9 @@ def get_image_sequence_metadata(path, source_type, start_index: int = 0):
         except (ValueError, OSError):
             pass
     if (width == 0 or height == 0) and paths:
-        idx = max(0, min(int(start_index), len(paths) - 1))
-        probe = _imread_still(paths[idx])
-        if probe is None and idx != 0:
-            probe = _imread_still(paths[0])
-        if probe is not None:
-            height, width = probe.shape[:2]
+        first = _imread_still(paths[0])
+        if first is not None:
+            height, width = first.shape[:2]
     return {
         "fps": fps,
         "width": width,

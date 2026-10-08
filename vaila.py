@@ -7,7 +7,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
 Update Date: 07 October 2026
-Version: 0.4.9
+Version: 0.4.8
 
 Example of usage:
 uv run --no-sync vaila.py
@@ -358,7 +358,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 07.Oct.2026 v0.4.9 (Python 3.12.14)
+    vailá - 07.Oct.2026 v0.4.8 (Python 3.12.14)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -477,7 +477,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 07.Oct.2026 v0.4.9 (Python 3.12.14)")
+        self.title("vailá - 07.Oct.2026 v0.4.8 (Python 3.12.14)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None

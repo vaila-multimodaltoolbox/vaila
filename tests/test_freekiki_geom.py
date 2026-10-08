@@ -1,7 +1,7 @@
 """FreeKiki field geometry: camera from keypoints, fill / fix, evaluate scoring.
 
 Version: 0.4.7
-Update Date: 05 October 2026
+Update Date: 07 October 2026
 """
 
 import numpy as np
@@ -247,3 +247,34 @@ def test_homography_with_no_inliers_is_rejected_not_a_crash(monkeypatch):
     fit = freekiki_diag.fit_field_homography(uv[use], xyz[use, :2], width=W)
     assert fit["status"] == "few_inliers" and fit["n_inliers"] == 0
     assert freekiki_diag._orientation(H_true, np.zeros((0, 2))) == 0
+
+
+def test_origin_view_hides_projected_labels_without_counting_them_as_errors():
+    from vaila import freekiki_diag as diag
+
+    n = 3
+    pred = {
+        "images": np.array(["a.jpg", "b.jpg", "c.jpg"]),
+        "groups": np.array(["a", "b", "c"]),
+        "sources": np.array(["s"] * n),
+        "width": np.full(n, 1920),
+        "box_conf": np.full(n, 0.9),
+        "pred_xy": np.zeros((n, 49, 2)),
+        "pred_kc": np.full((n, 49), 0.9),
+        "gt_xy": np.zeros((n, 49, 2)),
+        "gt_vis": np.zeros((n, 49)),
+    }
+    pred["gt_xy"][:, 5] = (100.0, 100.0)
+    pred["gt_vis"][:, 5] = 2
+    pred["pred_xy"][:, 5] = (100.0, 100.0)
+    pred["pred_kc"][2, 5] = 0.0  # missed where the label was only projected
+    origins = ["1" * 49, "1" * 5 + "2" + "1" * 43, "human_reviewed"]
+    origins[2] = "3" * 49
+    mask = diag.origin_mask(origins, 49, "1")
+    assert mask[:, 5].tolist() == [True, False, False]
+    assert diag.origin_mask(["human_reviewed"], 49, "1").all()
+    kw = {"det_conf": 0.25, "kp_conf": 0.5, "match_px": 25.0, "with_calib": False}
+    full = diag.score_predictions(pred, **kw)["per_keypoint"][5]
+    view = diag.score_predictions(diag.restrict_to_labelled(pred, mask), **kw)["per_keypoint"][5]
+    assert full["n_ref"] == 3 and full["recall"] == round(2 / 3, 4)
+    assert view["n_ref"] == 1 and view["recall"] == 1.0 and view["n_fp"] == 0

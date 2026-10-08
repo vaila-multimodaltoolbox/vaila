@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.7
 Created: 25 September 2026
-Update Date: 06 October 2026
+Update Date: 07 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -4023,6 +4023,7 @@ def evaluate(
     pck: tuple = (5, 10, 25),
     max_images: int = 0,
     geom_settings: dict | None = None,
+    origin: str = "1",
 ) -> Path:
     """Measure a model on a labelled split (default ``val``; ``test`` is for final reports).
 
@@ -4093,6 +4094,10 @@ def evaluate(
     )
     scores["images"] = pred["images"].tolist()
     write_scores(out, scores)
+    verified = evaluate_origin(
+        pred, manifest_index(ws), out, origin=origin,
+        det_conf=det_conf, kp_conf=kp_conf, match_px=match_px, pck=pck,
+    )  # fmt: skip
     geometry = evaluate_geometry(
         pred, out, det_conf=det_conf, kp_conf=kp_conf, match_px=match_px, pck=pck,
         settings=settings["geometry"] | dict(geom_settings or {}),
@@ -4120,6 +4125,7 @@ def evaluate(
         "keypoints": overall,
         "calib": calib,
         "geometry": geometry,
+        "origin_view": verified,
         "definitions": METRIC_DEFINITIONS,
     }
     (out / "eval_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -4215,6 +4221,43 @@ def evaluate_geometry(pred, out: Path, *, det_conf, kp_conf, match_px, pck, sett
             },
         }
     return result
+
+
+ORIGIN_NAMES = {"1": "annotated", "2": "plane", "3": "camera"}
+
+
+def evaluate_origin(
+    pred: dict, index: dict, out: Path, *, origin: str, det_conf, kp_conf, match_px, pck
+) -> dict:
+    """Score only the labels of the given provenance (default ``1`` = human-annotated).
+
+    Many val labels of the near-touchline points (p5, p29, p39, p47) are
+    projected from the field model, not seen; the network cannot be blamed for
+    those. Writes ``per_keypoint_origin_<digits>.csv`` and logs the rare points.
+    """
+    origins = [index.get(Path(n).stem, {}).get("origin", "") for n in pred["images"]]
+    mask = diag.origin_mask(origins, NKP, origin)
+    scores = diag.score_predictions(
+        diag.restrict_to_labelled(pred, mask),
+        det_conf=det_conf, kp_conf=kp_conf, match_px=match_px, pck=pck, with_calib=False,
+    )  # fmt: skip
+    diag.write_csv(out / f"per_keypoint_origin_{origin}.csv", scores["per_keypoint"])
+    label = "+".join(ORIGIN_NAMES.get(c, c) for c in origin)
+    rare = {r["kp"]: r for r in scores["per_keypoint"] if r["kp"] in RARE_LOG}
+    _log(f"labels of origin {label} only (recall / precision / n): "
+         + " | ".join(f"{k} {r['recall']}/{r['precision']}/{r['n_ref']}" for k, r in rare.items())
+         + f" | overall recall {scores['overall']['recall']} PCK10 {scores['overall'].get('pck10_all')}")  # fmt: skip
+    return {
+        "origin": origin,
+        "overall": scores["overall"],
+        "per_keypoint": {
+            k["kp"]: {"recall": k["recall"], "precision": k["precision"], "n_ref": k["n_ref"]}
+            for k in scores["per_keypoint"]
+        },
+    }
+
+
+RARE_LOG = ("p5", "p16", "p29", "p39", "p47")
 
 
 def _append_csv(path: Path, row: dict) -> None:
@@ -5286,6 +5329,12 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--geom-fix-px", type=float, help="Geometry fix distance, px@1920 (default 20)."
             )
+            p.add_argument(
+                "--origin",
+                default="1",
+                help="Extra table scoring only labels of this provenance: digits of 1 annotated, "
+                "2 plane-projected, 3 camera-projected (default 1 = human-annotated).",
+            )
         elif cmd == "sweep":
             p.add_argument("--eval-dir", required=True, help="Folder written by evaluate.")
             p.add_argument("--det-confs", default="0.05,0.1,0.25,0.5")
@@ -5454,6 +5503,7 @@ def main(argv: list[str] | None = None) -> int:
             match_px=args.match_px,
             pck=_floats(args.pck),
             max_images=args.max_images,
+            origin=args.origin,
             geom_settings={
                 k: v
                 for k, v in (("min_conf", args.geom_min_conf), ("fix_px", args.geom_fix_px))

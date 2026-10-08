@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.7
 Created: 27 September 2026
-Update Date: 05 October 2026
+Update Date: 07 October 2026
 
 Description:
     Verifiable measurement helpers for ``freekiki.py`` (49-point soccer-field
@@ -548,6 +548,35 @@ def calibration_table(pred: dict, kc: np.ndarray, kp_conf: float, **limits) -> d
         "correct_rate": _ratio(int((e <= CALIB_CORRECT_PX).sum()), n_gt_ok),
         "per_image": per_image,
     }
+
+
+def origin_mask(origins, n_kp: int = NKP, keep: str = "1") -> np.ndarray:
+    """(N, n_kp) bool: label origin digit is in ``keep`` (1 = clicked / line-annotated,
+    2 = ground-plane projection, 3 = camera projection).
+
+    ``origins`` holds one 49-digit string per image; a non-digit origin such as
+    ``human_reviewed`` (FreeKiki review) counts as annotated for every point.
+    """
+    out = np.zeros((len(origins), n_kp), dtype=bool)
+    for i, o in enumerate(origins):
+        o = str(o)
+        if len(o) == n_kp and o.isdigit():
+            out[i] = [c in keep for c in o]
+        else:
+            out[i] = "1" in keep
+    return out
+
+
+def restrict_to_labelled(pred: dict, mask: np.ndarray) -> dict:
+    """Copy of ``pred`` that scores only the points where ``mask`` is True.
+
+    Elsewhere the label is hidden and the prediction withdrawn, so a point whose
+    label was only projected (it may be occluded or out of frame) is neither a
+    miss nor a false positive.
+    """
+    gt_vis = np.where(mask, pred["gt_vis"], 0)
+    kc = np.where(mask, pred["pred_kc"], np.nan)
+    return pred | {"gt_vis": gt_vis, "pred_kc": kc}
 
 
 def score_predictions(
