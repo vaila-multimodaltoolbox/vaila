@@ -32,6 +32,17 @@ dependencies = [
     "pycairo",
     # Data processing
     "dask",
+    # polars is not used by vailá directly; it comes in through ultralytics (and
+    # statsmodels imports it when present). Its default runtime is built for CPUs
+    # with AVX2: on older CPUs (e.g. Intel 2nd gen "Sandy Bridge", i7-2670QM, still
+    # common in labs/clinics) `import polars` kills the whole process with SIGILL
+    # ("Illegal instruction", exit code 132) -- Markerless 2D and anything that
+    # imports statsmodels then close with no error message. The "rtcompat" extra
+    # installs polars-runtime-compat (same version as polars), built without AVX2,
+    # which polars prefers when present. Cost: slower polars on modern CPUs, which
+    # does not matter for vailá (no direct polars use). Opt out per machine with
+    # POLARS_PREFER_PKG=64 (or 32).
+    "polars[rtcompat]",
     "distributed",
     "h5py",
     "openpyxl",
