@@ -59,16 +59,17 @@ Always run `uv run --no-sync` (CUDA machine: a bare `uv run` downgrades torch to
 
 ## Open items
 
-1. Snap output of the other 19 FIFA videos in `outputs/fifa_v011_full/processed_freekiki_batch_20261015_140142/*/snap/`
-   was made with the older snap: rerun `snap` on the batch if it is used.
-2. Decide whether snap should run inside `detect` before the camera fit (would improve the per-frame DLT on rare
-   cameras). The user leaned to "not needed"; ask first.
-3. p29/p47: more human-labelled corners (review loop: `select` -> `detect` -> `queue --need p5,p29,p39,p47 --montage`
-   -> getpixelvideo -> `ingest`) and a larger labelled holdout for these points (`ingest --split hard`).
-4. Model card draft `release/MODEL_CARD_freekiki_l_v007.md` describes v007 (it was edited on disk by the user); update
-   it to v011 with the 2026-10-14 test numbers above. Licences of the training sources must be confirmed before
-   publishing (Roboflow CC BY 4.0/MIT need attribution; SoccerNet and others are research-only).
-5. The Roboflow key in the gitignored `.env` (`ROBOFLOW_API_KEY`) was pasted in a chat: the user may rotate it.
+1. **[RESOLVIDO 2026-10-16]** Snap atualizado nos 20 vídeos FIFA em `outputs/fifa_v011_full/processed_freekiki_batch_20261015_140142/*/snap/`
+   e nos lotes `palx_v011_screened` e `palx_v011`.
+   - Melhorias no `freekiki_snap.py`:
+     1. Busca de crista 1D (`fit_line_in_band`) imune ao arco da grande área e a jogadores dentro da faixa de busca;
+     2. Projeção de pontos de linha única (cruzamento do arco) na direção das linhas transversais projetivas (mantém coordenada Y na grande área);
+     3. Preenchimento de dropouts transitórios em `stabilize` sem oscilações abruptas de 40 px.
+   - Testes: 16 unit tests passando em `tests/test_freekiki_snap.py`.
+2. Decidir se o snap deve rodar internamente em `detect` antes do ajuste de câmera (caso o usuário prefira manter opcional ou acoplado).
+3. p29/p47: diagnóstico concluído sobre rotação $C_2$ (SoccerNet com coordenadas fixadas no estádio e 0 rótulos humanos em val); coleta de mais cantos rotulados por humanos via `select` -> `queue --need p5,p29,p39,p47 --montage` -> `getpixelvideo` -> `ingest`.
+4. **[RESOLVIDO 2026-10-16]** Model card `v011` criado em `release/MODEL_CARD_freekiki_l_v011.md` com números limpos de teste/val e documentação do diagnóstico dos keypoints raros.
+5. A chave Roboflow no `.env` gitignorado (`ROBOFLOW_API_KEY`) pode ser rotacionada pelo usuário quando desejado.
 
 ## Rules the user set (keep)
 

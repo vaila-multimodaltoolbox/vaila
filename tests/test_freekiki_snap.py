@@ -1,7 +1,7 @@
 """FreeKiki snap: keypoints moved onto the painted lines.
 
-Version: 0.4.8
-Update Date: 15 October 2026
+Version: 0.4.9
+Update Date: 16 October 2026
 """
 
 import numpy as np
@@ -157,3 +157,53 @@ def test_stabilize_keeps_the_network_when_its_correction_is_small():
     S[:, 17] = truth + np.random.default_rng(1).normal(0, 1.0, truth.shape)  # tiny, noisy moves
     out = fs.stabilize(N, S, 1920)
     assert np.allclose(out[:, 17], truth)  # identical to the network
+
+
+def test_fit_line_in_band_ignores_curved_penalty_arc():
+    """A curved penalty arc inside the search band must not pull the straight box line."""
+    m = _paint()
+    # Add a thick curved penalty arc bowing 28 px left of x=600 between y=360 and y=640
+    for y in range(360, 641):
+        u = (y - 500.0) / 140.0
+        x_arc = int(round(600.0 - 28.0 * (1.0 - u * u)))
+        m[y, x_arc - 2 : x_arc + 3] = True
+    ys, xs = np.nonzero(m)
+    pts = np.c_[xs, ys].astype(float)
+    line = fs.fit_line_in_band(pts, (580.0, 200.0), (580.0, 800.0), fs.BAND_PX, m)
+    assert line is not None
+    c, d = line
+    assert abs(c[0] - 600.0) < 1.5 and abs(d[0]) < 0.01
+
+
+def test_tilted_line_arc_crossing_follows_cross_line_direction():
+    """On a tilted box line in perspective, p18 slides along the cross-line rather than orthogonally."""
+    import cv2
+
+    m = np.zeros((1080, 1920), dtype=np.uint8)
+    # Tilted box_right_side from (900, 200) to (600, 800), horizontal top/bottom to x=1500
+    cv2.line(m, (900, 200), (1500, 200), 1, 3)
+    cv2.line(m, (600, 800), (1500, 800), 1, 3)
+    cv2.line(m, (900, 200), (600, 800), 1, 3)
+    cv2.line(m, (1500, 200), (1500, 800), 1, 3)
+    paint = m.astype(bool)
+    pts = np.full((49, 2), np.nan)
+    pts[17] = (875.0, 200.0)  # shifted 25 px left
+    pts[18] = (785.0, 380.0)  # true point on line at y=380 is x=810
+    pts[19] = (685.0, 580.0)  # true point on line at y=580 is x=710
+    pts[20] = (575.0, 800.0)
+    pts[25] = (1500.0, 200.0)
+    pts[28] = (1500.0, 800.0)
+    acc = np.isfinite(pts).all(axis=1)
+    new, how = fs.snap_keypoints(pts, acc, paint)
+    assert how[18] == "line"
+    assert abs(new[18, 0] - 810.0) < 2.0 and abs(new[18, 1] - 380.0) < 1.5
+
+
+def test_stabilize_fills_dropout_frames_inside_snapped_stretch():
+    """If the snap drops out for 2 frames inside a snapped clip, stabilize fills the gap."""
+    truth, net, base = _tracks()
+    N, S = base.copy(), base.copy()
+    N[:, 17], S[:, 17] = net, truth
+    S[20:22, 17] = net[20:22]  # 2 dropout frames where snap_keypoints kept the network point
+    out = fs.stabilize(N, S, 1920)
+    assert np.nanmax(np.hypot(*(out[20:22, 17] - truth[20:22]).T)) < 5.0
