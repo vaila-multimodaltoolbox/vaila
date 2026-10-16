@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.7
+Version: 0.4.9
 Created: 25 September 2026
-Update Date: 15 October 2026
+Update Date: 16 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -5383,6 +5383,15 @@ def _geom():
     return freekiki_geom
 
 
+def _snap():
+    """``freekiki_snap`` (lazy: pulls snap ridge search and painted line definitions)."""
+    try:
+        from . import freekiki_snap as fs
+    except ImportError:
+        import freekiki_snap as fs  # ty: ignore[unresolved-import]
+    return fs
+
+
 GEOM_ACCEPTED = ("D", "Dg", "G", "Gx")  # codes written to the geometry CSV
 
 
@@ -5557,17 +5566,22 @@ def detect_video(
     diag_frames: int = 12,
     cut_threshold: float = 0.4,
     geom: str | None = None,
+    snap: bool = True,
+    snap_band: float | None = None,
+    snap_max_move: float | None = None,
 ) -> Path:
     """Detect the 49 field keypoints in a video; returns the output folder.
 
     Outputs (``README.txt`` explains them): accepted points in getpixelvideo
-    format, raw best-instance predictions, per-point status codes with the
-    rejection reason, per-frame issues (cut, homography status), label-free
-    ``quality.json`` and a few annotated ``diag_frames/``. ``fill_gaps`` > 0
-    writes separate ``field_kps_filled_*`` CSVs with short gaps (same shot
-    only) linearly interpolated and marked ``I``. ``geom`` (fill | fix | off,
-    default from settings) adds the field-geometry CSVs (``freekiki_geom``):
-    the network CSVs above are never changed by it.
+    format (with ``snap=True``, default, snapped to the painted pitch lines),
+    raw best-instance predictions (``field_kps_raw.csv``), per-point status
+    codes with rejection reasons, per-frame issues (cut, homography status),
+    ``quality.json`` and annotated ``diag_frames/``. With ``overlay=True``,
+    writes the video overlay showing clean green points on painted lines
+    (inferior un-snapped network shifts discarded). ``fill_gaps`` > 0 writes
+    separate ``field_kps_filled_*`` CSVs with short gaps interpolated.
+    ``geom`` adds field-geometry CSVs (``field_kps_geom_*``) and per-frame DLT
+    files (``.dlt2d``, ``.dlt3d``) fitted to the snapped points.
     """
     import cv2
     import numpy as np
@@ -5579,6 +5593,12 @@ def detect_video(
     geom_settings = all_settings["geometry"]
     geom_mode = str(geom or geom_settings.get("mode", "fill"))
     G = _geom() if geom_mode != "off" else None
+    fs = _snap() if snap else None
+    snap_kw: dict = {}
+    if snap_band is not None:
+        snap_kw["band_px"] = float(snap_band)
+    if snap_max_move is not None:
+        snap_kw["max_move_px"] = float(snap_max_move)
     conf = float(defaults["conf"] if conf is None else conf)
     kp_conf = float(defaults["kp_conf"] if kp_conf is None else kp_conf)
     stride = max(1, int(stride))
@@ -5618,16 +5638,11 @@ def detect_video(
     n_expected = max(1, (min(total - start, max_frames or total) + stride - 1) // stride)
     diag_at = set(np.linspace(0, n_expected - 1, max(0, diag_frames)).round().astype(int).tolist())
     snapshot_at = n_expected // 2
-    frames, raw_rows, status_rows, issue_rows = [], [], [], []
-    pix_rows, conf_rows, xy_seq, kc_seq, cuts, calib = [], [], [], [], [], []
+    raw_frames = []
+    nets, snaps = [], []
     all_codes: Counter = Counter()
-    geom_rows, geom_status, geom_kps, dlt2d_rows, dlt3d_rows = [], [], [], [], []
-    geom_codes: Counter = Counter()
-    geom_sources: Counter = Counter()
-    geom_fills: Counter = Counter()
-    geom_fixes: Counter = Counter()
     prev_sig = None
-    frame_idx, processed, cut_shots = start, 0, 0
+    frame_idx, processed = start, 0
     try:
         while True:
             if (frame_idx - start) % stride:
@@ -5645,121 +5660,19 @@ def detect_video(
             codes = point_codes(xy, kc, box_conf, conf, kp_conf, (width, height))
             all_codes.update(codes)
             acc = np.array([c == "D" for c in codes])
-            kc_acc = None if kc is None or box_conf < conf else np.where(acc, kc, np.nan)
-            xy_acc = None if kc_acc is None else xy
-            fit = diag.frame_homography(xy_acc, kc_acc, kp_conf, planar, world, width)
-            gxy, gcodes = None, []
-            if G is not None:
-                gxy, gkc, gcodes, gmodel = (
-                    G.refine_keypoints(
-                        xy, kc, codes, width, height, mode=geom_mode, kp_conf=kp_conf,
-                        settings=geom_settings,
-                    )
-                    if xy is not None and kc_acc is not None
-                    else (xy, kc, list(codes), None)
-                )  # fmt: skip
-                gacc = np.array([c in GEOM_ACCEPTED for c in gcodes])
-                gkc_acc = None if gxy is None else np.where(gacc, gkc, np.nan)
-                geom_rows.append(keypoints_row(frame_idx, gxy, gkc_acc, kp_conf))
-                src = gmodel["source"] if gmodel and gmodel["status"] == "ok" else "none"
-                geom_status.append(
-                    [
-                        frame_idx,
-                        src,
-                        "" if gmodel is None else gmodel["focal_px"] or "",
-                        "" if gmodel is None else gmodel["cam_height_m"] or "",
-                        "" if gmodel is None else gmodel["rmse_px"] or "",
-                    ]
-                    + gcodes
-                )
-                d2, d3 = G.dlt_coefficients(gmodel)
-                dlt2d_rows.append(
-                    [frame_idx] + ([""] * 8 if d2 is None else [f"{v:.10g}" for v in d2])
-                )
-                dlt3d_rows.append(
-                    [frame_idx] + ([""] * 11 if d3 is None else [f"{v:.10g}" for v in d3])
-                )
-                geom_codes.update(gcodes)
-                geom_sources[src] += 1
-                geom_fills.update(f"p{i}" for i, c in enumerate(gcodes) if c == "G")
-                geom_fixes.update(f"p{i}" for i, c in enumerate(gcodes) if c == "Gx")
-                geom_kps.append(int(gacc.sum()))
-            frames.append(frame_idx)
-            xy_seq.append(xy_acc)
-            kc_seq.append(kc_acc)
-            cuts.append(cut)
-            calib.append(fit["status"])
-            pix_rows.append(keypoints_row(frame_idx, xy_acc, kc_acc, kp_conf))
-            conf_rows.append(
-                [frame_idx]
-                + (
-                    [f"{float(c):.3f}" for c in kc]
-                    if kc is not None and box_conf >= conf
-                    else [""] * NKP
-                )
+
+            s_xy = xy.copy() if xy is not None else None
+            if fs is not None and acc.any() and xy is not None:
+                mask = fs.paint_mask(frame)
+                s_xy, _ = fs.snap_keypoints(xy, acc, mask, **snap_kw)
+
+            raw_frames.append((frame_idx, box_conf, xy, kc, codes, acc, cut))
+            nets.append(
+                np.where(acc[:, None], xy, np.nan) if xy is not None else np.full((NKP, 2), np.nan)
             )
-            raw = [frame_idx, "" if not math.isfinite(box_conf) else f"{box_conf:.4f}"]
-            for i in range(NKP):
-                raw += (
-                    ["", "", ""]
-                    if xy is None
-                    else [f"{xy[i][0]:.2f}", f"{xy[i][1]:.2f}", f"{float(kc[i]):.4f}"]
-                )
-            raw_rows.append(raw)
-            status_rows.append(
-                [
-                    frame_idx,
-                    int(cut),
-                    int(acc.sum()),
-                    fit["status"],
-                    fit["n_inliers"],
-                    fit["rmse_px"],
-                ]
-                + codes
+            snaps.append(
+                np.where(acc[:, None], s_xy, np.nan) if s_xy is not None else np.full((NKP, 2), np.nan)
             )
-            issues = []
-            if cut:
-                issues.append("cut")
-            if codes[0] == "N":
-                issues.append("no_instance")
-            elif codes[0] == "Rb":
-                issues.append("box_below_conf")
-            if fit["status"] != "ok":
-                issues.append(f"homography_{fit['status']}")
-            if "Rd" in codes:
-                issues.append("duplicate_points")
-            if issues:
-                issue_rows.append(
-                    {
-                        "frame": frame_idx,
-                        "issues": ";".join(issues),
-                        "box_conf": diag._num(box_conf, 3),
-                        "n_accepted": int(acc.sum()),
-                        "n_rejected_kp_conf": codes.count("Rk"),
-                        "homography_n_points": fit["n_points"],
-                        "homography_inliers": fit["n_inliers"],
-                        "homography_rmse_px": fit["rmse_px"],
-                        "minor_std_m": fit["minor_std_m"],
-                    }
-                )
-            if processed in diag_at or (cut and cut_shots < 8):
-                cut_shots += int(cut)
-                header = (
-                    f"frame {frame_idx} | box {box_conf:.2f} | accepted {int(acc.sum())} | "
-                    f"H {fit['status']}" + (" | CUT" if cut else "")
-                )
-                cv2.imwrite(
-                    str(out / "diag_frames" / f"frame_{frame_idx:06d}.jpg"),
-                    _draw_diagnostic(frame.copy(), xy, kc, codes, names, header),
-                )
-            if writer is not None or processed == snapshot_at:
-                drawn = _draw_overlay(frame, xy_acc, kc_acc, kp_conf, bones)
-                if G is not None and gxy is not None:
-                    drawn = _draw_geom(drawn, gxy, gcodes)
-                if writer is not None:
-                    writer.write(drawn)
-                if processed == snapshot_at:
-                    cv2.imwrite(str(out / f"{video.stem}_freekiki_snapshot.png"), drawn)
             processed += 1
             frame_idx += 1
             if processed % 100 == 0:
@@ -5768,8 +5681,187 @@ def detect_video(
                 break
     finally:
         cap.release()
-        if writer is not None:
-            writer.release()
+
+    if fs is not None and len(nets) > 0:
+        final_pts = fs.stabilize(np.array(nets), np.array(snaps), width)
+    else:
+        final_pts = np.array(nets) if nets else np.zeros((0, NKP, 2))
+
+    frames, raw_rows, status_rows, issue_rows = [], [], [], []
+    pix_rows, conf_rows, xy_seq, kc_seq, cuts, calib = [], [], [], [], [], []
+    geom_rows, geom_status, geom_kps, dlt2d_rows, dlt3d_rows = [], [], [], [], []
+    geom_codes: Counter = Counter()
+    geom_sources: Counter = Counter()
+    geom_fills: Counter = Counter()
+    geom_fixes: Counter = Counter()
+    geom_rows_xy: list = []
+    geom_rows_codes: list = []
+    moves: list[dict] = []
+
+    for k, (f_idx, box_conf, raw_xy, kc, codes, acc, cut) in enumerate(raw_frames):
+        cur_pts = final_pts[k]
+        kc_acc = None if kc is None or box_conf < conf else np.where(acc, kc, np.nan)
+        xy_acc = None if kc_acc is None else np.where(acc[:, None], cur_pts, np.nan)
+        fit = diag.frame_homography(xy_acc, kc_acc, kp_conf, planar, world, width)
+        gxy, gcodes = None, []
+        if G is not None:
+            gxy, gkc, gcodes, gmodel = (
+                G.refine_keypoints(
+                    xy_acc if xy_acc is not None else raw_xy, kc, codes, width, height, mode=geom_mode, kp_conf=kp_conf,
+                    settings=geom_settings,
+                )
+                if raw_xy is not None and kc_acc is not None
+                else (raw_xy, kc, list(codes), None)
+            )  # fmt: skip
+            gacc = np.array([c in GEOM_ACCEPTED for c in gcodes])
+            gkc_acc = None if gxy is None else np.where(gacc, gkc, np.nan)
+            geom_rows.append(keypoints_row(f_idx, gxy, gkc_acc, kp_conf))
+            src = gmodel["source"] if gmodel and gmodel["status"] == "ok" else "none"
+            geom_status.append(
+                [
+                    f_idx,
+                    src,
+                    "" if gmodel is None else gmodel["focal_px"] or "",
+                    "" if gmodel is None else gmodel["cam_height_m"] or "",
+                    "" if gmodel is None else gmodel["rmse_px"] or "",
+                ]
+                + gcodes
+            )
+            d2, d3 = G.dlt_coefficients(gmodel)
+            dlt2d_rows.append(
+                [f_idx] + ([""] * 8 if d2 is None else [f"{v:.10g}" for v in d2])
+            )
+            dlt3d_rows.append(
+                [f_idx] + ([""] * 11 if d3 is None else [f"{v:.10g}" for v in d3])
+            )
+            geom_codes.update(gcodes)
+            geom_sources[src] += 1
+            geom_fills.update(f"p{i}" for i, c in enumerate(gcodes) if c == "G")
+            geom_fixes.update(f"p{i}" for i, c in enumerate(gcodes) if c == "Gx")
+            geom_kps.append(int(gacc.sum()))
+        geom_rows_xy.append(gxy)
+        geom_rows_codes.append(gcodes)
+        frames.append(f_idx)
+        xy_seq.append(xy_acc)
+        kc_seq.append(kc_acc)
+        cuts.append(cut)
+        calib.append(fit["status"])
+        pix_rows.append(keypoints_row(f_idx, xy_acc, kc_acc, kp_conf))
+        conf_rows.append(
+            [f_idx]
+            + (
+                [f"{float(c):.3f}" for c in kc]
+                if kc is not None and box_conf >= conf
+                else [""] * NKP
+            )
+        )
+        raw = [f_idx, "" if not math.isfinite(box_conf) else f"{box_conf:.4f}"]
+        for i in range(NKP):
+            raw += (
+                ["", "", ""]
+                if raw_xy is None
+                else [f"{raw_xy[i][0]:.2f}", f"{raw_xy[i][1]:.2f}", f"{float(kc[i]):.4f}"]
+            )
+        raw_rows.append(raw)
+        status_rows.append(
+            [
+                f_idx,
+                int(cut),
+                int(acc.sum()),
+                fit["status"],
+                fit["n_inliers"],
+                fit["rmse_px"],
+            ]
+            + codes
+        )
+        issues = []
+        if cut:
+            issues.append("cut")
+        if codes[0] == "N":
+            issues.append("no_instance")
+        elif codes[0] == "Rb":
+            issues.append("box_below_conf")
+        if fit["status"] != "ok":
+            issues.append(f"homography_{fit['status']}")
+        if "Rd" in codes:
+            issues.append("duplicate_points")
+        if issues:
+            issue_rows.append(
+                {
+                    "frame": f_idx,
+                    "issues": ";".join(issues),
+                    "box_conf": diag._num(box_conf, 3),
+                    "n_accepted": int(acc.sum()),
+                    "n_rejected_kp_conf": codes.count("Rk"),
+                    "homography_n_points": fit["n_points"],
+                    "homography_inliers": fit["n_inliers"],
+                    "homography_rmse_px": fit["rmse_px"],
+                    "minor_std_m": fit["minor_std_m"],
+                }
+            )
+        if fs is not None and raw_xy is not None:
+            for i in np.flatnonzero(acc):
+                dx, dy = cur_pts[i] - raw_xy[i]
+                dist = float(np.hypot(dx, dy))
+                if dist >= 0.05:
+                    moves.append(
+                        {
+                            "frame": f_idx,
+                            "point": f"p{i}",
+                            "how": "snap",
+                            "dx": round(float(dx), 2),
+                            "dy": round(float(dy), 2),
+                            "distance_px": round(dist, 2),
+                        }
+                    )
+
+    if writer is not None or processed == snapshot_at or (diag_frames > 0 and len(raw_frames) > 0):
+        cap = cv2.VideoCapture(str(video))
+        if start > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, start)
+        frame_idx, p_idx, cut_shots = start, 0, 0
+        try:
+            while p_idx < len(raw_frames):
+                target_f = raw_frames[p_idx][0]
+                if frame_idx < target_f:
+                    if not cap.grab():
+                        break
+                    frame_idx += 1
+                    continue
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                f_idx, box_conf, raw_xy, kc, codes, acc, cut = raw_frames[p_idx]
+                cur_xy_acc = xy_seq[p_idx]
+                cur_kc_acc = kc_seq[p_idx]
+                cur_gxy = geom_rows_xy[p_idx] if G is not None else None
+                cur_gcodes = geom_rows_codes[p_idx] if G is not None else []
+                fit_status = calib[p_idx]
+
+                if p_idx in diag_at or (cut and cut_shots < 8):
+                    cut_shots += int(cut)
+                    header = (
+                        f"frame {f_idx} | box {box_conf:.2f} | accepted {int(acc.sum())} | "
+                        f"H {fit_status}" + (" | CUT" if cut else "")
+                    )
+                    cv2.imwrite(
+                        str(out / "diag_frames" / f"frame_{f_idx:06d}.jpg"),
+                        _draw_diagnostic(frame.copy(), cur_xy_acc if cur_xy_acc is not None else raw_xy, kc, codes, names, header),
+                    )
+                if writer is not None or p_idx == snapshot_at:
+                    drawn = _draw_overlay(frame, cur_xy_acc, cur_kc_acc, kp_conf, bones)
+                    if G is not None and cur_gxy is not None:
+                        drawn = _draw_geom(drawn, cur_gxy, cur_gcodes)
+                    if writer is not None:
+                        writer.write(drawn)
+                    if p_idx == snapshot_at:
+                        cv2.imwrite(str(out / f"{video.stem}_freekiki_snapshot.png"), drawn)
+                p_idx += 1
+                frame_idx += 1
+        finally:
+            cap.release()
+            if writer is not None:
+                writer.release()
 
     def write_rows(name: str, header: list, rows: list) -> None:
         with (out / name).open("w", newline="", encoding="utf-8") as f:
@@ -5778,6 +5870,7 @@ def detect_video(
             w.writerows(rows)
 
     write_rows("field_kps_getpixelvideo.csv", getpixelvideo_header(), pix_rows)
+    write_rows("field_kps_snap_getpixelvideo.csv", getpixelvideo_header(), pix_rows)
     write_rows("field_kps_conf.csv", ["frame"] + [f"p{i}_conf" for i in range(NKP)], conf_rows)
     write_rows(
         "field_kps_raw.csv",
@@ -5791,6 +5884,11 @@ def detect_video(
         status_rows,
     )
     diag.write_csv(out / "frame_issues.csv", issue_rows or [{"frame": "", "issues": ""}])
+    if fs is not None:
+        diag.write_csv(
+            out / "snap_moves.csv",
+            moves or [{"frame": "", "point": "", "how": "", "dx": "", "dy": "", "distance_px": ""}],
+        )
     if G is not None:
         write_rows("field_kps_geom_getpixelvideo.csv", getpixelvideo_header(), geom_rows)
         write_rows(
@@ -5841,11 +5939,14 @@ def detect_video(
         f"dimensions: {width}x{height}\nframes: {processed} (start={start}, "
         f"stride={stride})\ndetection (box) conf: {conf}\nkeypoint conf: {kp_conf}\n"
         f"imgsz: {imgsz}\nfill gaps: {fill_gaps} frames\ngeometry: {geom_mode}\n"
+        f"snap: {snap} (snapped onto painted pitch lines, raw network shifts discarded)\n"
         "schema: vaila/models/soccerfield_kiki.csv (p0..p48, 0-based)\n\n"
-        "field_kps_getpixelvideo.csv  accepted points only (status D)\n"
+        "field_kps_getpixelvideo.csv  accepted points only (status D, snapped to paint)\n"
+        "field_kps_snap_getpixelvideo.csv accepted points after snap (identical to getpixelvideo)\n"
         "field_kps_conf.csv           keypoint conf of the accepted box (blank: no box)\n"
-        f"field_kps_raw.csv            best instance down to box conf {RAW_CONF} (no filter)\n"
+        f"field_kps_raw.csv            best instance down to box conf {RAW_CONF} (raw network)\n"
         "field_kps_status.csv         per point code, cut flag, homography status\n"
+        "snap_moves.csv               per-point corrections (dx, dy, distance_px)\n"
         "frame_issues.csv             frames with a cut / no box / no valid homography\n"
         "diag_frames/                 annotated frames (green accepted, red rejected)\n"
         "quality.json                 label-free indicators - NOT accuracy\n"
@@ -5874,6 +5975,26 @@ def detect_video(
         | video_quality(xy_seq, kc_seq, kp_conf, width=width, cuts=cuts, calib=calib)
         | {"point_codes": dict(sorted(all_codes.items())), "note": "label-free, not accuracy"}
     )
+    if fs is not None:
+        by_point = Counter(m["point"] for m in moves)
+        med = {
+            p: round(float(np.median([m["distance_px"] for m in moves if m["point"] == p])), 1)
+            for p in by_point
+        }
+        quality |= {
+            "snap": True,
+            "snap_moves": len(moves),
+            "snap_median_move_px": (
+                round(float(np.median([m["distance_px"] for m in moves])), 2) if moves else 0.0
+            ),
+        }
+        if moves:
+            _log(
+                f"snap {video.name}: {len(raw_frames)} frames, {len(moves)} points moved | median move px "
+                + ", ".join(f"{p} {med[p]}" for p in sorted(med, key=lambda q: int(q[1:])))
+            )
+    else:
+        quality["snap"] = False
     if G is not None:
         n_geom = max(1, len(geom_kps))
         quality |= {
@@ -6682,6 +6803,23 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Field geometry (default: settings, fill): fill missing points / also fix "
                 "points that disagree with the camera / off. Writes field_kps_geom_*.csv.",
             )
+            p.add_argument(
+                "--no-snap",
+                dest="snap",
+                action="store_false",
+                help="Do not snap accepted keypoints onto painted lines (raw network output only).",
+            )
+            p.add_argument(
+                "--snap-band",
+                type=float,
+                help="Search band half width for snap, px@1920 (default 35).",
+            )
+            p.add_argument(
+                "--snap-max-move",
+                type=float,
+                help="Largest move allowed for snap, px@1920 (default 40).",
+            )
+            p.set_defaults(snap=True)
     return parser
 
 
@@ -6906,6 +7044,9 @@ def main(argv: list[str] | None = None) -> int:
             geom=args.geom,
             screen=not args.no_screen,
             min_camera_ok=args.min_camera_ok,
+            snap=args.snap,
+            snap_band=args.snap_band,
+            snap_max_move=args.snap_max_move,
         )
     return 0
 
@@ -6976,6 +7117,7 @@ def run_freekiki() -> None:
         "match_id": tk.StringVar(),
     }
     overlay = tk.BooleanVar(value=True)
+    snap = tk.BooleanVar(value=True)
     link_output_to_input(v["video"], v["out"])
 
     def browse_dir(var, title):
@@ -7149,6 +7291,8 @@ def run_freekiki() -> None:
         args += opt("--max-frames", "max_frames") + opt("--conf", "conf")
         args += opt("--kp-conf", "kp_conf") + opt("--device", "device")
         args += opt("--fill-gaps", "fill_gaps") + opt("--geom", "geom")
+        if not snap.get():
+            args.append("--no-snap")
         if not overlay.get():
             args.append("--no-overlay")
         run_cli(args)
@@ -7414,6 +7558,7 @@ def run_freekiki() -> None:
     ttk.Combobox(
         grid, textvariable=v["geom"], values=("fill", "fix", "off"), width=5, state="readonly"
     ).grid(row=0, column=12)
+    ttk.Checkbutton(grid, text="Snap", variable=snap).grid(row=0, column=13, padx=6)
     bar = ttk.Frame(box)
     bar.grid(row=5, column=1, sticky="w", pady=2)
     ttk.Button(bar, text="Detect", command=do_detect).pack(side="left")

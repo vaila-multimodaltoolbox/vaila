@@ -436,13 +436,17 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
       <p>Also look at <code>diag_frames/</code> (green accepted, red rejected with name, confidence and code) and the
         overlay MP4 — wrong points are obvious there.</p>
 
-      <h3>Snap the keypoints onto the painted lines (<code>snap</code>)</h3>
-      <p>On cameras rare in the training set (high, lateral, close to the box) the network places the box corners with a
-        systematic 20-30 px offset. <code>snap</code> refits every painted straight line that has at least two accepted
-        points to the white paint (band 35 px) and moves a point at the crossing of two lines to their intersection, or
-        a point on one line onto it (moves above 40 px are refused). A point already within 3 px of its refitted line(s) is kept, a refitted line must lie on paint for 60&nbsp;% of its length, and lines crossing at less than 15&deg; give no corner, so on a camera the network knows well nothing moves. Each point keeps, for each stretch where it is visible, the steadier of the per-frame snap and the network plus the running mean of its correction, so the snap adds no flicker. Output: <code>&lt;run&gt;/snap/</code> with
-        <code>field_kps_snap_getpixelvideo.csv</code>, <code>snap_moves.csv</code> and an overlay video (red = network,
-        green = snapped). The network CSVs are not changed.</p>
+      <h3>Snap keypoints onto painted lines (<code>detect</code> default, or standalone <code>snap</code>)</h3>
+      <p>On cameras rare in the training set (high, lateral, close to the box) raw network detections can exhibit a systematic 20-30 px offset on box corners. <code>snap</code> refits straight lines to the painted field markings and moves corners to line intersections and arc crossings along projective line directions. Stabilisation compares per-frame snap vs temporal running-mean correction to eliminate jitter while leaving known cameras untouched.</p>
+      <p><code>detect</code> now runs <code>snap</code> by default (opt-out with <code>--no-snap</code>):</p>
+      <ul>
+        <li><code>field_kps_getpixelvideo.csv</code> contains the clean snapped keypoints on the paint.</li>
+        <li>Homography and DLT calibration (<code>.dlt2d</code>, <code>.dlt3d</code>) are fitted directly to the snapped points, improving camera accuracy.</li>
+        <li>The output overlay MP4 and snapshot display clean green markers on the paint, discarding the inferior un-snapped network shifts (red mode).</li>
+        <li>Raw network predictions remain preserved in <code>field_kps_raw.csv</code>.</li>
+        <li><code>snap_moves.csv</code> logs every shifted point with dx, dy, and distance.</li>
+      </ul>
+      <p>For existing runs, standalone <code>freekiki snap</code> can be run:</p>
       <pre><code>uv run --no-sync vaila/freekiki.py snap -w $W --run DETECT_BATCH_OR_RUN</code></pre>
 
       <h3>Cameras the network was not trained for (<code>detect</code> skips them)</h3>

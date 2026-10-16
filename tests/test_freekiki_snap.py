@@ -207,3 +207,56 @@ def test_stabilize_fills_dropout_frames_inside_snapped_stretch():
     S[20:22, 17] = net[20:22]  # 2 dropout frames where snap_keypoints kept the network point
     out = fs.stabilize(N, S, 1920)
     assert np.nanmax(np.hypot(*(out[20:22, 17] - truth[20:22]).T)) < 5.0
+
+
+def test_detect_cli_snap_defaults_and_opt_out():
+    p = freekiki.build_parser()
+    args_def = p.parse_args(["detect", "-w", "W", "--video", "V.mp4"])
+    assert args_def.snap is True
+    args_nosnap = p.parse_args(["detect", "-w", "W", "--video", "V.mp4", "--no-snap"])
+    assert args_nosnap.snap is False
+
+
+def test_detect_video_applies_snap_by_default_and_respects_no_snap(tmp_path, monkeypatch):
+    import json
+
+    import cv2
+
+    w, h = 640, 480
+    video = tmp_path / "clip.mp4"
+    out = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), 25, (w, h))  # ty: ignore[unresolved-attribute]
+    for _ in range(3):
+        out.write(np.zeros((h, w, 3), np.uint8))
+    out.release()
+    ws = freekiki.init_workspace(tmp_path / "ws")
+    model = tmp_path / "fake.pt"
+    model.write_bytes(b"fake")
+
+    class FakePredictor:
+        backend, imgsz, calls = "fake", 640, 0
+
+        def predict(self, frame):
+            FakePredictor.calls += 1
+            pts = np.full((49, 2), 100.0)
+            return 0.9, pts, np.full(49, 0.9)
+
+    monkeypatch.setattr(freekiki, "resolve_model", lambda *_a, **_k: str(model))
+    monkeypatch.setattr(freekiki, "load_predictor", lambda *_a, **_k: FakePredictor())
+
+    # Default: snap=True
+    run1 = freekiki.detect_video(ws, video, output_dir=tmp_path / "out1", overlay=False, diag_frames=0)
+    assert (run1 / "field_kps_getpixelvideo.csv").is_file()
+    assert (run1 / "field_kps_snap_getpixelvideo.csv").is_file()
+    assert (run1 / "snap_moves.csv").is_file()
+    q1 = json.loads((run1 / "quality.json").read_text())
+    assert q1["snap"] is True
+
+    # Opt-out: snap=False
+    run2 = freekiki.detect_video(
+        ws, video, output_dir=tmp_path / "out2", overlay=False, diag_frames=0, snap=False
+    )
+    assert (run2 / "field_kps_getpixelvideo.csv").is_file()
+    assert not (run2 / "snap_moves.csv").is_file()
+    q2 = json.loads((run2 / "quality.json").read_text())
+    assert q2["snap"] is False
+

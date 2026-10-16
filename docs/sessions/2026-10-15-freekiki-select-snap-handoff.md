@@ -66,7 +66,10 @@ Always run `uv run --no-sync` (CUDA machine: a bare `uv run` downgrades torch to
      2. Projeção de pontos de linha única (cruzamento do arco) na direção das linhas transversais projetivas (mantém coordenada Y na grande área);
      3. Preenchimento de dropouts transitórios em `stabilize` sem oscilações abruptas de 40 px.
    - Testes: 16 unit tests passando em `tests/test_freekiki_snap.py`.
-2. Decidir se o snap deve rodar internamente em `detect` antes do ajuste de câmera (caso o usuário prefira manter opcional ou acoplado).
+2. **[RESOLVIDO 2026-10-16]** Snap integrado por padrão em `detect` (com opt-out via `--no-snap` e checkbox na GUI).
+   - O modo inferior não ajustado (red) foi descartado das visualizações padrão (overlay e snapshots mostram apenas os círculos verdes ajustados nas linhas pintadas).
+   - Os arquivos de calibração DLT (`.dlt2d`, `.dlt3d`), a homografia e `field_kps_getpixelvideo.csv` agora utilizam diretamente os pontos ajustados (snapped) e estabilizados temporalmente, melhorando a calibração de câmeras 2D/3D.
+   - Os dados brutos da rede continuam preservados em `field_kps_raw.csv` e as correções registradas em `snap_moves.csv`.
 3. p29/p47: diagnóstico concluído sobre rotação $C_2$ (SoccerNet com coordenadas fixadas no estádio e 0 rótulos humanos em val); coleta de mais cantos rotulados por humanos via `select` -> `queue --need p5,p29,p39,p47 --montage` -> `getpixelvideo` -> `ingest`.
 4. **[RESOLVIDO 2026-10-16]** Model card `v011` criado em `release/MODEL_CARD_freekiki_l_v011.md` com números limpos de teste/val e documentação do diagnóstico dos keypoints raros.
 5. A chave Roboflow no `.env` gitignorado (`ROBOFLOW_API_KEY`) pode ser rotacionada pelo usuário quando desejado.
