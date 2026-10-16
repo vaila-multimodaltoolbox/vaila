@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.7
 Created: 25 September 2026
-Update Date: 07 October 2026
+Update Date: 15 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -927,6 +927,85 @@ def ingest_reviewed(
         _log(f"measure: uv run --no-sync vaila/freekiki.py evaluate -w {ws} --split hard --model l")
     else:
         _log(f"train: uv run --no-sync vaila/freekiki.py train -w {ws} --base active")
+    return report
+
+
+def remove_source(
+    ws, source: str | None = None, *, apply: bool = False, images=None, tag: str | None = None
+) -> dict:
+    """Take train rows out of the dataset, reversibly.
+
+    Selects every **train** row of ``source`` and/or the rows whose ``image``
+    is in ``images`` (a set, or a text file with one ``images/train/...`` path per
+    line). Dry run by default. With ``apply``: ``manifest.csv`` is copied to
+    ``manifest_backup_before_remove_<tag>_<ts>.csv``, the images and labels are
+    *moved* (never deleted) to ``<dataset>/_removed/<tag>/`` and the manifest is
+    rewritten atomically. A selected row of val, test or hard is refused (those
+    splits are frozen). To undo: copy the backup over ``manifest.csv`` and move
+    the files back. ``tag`` names the backup / folder (default: the source).
+    """
+    if source is None and images is None:
+        raise ValueError("remove-source needs a source and/or an image list")
+    if images is not None and not isinstance(images, (set, frozenset)):
+        images = {
+            ln.strip() for ln in Path(images).read_text(encoding="utf-8").splitlines() if ln.strip()
+        }
+    tag = tag or source or "images"
+    ws = Path(ws).expanduser().resolve()
+    ds = dataset_dir(ws)
+    with (ds / "manifest.csv").open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fields = list(reader.fieldnames or [])
+        rows = list(reader)
+    mine = [
+        r
+        for r in rows
+        if (source is not None and r["source"] == source) or (images and r["image"] in images)
+    ]
+    frozen = Counter(r["split"] for r in mine if r["split"] != "train")
+    if frozen:
+        raise ValueError(f"{tag}: rows in frozen splits {dict(frozen)}; refusing")
+    report = {
+        "tag": tag,
+        "rows": len(mine),
+        "sources": dict(Counter(r["source"] for r in mine)),
+        "groups": len({r["group"] for r in mine}),
+        "remaining_train": sum(r["split"] == "train" for r in rows) - len(mine),
+        "applied": False,
+    }
+    _log(f"remove-source {tag}: {report}")
+    if not mine or not apply:
+        if mine:
+            _log(f"dry run: add --apply to move them to {ds / '_removed' / tag}")
+        return report
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup = ds / f"manifest_backup_before_remove_{tag}_{stamp}.csv"
+    shutil.copy2(ds / "manifest.csv", backup)
+    dest = ds / "_removed" / tag
+    for r in mine:
+        for key in ("image", "label"):
+            src = ds / r[key]
+            if src.is_file():
+                target = dest / r[key]  # keeps images/train/..., labels/train/...
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(src), str(target))
+    gone = {id(r) for r in mine}
+    keep = [r for r in rows if id(r) not in gone]
+    with tempfile.NamedTemporaryFile(
+        "w", newline="", encoding="utf-8", dir=ds, prefix=".manifest-", delete=False
+    ) as f:
+        tmp = Path(f.name)
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(keep)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, ds / "manifest.csv")
+    report["applied"] = True
+    _log(
+        f"removed {len(mine)} rows; files moved to {dest}; undo: copy {backup.name} over "
+        "manifest.csv and move the files back"
+    )
     return report
 
 
@@ -3578,6 +3657,774 @@ def build_label_queue(
     return sessions
 
 
+# --------------------------------------------------------------------------- #
+# Select clips: find the moments where the rare keypoints show, cut them out
+# --------------------------------------------------------------------------- #
+SELECT_NEED = (5, 29, 39, 47)
+SELECT_FIELDS = (
+    "clip",
+    "source_video",
+    "match",
+    "start_frame",
+    "end_frame",
+    "frames",
+    "fps",
+    "start_s",
+    "duration_s",
+    "hits",
+    "score",
+    "points",
+    "reason",
+    "max_pose",
+    "checked_frames",
+    "invalid_cam",
+    "trimmed_from",
+)
+GATE_PREVIEWS = 24  # rejected frames saved for the user to look at
+GATE_PREVIEWS_PER_VIDEO = 6
+
+
+def _hit_window(c: list[dict], start: int, stop: int) -> dict[str, Any]:
+    """One window ``[start, stop]`` summarising the hits ``c`` inside it."""
+    pts = sorted({i for h in c for i in h["points"]})
+    return {
+        "start": start,
+        "end": stop,
+        "hits": len(c),
+        "score": round(sum(h["score"] for h in c), 3),
+        "points": pts,
+        "reason": f"{len(c)} frames with " + " ".join(f"p{i}" for i in pts),
+        "hit_list": c,
+        "invalid_frames": [],
+    }
+
+
+def select_windows(
+    status_rows,
+    raw_rows,
+    need,
+    width: float,
+    height: float,
+    total_frames: int,
+    *,
+    low_conf: float = 0.5,
+    pad: int = 50,
+    join_gap: int = 75,
+    min_len: int = 50,
+    max_len: int = 750,
+    per_video: int = 20,
+    min_accepted: int = 6,
+    max_rmse: float = 5.0,
+    cam_height: tuple[float, float] = (8.0, 45.0),
+    settings: dict | None = None,
+    skip=frozenset(),
+    trim=None,
+    rejected: list | None = None,
+) -> list[dict]:
+    """Frame windows (0-based, inclusive) of one detect output where ``need`` shows.
+
+    A frame is a hit when a needed keypoint has raw network confidence >=
+    ``low_conf`` or when the field camera fitted to the accepted points puts
+    it inside the picture.
+
+    **Camera check.** A frame with at least ``min_accepted`` accepted points
+    can be judged: its camera must fit them (``rmse_px`` <= ``max_rmse``) and
+    stand at a broadcast height (``cam_height`` metres). The network accepts
+    many points on a camera behind the net or a zoom, but they do not lie on a
+    plane seen from a plausible camera: such a frame is *invalid*, makes no
+    hit and is listed in the window's ``invalid_frames``. A frame with fewer
+    accepted points cannot be judged and keeps the confidence rule only.
+    Hits closer than ``join_gap`` frames form one window, grown by ``pad``
+    frames each side, at least ``min_len`` and at most ``max_len`` long (a
+    longer window keeps its best-scoring stretch). ``skip`` holds frames
+    already labelled.
+
+    ``trim(window) -> (pieces, info)`` (optional) returns the ``(start, end)``
+    stretches of a window worth keeping (e.g. without close-up cameras, see
+    ``freekiki_posegate``) and a dict merged into them; a piece holds only the
+    hits inside it and is dropped without any. The ``per_video`` best pieces
+    (most needed points, most hits) are returned in time order; every dropped
+    window / piece is appended to ``rejected`` with its ``reason``.
+    """
+    G = _geom()
+    raw = {int(r["frame"]): r for r in raw_rows}
+    hits: list[dict] = []
+    invalid: list[int] = []
+    for st in status_rows:
+        frame = int(st["frame"])
+        if frame in skip:
+            continue
+        parsed = _raw_frame(raw.get(frame, {}))
+        if parsed is None:
+            continue
+        xy, kc, _ = parsed
+        codes = [st.get(f"p{i}", "") for i in range(NKP)]
+        model = G.fit_field_camera(xy, [c == "D" for c in codes], width, height, settings)
+        judged = model["status"] == "ok" and codes.count("D") >= min_accepted
+        height_m = model.get("cam_height_m")
+        valid = judged and (model.get("rmse_px") or 0.0) <= max_rmse
+        valid = valid and (height_m is None or cam_height[0] <= height_m <= cam_height[1])
+        if judged and not valid:
+            invalid.append(frame)
+            continue
+        inside = G.project_field(model, width, height)[1] if valid else None
+        seen = [i for i in need if kc[i] >= low_conf or (inside is not None and inside[i])]
+        if not seen:
+            continue
+        score = sum((1.0 if inside is not None and inside[i] else 0.0) + float(kc[i]) for i in seen)
+        hits.append({"frame": frame, "points": seen, "score": score})
+    hits.sort(key=lambda h: h["frame"])
+    clusters: list[list[dict]] = []
+    for h in hits:
+        if clusters and h["frame"] - clusters[-1][-1]["frame"] <= join_gap:
+            clusters[-1].append(h)
+        else:
+            clusters.append([h])
+    last = max(0, total_frames - 1)
+    windows: list[dict[str, Any]] = []
+    for c in clusters:
+        first, end = c[0]["frame"], c[-1]["frame"]
+        if end - first + 1 > max_len - 2 * pad:  # keep the best-scoring stretch
+            span = max(1, max_len - 2 * pad)
+            best = max(
+                (sum(h["score"] for h in c if a <= h["frame"] < a + span), a)
+                for a in {h["frame"] for h in c}
+            )[1]
+            c = [h for h in c if best <= h["frame"] < best + span]
+            first, end = c[0]["frame"], c[-1]["frame"]
+        start, stop = max(0, first - pad), min(last, end + pad)
+        if stop - start + 1 < min_len:  # extend around the middle
+            mid = (start + stop) // 2
+            start, stop = max(0, mid - min_len // 2), min(last, mid + min_len // 2)
+        windows.append(_hit_window(c, start, stop))
+    for w in windows:
+        w["invalid_frames"] = [f for f in invalid if w["start"] <= f <= w["end"]]
+    kept: list[dict[str, Any]] = []
+    for w in windows:
+        if trim is None:
+            kept.append(w)
+            continue
+        pieces, info = trim(w)
+        if not pieces:
+            if rejected is not None:
+                rejected.append({"start": w["start"], "end": w["end"], "reason": "close_up"} | info)
+            continue
+        for a, b in pieces:
+            inside_hits = [h for h in w["hit_list"] if a <= h["frame"] <= b]
+            if not inside_hits:
+                if rejected is not None:
+                    rejected.append({"start": a, "end": b, "reason": "no_hits"} | info)
+                continue
+            piece = _hit_window(inside_hits, a, b) | info
+            piece["invalid_frames"] = [f for f in w["invalid_frames"] if a <= f <= b]
+            if (a, b) != (w["start"], w["end"]):
+                piece["trimmed_from"] = f"{w['start'] + 1}-{w['end'] + 1}"
+            kept.append(piece)
+    best_pieces = sorted(kept, key=lambda w: (len(w["points"]), w["score"]), reverse=True)
+    return sorted(best_pieces[:per_video], key=lambda w: w["start"])
+
+
+def find_videos(source, recursive: bool = True) -> list[Path]:
+    """Videos of a file or folder (every sub-folder with ``recursive``), sorted by path."""
+    source = Path(source).expanduser().resolve()
+    if source.is_file():
+        return [source]
+    walk = source.rglob("*") if recursive else source.iterdir()
+    return sorted(p for p in walk if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
+
+
+def select_frames(
+    ws,
+    src,
+    out,
+    *,
+    need=SELECT_NEED,
+    kp_conf: float | None = None,
+    low_conf: float | None = None,
+    stride: int = 5,
+    pad: int = 50,
+    join_gap: int = 75,
+    min_len: int = 50,
+    max_len: int = 750,
+    per_video: int = 20,
+    min_accepted: int = 6,
+    max_rmse: float = 5.0,
+    cam_height: tuple[float, float] = (8.0, 45.0),
+    model: str = "active",
+    detect_dir=None,
+    cut: bool = True,
+    device: str | None = None,
+    pose_gate: bool = True,
+    max_pose: float = 0.10,
+    pose_complexity: int = 0,
+    check_every: int = 10,
+) -> Path:
+    """Find the moments of long videos where the needed keypoints show and cut them out.
+
+    1. ``detect`` every video under ``src`` (all sub-folders) at ``kp_conf``
+       (default: the workspace setting) and ``stride`` (skipped with
+       ``detect_dir``: a batch of an earlier run made at the same ``kp_conf``);
+    2. :func:`select_windows` per video (``low_conf`` defaults to ``kp_conf``);
+    3. **camera check** (in :func:`select_windows`): frames whose fitted camera has
+       an rmse above ``max_rmse`` or a height outside ``cam_height`` (a camera
+       behind the net, a zoom) make no hit and split their window;
+       the **pose gate** (``freekiki_posegate``): MediaPipe Pose runs every
+       ``check_every`` frames of each window; a pose taller than ``max_pose`` of
+       the image is a close-up camera (behind the goal, a celebrating player, a
+       zoom the network mistakes for the pitch). The window is split there and
+       only the stretches without close-ups are kept;
+    4. with ``cut`` (default), vailá Cut Video's ffmpeg cutter writes each piece
+       to ``out/<video>_frame_<a>_to_<b>.mp4`` (1-based frames, so the clips
+       keep their source and match), plus ``out/selected_clips.csv``,
+       ``out/rejected_windows.csv`` and, with the gate, up to
+       ``GATE_PREVIEWS`` rejected frames in ``out/_pose_gate/``.
+    The clips are then labelled like any video: ``detect`` on ``out``, then
+    ``queue --need ... --montage``. Re-running skips clips that exist.
+    Without ``cut`` only the plan is written.
+    """
+    import cv2
+
+    try:
+        from . import cutvideo
+    except ImportError:
+        import cutvideo  # ty: ignore[unresolved-import]
+
+    ws = Path(ws).expanduser().resolve()
+    out = Path(out).expanduser().resolve()
+    need = tuple(need)
+    settings = load_settings(ws)
+    kp_conf = float(settings["detect"]["kp_conf"] if kp_conf is None else kp_conf)
+    low_conf = kp_conf if low_conf is None else float(low_conf)
+    out.mkdir(parents=True, exist_ok=True)
+    videos = find_videos(src)
+    if not videos:
+        raise FileNotFoundError(f"No videos ({', '.join(sorted(VIDEO_EXTS))}) under {src}")
+    if detect_dir:
+        folder = Path(detect_dir).expanduser().resolve()
+        outputs = [folder] if (folder / "README.txt").is_file() else _detect_run_children(folder)
+        _log(f"select: reusing detect {folder} (its keypoint confidence must be {kp_conf})")
+    else:
+        batch = ws / "outputs" / f"select_detect_{datetime.now():%Y%m%d_%H%M%S}"
+        batch.mkdir(parents=True, exist_ok=True)
+        _log(f"select: detect {len(videos)} videos (kp-conf {kp_conf}, stride {stride}) -> {batch}")
+        outputs = []
+        for video in videos:
+            try:
+                outputs.append(
+                    detect_video(
+                        ws, video, model=model, output_dir=batch, stride=stride, kp_conf=kp_conf,
+                        overlay=False, diag_frames=0, geom="off", device=device,
+                    )
+                )  # fmt: skip
+            except (OSError, ValueError, RuntimeError) as exc:
+                _log(f"ERROR on {video.name}: {type(exc).__name__}: {exc} - continuing")
+    try:
+        from . import freekiki_posegate as posegate
+    except ImportError:
+        import freekiki_posegate as posegate  # ty: ignore[unresolved-import]
+
+    gate = None
+    if pose_gate:
+        gate = posegate.PoseGate(pose_complexity, max_pose)
+        _log(f"select: pose gate on (close-up = a pose taller than {max_pose:.0%} of the image)")
+    preview_dir = out / "_pose_gate"
+    previews = [0]
+    taken = already_queued(ws)
+    rows: list[dict] = []
+    rejected_rows: list[dict] = []
+    for run in outputs:
+        video = _read_readme_video(run)
+        if video is None or not video.is_file():
+            _log(f"skip {run.name}: video not found ({video})")
+            continue
+        with (run / "field_kps_status.csv").open(encoding="utf-8") as f:
+            status_rows = list(csv.DictReader(f))
+        with (run / "field_kps_raw.csv").open(encoding="utf-8") as f:
+            raw_rows = list(csv.DictReader(f))
+        meta = cutvideo.get_precise_video_metadata(video)
+        fps = float(meta["fps"])
+        total = int(meta.get("nb_frames") or 0)
+        if not total:
+            cap = cv2.VideoCapture(str(video))
+            total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            cap.release()
+        skip = {f for v, f in taken if v == video.resolve()}
+        base = cutvideo.sanitize_output_basename(video.stem)[:80] or "video"
+        seen_big = [0]
+
+        def trim(w, video=video, base=base, seen_big=seen_big):
+            def save(frame, img, frac):
+                if previews[0] >= GATE_PREVIEWS or seen_big[0] >= GATE_PREVIEWS_PER_VIDEO:
+                    return
+                preview_dir.mkdir(parents=True, exist_ok=True)
+                shot = cv2.putText(
+                    img.copy(), f"pose {frac:.0%} of the image height", (30, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 2.0, (0, 0, 255), 4, cv2.LINE_AA,
+                )  # fmt: skip
+                name = f"{base}_frame_{frame + 1}.jpg"
+                cv2.imwrite(str(preview_dir / name), shot, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                previews[0] += 1
+                seen_big[0] += 1
+
+            samples = (
+                posegate.check_window(
+                    video, w["start"], w["end"], gate, every=check_every, on_big=save
+                )
+                if gate is not None
+                else []
+            )
+            # frames whose camera does not fit the pitch (behind the net, zoom) split a window too
+            bad = [(f, 1.0) for f in w["invalid_frames"]]
+            pieces = posegate.split_good(
+                w["start"], w["end"], samples + bad,
+                max_pose=max_pose, every=check_every, min_len=min_len,
+            )  # fmt: skip
+            info = {
+                "max_pose": round(max((f for _, f in samples), default=0.0), 3),
+                "checked_frames": len(samples),
+                "invalid_cam": len(w["invalid_frames"]),
+                "video": str(video),
+                "clip_base": base,
+            }
+            return pieces, info
+
+        rejected: list[dict] = []
+        wins = select_windows(
+            status_rows, raw_rows, need, meta["width"], meta["height"], total,
+            low_conf=low_conf, pad=pad, join_gap=join_gap, min_len=min_len, max_len=max_len,
+            per_video=per_video, min_accepted=min_accepted, settings=settings["geometry"],
+            skip=skip, trim=trim, rejected=rejected,
+            max_rmse=max_rmse, cam_height=cam_height,
+        )  # fmt: skip
+        rejected_rows += [
+            {
+                "source_video": str(video),
+                "start_frame": r["start"] + 1,
+                "end_frame": r["end"] + 1,
+                "reason": r["reason"],
+                "max_pose": r.get("max_pose", ""),
+            }
+            for r in rejected
+        ]
+        _log(
+            f"select {video.name}: {len(wins)} windows "
+            f"({sum(w['end'] - w['start'] + 1 for w in wins)} frames), {len(rejected)} dropped "
+            f"({Counter(r['reason'] for r in rejected).most_common()})"
+        )
+        names = [cutvideo.cut_output_filename(base, w["start"], w["end"]) for w in wins]
+        for w, name in zip(wins, names, strict=True):
+            target = out / name
+            if cut and not target.is_file():
+                ok = cutvideo.cut_video_with_ffmpeg(video, target, w["start"], w["end"], meta)
+                if not ok or not target.is_file():
+                    _log(f"  cut failed: {name}")
+                    target.unlink(missing_ok=True)
+                    continue
+            n = w["end"] - w["start"] + 1
+            rows.append(
+                {
+                    "clip": name,
+                    "source_video": str(video),
+                    "match": _match_from_name(base),
+                    "start_frame": w["start"] + 1,
+                    "end_frame": w["end"] + 1,
+                    "frames": n,
+                    "fps": f"{fps:.6f}",
+                    "start_s": f"{w['start'] / fps:.2f}" if fps > 0 else "",
+                    "duration_s": f"{n / fps:.2f}" if fps > 0 else "",
+                    "hits": w["hits"],
+                    "score": w["score"],
+                    "points": " ".join(f"p{i}" for i in w["points"]),
+                    "reason": w["reason"],
+                    "max_pose": w.get("max_pose", ""),
+                    "checked_frames": w.get("checked_frames", ""),
+                    "invalid_cam": w.get("invalid_cam", ""),
+                    "trimmed_from": w.get("trimmed_from", ""),
+                }
+            )
+    if gate is not None:
+        gate.close()
+    csv_path = out / "selected_clips.csv"
+    previous = []
+    if csv_path.is_file():
+        with csv_path.open(encoding="utf-8") as f:
+            have = {x["clip"] for x in rows}
+            previous = [
+                {k: r.get(k, "") for k in SELECT_FIELDS} for r in csv.DictReader(f)
+                if r["clip"] not in have
+            ]  # fmt: skip
+    diag.write_csv(csv_path, previous + rows)
+    if rejected_rows:
+        diag.write_csv(out / "rejected_windows.csv", rejected_rows)
+    names_kp, _ = load_schema()
+    _log(
+        f"select: {len(rows)} clips ({sum(int(r['frames']) for r in rows)} frames) -> {out} "
+        f"({'cut' if cut else 'plan only, nothing cut'}); keypoints "
+        + ", ".join(f"p{i} {names_kp[i]}" for i in need)
+    )
+    if rejected_rows:
+        _log(f"dropped windows: {out / 'rejected_windows.csv'}; frames: {preview_dir}")
+    _log(
+        f"label: uv run --no-sync vaila/freekiki.py detect -w {ws} --video {out}  # then queue --need ..."
+    )
+    return csv_path
+
+
+# --------------------------------------------------------------------------- #
+# Pseudo-labels: complete frames from the network + the fitted field camera
+# --------------------------------------------------------------------------- #
+PSEUDO_SOURCE = "freekiki_pseudo"
+PSEUDO_AUX_TOL_PX = 15.0  # a flag / post top the network accepted must agree with the camera
+
+
+def _pseudo_name(video_stem: str, frame: int) -> str:
+    """Unique file stem of a pseudo frame: readable head + hash of the *whole* clip name.
+
+    Clip names end in ``_frame_<a>_to_<b>``; cutting a long name would drop that
+    tail and make different clips of one game share (and overwrite) a name.
+    """
+    head = re.sub(r"[^A-Za-z0-9._-]+", "_", video_stem)[:60]
+    tag = hashlib.sha1(video_stem.encode("utf-8")).hexdigest()[:8]
+    return f"{PSEUDO_SOURCE}__{head}_{tag}_f{frame + 1:07d}"
+
+
+def _pseudo_key(image_name: str) -> tuple[str, int] | None:
+    """``(clip hash, 0-based frame)`` of a staged pseudo image name, else None."""
+    m = re.fullmatch(rf"{PSEUDO_SOURCE}__.+_([0-9a-f]{{8}})_f(\d{{7}})\.jpg", Path(image_name).name)
+    return (m.group(1), int(m.group(2)) - 1) if m else None
+
+
+def pseudo_point_trust(
+    csv_paths,
+    *,
+    tol_px: float = 6.0,
+    max_bad: float = 0.45,
+    min_n: int = 20,
+) -> dict[int, dict]:
+    """How far each keypoint of a pseudo label can be trusted, from human reviews.
+
+    ``csv_paths``: ``human_vs_ai.csv`` files of reviewed pseudo-label sessions
+    (written by ``export``). Of the points the pseudo label *drew*, a point is
+    **bad** when the reviewer moved it by more than ``tol_px`` or hid it. A
+    keypoint is trusted when at least ``min_n`` were drawn and at most
+    ``max_bad`` of them were bad; fewer than ``min_n`` is *unknown* and counts
+    as untrusted (nothing proves the pseudo label gets it right). Returns
+    ``{point: {"n", "bad", "bad_rate", "median_px", "trusted"}}``.
+    """
+    import statistics
+
+    drawn: dict[int, list[float | None]] = {}
+    for path in csv_paths:
+        with Path(path).open(encoding="utf-8") as f:
+            for r in csv.DictReader(f):
+                if float(r.get("confidence") or 0) <= 0:
+                    continue  # the pseudo label did not draw this point
+                err = float(r["error_px"]) if r.get("error_px") else None
+                hidden = r["status"] == "human_absent"
+                drawn.setdefault(int(r["point"]), []).append(None if hidden else err or 0.0)
+    out: dict[int, dict] = {}
+    for point, errs in sorted(drawn.items()):
+        bad = sum(e is None or e > tol_px for e in errs)
+        moved = [e for e in errs if e]
+        out[point] = {
+            "n": len(errs),
+            "bad": bad,
+            "bad_rate": round(bad / len(errs), 3),
+            "median_px": round(statistics.median(moved), 1) if moved else 0.0,
+            "trusted": len(errs) >= min_n and bad / len(errs) <= max_bad,
+        }
+    return out
+
+
+def untrusted_points(trust: dict[int, dict]) -> frozenset[int]:
+    """Keypoints a pseudo label must not contain: measured bad, or never measured
+    (a point absent from ``trust`` was never drawn in the reviewed frames)."""
+    return frozenset(range(NKP)) - frozenset(p for p, t in trust.items() if t["trusted"])
+
+
+def pseudo_label_frame(
+    xy,
+    kc,
+    codes,
+    img,
+    width: float,
+    height: float,
+    *,
+    settings: dict | None = None,
+    min_accepted: int = 8,
+    max_rmse: float = 5.0,
+    cam_height: tuple[float, float] = (8.0, 45.0),
+    tau: float = 0.35,
+    untrusted: frozenset[int] = frozenset(),
+):
+    """A complete 49-point label of one frame, or ``(None, reason)``.
+
+    The camera is fitted to the points the network accepted (``codes == "D"``)
+    and must pass the same checks as ``select`` (enough points, ``rmse_px`` <=
+    ``max_rmse``, a broadcast height). Every keypoint inside the picture is then
+    projected, so a missing keypoint means "not in view" (an empty point teaches
+    the network to ignore it). Two more gates keep the network from teaching
+    itself its own mistakes: the points off the ground (flags, post tops) are
+    kept only when every one the network accepted agrees with the camera within
+    ``PSEUDO_AUX_TOL_PX``, and the projected pitch lines must sit on painted
+    lines of the image (line support >= ``tau``, as in the kiki49 build).
+    A frame with a keypoint of ``untrusted`` (see :func:`pseudo_point_trust`)
+    inside the picture is rejected as ``untrusted_point``: leaving the point out
+    would teach "not visible", and writing it would teach a known error.
+    Returns ``(points (49) of (x, y) | None, origin (49) str digits)``.
+    """
+    import numpy as np
+
+    G = _geom()
+    try:
+        from .kiki49_build.line_support import line_distance_map, support_score
+    except ImportError:
+        from kiki49_build.line_support import (  # ty: ignore[unresolved-import]
+            line_distance_map,
+            support_score,
+        )
+
+    ok = [c == "D" for c in codes]
+    if sum(ok) < min_accepted:
+        return None, "few_points"
+    model = G.fit_field_camera(xy, ok, width, height, settings)
+    if model["status"] != "ok" or model.get("P") is None:
+        return None, "no_camera"
+    height_m = model.get("cam_height_m")
+    if (model.get("rmse_px") or 0.0) > max_rmse:
+        return None, "camera_rmse"
+    if height_m is not None and not cam_height[0] <= height_m <= cam_height[1]:
+        return None, "camera_height"
+    proj, inside = G.project_field(model, width, height)
+    xyz, planar = G._field()
+    aux = ~planar
+    scale = 1920.0 / width
+    accepted_aux = [i for i in np.flatnonzero(aux) if ok[i] and inside[i]]
+    if any(np.hypot(*(proj[i] - xy[i])) * scale > PSEUDO_AUX_TOL_PX for i in accepted_aux):
+        return None, "aux_disagree"
+    if any(inside[i] for i in untrusted):
+        return None, "untrusted_point"
+    P = model["P"]
+
+    def project_fn(X):
+        uv, front = G._project(P, X)
+        return uv, np.where(front, 1.0, -1.0)
+
+    support = support_score(line_distance_map(img), project_fn)
+    if not support >= tau:
+        return None, "line_support"
+    n_vis = int(inside.sum())
+    if n_vis < 4:
+        return None, "few_visible"
+    points = [(float(proj[i, 0]), float(proj[i, 1])) if inside[i] else None for i in range(NKP)]
+    origin = "".join("0" if not inside[i] else ("3" if aux[i] else "2") for i in range(NKP))
+    return points, origin
+
+
+def stage_pseudo(ws, batch, out=None, *, every: int = 3, trust_csv=(), **gate) -> Path:
+    """Stage complete pseudo-labelled frames of a detect batch for ``extend --src``.
+
+    ``batch``: a detect output folder or a batch of them (the clips of
+    ``select``). Every ``every``-th frame is judged by :func:`pseudo_label_frame`;
+    the accepted ones are written like an external dataset
+    (``images/``, ``labels/``, ``rows.csv``, ``report.md``, source
+    ``freekiki_pseudo``, group = the match of the clip name), so ``extend
+    --src <folder>`` previews and ``--commit`` appends them to train with the
+    same leakage and duplicate gates. These labels come from the network itself
+    (no human saw them): nothing is committed here.
+    """
+    import cv2
+
+    ws = Path(ws).expanduser().resolve()
+    settings = load_settings(ws)
+    batch = Path(batch).expanduser().resolve()
+    runs = [batch] if (batch / "README.txt").is_file() else _detect_run_children(batch)
+    out = (
+        Path(out).expanduser().resolve()
+        if out
+        else ws / "incoming" / f"pseudo_{datetime.now():%Y%m%d_%H%M%S}"
+    )
+    trust = pseudo_point_trust(trust_csv) if trust_csv else {}
+    if trust_csv:
+        gate["untrusted"] = untrusted_points(trust)
+        _log(
+            "pseudo: untrusted keypoints (frames showing them are rejected): "
+            + ", ".join(f"p{i}" for i in sorted(gate["untrusted"]))
+        )
+    for d in ("images", "labels"):
+        (out / d).mkdir(parents=True, exist_ok=True)
+    rows: list[dict] = []
+    reasons: Counter = Counter()
+    rare = Counter()
+    for run in runs:
+        video = _read_readme_video(run)
+        if video is None or not video.is_file():
+            _log(f"skip {run.name}: video not found ({video})")
+            continue
+        with (run / "field_kps_status.csv").open(encoding="utf-8") as f:
+            status = {int(r["frame"]): r for r in csv.DictReader(f)}
+        with (run / "field_kps_raw.csv").open(encoding="utf-8") as f:
+            raw = {int(r["frame"]): r for r in csv.DictReader(f)}
+        match = _match_from_name(video.stem)
+        cap = cv2.VideoCapture(str(video))
+        width, height = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        frame, kept = -1, 0
+        while True:
+            ok, img = cap.read()
+            if not ok:
+                break
+            frame += 1
+            if frame % every or frame not in status:
+                continue
+            parsed = _raw_frame(raw.get(frame, {}))
+            if parsed is None:
+                reasons["no_detection"] += 1
+                continue
+            xy, kc, _ = parsed
+            codes = [status[frame].get(f"p{i}", "") for i in range(NKP)]
+            points, origin = pseudo_label_frame(
+                xy, kc, codes, img, width, height, settings=settings["geometry"], **gate
+            )
+            if points is None:
+                reasons[origin] += 1
+                continue
+            name = _pseudo_name(video.stem, frame)
+            cv2.imwrite(str(out / "images" / f"{name}.jpg"), img, [cv2.IMWRITE_JPEG_QUALITY, 95])
+            lbl = out / "labels" / f"{name}.txt"
+            lbl.write_text(
+                pose_label_line(points, int(width), int(height)) + "\n", encoding="utf-8"
+            )
+            n_vis = _validate_ingest_label(lbl)
+            rows.append(
+                {
+                    "split": "train",
+                    "image": f"images/{name}.jpg",
+                    "label": f"labels/{name}.txt",
+                    "source": PSEUDO_SOURCE,
+                    "group": match,
+                    "origin": origin,
+                    "n_visible": str(n_vis),
+                    "aux3d": "1",
+                    "qa_score": "",
+                }
+            )
+            kept += 1
+            for i in (5, 16, 29, 39, 47):
+                rare[f"p{i}"] += int(points[i] is not None)
+        cap.release()
+        _log(f"pseudo {video.name}: {kept} frames")
+    with (out / EXTERNAL_ROWS).open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=EXTERNAL_FIELDS)
+        writer.writeheader()
+        writer.writerows(rows)
+    (out / "report.md").write_text(
+        "# Pseudo-labelled frames (network + fitted camera, not human-reviewed)\n\n"
+        f"Frames: {len(rows)} | rejected (reason: count): {dict(reasons.most_common())}\n\n"
+        f"Rare points: {dict(rare)}\n\n"
+        + (
+            "Untrusted keypoints (human reviews): "
+            + ", ".join(f"p{i}" for i in sorted(gate.get("untrusted", ())))
+            + "\n"
+            if trust_csv
+            else "No trust table used (--trust-csv).\n"
+        ),
+        encoding="utf-8",
+    )
+    _log(
+        f"pseudo: {len(rows)} frames staged ({dict(reasons.most_common())}) | rare points "
+        f"{dict(rare)} -> {out}"
+    )
+    _log(f"preview: uv run --no-sync vaila/freekiki.py extend -w {ws} --src {out}")
+    return out
+
+
+def pseudo_review_queue(ws, batch, staging) -> Path:
+    """Review session (one montage) of the frames of a ``pseudo`` staging folder.
+
+    Each staged frame (``staging/rows.csv``) is found again in the detect run of
+    its clip (``batch``, the folder ``pseudo`` was run on). The draft of every frame is its **pseudo label**
+    (network + fitted camera), not the raw network output, so the reviewer
+    corrects exactly what was trained on: the label is written as the raw
+    prediction of a copy of the run (``<ws>/incoming/pseudo_review_runs_<ts>/``,
+    confidence 0.9 for a labelled point, 0 for the rest) and
+    :func:`build_montage` does the rest. Ingest of the corrected frames
+    (``ingest``) adds human labels *next to* any pseudo ones already committed:
+    drop the pseudo rows of the same frames afterwards, or they are seen twice.
+    """
+    import cv2
+
+    ws = Path(ws).expanduser().resolve()
+    ds = Path(staging).expanduser().resolve()
+    batch = Path(batch).expanduser().resolve()
+    runs = [batch] if (batch / "README.txt").is_file() else _detect_run_children(batch)
+    by_key = {}
+    for run in runs:
+        video = _read_readme_video(run)
+        if video is not None and video.is_file():
+            by_key[hashlib.sha1(video.stem.encode("utf-8")).hexdigest()[:8]] = (run, video)
+    with (ds / EXTERNAL_ROWS).open(encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    if not rows:
+        raise ValueError(f"No staged frame in {ds / EXTERNAL_ROWS}")
+    work = ws / "incoming" / f"pseudo_review_runs_{datetime.now():%Y%m%d_%H%M%S}"
+    items, missing = [], 0
+    per_run: dict[str, list] = {}
+    for r in rows:
+        key = _pseudo_key(r["image"])
+        if key is None or key[0] not in by_key:
+            missing += 1
+            continue
+        per_run.setdefault(key[0], []).append((key[1], ds / r["label"], r))
+    for key, frames in per_run.items():
+        run, video = by_key[key]
+        cap = cv2.VideoCapture(str(video))
+        w, h = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        cap.release()
+        fake = work / run.name
+        fake.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(run / "README.txt", fake / "README.txt")
+        header = ["frame", "box_conf"] + [
+            f"p{i}_{c}" for i in range(NKP) for c in ("x", "y", "conf")
+        ]
+        picked = []
+        with (fake / "field_kps_raw.csv").open("w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=header)
+            writer.writeheader()
+            for frame, label, _ in sorted(frames, key=lambda t: t[0]):
+                vals = [float(v) for v in label.read_text().split()[5:]]
+                row = {"frame": frame, "box_conf": 0.9}
+                for i in range(NKP):
+                    x, y, v = vals[3 * i : 3 * i + 3]
+                    row |= {
+                        f"p{i}_x": round(x * w, 3),
+                        f"p{i}_y": round(y * h, 3),
+                        f"p{i}_conf": 0.9 if v > 0 else 0.0,
+                    }
+                writer.writerow(row)
+                picked.append(
+                    {"frame": frame, "tier": "pseudo", "reason": "pseudo label in train (review)"}
+                )
+        items.append((fake, video, picked))
+    if not items:
+        raise ValueError(f"None of the {len(rows)} pseudo frames matches a clip of {batch}")
+    items.sort(key=lambda item: item[1].name)
+    settings = load_settings(ws)
+    path = build_montage(ws, items, kp_conf=float(settings["detect"]["kp_conf"]))
+    _log(
+        f"pseudo-queue: {sum(len(i[2]) for i in items)} frames of {len(items)} clips "
+        f"({missing} not matched) -> {path.parent / 'montage.mp4'}"
+    )
+    print_gui_cli_mirror(
+        "vaila/getpixelvideo",
+        [
+            "uv", "run", "--no-sync", "vaila/getpixelvideo.py", "--freekiki",
+            "--freekiki-workspace", str(ws), "--freekiki-session", str(path),
+        ],
+        note="Review the pseudo-labelled frames (F10 accepts a ghost, Del hides, F3 = OK, F9 saves):",
+    )  # fmt: skip
+    return path
+
+
 REVIEWED_FIELDS = (
     "image",
     "label",
@@ -5084,17 +5931,294 @@ def validate_detection_workspace(ws, model: str) -> None:
         resolve_model(ws, model)
 
 
-def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
+def snap_run(
+    ws,
+    path,
+    *,
+    overlay: bool = True,
+    show_network: bool = False,
+    band_px: float | None = None,
+    max_move_px: float | None = None,
+) -> list[Path]:
+    """Snap the accepted keypoints of detect run(s) onto the painted lines (``freekiki_snap``).
+
+    ``path``: a detect run or a batch. Writes, inside each run, ``snap/``:
+    ``field_kps_snap_getpixelvideo.csv`` (the accepted points after the snap,
+    same layout as ``field_kps_getpixelvideo.csv``), ``snap_moves.csv`` (frame,
+    point, how, dx, dy, distance) and, with ``overlay``, ``<video>_snap_overlay.mp4``
+    plus a snapshot PNG with the final points (filled = snapped, ring = kept);
+    ``show_network`` also draws the network point before the snap (red dot).
+    Each point's correction is stabilised over time (``freekiki_snap.stabilize``) so
+    a line refitted to the wrong stroke in one frame does not flicker. The network
+    CSVs are not changed. Returns the ``snap/`` folders.
+    """
+    import cv2
+    import numpy as np
+
+    try:
+        from . import freekiki_snap as fs
+    except ImportError:
+        import freekiki_snap as fs  # ty: ignore[unresolved-import]
+
+    path = Path(path).expanduser().resolve()
+    runs = [path] if (path / "README.txt").is_file() else _detect_run_children(path)
+    kw = {}
+    if band_px is not None:
+        kw["band_px"] = float(band_px)
+    if max_move_px is not None:
+        kw["max_move_px"] = float(max_move_px)
+    done = []
+    for run in runs:
+        video = _read_readme_video(run)
+        if video is None or not video.is_file():
+            _log(f"skip {run.name}: video not found ({video})")
+            continue
+        with (run / "field_kps_status.csv").open(encoding="utf-8") as f:
+            status = {int(r["frame"]): r for r in csv.DictReader(f)}
+        with (run / "field_kps_raw.csv").open(encoding="utf-8") as f:
+            raw = {int(r["frame"]): r for r in csv.DictReader(f)}
+        out = run / "snap"
+        out.mkdir(exist_ok=True)
+        cap = cv2.VideoCapture(str(video))
+        fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+        w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        writer = (
+            cv2.VideoWriter(
+                str(out / f"{video.stem}_snap_overlay.mp4"),
+                cv2.VideoWriter_fourcc(*"mp4v"),  # ty: ignore[unresolved-attribute]
+                fps,
+                (w, h),
+            )
+            if overlay
+            else None
+        )
+        # pass 1: snap every frame
+        frames, nets, snaps, accs = [], [], [], []
+        frame = -1
+        while True:
+            ok, img = cap.read()
+            if not ok:
+                break
+            frame += 1
+            parsed = _raw_frame(raw.get(frame, {})) if frame in status else None
+            if parsed is None:
+                continue
+            xy, _, _ = parsed
+            acc = np.array([status[frame].get(f"p{i}") == "D" for i in range(NKP)])
+            new, _ = fs.snap_keypoints(xy, acc, fs.paint_mask(img), **kw)
+            frames.append(frame)
+            nets.append(np.where(acc[:, None], xy, np.nan))
+            snaps.append(np.where(acc[:, None], new, np.nan))
+            accs.append(acc)
+        cap.release()
+        final = (
+            fs.stabilize(np.array(nets), np.array(snaps), w) if frames else np.zeros((0, NKP, 2))
+        )
+        index = {f: k for k, f in enumerate(frames)}
+        # pass 2: CSV rows, moves and the overlay
+        pix_rows, moves, best = [], [], (-1.0, None)
+        r = max(4, w // 240)
+        cap = cv2.VideoCapture(str(video))
+        frame = -1
+        while True:
+            ok, img = cap.read()
+            if not ok:
+                break
+            frame += 1
+            k = index.get(frame)
+            if k is None:
+                if writer is not None:
+                    writer.write(img)
+                continue
+            xy, new, acc = nets[k], final[k], accs[k]
+            row = {"frame": frame}
+            for i in range(NKP):
+                row[f"p{i}_x"] = f"{new[i, 0]:.2f}" if acc[i] else ""
+                row[f"p{i}_y"] = f"{new[i, 1]:.2f}" if acc[i] else ""
+            pix_rows.append(row)
+            total = 0.0
+            how = {}
+            for i in np.flatnonzero(acc):
+                dx, dy = new[i] - xy[i]
+                dist = float(np.hypot(dx, dy))
+                if dist < 0.05:
+                    continue
+                how[int(i)] = True
+                total += dist
+                moves.append(
+                    {"frame": frame, "point": f"p{i}", "how": "snap", "dx": round(float(dx), 2),
+                     "dy": round(float(dy), 2), "distance_px": round(dist, 2)}
+                )  # fmt: skip
+            if writer is not None or total > best[0]:
+                canvas = img.copy()
+                for i in np.flatnonzero(acc):
+                    b = tuple(int(round(v)) for v in new[i])
+                    if show_network and i in how:
+                        a = tuple(int(round(v)) for v in xy[i])
+                        cv2.circle(canvas, a, max(2, r // 2), (0, 0, 255), -1)
+                        cv2.line(canvas, a, b, (0, 255, 255), 1)
+                    cv2.circle(canvas, b, r, (0, 255, 0), -1 if i in how else 2)
+                    cv2.putText(canvas, f"p{i}", (b[0] + r + 2, b[1] - r), cv2.FONT_HERSHEY_SIMPLEX,
+                                w / 3000, (255, 255, 255), 2, cv2.LINE_AA)  # fmt: skip
+                legend = "filled = snapped to paint, ring = network point kept"
+                if show_network:
+                    legend += ", red dot = network before the snap"
+                cv2.putText(canvas, f"frame {frame}  {legend}",
+                            (20, h - 20), cv2.FONT_HERSHEY_SIMPLEX, w / 2400, (0, 255, 255), 2, cv2.LINE_AA)  # fmt: skip
+                if writer is not None:
+                    writer.write(canvas)
+                if total > best[0]:
+                    best = (total, canvas)
+        cap.release()
+        if writer is not None:
+            writer.release()
+        if best[1] is not None:
+            cv2.imwrite(str(out / f"{video.stem}_snap_snapshot.png"), best[1])
+        with (out / "field_kps_snap_getpixelvideo.csv").open(
+            "w", newline="", encoding="utf-8"
+        ) as f:
+            writer_csv = csv.DictWriter(f, fieldnames=getpixelvideo_header())
+            writer_csv.writeheader()
+            writer_csv.writerows(pix_rows)
+        diag.write_csv(
+            out / "snap_moves.csv",
+            moves or [{"frame": "", "point": "", "how": "", "dx": "", "dy": "", "distance_px": ""}],
+        )
+        by_point = Counter(m["point"] for m in moves)
+        med = {
+            p: round(float(np.median([m["distance_px"] for m in moves if m["point"] == p])), 1)
+            for p in by_point
+        }
+        _log(
+            f"snap {video.name}: {len(pix_rows)} frames, {len(moves)} points moved | median move px "
+            + ", ".join(f"{p} {med[p]}" for p in sorted(med, key=lambda q: int(q[1:])))
+            + f" -> {out}"
+        )
+        done.append(out)
+    return done
+
+
+def screen_video(
+    video,
+    predictor,
+    *,
+    conf: float,
+    kp_conf: float,
+    n: int = 24,
+    min_accepted: int = 6,
+    max_rmse: float = 5.0,
+    cam_height: tuple[float, float] = (8.0, 45.0),
+    settings: dict | None = None,
+) -> dict:
+    """Is this video a camera the network was trained for? (``n`` sampled frames, no outputs)
+
+    Each sampled frame is judged like ``select`` judges a frame: at least
+    ``min_accepted`` accepted points, a camera fitted to them with an ``rmse_px``
+    of at most ``max_rmse`` and a height inside ``cam_height`` (metres). Frames
+    behind the goal, on a player or zoomed in show too few points (``few_points``)
+    or points that fit no plausible camera (``bad_camera``). Returns the rates of
+    ``camera_ok`` / ``few_points`` / ``bad_camera`` over the sampled frames.
+    """
+    import cv2
+    import numpy as np
+
+    G = _geom()
+    cap = cv2.VideoCapture(str(video))
+    if not cap.isOpened():
+        raise OSError(f"Cannot open video: {video}")
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    width, height = cap.get(cv2.CAP_PROP_FRAME_WIDTH), cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    count = {"camera_ok": 0, "few_points": 0, "bad_camera": 0}
+    seen = 0
+    try:
+        for idx in np.unique(np.linspace(0, max(0, total - 1), max(1, n)).astype(int)):
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int(idx))
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            seen += 1
+            box, xy, kc = predictor.predict(frame)
+            if xy is None or kc is None or not float(np.nan_to_num(box, nan=0.0)) >= conf:
+                count["few_points"] += 1
+                continue
+            accepted = np.nan_to_num(np.asarray(kc, dtype=float), nan=-1.0) >= kp_conf
+            if int(accepted.sum()) < min_accepted:
+                count["few_points"] += 1
+                continue
+            model = G.fit_field_camera(
+                np.asarray(xy, dtype=float), accepted, width, height, settings
+            )
+            height_m = model.get("cam_height_m")
+            fits = model["status"] == "ok" and (model.get("rmse_px") or 0.0) <= max_rmse
+            fits = fits and (height_m is None or cam_height[0] <= height_m <= cam_height[1])
+            count["camera_ok" if fits else "bad_camera"] += 1
+    finally:
+        cap.release()
+    rates = {k: (v / seen if seen else 0.0) for k, v in count.items()}
+    return rates | {"sampled": seen}
+
+
+def screen_verdict(rates: dict, min_camera_ok: float) -> tuple[bool, str]:
+    """``(usable, reason)`` of a :func:`screen_video` result."""
+    ok = rates["camera_ok"]
+    if ok >= min_camera_ok:
+        return True, ""
+    kind = "too few keypoints (zoom / behind the goal / close-up)"
+    if rates["bad_camera"] > rates["few_points"]:
+        kind = "keypoints fit no broadcast camera (zoom / behind the goal)"
+    return False, f"{kind}: only {ok:.0%} of the sampled frames have a valid pitch camera"
+
+
+def detect_videos(
+    ws, source, *, output_dir=None, screen: bool = True, min_camera_ok: float = 0.3, **kwargs
+) -> Path:
     """Detect on one video or on every video of a folder.
 
     A folder writes ``processed_freekiki_batch_<ts>/`` (inside ``output_dir``,
     default the folder itself) with one ``freekiki_predict_<stem>_<ts>/``
     sub-folder per video and ``quality_summary.csv`` comparing them.
     Returns the output folder.
+
+    With ``screen`` (default) every video is first judged by
+    :func:`screen_video` on 24 sampled frames: a camera the network was not
+    trained for (zoom, behind the goal, a close-up on a player) is **skipped**
+    in a folder batch and listed in ``skipped_videos.csv`` (a single video that
+    was named explicitly is still processed, with a warning). ``min_camera_ok``
+    is the share of sampled frames that need a valid pitch camera.
     """
     validate_detection_workspace(ws, kwargs.get("model", "active"))
     source = Path(source).expanduser().resolve()
+    ws_path = Path(ws).expanduser().resolve()
+    verdicts: dict[Path, tuple[bool, str, dict]] = {}
+
+    def judge(video: Path) -> tuple[bool, str, dict]:
+        if video not in verdicts:
+            settings = load_settings(ws_path)
+            defaults = settings["detect"]
+            if "predictor" not in verdicts_cache:
+                model_path = resolve_model(ws_path, kwargs.get("model", "active"))
+                verdicts_cache["predictor"] = load_predictor(
+                    model_path,
+                    imgsz=kwargs.get("imgsz"),
+                    fallback_imgsz=defaults["imgsz"],
+                    device=kwargs.get("device"),
+                )
+            conf = float(defaults["conf"] if kwargs.get("conf") is None else kwargs["conf"])
+            kp = float(defaults["kp_conf"] if kwargs.get("kp_conf") is None else kwargs["kp_conf"])
+            rates = screen_video(
+                video, verdicts_cache["predictor"], conf=conf, kp_conf=kp,
+                settings=settings["geometry"],
+            )  # fmt: skip
+            usable, reason = screen_verdict(rates, min_camera_ok)
+            verdicts[video] = (usable, reason, rates)
+        return verdicts[video]
+
+    verdicts_cache: dict = {}
     if source.is_file():
+        if screen:
+            usable, reason, _ = judge(source)
+            if not usable:
+                _log(f"WARNING {source.name}: {reason}; processing it because it was named")
         return detect_video(ws, source, output_dir=output_dir, **kwargs)
     videos = sorted(p for p in source.iterdir() if p.suffix.lower() in VIDEO_EXTS)
     if not videos:
@@ -5105,7 +6229,23 @@ def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
     _log(f"batch: {len(videos)} videos -> {batch}")
     rows = []
     failed = []
+    skipped = []
     for video in videos:
+        if screen:
+            usable, reason, rates = judge(video)
+            if not usable:
+                _log(f"SKIP {video.name}: {reason}")
+                skipped.append(
+                    {
+                        "video": video.name,
+                        "camera_ok": round(rates["camera_ok"], 3),
+                        "few_points": round(rates["few_points"], 3),
+                        "bad_camera": round(rates["bad_camera"], 3),
+                        "sampled": rates["sampled"],
+                        "reason": reason,
+                    }
+                )
+                continue
         try:
             out = detect_video(ws, video, output_dir=batch, **kwargs)
         except (OSError, ValueError, RuntimeError) as exc:
@@ -5116,6 +6256,8 @@ def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
         rows.append(json.loads((out / "quality.json").read_text(encoding="utf-8")))
     if failed:
         diag.write_csv(batch / "failed_videos.csv", failed)
+    if skipped:
+        diag.write_csv(batch / "skipped_videos.csv", skipped)
     if rows:
         with (batch / "quality_summary.csv").open("w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=list(rows[0]))
@@ -5125,6 +6267,11 @@ def detect_videos(ws, source, *, output_dir=None, **kwargs) -> Path:
             )
     _log(
         f"batch done: {len(rows)}/{len(videos)} videos, summary -> {batch / 'quality_summary.csv'}"
+        + (
+            f" | {len(skipped)} skipped (not a trained camera) -> {batch / 'skipped_videos.csv'}"
+            if skipped
+            else ""
+        )
         + (f" | {len(failed)} failed -> {batch / 'failed_videos.csv'}" if failed else "")
     )
     return batch
@@ -5144,6 +6291,30 @@ def build_parser() -> argparse.ArgumentParser:
         ("import-dataset", "Copy a kiki49 YOLO-pose build into the workspace."),
         ("queue", "Pick the frames worth labelling from a detect batch (review sessions)."),
         ("ingest", "Validate complete reviewed frames; --commit appends them to train or hard."),
+        (
+            "select",
+            "Find the moments of long videos where the rare keypoints show (low confidence) "
+            "and cut them to a folder, ready to label.",
+        ),
+        (
+            "pseudo",
+            "Stage complete pseudo-labelled frames (network + fitted camera) of a detect batch; "
+            "then 'extend --src <staging>' previews / commits them to train.",
+        ),
+        (
+            "pseudo-queue",
+            "Review session (one montage) of a pseudo staging folder; the draft of each frame "
+            "is its pseudo label.",
+        ),
+        (
+            "remove-source",
+            "Take every train row of a source out of the dataset (dry run; --apply moves the "
+            "files to _removed/ and backs up the manifest).",
+        ),
+        (
+            "snap",
+            "Snap the accepted keypoints of detect run(s) onto the painted lines (check overlay).",
+        ),
         (
             "extend",
             "Convert an external field dataset (Roboflow, SoccerNet-GSR, SoccerNet rescue) to "
@@ -5198,6 +6369,110 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--commit", action="store_true", help="Publish validated pairs to the split."
             )
+        elif cmd == "select":
+            p.add_argument("--src", required=True, help="Video or folder (all sub-folders).")
+            p.add_argument("--out", required=True, help="Folder for the cut clips.")
+            p.add_argument(
+                "--need",
+                default="p5,p29,p39,p47",
+                help="Keypoints to find (default the rare four).",
+            )
+            p.add_argument(
+                "--kp-conf",
+                type=float,
+                help="Keypoint confidence of the detect (default: settings).",
+            )
+            p.add_argument(
+                "--low-conf",
+                type=float,
+                help="Confidence of a hit (default: the same as --kp-conf).",
+            )
+            p.add_argument(
+                "--min-accepted",
+                type=int,
+                default=6,
+                help="Accepted points a camera needs to mark a frame (6; a zoom fits on few).",
+            )
+            p.add_argument(
+                "--max-rmse",
+                type=float,
+                default=5.0,
+                help="Camera fit error (px@1920) above which a frame is not a pitch view (5).",
+            )
+            p.add_argument(
+                "--cam-height",
+                default="8,45",
+                help="Plausible broadcast camera height in metres, MIN,MAX (8,45).",
+            )
+            p.add_argument(
+                "--max-pose",
+                type=float,
+                default=0.10,
+                help="MediaPipe pose taller than this fraction of the image = close-up (0.10).",
+            )
+            p.add_argument(
+                "--pose-complexity",
+                type=int,
+                default=0,
+                choices=(0, 1, 2),
+                help="0 lite, 1 full, 2 heavy.",
+            )
+            p.add_argument("--check-every", type=int, default=10, help="Pose check every N frames.")
+            p.add_argument(
+                "--no-pose-gate", action="store_true", help="Do not drop close-up camera stretches."
+            )
+            p.add_argument("--stride", type=int, default=5, help="Detect every Nth frame (5).")
+            p.add_argument("--pad", type=int, default=50, help="Frames kept around a hit (50).")
+            p.add_argument("--join-gap", type=int, default=75, help="Merge hits closer than this.")
+            p.add_argument("--min-len", type=int, default=50, help="Shortest clip, frames.")
+            p.add_argument("--max-len", type=int, default=750, help="Longest clip, frames.")
+            p.add_argument("--per-video", type=int, default=20, help="Clips kept per video (20).")
+            p.add_argument("--model", default="active", help="Network (slot or .pt).")
+            p.add_argument("--device", help="cuda device, e.g. 0 or cpu.")
+            p.add_argument("--detect-dir", help="Reuse the detect batch of an earlier run.")
+            p.add_argument(
+                "--plan-only", action="store_true", help="Write selected_clips.csv, cut nothing."
+            )
+        elif cmd == "pseudo":
+            p.add_argument(
+                "--batch", dest="batch_dir", required=True, help="detect output or batch folder."
+            )
+            p.add_argument("--out", help="Staging folder (default <ws>/incoming/pseudo_<ts>).")
+            p.add_argument("--every", type=int, default=3, help="Judge every Nth frame (3).")
+            p.add_argument(
+                "--min-accepted", type=int, default=8, help="Accepted points needed (8)."
+            )
+            p.add_argument("--max-rmse", type=float, default=5.0, help="Camera fit error px (5).")
+            p.add_argument("--cam-height", default="8,45", help="Camera height m, MIN,MAX.")
+            p.add_argument("--tau", type=float, default=0.35, help="Line support needed (0.35).")
+            p.add_argument(
+                "--trust-csv",
+                action="append",
+                default=[],
+                help="human_vs_ai.csv of a reviewed pseudo session (repeatable): frames showing a "
+                "keypoint the reviewers kept correcting are rejected.",
+            )
+        elif cmd == "remove-source":
+            p.add_argument("--source", help="Manifest source, e.g. freekiki_pseudo.")
+            p.add_argument("--images", help="Text file: one dataset image path per line to remove.")
+            p.add_argument("--tag", help="Name of the backup / _removed folder (default: source).")
+            p.add_argument("--apply", action="store_true", help="Do it (default: dry run).")
+        elif cmd == "pseudo-queue":
+            p.add_argument(
+                "--batch",
+                dest="batch_dir",
+                required=True,
+                help="Detect batch the pseudo frames came from.",
+            )
+            p.add_argument("--src", required=True, help="The pseudo staging folder.")
+        elif cmd == "snap":
+            p.add_argument("--run", required=True, help="detect run or batch folder.")
+            p.add_argument("--no-overlay", action="store_true", help="CSV only, no video.")
+            p.add_argument(
+                "--show-network", action="store_true", help="Also draw the point before the snap."
+            )
+            p.add_argument("--band", type=float, help="Search band half width, px@1920 (35).")
+            p.add_argument("--max-move", type=float, help="Largest move allowed, px@1920 (40).")
         elif cmd == "extend":
             p.add_argument("--source", choices=EXTERNAL_SOURCES, help="Dataset to convert.")
             p.add_argument(
@@ -5384,6 +6659,17 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--device")
             p.add_argument("--no-overlay", action="store_true")
             p.add_argument(
+                "--no-screen",
+                action="store_true",
+                help="Do not skip videos whose camera the network was not trained for.",
+            )
+            p.add_argument(
+                "--min-camera-ok",
+                type=float,
+                default=0.3,
+                help="Share of sampled frames that need a valid pitch camera (0.3).",
+            )
+            p.add_argument(
                 "--fill-gaps",
                 type=int,
                 default=0,
@@ -5397,6 +6683,14 @@ def build_parser() -> argparse.ArgumentParser:
                 "points that disagree with the camera / off. Writes field_kps_geom_*.csv.",
             )
     return parser
+
+
+def _height_range(text: str) -> tuple[float, float]:
+    """``"8,45"`` -> ``(8.0, 45.0)``."""
+    lo, hi = _floats(text)[:2]
+    if not 0 < lo < hi:
+        raise ValueError(f"--cam-height must be MIN,MAX metres with 0 < MIN < MAX, got {text!r}")
+    return lo, hi
 
 
 def _floats(text: str) -> tuple[float, ...]:
@@ -5423,6 +6717,57 @@ def main(argv: list[str] | None = None) -> int:
         import_dataset(ws, args.src)
     elif args.command == "ingest":
         ingest_reviewed(ws, args.src, args.match_id, split=args.split, commit=args.commit)
+    elif args.command == "select":
+        select_frames(
+            ws,
+            args.src,
+            args.out,
+            need=parse_keypoints(args.need),
+            kp_conf=args.kp_conf,
+            low_conf=args.low_conf,
+            min_accepted=args.min_accepted,
+            max_rmse=args.max_rmse,
+            cam_height=_height_range(args.cam_height),
+            pose_gate=not args.no_pose_gate,
+            max_pose=args.max_pose,
+            pose_complexity=args.pose_complexity,
+            check_every=args.check_every,
+            stride=args.stride,
+            pad=args.pad,
+            join_gap=args.join_gap,
+            min_len=args.min_len,
+            max_len=args.max_len,
+            per_video=args.per_video,
+            model=args.model,
+            detect_dir=args.detect_dir,
+            cut=not args.plan_only,
+            device=args.device,
+        )
+    elif args.command == "pseudo":
+        stage_pseudo(
+            ws,
+            args.batch_dir,
+            args.out,
+            every=args.every,
+            min_accepted=args.min_accepted,
+            max_rmse=args.max_rmse,
+            cam_height=_height_range(args.cam_height),
+            tau=args.tau,
+            trust_csv=args.trust_csv,
+        )
+    elif args.command == "remove-source":
+        remove_source(ws, args.source, apply=args.apply, images=args.images, tag=args.tag)
+    elif args.command == "pseudo-queue":
+        pseudo_review_queue(ws, args.batch_dir, args.src)
+    elif args.command == "snap":
+        snap_run(
+            ws,
+            args.run,
+            overlay=not args.no_overlay,
+            show_network=args.show_network,
+            band_px=args.band,
+            max_move_px=args.max_move,
+        )
     elif args.command == "extend":
         if args.src:
             commit_external(ws, args.src, commit=args.commit)
@@ -5559,6 +6904,8 @@ def main(argv: list[str] | None = None) -> int:
             fill_gaps=args.fill_gaps,
             diag_frames=args.diag_frames,
             geom=args.geom,
+            screen=not args.no_screen,
+            min_camera_ok=args.min_camera_ok,
         )
     return 0
 
@@ -5621,6 +6968,11 @@ def run_freekiki() -> None:
         "ext_source": tk.StringVar(value="roboflow"),
         "ext_query": tk.StringVar(value="class:pitch"),
         "ext_src": tk.StringVar(),
+        "sel_src": tk.StringVar(),
+        "sel_out": tk.StringVar(),
+        "sel_conf": tk.StringVar(value="0.5"),
+        "sel_pose": tk.StringVar(value="0.10"),
+        "sel_gate": tk.StringVar(value="1"),
         "match_id": tk.StringVar(),
     }
     overlay = tk.BooleanVar(value=True)
@@ -5813,6 +7165,27 @@ def run_freekiki() -> None:
             current = [p for p in v["corrections"].get().split(";") if p.strip()]
             v["corrections"].set(";".join([*current, path]))
 
+    def pick_select_folder(key: str, title: str):
+        path = filedialog.askdirectory(title=title, initialdir=v[key].get() or None)
+        if path:
+            v[key].set(path)
+
+    def do_select(plan_only: bool):
+        if not v["sel_src"].get().strip() or not v["sel_out"].get().strip():
+            messagebox.showerror(
+                "FreeKiki", "Choose the games folder and the clips folder.", parent=root
+            )
+            return
+        run_cli(
+            ["select", "--src", v["sel_src"].get().strip(), "--out", v["sel_out"].get().strip()]
+            + opt("--kp-conf", "sel_conf")
+            + opt("--max-pose", "sel_pose")
+            + ([] if v["sel_gate"].get() == "1" else ["--no-pose-gate"])
+            + opt("--model", "model")
+            + opt("--device", "device")
+            + (["--plan-only"] if plan_only else [])
+        )
+
     def do_extend_stage():
         args = ["extend", "--source", v["ext_source"].get()]
         if v["ext_source"].get() == "roboflow":
@@ -5940,6 +7313,26 @@ def run_freekiki() -> None:
     ttk.Button(corr, text="Add folder...", command=add_corrections_folder).pack(side="left", padx=4)
     ttk.Label(corr, text="Match id").pack(side="left", padx=(8, 2))
     ttk.Entry(corr, textvariable=v["match_id"], width=16).pack(side="left")
+    sel = ttk.Frame(box)
+    sel.grid(row=7, column=0, columnspan=3, sticky="we", pady=2)
+    ttk.Label(sel, text="Select frames in video").pack(side="left", padx=(4, 2))
+    ttk.Entry(sel, textvariable=v["sel_src"], width=26).pack(side="left")
+    ttk.Button(
+        sel, text="Games...", command=lambda: pick_select_folder("sel_src", "Folder of games")
+    ).pack(side="left", padx=2)
+    ttk.Entry(sel, textvariable=v["sel_out"], width=26).pack(side="left", padx=(6, 0))
+    ttk.Button(
+        sel, text="Clips...", command=lambda: pick_select_folder("sel_out", "Folder for the clips")
+    ).pack(side="left", padx=2)
+    ttk.Label(sel, text="KP conf").pack(side="left", padx=(6, 2))
+    ttk.Entry(sel, textvariable=v["sel_conf"], width=5).pack(side="left")
+    ttk.Label(sel, text="Max pose").pack(side="left", padx=(6, 2))
+    ttk.Entry(sel, textvariable=v["sel_pose"], width=5).pack(side="left")
+    ttk.Checkbutton(sel, text="Pose gate", variable=v["sel_gate"], onvalue="1", offvalue="0").pack(
+        side="left", padx=4
+    )
+    ttk.Button(sel, text="Plan", command=lambda: do_select(True)).pack(side="left", padx=(6, 2))
+    ttk.Button(sel, text="Select + cut", command=lambda: do_select(False)).pack(side="left")
     ext = ttk.Frame(box)
     ext.grid(row=6, column=0, columnspan=3, sticky="we", pady=2)
     ttk.Label(ext, text="External data").pack(side="left", padx=(4, 2))

@@ -1,7 +1,7 @@
 # YouTube Downloader
 
-**Version:** 0.4.7
-**Updated:** 2026-10-02
+**Version:** 0.4.8
+**Updated:** 2026-10-08
 
 Download video as MP4 or audio as MP3 from one editable list. Open **Video and Image → YouTube Downloader** or run the module without CLI inputs.
 
@@ -66,8 +66,8 @@ Exit codes: 0 all succeeded; 1 failure including partial failures; 2 invalid arg
 
 - Single video: vaila_ytdownload_TIMESTAMP/TITLE.mp4 and video_info.txt with title, channel, source URL, downloaded dimensions/FPS, duration and available formats.
 - Single audio: vaila_ytaudio_TIMESTAMP/TITLE.mp3.
-- Batch video: vaila_batch_TIMESTAMP/001/vaila_ytdownload_TIMESTAMP/001_TITLE.mp4, then 002, etc.
-- Batch audio: vaila_audio_TIMESTAMP/001/vaila_ytaudio_TIMESTAMP/001_TITLE.mp3.
+- Batch video: vaila_batch_TIMESTAMP/001/001_TITLE.mp4 with video_info.txt beside it, then 002/002_TITLE.mp4, etc.
+- Batch audio: vaila_audio_TIMESTAMP/001/001_TITLE.mp3, then 002/002_TITLE.mp3, etc.
 - A numerical suffix prevents runs started in the same second from reusing an output directory.
 - download_log.txt records progress, successful paths, failures and summary. Batch logs live at the batch root; single-run logs live beside the final media.
 - Multiple edited GUI URLs and CLI TXT runs save the exact list as urls.txt in the run directory. The equivalent command references that list; single-URL commands use --url. Destination, audio choice and diagnostics are included with native shell quoting.

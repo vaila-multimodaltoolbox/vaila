@@ -2,7 +2,7 @@
 
 The **FreeKiki (49 field KPs)** button (Frame B → Soccer Tools) launches `vaila/freekiki.py`.
 
-**Version:** 0.4.7 · **Updated:** 07 October 2026
+**Version:** 0.4.7 · **Updated:** 15 October 2026
 
 ## Overview
 
@@ -64,6 +64,20 @@ per-frame camera calibration.
   Load** (point at the run folder; it finds the video), opens the detected video with its labels. Right-click picks a point, left-click places it, Del / Del Range = not visible, F10 accepts a
   ghost, F3 = frame OK, F9 = save dataset folder. Put that folder in section 3 **Corrections** and
   Train. Only complete frames are saved. The CLI keeps `queue`, `ingest` and `--split hard`.
+- **Snap (`snap`, CLI):** moves the accepted keypoints of a detect run onto the painted lines (lines refitted to the
+  paint, corners = intersections); writes `<run>/snap/` with a corrected CSV, the moves and an overlay video.
+- **Detect screens the cameras:** a folder `detect` skips videos from cameras the network was not trained for
+  (zoom, behind the goal, a close-up on a player: fewer than 30 % of the sampled frames have a valid pitch camera),
+  lists them in `skipped_videos.csv`, and never deletes them. `--no-screen` runs everything.
+- **Select frames in video (`select`):** detects on downloaded games at the normal keypoint confidence, finds the
+  moments where the rare keypoints (p5, p29, p39, p47) show and cuts them with vailá Cut Video's ffmpeg cutter to a
+  clips folder (`<video>_frame_<a>_to_<b>.mp4`, `selected_clips.csv`, `rejected_windows.csv`). A MediaPipe **pose
+  gate** drops close-up cameras (a pose taller than 1/10 of the image) and a **camera check** drops frames whose fitted
+  camera does not fit the pitch (rmse above 5 px, height outside 8-45 m: behind the net, zoom).
+- **Pseudo-labelled frames (`pseudo`, CLI):** turns the detect run of the `select` clips into complete labels (network
+  points + fitted camera, with camera, aux-point and line-support gates), staged for `extend --src` (preview, then
+  `--commit` to train). No human reviews them; `--trust-csv` rejects frames showing keypoints the reviewers kept
+  correcting. `remove-source` takes a source out of train reversibly.
 - **External datasets (`extend`):** converts Roboflow Universe keypoint projects, SoccerNet-GSR and the
   rejected SoccerNet-calibration images into 49-point labels. A Roboflow project's own keypoint layout is
   aligned by network votes plus pitch geometry (`mapping.csv`, editable). Frames are staged in
@@ -103,6 +117,7 @@ Every button prints its `>>` command in the terminal (`WS` = workspace; CUDA mac
 | Sweep thresholds (val) | `uv run vaila/freekiki.py sweep -w WS --eval-dir EVAL_DIR` |
 | Compare with its slot | `uv run vaila/freekiki.py compare -w WS --candidate BEST.pt` |
 | Model slots | `uv run vaila/freekiki.py models -w WS [--default l]` |
+| Select frames in video → Plan / Select + cut | `uv run vaila/freekiki.py select -w WS --src GAMES --out CLIPS [--plan-only]` |
 | External data → Stage | `uv run vaila/freekiki.py extend -w WS --source roboflow --search "class:pitch"` |
 | External data → Preview / Commit | `uv run vaila/freekiki.py extend -w WS --src STAGING [--commit]` |
 | (CLI only) grow m to l | `uv run vaila/freekiki.py grow -w WS --src m --to l --out models/freekiki_l_init.pt` |

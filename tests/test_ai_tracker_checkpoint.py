@@ -139,3 +139,49 @@ def test_get_available_resnet50_checkpoints() -> None:
         assert any(c.name == "resnet50_imagenet.pth" for c in ckpts)
         assert any("ai_tracker" in str(c) for c in ckpts)
 
+
+class _StubExtractor:
+    """Frozen-embedding stand-in so the deep path runs without ResNet weights."""
+
+    enabled = True
+    feature_dim = 16
+
+    def extract_embedding(self, patch):
+        return np.full(self.feature_dim, float(patch.mean()) / 255.0, dtype=np.float32)
+
+
+def _frame() -> np.ndarray:
+    rng = np.random.default_rng(3)
+    return rng.integers(0, 255, (240, 320, 3), dtype=np.uint8)
+
+
+def test_toggling_deep_features_mid_session_does_not_break_retraining() -> None:
+    """Old (short) and new (long) features used to make np.stack fail:
+    'all input arrays must have the same shape'."""
+    tr = _tracker()
+    frame = _frame()
+    tr.add_anchor(frame, (100.0, 100.0), 0)
+    tr.retrain_online_model()
+    assert tr.discriminator_w is not None and tr.discriminator_w.shape == (ait._FEATURE_DIM,)
+
+    tr.params.use_deep_features = True  # the checkbox is switched on
+    tr.extractor = _StubExtractor()
+    tr.add_anchor(frame, (150.0, 120.0), 1)
+    assert len({f.shape[0] for f in tr.training_feats}) == 2  # the bug's precondition
+    tr.retrain_online_model()  # must not raise
+    assert tr.discriminator_w.shape == (ait._FEATURE_DIM + _StubExtractor.feature_dim,)
+    assert len(tr.training_feats) == len(tr.training_labels) == len(tr.training_patches) > 2
+
+    tr.params.use_deep_features = False  # and off again
+    tr.add_anchor(frame, (200.0, 150.0), 2)
+    tr.retrain_online_model()
+    assert tr.discriminator_w.shape == (ait._FEATURE_DIM,)
+
+
+def test_constant_feature_dimension_is_left_untouched() -> None:
+    tr = _tracker()
+    frame = _frame()
+    tr.add_anchor(frame, (100.0, 100.0), 0)
+    before = [f.copy() for f in tr.training_feats]
+    tr.retrain_online_model()
+    assert all(np.array_equal(a, b) for a, b in zip(before, tr.training_feats, strict=True))

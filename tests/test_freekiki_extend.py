@@ -196,3 +196,75 @@ def test_extend_cli_parses_stage_and_commit():
     assert a.src == "S" and a.commit
     with pytest.raises(SystemExit):
         p.parse_args(["extend", "-w", "W", "--source", "kaggle"])
+
+
+def _add_rows(ws, source, split, n):
+    ds = ws / "datasets/kiki49"
+    rows = list(csv.DictReader((ds / "manifest.csv").open()))
+    fields = list(rows[0])
+    for i in range(n):
+        name = f"{source}_{split}_{i}"
+        for sub, suffix in (("images", "png"), ("labels", "txt")):
+            (ds / sub / split).mkdir(parents=True, exist_ok=True)
+            (ds / sub / split / f"{name}.{suffix}").write_text("x")
+        rows.append(
+            dict.fromkeys(fields, "")
+            | {
+                "split": split,
+                "image": f"images/{split}/{name}.png",
+                "label": f"labels/{split}/{name}.txt",
+                "source": source,
+                "group": f"g{i}",
+            }
+        )
+    with (ds / "manifest.csv").open("w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=fields)
+        w.writeheader()
+        w.writerows(rows)
+
+
+def test_remove_source_is_reversible_and_train_only(tmp_path):
+    ws = _workspace(tmp_path / "workspace")
+    ds = ws / "datasets/kiki49"
+    _add_rows(ws, "pseudo", "train", 3)
+    _add_rows(ws, "other", "train", 2)
+    before = (ds / "manifest.csv").read_text()
+    dry = freekiki.remove_source(ws, "pseudo")
+    assert dry["rows"] == 3 and not dry["applied"] and (ds / "manifest.csv").read_text() == before
+    done = freekiki.remove_source(ws, "pseudo", apply=True)
+    assert done["applied"] and done["remaining_train"] == 2
+    left = list(csv.DictReader((ds / "manifest.csv").open()))
+    assert {r["source"] for r in left} == {"fixture", "other"}
+    assert len(list((ds / "_removed/pseudo").rglob("*.*"))) == 6
+    assert not (ds / "images/train/pseudo_train_0.png").exists()
+    backups = list(ds.glob("manifest_backup_before_remove_pseudo_*.csv"))
+    assert len(backups) == 1 and backups[0].read_text() == before
+    assert freekiki.remove_source(ws, "pseudo", apply=True)["rows"] == 0  # second run: no-op
+
+
+def test_remove_source_refuses_frozen_splits(tmp_path):
+    ws = _workspace(tmp_path / "workspace")
+    with pytest.raises(ValueError, match="frozen"):
+        freekiki.remove_source(ws, "fixture", apply=True)  # the fixture has val/test rows
+
+
+def test_remove_by_image_list_across_sources(tmp_path):
+    ws = _workspace(tmp_path / "workspace")
+    ds = ws / "datasets/kiki49"
+    _add_rows(ws, "pseudo", "train", 3)
+    _add_rows(ws, "other", "train", 3)
+    listing = tmp_path / "drop.txt"
+    listing.write_text("images/train/pseudo_train_1.png\nimages/train/other_train_2.png\n")
+    rep = freekiki.remove_source(ws, images=listing, tag="leak", apply=True)
+    assert rep["rows"] == 2 and rep["sources"] == {"pseudo": 1, "other": 1}
+    names = {Path(r["image"]).stem for r in csv.DictReader((ds / "manifest.csv").open())}
+    assert (
+        "pseudo_train_1" not in names and "other_train_2" not in names and "pseudo_train_0" in names
+    )
+    assert (ds / "_removed/leak/images/train/pseudo_train_1.png").is_file()
+    assert list(ds.glob("manifest_backup_before_remove_leak_*.csv"))
+    listing.write_text("images/val/val.png\n")
+    with pytest.raises(ValueError, match="frozen"):
+        freekiki.remove_source(ws, images=listing, apply=True)
+    with pytest.raises(ValueError):
+        freekiki.remove_source(ws)

@@ -5,7 +5,7 @@
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
 - **Version:** 0.4.7
-- **Updated:** 07 October 2026
+- **Updated:** 15 October 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
 - **CLI Interface:** Yes
@@ -246,6 +246,10 @@ directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder.
 | 3. Train → **Corrections** folder(s) + **Train** | `uv run vaila/freekiki.py train -w WS --base active --add-dataset FOLDER [--match-id M]` |
 | 3. Train → **External data** → Source + query + **Stage** | `uv run vaila/freekiki.py extend -w WS --source roboflow --search "class:pitch"` (or `--source gsr` / `soccernet-rescue`) |
 | 3. Train → **External data** → staging folder + **Preview** / **Commit** | `uv run vaila/freekiki.py extend -w WS --src WS/incoming/external_<source>_<ts> [--commit]` |
+| 3. Train → **Select frames in video** → **Plan** / **Select + cut** | `uv run vaila/freekiki.py select -w WS --src GAMES --out CLIPS [--plan-only]` |
+| (CLI only) pseudo-labelled frames of a detect batch | `uv run vaila/freekiki.py pseudo -w WS --batch DETECT_BATCH [--every 3]` |
+| (CLI only) take a source out of train (reversible) | `uv run vaila/freekiki.py remove-source -w WS --source freekiki_pseudo [--apply]` |
+| (CLI only) review the pseudo labels | `uv run vaila/freekiki.py pseudo-queue -w WS --batch DETECT_BATCH --src WS/incoming/pseudo_<ts>` |
 | (CLI only) label queue / ingest / hard holdout | `queue -w WS --batch DIR`, `ingest -w WS --src DIR --match-id M [--split hard] [--commit]` |
 | 4. Evaluate → Split `hard` + **Evaluate model** | `uv run vaila/freekiki.py evaluate -w WS --split hard` |
 | **Stop** | `Ctrl+C` in the terminal |
@@ -530,6 +534,35 @@ also writes `quality_summary.csv` comparing all videos.
 Also look at `diag_frames/` (green accepted, red rejected with name,
 confidence and code) and the overlay MP4 — wrong points are obvious there.
 
+### Snap the keypoints onto the painted lines (`snap`)
+
+On cameras that are rare in the training set (high, lateral, close to the penalty box) the network places the box
+corners with a systematic offset of 20-30 px (the box comes out larger than the painted one). `snap` corrects a detect
+run with the paint itself: every painted straight line (touchlines, goal lines, halfway line, penalty-box and
+goal-area lines) with at least two accepted points is refitted to the white paint in a band of 35 px around the
+predicted segment; a point at the crossing of two refitted lines moves to their intersection, a point on one line
+(penalty-arc crossings, post bases, centre circle top/bottom) moves onto it. A move above 40 px is refused. On a camera the network knows well nothing moves (a stretch whose median correction is below 3 px keeps the network points exactly): a point already within 3 px of its refitted line(s) is kept, a refitted line must lie on paint for 60 % of its length (a line pulled by posts, the net or a board is dropped), and two lines crossing at less than 15 degrees give no corner. Each point then keeps, for each stretch where it is visible, the steadier of two tracks: the per-frame snap (sharp paint) or the network plus the running mean of its correction (when the snap hesitates between two strokes); a point never switches source mid-clip, so the snap adds no flicker.
+
+```bash
+uv run --no-sync vaila/freekiki.py snap -w $W --run DETECT_BATCH_OR_RUN          # writes <run>/snap/
+```
+
+Each run gets `snap/field_kps_snap_getpixelvideo.csv` (accepted points after the snap), `snap/snap_moves.csv`
+(frame, point, how, dx, dy, distance) and `snap/<video>_snap_overlay.mp4` plus a snapshot (red = network,
+green = snapped). The network CSVs are not changed. It needs the line to be visible: a line under players or more
+than 35 px away is left as the network put it.
+
+### Cameras the network was not trained for (`detect` skips them)
+
+The network is trained on wide broadcast cameras. A camera behind the goal, on a player or zoomed in gives few
+keypoints, or confident ones that fit no pitch, so its detection and DLT are worthless. A folder `detect` therefore
+**screens every video first**: 24 sampled frames are judged like `select` judges a frame (at least 6 accepted points, a
+camera fitted to them with an `rmse` of at most 5 px and a height of 8-45 m). A video where fewer than 30 % of the
+sampled frames have a valid pitch camera is **skipped** (nothing is deleted) and listed in `skipped_videos.csv` of the
+batch folder with its rates and the reason. A single video that you name is still processed, with a warning.
+`--no-screen` runs everything; `--min-camera-ok 0.3` sets the share. On the five palxscri clips the two usable ones
+have 100 % valid frames and the three discarded ones 0 %; the 20 FIFA videos are all above 57 %.
+
 ## Detect outputs
 
 Written to `freekiki_predict_<video>_<timestamp>/` inside the output folder
@@ -643,6 +676,91 @@ Limits:
 - In review (getpixelvideo), flags and post tops get camera ghosts (F10
   accepts).
 
+## Select frames in video: find the rare keypoints in long games
+
+For games you downloaded (full matches, highlights): `select` detects at the normal keypoint confidence
+(the workspace setting, 0.5), finds the moments where the field camera puts the rare points (p5, p29, p39, p47)
+in the picture or the network sees them, and **cuts those moments out** with vailá Cut Video's ffmpeg cutter.
+The short clips are what you then label.
+
+**Close-up cameras are dropped.** The network is trained on wide cameras: a camera behind the goal, on a
+celebrating player or zoomed in makes it put keypoints in wrong places. The **pose gate** runs MediaPipe Pose (the
+PoseLandmarker of `markerless_2d_analysis.py`) every 10 frames of each candidate window; a pose taller than 1/10 of
+the image height is a close-up. The window is split there and only the stretches without close-ups are kept
+(pieces shorter than `--min-len` go). No pose found means the frame is apparently fine (players of a wide shot are
+small). **Camera check.** Hand-sorting the first 56 clips showed the network is *confident* on a camera behind the net or
+a zoom (it accepts **more** points there, 21 against 17 on average) but those points do not lie on the pitch plane
+seen from a plausible camera. A frame with at least 6 accepted points is judged: the fitted camera must have an
+`rmse` of at most 5 px (at 1920 px width) and stand 8-45 m high (broadcast cameras do; the wrong clips fitted at
+about 7 m or with 6 px errors). A frame that fails makes no hit and splits its window. Frames with fewer points
+cannot be judged and keep the confidence rule only.
+
+```bash
+W=/path/FreeKiki
+uv run --no-sync vaila/freekiki.py select -w $W --src /media/disk/games --out /media/disk/expand_kiki_dataset
+uv run --no-sync vaila/freekiki.py select -w $W --src GAMES --out CLIPS --plan-only     # list the windows, cut nothing
+uv run --no-sync vaila/freekiki.py select -w $W --src GAMES --out CLIPS --max-pose 0.15 --pose-complexity 2
+uv run --no-sync vaila/freekiki.py select -w $W --src GAMES --out CLIPS --detect-dir DETECT_BATCH   # same --kp-conf
+```
+
+- `--src` is a video or a folder (all sub-folders are searched). `--need p5,p29,p39,p47` (default),
+  `--kp-conf` (default: settings), `--stride 5` (detect every 5th frame), `--pad 50` (frames kept around a hit),
+  `--join-gap 75`, `--min-len 50`, `--max-len 750`, `--per-video 20` (best pieces kept per video),
+  `--min-accepted 6`, `--max-rmse 5`, `--cam-height 8,45`.
+- Pose gate: `--max-pose 0.10`, `--pose-complexity 0|1|2` (lite, full, heavy), `--check-every 10`,
+  `--no-pose-gate`.
+- Output: `CLIPS/<video>_frame_<a>_to_<b>.mp4` (1-based frames; the name keeps the source and the match),
+  `CLIPS/selected_clips.csv` (source video, frames, seconds, points, largest pose, `trimmed_from`),
+  `CLIPS/rejected_windows.csv` (every dropped window or piece and why) and `CLIPS/_pose_gate/` (a few frames the
+  gate rejected, to look at). Existing clips are not cut again. Frames already labelled or queued are not offered again.
+- Limit: MediaPipe's detector sees people at roughly 10 % of the image height or more, so the threshold sits at
+  the edge of what it can see, and a camera behind the net with small players passes. "No pose" means
+  "apparently fine", not proof; the clips are still reviewed when labelling.
+- Next: `detect -w $W --video CLIPS`, then `queue --need p5,p29,p39,p47 --montage` and label as usual.
+  Clips of the same game share a match id from their name; two videos of the same match need the same
+  `--match-id` (or edit the `match` column of the montage).
+- GUI: section 3, row **Select frames in video** (Games..., Clips..., KP conf, Max pose, Pose gate, **Plan**,
+  **Select + cut**).
+
+## Pseudo-labelled frames from the network (`pseudo`)
+
+When there is no time to label: `pseudo` takes the detect run of the `select` clips and turns the frames it can
+trust into **complete** labels (an empty point teaches the network "not visible", so a partial label is never
+written). The camera fitted to the points the network accepted must pass the `select` checks (at least 8 points,
+`rmse` <= 5 px, height 8-45 m); every keypoint inside the picture is then projected, so a missing point means "not
+in view". Two more gates stop the network from teaching itself its own mistakes: a flag or post top the network
+accepted must agree with the camera within 15 px, and the projected pitch lines must sit on painted lines of the
+image (line support >= 0.35, as in the kiki49 build).
+
+```bash
+W=/path/FreeKiki
+uv run --no-sync vaila/freekiki.py detect -w $W --video CLIPS --stride 1 --no-overlay --output-dir DETECT
+uv run --no-sync vaila/freekiki.py pseudo -w $W --batch DETECT/processed_freekiki_batch_<ts> --every 3
+uv run --no-sync vaila/freekiki.py extend -w $W --src $W/incoming/pseudo_<ts>             # preview (leak / duplicate gates)
+uv run --no-sync vaila/freekiki.py extend -w $W --src $W/incoming/pseudo_<ts> --commit    # append to train
+```
+
+Review them before (or after) committing: `pseudo-queue -w $W --batch DETECT/processed_freekiki_batch_<ts> --src
+$W/incoming/pseudo_<ts>` builds one review montage whose draft of each frame is its pseudo label (open it in
+getpixelvideo: F10 accepts a ghost, Del hides a point, F3 = frame OK, F9 saves). Corrected frames go through `ingest`;
+they are added next to any pseudo rows already in train, so drop those rows afterwards.
+
+**Which keypoints can be trusted.** A reviewed pseudo session writes `human_vs_ai.csv`. `pseudo --trust-csv
+that.csv` (repeatable) counts, per keypoint, how often a point the pseudo label *drew* was moved by more than 6 px or
+hidden by the reviewer; a keypoint with more than 45 % bad, or with fewer than 20 drawn samples, is untrusted, and a
+frame that shows an untrusted keypoint is **rejected** (leaving it out would teach "not visible", writing it would teach
+a known error). On the 255 frames reviewed on 2026-10-13 the untrusted points were p9, p17, p24, **p29**, p31, p36, p46,
+**p47**, p48 (measured bad) and p13-p16, p30 (never drawn). The result on the same 52 clips: **18 frames and no rare
+point**. The pseudo labeller cannot label the bottom corners; those need a human or a better network.
+
+Retire a source from train with `remove-source -w $W --source freekiki_pseudo` (dry run; `--apply` backs up
+`manifest.csv`, moves the files to `datasets/kiki49/_removed/<source>/` and refuses sources with val/test/hard rows).
+
+Nothing is committed by `pseudo`; the staging folder has `images/`, `labels/`, `rows.csv`, `report.md`
+(rejected frames by reason, rare points). **No human sees these labels**: they carry the network's own errors where
+the camera and the lines happen to agree, so keep a share of human-reviewed frames in the training mix and
+judge a retrain on the frozen val split only.
+
 ## External datasets (super-dataset): `extend`
 
 More labelled frames without labelling by hand. External soccer-field datasets
@@ -707,6 +825,7 @@ uv run vaila/freekiki.py queue    -w /path/FreeKiki --batch /path/processed_free
 uv run vaila/freekiki.py queue    -w /path/FreeKiki --batch BATCH1 BATCH2 --need p5,p29,p39,p47 --montage   # one review video
 uv run vaila/freekiki.py ingest   -w /path/FreeKiki --src /path/FreeKiki/incoming/SESSION --match-id MATCH [--split hard] [--commit]
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split hard
+uv run vaila/freekiki.py select   -w /path/FreeKiki --src /path/games --out /path/clips            # rare keypoints -> cut clips
 uv run vaila/freekiki.py extend   -w /path/FreeKiki --source roboflow --search "class:pitch"   # external data -> staging
 uv run vaila/freekiki.py extend   -w /path/FreeKiki --src /path/FreeKiki/incoming/external_roboflow_<ts> --commit
 uv run vaila/freekiki.py detect   -w /path/FreeKiki --video match.mp4 --geom fix      # fill (default) | fix | off

@@ -4,8 +4,8 @@ YouTube High Quality Downloader - vaila_ytdown.py
 ================================================================================
 Author: Prof. Dr. Paulo R. P. Santiago
 Create: 10 October 2025
-Update Date: 02 October 2026
-Version: 0.4.7
+Update Date: 08 October 2026
+Version: 0.4.8
 
 Description:
 ------------
@@ -517,13 +517,19 @@ class YTDownloader:
             raise ValueError(f"Cannot consult video qualities: {e}") from e
 
     def download_video(
-        self, url, output_dir=None, filename_prefix="", *, video_info=None, format_id=None
+        self,
+        url,
+        output_dir=None,
+        filename_prefix="",
+        *,
+        video_info=None,
+        format_id=None,
+        output_dir_is_final=False,
     ):
         """Download the selected video quality with audio and verify the final MP4."""
         if output_dir:
             self.output_dir = output_dir
 
-        # Create timestamp for unique folder
         self._check_ready()
         video_info = video_info or self.get_video_info(url)
         options = quality_options(video_info, keep_codec=self.keep_codec)
@@ -538,7 +544,13 @@ class YTDownloader:
             raise ValueError(f"Video format unavailable: {format_id}")
         requested_quality = quality_key(selected)
         selected_format_id = selected["format_id"]
-        save_dir = str(_make_directory(self.output_dir, "vaila_ytdownload"))
+        save_dir = (
+            Path(self.output_dir)
+            if output_dir_is_final
+            else _make_directory(self.output_dir, "vaila_ytdownload")
+        )
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_dir = str(save_dir)
         if self.feedback.log_file is None:
             self.feedback.log_file = Path(save_dir) / "download_log.txt"
 
@@ -733,14 +745,21 @@ class YTDownloader:
         self.feedback(f"H.264 ready: {path}")
         return path
 
-    def download_audio(self, url, output_dir=None, filename_prefix=""):
+    def download_audio(
+        self, url, output_dir=None, filename_prefix="", *, output_dir_is_final=False
+    ):
         """Download audio only from a YouTube URL as MP3."""
         if output_dir:
             self.output_dir = output_dir
 
-        # Create timestamp for unique folder (optional, maybe save directly to output_dir?)
         self._check_ready()
-        save_dir = str(_make_directory(self.output_dir, "vaila_ytaudio"))
+        save_dir = (
+            Path(self.output_dir)
+            if output_dir_is_final
+            else _make_directory(self.output_dir, "vaila_ytaudio")
+        )
+        save_dir.mkdir(parents=True, exist_ok=True)
+        save_dir = str(save_dir)
         if self.feedback.log_file is None:
             self.feedback.log_file = Path(save_dir) / "download_log.txt"
 
@@ -889,6 +908,7 @@ class YTDownloader:
                         url,
                         output_dir=str(item_dir),
                         filename_prefix=f"{index:03d}" if use_batch else "",
+                        output_dir_is_final=use_batch,
                         **extra,
                     )
                     result.files.append(output)

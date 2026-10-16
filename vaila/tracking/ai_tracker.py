@@ -9,8 +9,8 @@ into the retrained online discriminator's feature vector. Integrates bidirection
 keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 02 October 2026
-Version: 0.4.7
+Update Date: 14 October 2026
+Version: 0.4.8
 """
 
 from __future__ import annotations
@@ -833,6 +833,9 @@ class AITracker:
         self.exemplar_templates: list[np.ndarray] = []
         self.training_feats: list[np.ndarray] = []
         self.training_labels: list[float] = []
+        # Patch behind every training feature, so the features can be rebuilt when
+        # their length changes (the Deep checkbox is toggled in the middle of a session).
+        self.training_patches: list[np.ndarray] = []
         self.discriminator_w: np.ndarray | None = None
         self.discriminator_b: float = 0.0
 
@@ -1064,6 +1067,7 @@ class AITracker:
         pos_feat = self._discriminator_feature(pos_patch, shape_mode)
         self.training_feats.append(pos_feat)
         self.training_labels.append(1.0)
+        self.training_patches.append(pos_patch)
 
         # Sample 6 negative background patches around the anchor point
         cx, cy = point
@@ -1084,10 +1088,32 @@ class AITracker:
                     neg_feat = self._discriminator_feature(neg_patch, shape_mode)
                     self.training_feats.append(neg_feat)
                     self.training_labels.append(-1.0)
+                    self.training_patches.append(neg_patch)
 
         if len(self.training_feats) > _MAX_TRAINING_FEATS:
             self.training_feats = self.training_feats[-_MAX_TRAINING_FEATS:]
             self.training_labels = self.training_labels[-_MAX_TRAINING_FEATS:]
+            self.training_patches = self.training_patches[-_MAX_TRAINING_FEATS:]
+
+    def _rebuild_training_feats(self) -> None:
+        """Re-extract every training feature from its stored patch with the current
+        configuration, when the feature length no longer matches ``effective_feature_dim``.
+
+        Switching deep features on or off mid-session leaves samples of two lengths;
+        ``np.stack`` then fails. Samples whose patch is unknown are dropped.
+        """
+        dim = self.effective_feature_dim()
+        if all(f.shape[0] == dim for f in self.training_feats):
+            return
+        shape_mode = getattr(self.params, "tracking_shape", "point").lower()
+        feats: list[np.ndarray] = []
+        labels: list[float] = []
+        patches: list[np.ndarray] = []
+        for patch, label in zip(self.training_patches, self.training_labels, strict=False):
+            feats.append(self._discriminator_feature(patch, shape_mode))
+            labels.append(label)
+            patches.append(patch)
+        self.training_feats, self.training_labels, self.training_patches = feats, labels, patches
 
     def retrain_online_model(self) -> float:
         """Retrain the online appearance discriminator using regularized dual Ridge regression (<5 ms).
@@ -1097,6 +1123,7 @@ class AITracker:
         float
             Elapsed training time in milliseconds.
         """
+        self._rebuild_training_feats()
         if len(self.training_feats) < 2:
             return 0.0
 
@@ -1272,6 +1299,7 @@ class AITracker:
             self.exemplar_templates.clear()
             self.training_feats.clear()
             self.training_labels.clear()
+            self.training_patches.clear()
             self.discriminator_w = None
             self.discriminator_b = 0.0
 

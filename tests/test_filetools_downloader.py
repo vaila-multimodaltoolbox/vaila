@@ -1,7 +1,7 @@
 """Downloader backend and batch regression tests (no network).
 
-Version: 0.4.5
-Update Date: 27 September 2026
+Version: 0.4.8
+Update Date: 08 October 2026
 """
 
 import contextlib
@@ -81,6 +81,7 @@ def backend(monkeypatch):
 
     monkeypatch.setattr(yt.yt_dlp, "YoutubeDL", FakeYDL)
     monkeypatch.setattr(yt.YTDownloader, "_check_ffmpeg", lambda self: True)
+    monkeypatch.setattr(yt, "opencv_reads_video", lambda _path: True)
     return state
 
 
@@ -99,6 +100,10 @@ def test_single_download_waits_for_postprocessing(tmp_path, backend, audio):
     assert result.exit_code == 0 and len(result.files) == 1
     assert Path(result.files[0]).suffix == (".mp3" if audio else ".mp4")
     assert Path(result.files[0]).is_file()
+    assert Path(result.files[0]).parent == Path(result.directory)
+    assert Path(result.directory).name.startswith(
+        "vaila_ytaudio_" if audio else "vaila_ytdownload_"
+    )
     assert any(kind == "progress" and value["percent"] == 50 for kind, value in events)
     assert any(kind == "phase" for kind, _ in events)
     if audio:
@@ -106,6 +111,31 @@ def test_single_download_waits_for_postprocessing(tmp_path, backend, audio):
         assert opts["postprocessors"][0]["preferredquality"] == "192"
     else:
         assert (Path(result.directory) / "video_info.txt").exists()
+
+
+@pytest.mark.parametrize("audio", [False, True])
+def test_batch_media_lives_directly_in_numbered_folders(tmp_path, backend, audio):
+    urls = ["https://example/one", "https://example/two"]
+    result = yt.YTDownloader().download_urls(urls, tmp_path, audio)
+
+    root = Path(result.directory)
+    assert result.exit_code == 0
+    assert root.parent == tmp_path
+    assert root.name.startswith("vaila_audio_" if audio else "vaila_batch_")
+    assert (root / "urls.txt").read_text().splitlines() == urls
+    assert (root / "download_log.txt").is_file()
+    assert {path.name for path in root.iterdir()} == {"001", "002", "urls.txt", "download_log.txt"}
+    for index, output in enumerate(result.files, 1):
+        media = Path(output)
+        item_dir = root / f"{index:03d}"
+        assert media.parent == item_dir
+        assert media.is_file()
+        assert media.suffix == (".mp3" if audio else ".mp4")
+        assert {path.name for path in item_dir.iterdir()} == (
+            {media.name} if audio else {media.name, "video_info.txt"}
+        )
+        if not audio:
+            assert "Requested quality" in (item_dir / "video_info.txt").read_text()
 
 
 def test_batch_txt_failure_codes_log_and_replay(tmp_path, backend, capsys):

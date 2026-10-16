@@ -32,7 +32,7 @@
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
         <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,models,sizes,grow,audit,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.7 · <strong>Updated:</strong> 07 October 2026
+        <strong>Version:</strong> 0.4.7 · <strong>Updated:</strong> 15 October 2026
       </div>
 
       <h2>Correct and retrain (3 steps)</h2>
@@ -436,6 +436,24 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
       <p>Also look at <code>diag_frames/</code> (green accepted, red rejected with name, confidence and code) and the
         overlay MP4 — wrong points are obvious there.</p>
 
+      <h3>Snap the keypoints onto the painted lines (<code>snap</code>)</h3>
+      <p>On cameras rare in the training set (high, lateral, close to the box) the network places the box corners with a
+        systematic 20-30 px offset. <code>snap</code> refits every painted straight line that has at least two accepted
+        points to the white paint (band 35 px) and moves a point at the crossing of two lines to their intersection, or
+        a point on one line onto it (moves above 40 px are refused). A point already within 3 px of its refitted line(s) is kept, a refitted line must lie on paint for 60&nbsp;% of its length, and lines crossing at less than 15&deg; give no corner, so on a camera the network knows well nothing moves. Each point keeps, for each stretch where it is visible, the steadier of the per-frame snap and the network plus the running mean of its correction, so the snap adds no flicker. Output: <code>&lt;run&gt;/snap/</code> with
+        <code>field_kps_snap_getpixelvideo.csv</code>, <code>snap_moves.csv</code> and an overlay video (red = network,
+        green = snapped). The network CSVs are not changed.</p>
+      <pre><code>uv run --no-sync vaila/freekiki.py snap -w $W --run DETECT_BATCH_OR_RUN</code></pre>
+
+      <h3>Cameras the network was not trained for (<code>detect</code> skips them)</h3>
+      <p>The network is trained on wide broadcast cameras. A camera behind the goal, on a player or zoomed in gives few
+        keypoints, or confident ones that fit no pitch. A folder <code>detect</code> therefore <b>screens every video
+        first</b>: 24 sampled frames are judged like <code>select</code> judges a frame (at least 6 accepted points, a camera
+        fitted to them with an <code>rmse</code> of at most 5 px and a height of 8-45 m). A video where fewer than 30&nbsp;%
+        of the sampled frames have a valid pitch camera is <b>skipped</b> (nothing is deleted) and listed in
+        <code>skipped_videos.csv</code>. A single video you name is still processed, with a warning.
+        <code>--no-screen</code> runs everything; <code>--min-camera-ok 0.3</code> sets the share.</p>
+
       <h2>Detect outputs</h2>
       <p>Folder <code>freekiki_predict_&lt;video&gt;_&lt;timestamp&gt;/</code> inside the output folder (default: the
         video's folder). A folder of videos writes <code>processed_freekiki_batch_&lt;timestamp&gt;/</code> with one
@@ -515,6 +533,68 @@ uv run --no-sync vaila/rec2d.py --dlt-file OUT/freekiki_predict_match_&lt;ts&gt;
         <li><code>audit</code> reports flag and post-top labels far from the camera of the others
           (<code>kind=geom3d</code>).</li>
       </ul>
+
+      <h2 id="select">Select frames in video: find the rare keypoints in long games</h2>
+      <p>For downloaded games: <code>select</code> detects at the normal keypoint confidence (the workspace setting,
+        0.5), finds the moments where the field camera puts the rare points (p5, p29, p39, p47) in the picture or the
+        network sees them, and <b>cuts those moments out</b> with the vailá Cut Video ffmpeg cutter. The short clips are
+        what you then label.</p>
+      <p><b>Close-up cameras are dropped.</b> The network is trained on wide cameras: a camera behind the goal, on a
+        celebrating player or zoomed in makes it put keypoints in wrong places. The <b>pose gate</b> runs MediaPipe Pose
+        (the PoseLandmarker of <code>markerless_2d_analysis.py</code>) every 10 frames of each candidate window; a pose
+        taller than 1/10 of the image height is a close-up. The window is split there and only the stretches without
+        close-ups are kept. No pose found means the frame is apparently fine (players of a wide shot are small). A camera
+        also needs at least 6 accepted points to mark a frame.</p>
+      <p><b>Camera check.</b> Sorting the first 56 clips by hand showed the network is <i>confident</i> on a camera behind
+        the net or a zoom (it accepts <b>more</b> points there, 21 against 17 on average) but those points do not lie on
+        the pitch plane seen from a plausible camera. A frame with at least 6 accepted points is judged: the fitted camera
+        must have an <code>rmse</code> of at most 5 px (at 1920 px width) and stand 8-45 m high. A frame that fails makes
+        no hit and splits its window (<code>--max-rmse 5</code>, <code>--cam-height 8,45</code>).</p>
+      <pre><code>W=/path/FreeKiki
+uv run --no-sync vaila/freekiki.py select -w $W --src /media/disk/games --out /media/disk/expand_kiki_dataset
+uv run --no-sync vaila/freekiki.py select -w $W --src GAMES --out CLIPS --plan-only      # list the windows, cut nothing
+uv run --no-sync vaila/freekiki.py select -w $W --src GAMES --out CLIPS --max-pose 0.15 --pose-complexity 2</code></pre>
+      <ul>
+        <li><code>--src</code>: a video or a folder (all sub-folders). <code>--need p5,p29,p39,p47</code> (default),
+          <code>--kp-conf</code> (default: settings), <code>--stride 5</code>, <code>--pad 50</code>,
+          <code>--join-gap 75</code>, <code>--min-len 50</code>, <code>--max-len 750</code>, <code>--per-video 20</code>,
+          <code>--min-accepted 6</code>.</li>
+        <li>Pose gate: <code>--max-pose 0.10</code>, <code>--pose-complexity 0|1|2</code>,
+          <code>--check-every 10</code>, <code>--no-pose-gate</code>.</li>
+        <li>Output: <code>CLIPS/&lt;video&gt;_frame_&lt;a&gt;_to_&lt;b&gt;.mp4</code>, <code>selected_clips.csv</code>,
+          <code>rejected_windows.csv</code> (every dropped piece and why) and <code>_pose_gate/</code> (a few rejected
+          frames). Existing clips are not cut again.</li>
+        <li>Limit: MediaPipe's detector sees people at roughly 10&nbsp;% of the image height or more, so the threshold sits at
+          the edge of what it can see, and a camera behind the net with small players passes. "No pose" means
+          "apparently fine", not proof.</li>
+        <li>Next: <code>detect --video CLIPS</code>, then <code>queue --need p5,p29,p39,p47 --montage</code>. Two videos of
+          the same match need the same <code>--match-id</code>.</li>
+        <li>GUI: section 3, row <b>Select frames in video</b> (Games..., Clips..., KP conf, Max pose, Pose gate,
+          <b>Plan</b>, <b>Select + cut</b>).</li>
+      </ul>
+
+      <h2 id="pseudo">Pseudo-labelled frames from the network (<code>pseudo</code>)</h2>
+      <p>When there is no time to label: <code>pseudo</code> takes the detect run of the <code>select</code> clips and turns
+        the frames it can trust into <b>complete</b> labels (an empty point teaches the network "not visible"). The camera
+        fitted to the accepted points must pass the <code>select</code> checks (at least 8 points, <code>rmse</code>
+        &le; 5 px, height 8-45 m); every keypoint inside the picture is then projected. Two more gates: a flag or post top
+        the network accepted must agree with the camera within 15 px, and the projected pitch lines must sit on painted
+        lines (line support &ge; 0.35).</p>
+      <pre><code>uv run --no-sync vaila/freekiki.py pseudo -w $W --batch DETECT/processed_freekiki_batch_&lt;ts&gt; --every 3
+uv run --no-sync vaila/freekiki.py extend -w $W --src $W/incoming/pseudo_&lt;ts&gt;             # preview
+uv run --no-sync vaila/freekiki.py extend -w $W --src $W/incoming/pseudo_&lt;ts&gt; --commit    # append to train</code></pre>
+      <p>Review them with <code>pseudo-queue -w $W --batch DETECT/processed_freekiki_batch_&lt;ts&gt; --src
+        $W/incoming/pseudo_&lt;ts&gt;</code>: one review montage whose draft of each frame is its pseudo label (F10 accepts a
+        ghost, Del hides a point, F3 = frame OK, F9 saves); corrected frames go through <code>ingest</code>.</p>
+      <p><b>Which keypoints can be trusted.</b> <code>pseudo --trust-csv human_vs_ai.csv</code> (repeatable) counts, per keypoint,
+        how often a drawn point was moved by more than 6 px or hidden by the reviewer; more than 45&nbsp;% bad, or fewer than
+        20 samples, makes it untrusted and a frame showing it is <b>rejected</b>. On the 255 frames reviewed on 2026-10-13
+        the untrusted points were p9, p17, p24, <b>p29</b>, p31, p36, p46, <b>p47</b>, p48 and p13-p16, p30 (never drawn): the
+        same 52 clips give 18 frames and no rare point. The pseudo labeller cannot label the bottom corners.</p>
+      <p>Retire a source from train with <code>remove-source -w $W --source freekiki_pseudo [--apply]</code> (backup of the
+        manifest, files moved to <code>_removed/</code>, frozen splits refused).</p>
+      <p><b>No human sees these labels</b>: they carry the network's own errors where the camera and the lines happen to
+        agree. Keep a share of human-reviewed frames in the training mix and judge a retrain on the frozen val split only.</p>
 
       <h2 id="extend">External datasets (super-dataset): <code>extend</code></h2>
       <p>More labelled frames without labelling by hand. External soccer-field datasets are converted to the
