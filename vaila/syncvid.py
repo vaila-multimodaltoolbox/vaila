@@ -21,6 +21,11 @@ video and the generated sync file already selected.
 
 Holding Left/Right (or Up/Down) keeps stepping frame by frame, as in
 getpixelvideo. The mouse wheel zooms at the cursor; drag pans; ``0`` resets.
+``G`` or the Go to frame field jumps to a typed frame.
+
+Cameras with different frame rates are aligned in time at their sync (key)
+frame, each at its own fps (shown per camera). A non-reference camera may
+instead be cut at its own typed Start/End.
 
 Repeated frames: an editor that splices several cameras into one timeline
 repeats frames (a re-encoded copy differs from the previous frame only by
@@ -44,6 +49,7 @@ import csv
 import datetime as dt
 import io
 import json
+import math
 import os
 import re
 import shlex
@@ -338,44 +344,70 @@ def probe_video_directory(directory_path: str | Path) -> list[VideoInfo]:
     return [probe_video(video) for video in videos]
 
 
+def _frames_floor(value: float) -> int:
+    """floor() tolerant to float noise (60 / 60 * 60 may give 59.999999)."""
+    return math.floor(value + 1e-6)
+
+
+def _frames_ceil(value: float) -> int:
+    return math.ceil(value - 1e-6)
+
+
 def common_reference_bounds(
     video_infos: Sequence[VideoInfo],
     sync_frames: Mapping[str, int],
     reference_video: str,
+    keyframe_videos: Collection[str] | None = None,
 ) -> tuple[int, int]:
-    """Return the largest reference-camera range present in every camera."""
+    """Return the largest reference-camera range present in every keyframe camera.
+
+    Cameras are aligned in time at their sync (key) frames, each at its own
+    fps. ``keyframe_videos`` (default: every video) are the cameras whose
+    range follows the reference; cameras cut by their own Start/End are left
+    out.
+    """
     info_by_name = {info.name: info for info in video_infos}
     if reference_video not in info_by_name:
         raise SyncWorkflowError(
             f"Reference video is not in the target directory: {reference_video}"
         )
-    missing = [name for name in info_by_name if name not in sync_frames]
+    names = set(info_by_name if keyframe_videos is None else keyframe_videos)
+    names.add(reference_video)
+    missing = [name for name in info_by_name if name in names and name not in sync_frames]
     if missing:
-        raise SyncWorkflowError("Mark a sync frame for every video: " + ", ".join(missing))
+        raise SyncWorkflowError(
+            "Mark a sync frame for every video without its own Start/End: " + ", ".join(missing)
+        )
 
-    min_relative = -MAX_FRAME_NUMBER
-    max_relative = MAX_FRAME_NUMBER
-    for name, info in info_by_name.items():
+    # Common time window, in seconds relative to the sync frames.
+    earliest = -float("inf")
+    latest = float("inf")
+    for name in names:
+        info = info_by_name[name]
         sync_frame = int(sync_frames[name])
         if not 0 <= sync_frame < info.frame_count:
             raise SyncWorkflowError(
                 f"Sync frame {sync_frame + 1} is outside {name} (1–{info.frame_count})"
             )
-        min_relative = max(min_relative, -sync_frame)
-        max_relative = min(max_relative, info.frame_count - 1 - sync_frame)
+        earliest = max(earliest, -sync_frame / info.fps)
+        latest = min(latest, (info.frame_count - 1 - sync_frame) / info.fps)
 
+    reference = info_by_name[reference_video]
     reference_sync = int(sync_frames[reference_video])
-    start = reference_sync + min_relative
-    end = reference_sync + max_relative
+    start = reference_sync + _frames_ceil(earliest * reference.fps)
+    end = reference_sync + _frames_floor(latest * reference.fps)
     if start > end:
         raise SyncWorkflowError("The selected sync frames have no common video interval")
     return start, end
 
 
-def _safe_output_name(video_name: str, sync_frame: int, start_frame: int, end_frame: int) -> str:
+def _safe_output_name(
+    video_name: str, sync_frame: int | None, start_frame: int, end_frame: int
+) -> str:
     stem = re.sub(r"[^\w.-]+", "_", Path(video_name).stem, flags=re.UNICODE).strip("._")
     stem = (stem or "video")[:120]
-    output_name = f"{stem}_sync_{sync_frame + 1}_frames_{start_frame + 1}_to_{end_frame + 1}.mp4"
+    sync_part = "" if sync_frame is None else f"_sync_{sync_frame + 1}"
+    output_name = f"{stem}{sync_part}_frames_{start_frame + 1}_to_{end_frame + 1}.mp4"
     return validate_sync_leaf_filename(output_name, field="output_file")
 
 
@@ -386,28 +418,56 @@ def build_sync_plan(
     reference_start: int,
     reference_end: int,
     removed_frames: Mapping[str, Collection[int]] | None = None,
+    ranges: Mapping[str, tuple[int, int]] | None = None,
 ) -> list[SyncPlanEntry]:
-    """Build equal-duration synchronized ranges for all videos.
+    """Build synchronized ranges (0-based, inclusive) covering the same time for all videos.
 
+    The reference is cut at ``reference_start``..``reference_end``. A camera
+    listed in ``ranges`` is cut at its own (start, end), e.g. the same event
+    start and end marked by hand; its sync frame is optional. Every other
+    camera follows the reference in time from its sync (key) frame, at its own
+    fps::
+
+        start = sync + round((reference_start - reference_sync) / reference_fps * fps)
+        end   = start + round((reference_end - reference_start) / reference_fps * fps)
+
+    Rounding the length keeps each cut within half a frame of the reference
+    duration; with equal fps this is the same frame offset for every camera.
     ``removed_frames`` maps a video name to source frames (0-based) marked as
-    repeated; those inside the computed range are kept on its entry.
+    repeated; those inside the range are kept on its entry.
     """
     if reference_start > reference_end:
         raise SyncWorkflowError("Reference start frame must not be after the end frame")
-    lower, upper = common_reference_bounds(video_infos, sync_frames, reference_video)
+    info_by_name = {info.name: info for info in video_infos}
+    ranges = {name: value for name, value in (ranges or {}).items() if name != reference_video}
+    keyframe_videos = [info.name for info in video_infos if info.name not in ranges]
+    if len(keyframe_videos) > 1:
+        lower, upper = common_reference_bounds(
+            video_infos, sync_frames, reference_video, keyframe_videos
+        )
+    else:
+        lower, upper = 0, info_by_name[reference_video].frame_count - 1
     if reference_start < lower or reference_end > upper:
         raise SyncWorkflowError(
             f"Reference range is outside the common interval: choose frames {lower + 1}–{upper + 1}"
         )
 
-    reference_sync = int(sync_frames[reference_video])
-    start_offset = int(reference_start) - reference_sync
-    end_offset = int(reference_end) - reference_sync
+    reference = info_by_name[reference_video]
     entries: list[SyncPlanEntry] = []
     for info in video_infos:
-        sync_frame = int(sync_frames[info.name])
-        start_frame = sync_frame + start_offset
-        end_frame = sync_frame + end_offset
+        sync_frame = sync_frames.get(info.name)
+        if info.name == reference_video:
+            start_frame, end_frame = int(reference_start), int(reference_end)
+        elif info.name in ranges:
+            start_frame, end_frame = (int(value) for value in ranges[info.name])
+            if start_frame > end_frame:
+                raise SyncWorkflowError(f"Start must not be after End for {info.name}")
+        else:
+            reference_sync = int(sync_frames[reference_video])
+            offset_s = (int(reference_start) - reference_sync) / reference.fps
+            span_s = (int(reference_end) - int(reference_start)) / reference.fps
+            start_frame = int(sync_frames[info.name]) + round(offset_s * info.fps)
+            end_frame = start_frame + round(span_s * info.fps)
         if not 0 <= start_frame <= end_frame < info.frame_count:
             raise SyncWorkflowError(
                 f"Computed range {start_frame + 1}–{end_frame + 1} is outside "
@@ -421,7 +481,7 @@ def build_sync_plan(
                 ),
                 start_frame=start_frame,
                 end_frame=end_frame,
-                sync_frame=sync_frame,
+                sync_frame=None if sync_frame is None else int(sync_frame),
                 removed_frames=tuple(
                     sorted(
                         frame
@@ -432,6 +492,39 @@ def build_sync_plan(
             )
         )
     return entries
+
+
+def describe_sync_plan(
+    entries: Sequence[SyncPlanEntry], video_infos: Sequence[VideoInfo], reference_video: str
+) -> list[str]:
+    """One line per camera: range (1-based), frames, fps and duration.
+
+    A camera whose duration differs from the reference by more than one of its
+    frames (a hand-set Start/End, or a wrong fps) also shows the fps its range
+    implies: (end - start) / reference duration.
+    """
+    info_by_name = {info.name: info for info in video_infos}
+    reference_entry = next(entry for entry in entries if entry.video_file == reference_video)
+    reference_s = (reference_entry.end_frame - reference_entry.start_frame) / info_by_name[
+        reference_video
+    ].fps
+    lines = []
+    for entry in entries:
+        info = info_by_name[entry.video_file]
+        duration_s = (entry.end_frame - entry.start_frame) / info.fps
+        line = (
+            f"{entry.video_file}: frames {entry.start_frame + 1}–{entry.end_frame + 1} "
+            f"({entry.end_frame - entry.start_frame + 1}), {info.fps:.3f} fps, {duration_s:.3f} s"
+        )
+        if entry.video_file == reference_video:
+            line += " [reference]"
+        elif reference_s > 0 and abs(duration_s - reference_s) * info.fps > 1.0:
+            implied = (entry.end_frame - entry.start_frame) / reference_s
+            line += (
+                f" | differs from reference {reference_s:.3f} s: Start/End imply {implied:.3f} fps"
+            )
+        lines.append(line)
+    return lines
 
 
 def _playback_speed_index(speed: float) -> int:
@@ -513,18 +606,48 @@ def build_sync_plan_from_fields(
     reference_start_text: str,
     reference_end_text: str,
     removed_frames: Mapping[str, Collection[int]] | None = None,
+    range_texts: Mapping[str, tuple[str, str]] | None = None,
 ) -> tuple[str, list[SyncPlanEntry]]:
-    """Validate the Pygame text fields and build the regular synchronization plan."""
+    """Validate the Pygame text fields and build the synchronization plan.
+
+    ``range_texts`` holds each camera's optional (Start, End) texts. A camera
+    with both is cut there and needs no sync frame; one with neither follows
+    the reference from its sync frame (see ``build_sync_plan``).
+    """
     reference_video = resolve_reference_video(reference_text, video_infos)
     info_by_name = {info.name: info for info in video_infos}
-    sync_frames = {
-        info.name: parse_frame_field(
-            sync_frame_texts.get(info.name, ""),
-            field=f"sync frame for {info.name}",
-            frame_count=info.frame_count,
+    ranges: dict[str, tuple[int, int]] = {}
+    for info in video_infos:
+        if info.name == reference_video:
+            continue
+        start_text, end_text = (
+            text.strip() for text in (range_texts or {}).get(info.name, ("", ""))
         )
-        for info in video_infos
-    }
+        if not start_text and not end_text:
+            continue
+        if not start_text or not end_text:
+            raise SyncWorkflowError(f"Enter both Start and End for {info.name}, or neither")
+        ranges[info.name] = (
+            parse_frame_field(
+                start_text, field=f"start frame for {info.name}", frame_count=info.frame_count
+            ),
+            parse_frame_field(
+                end_text, field=f"end frame for {info.name}", frame_count=info.frame_count
+            ),
+        )
+    needs_reference_sync = any(
+        info.name not in ranges for info in video_infos if info.name != reference_video
+    )
+    sync_frames: dict[str, int] = {}
+    for info in video_infos:
+        text = sync_frame_texts.get(info.name, "")
+        required = info.name not in ranges and (
+            info.name != reference_video or needs_reference_sync
+        )
+        if required or text.strip():
+            sync_frames[info.name] = parse_frame_field(
+                text, field=f"sync frame for {info.name}", frame_count=info.frame_count
+            )
     reference_info = info_by_name[reference_video]
     reference_start = parse_frame_field(
         reference_start_text,
@@ -543,6 +666,7 @@ def build_sync_plan_from_fields(
         reference_start,
         reference_end,
         removed_frames,
+        ranges,
     )
 
 
@@ -701,12 +825,19 @@ def build_checkpoint_state(
     output_file: str | Path | None,
     completed: bool,
     removed_frames: Mapping[str, Collection[int]] | None = None,
+    ranges: Mapping[str, tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Build the JSON-serializable "Load / Resume" checkpoint for the current UI state.
 
     ``removed_frames`` (0-based) is stored 1-based, like every frame the user sees.
+    ``ranges`` keeps each camera's optional Start/End texts (only non-empty ones).
     """
     return {
+        "ranges": {
+            name: [start_text, end_text]
+            for name, (start_text, end_text) in (ranges or {}).items()
+            if start_text.strip() or end_text.strip()
+        },
         "removed_frames": {
             name: sorted(int(frame) + 1 for frame in frames)
             for name, frames in (removed_frames or {}).items()
@@ -818,6 +949,17 @@ def read_checkpoint_file(checkpoint_file: str | Path) -> dict[str, Any]:
         raise SyncFileError(
             f"Checkpoint 'removed_frames' must map video names to 1-based frame lists: {path}"
         )
+    ranges = data.get("ranges", {})
+    if not isinstance(ranges, dict) or not all(
+        isinstance(name, str)
+        and isinstance(texts, list)
+        and len(texts) == 2
+        and all(isinstance(text, str) for text in texts)
+        for name, texts in ranges.items()
+    ):
+        raise SyncFileError(
+            f"Checkpoint 'ranges' must map video names to [start, end] texts: {path}"
+        )
     return data
 
 
@@ -905,9 +1047,19 @@ def launch_cutvideo(reference_video: str | Path, sync_file: str | Path) -> subpr
 # motion >= 40.2, and <= 8.4 against >= 30.6; videos without repeats show a
 # continuous range (largest gap 1.09x). Scores at or below
 # REPEAT_INVISIBLE_SCORE are invisible and always count as repeats.
+#
+# Interlaced sources (e.g. 50i material on a 59.94 timeline) repeat a frame
+# built from the other field: the same image shifted about +-1.2 px
+# vertically. Its raw score (~20 on gol.mp4) falls among slow real frames, so
+# a small, purely vertical global shift (phase correlation on the centre of
+# the frame) is compensated before scoring again; the lower score is kept.
+# Horizontal or larger shifts are real camera motion and are not compensated.
 REPEAT_GRID = (32, 18)
 REPEAT_INVISIBLE_SCORE = 1.0
 REPEAT_MIN_GAP_RATIO = 2.0
+REPEAT_FIELD_SHIFT_MAX_X = 0.5
+REPEAT_FIELD_SHIFT_MAX_Y = 2.0
+REPEAT_SHIFT_MARGIN = 8
 
 ProgressCallback = Callable[[str, int, int], None]
 
@@ -917,7 +1069,8 @@ class RepeatedFrameReport:
     """Repeated-frame analysis of one video (0-based frame indices).
 
     ``motion_scores[i]`` scores frame ``i + 1`` against frame ``i``; a frame is
-    repeated when its score is at or below ``threshold``.
+    repeated when its score is at or below ``threshold``. ``shifts[i]`` is the
+    global (x, y) shift in pixels measured for that pair.
     """
 
     video: Path
@@ -927,6 +1080,7 @@ class RepeatedFrameReport:
     motion_scores: tuple[float, ...]
     threshold: float
     gap_ratio: float
+    shifts: tuple[tuple[float, float], ...] = ()
 
     @property
     def total_frames(self) -> int:
@@ -967,6 +1121,40 @@ def frame_motion_score(previous_blurred: Any, blurred: Any) -> float:
     return float(blocks.max())
 
 
+def _centre_crop(image: Any) -> Any:
+    height, width = image.shape[:2]
+    return image[height // 4 : height // 4 + height // 2, width // 4 : width // 4 + width // 2]
+
+
+def field_shift_motion_score(
+    previous_blurred: Any, blurred: Any
+) -> tuple[float, tuple[float, float]]:
+    """Motion score with a field-like shift compensated, and the measured shift.
+
+    The global shift comes from phase correlation on the centre of the frames.
+    When it is small and purely vertical (an interlaced-field copy), the
+    previous frame is shifted back and scored again away from the borders;
+    the lower of the two scores is returned.
+    """
+    score = frame_motion_score(previous_blurred, blurred)
+    (dx, dy), _response = cv2.phaseCorrelate(
+        _centre_crop(previous_blurred).astype(np.float32),
+        _centre_crop(blurred).astype(np.float32),
+    )
+    if abs(dx) <= REPEAT_FIELD_SHIFT_MAX_X and abs(dy) <= REPEAT_FIELD_SHIFT_MAX_Y:
+        height, width = blurred.shape[:2]
+        shifted = cv2.warpAffine(
+            previous_blurred,
+            np.array([[1.0, 0.0, dx], [0.0, 1.0, dy]], dtype=np.float32),
+            (width, height),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_REPLICATE,
+        )
+        m = REPEAT_SHIFT_MARGIN
+        score = min(score, frame_motion_score(shifted[m:-m, m:-m], blurred[m:-m, m:-m]))
+    return score, (float(dx), float(dy))
+
+
 def repeat_threshold(scores: Sequence[float]) -> tuple[float, float]:
     """Return (threshold, gap ratio) separating codec noise from real motion.
 
@@ -1001,6 +1189,7 @@ def find_repeated_frames(
     info = probe_video(video_path)
     cap = cv2.VideoCapture(str(info.path))
     scores: list[float] = []
+    shifts: list[tuple[float, float]] = []
     previous = None
     index = 0
     try:
@@ -1010,7 +1199,9 @@ def find_repeated_frames(
                 break
             blurred = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (5, 5), 0)
             if previous is not None:
-                scores.append(frame_motion_score(previous, blurred))
+                score, shift = field_shift_motion_score(previous, blurred)
+                scores.append(score)
+                shifts.append(shift)
             previous = blurred
             index += 1
             if progress is not None and index % 30 == 0:
@@ -1028,6 +1219,7 @@ def find_repeated_frames(
         motion_scores=tuple(scores),
         threshold=threshold,
         gap_ratio=gap_ratio,
+        shifts=tuple(shifts),
     )
 
 
@@ -1194,11 +1386,22 @@ def save_videos_without_frames(
             scores_csv = out_dir / f"{info.path.stem}_motion_scores.csv"
             with open(scores_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["frame", "motion_score", "repeated"])
-                writer.writerow([1, "", int(0 in removed)])
+                writer.writerow(["frame", "motion_score", "repeated", "shift_x_px", "shift_y_px"])
+                writer.writerow([1, "", int(0 in removed), "", ""])
                 removed_set = set(removed)
-                for index, score in enumerate(report.motion_scores, start=1):
-                    writer.writerow([index + 1, f"{score:.3f}", int(index in removed_set)])
+                shifts = report.shifts or ((0.0, 0.0),) * len(report.motion_scores)
+                for index, (score, (dx, dy)) in enumerate(
+                    zip(report.motion_scores, shifts, strict=True), start=1
+                ):
+                    writer.writerow(
+                        [
+                            index + 1,
+                            f"{score:.3f}",
+                            int(index in removed_set),
+                            f"{dx:.2f}",
+                            f"{dy:.2f}",
+                        ]
+                    )
         output_name = ""
         if removed:
             output_name = write_video_without_frames(info, removed, out_dir, progress).name
@@ -1274,6 +1477,8 @@ class PygameTextField:
         self.cursor = len(text)
         self.active = False
         self.select_all = False
+        # Grey hint shown while the field is empty and inactive.
+        self.placeholder = ""
 
     def set_rect(self, rect: pygame.Rect) -> None:
         self.rect = rect
@@ -1344,7 +1549,10 @@ class PygameTextField:
         inner = self.rect.inflate(-10, -6)
         old_clip = surface.get_clip()
         surface.set_clip(inner)
-        rendered = font.render(self.text, True, (20, 25, 31))
+        if not self.text and not self.active and self.placeholder:
+            rendered = font.render(self.placeholder, True, (128, 138, 150))
+        else:
+            rendered = font.render(self.text, True, (20, 25, 31))
         text_x = inner.x
         if rendered.get_width() > inner.width:
             text_x = inner.right - rendered.get_width()
@@ -1370,7 +1578,7 @@ class PygameSyncPlayer:
 
     PANEL_MIN_WIDTH = 370
     PANEL_MAX_WIDTH = 470
-    CONTROL_HEIGHT = 146
+    CONTROL_HEIGHT = 180
     ROW_HEIGHT = 40
     # Reserved height (px) at the bottom of the side panel for the status
     # line, the four action-button rows, and the footer hint.
@@ -1399,6 +1607,17 @@ class PygameSyncPlayer:
             info.name: PygameTextField(f"sync:{info.name}", "", max_length=16)
             for info in self.video_infos
         }
+        # Optional per-camera cut range; empty = follow the reference from the
+        # sync frame at the camera's own fps (shown as a grey preview).
+        self.range_start_fields = {
+            info.name: PygameTextField(f"start:{info.name}", "", max_length=16)
+            for info in self.video_infos
+        }
+        self.range_end_fields = {
+            info.name: PygameTextField(f"end:{info.name}", "", max_length=16)
+            for info in self.video_infos
+        }
+        self.goto_field = PygameTextField("goto", "", max_length=16)
         self.active_field: PygameTextField | None = None
 
         self.current_index = 0
@@ -1642,28 +1861,83 @@ class PygameSyncPlayer:
         if self.current_frame >= self.current_info.frame_count - 1:
             self.playing = False
 
+    def _reference_name_or_none(self) -> str | None:
+        try:
+            return resolve_reference_video(self.reference_field.text, self.video_infos)
+        except SyncWorkflowError:
+            return None
+
     def _all_fields(self) -> list[PygameTextField]:
-        return [
+        """Tab order: reference fields, then each camera's Sync, Start, End."""
+        reference_name = self._reference_name_or_none()
+        fields = [self.reference_field, self.start_field, self.end_field]
+        for info in self.video_infos:
+            fields.append(self.sync_fields[info.name])
+            if info.name != reference_name:
+                fields += [self.range_start_fields[info.name], self.range_end_fields[info.name]]
+        return fields
+
+    def _range_texts(self) -> dict[str, tuple[str, str]]:
+        return {
+            info.name: (
+                self.range_start_fields[info.name].text,
+                self.range_end_fields[info.name].text,
+            )
+            for info in self.video_infos
+        }
+
+    def _plan_preview(self) -> dict[str, tuple[int, int]]:
+        """Ranges (0-based) the current fields would save, or {} while incomplete."""
+        try:
+            _reference, entries = build_sync_plan_from_fields(
+                self.video_infos,
+                {name: field.text for name, field in self.sync_fields.items()},
+                self.reference_field.text,
+                self.start_field.text,
+                self.end_field.text,
+                range_texts=self._range_texts(),
+            )
+        except SyncWorkflowError:
+            return {}
+        return {entry.video_file: (entry.start_frame, entry.end_frame) for entry in entries}
+
+    def _set_active_field(self, field: PygameTextField | None) -> None:
+        for candidate in (
             self.reference_field,
             self.start_field,
             self.end_field,
-            *(self.sync_fields[info.name] for info in self.video_infos),
-        ]
-
-    def _set_active_field(self, field: PygameTextField | None) -> None:
-        for candidate in self._all_fields():
+            self.goto_field,
+            *self.sync_fields.values(),
+            *self.range_start_fields.values(),
+            *self.range_end_fields.values(),
+        ):
             candidate.deactivate()
         self.active_field = field
         if field is None:
             return
         self.playing = False
+        if field is self.goto_field:
+            field.text = str(self.current_frame + 1)
         field.activate()
-        if field.key.startswith("sync:"):
-            video_name = field.key.removeprefix("sync:")
+        prefix, _sep, video_name = field.key.partition(":")
+        if prefix in ("sync", "start", "end"):
             index = next(i for i, info in enumerate(self.video_infos) if info.name == video_name)
             if index != self.current_index:
                 self._open_video(index)
             self._ensure_row_visible(index)
+
+    def _goto_frame(self, text: str) -> None:
+        """Seek the current video to a typed 1-based frame."""
+        try:
+            value = parse_frame_field(
+                text, field="Go to frame", frame_count=self.current_info.frame_count
+            )
+        except SyncWorkflowError as exc:
+            self._set_status(str(exc), error=True)
+            return
+        self.playing = False
+        if self._decode_at(value):
+            self._set_status(f"Frame {value + 1} of {self.current_info.name}")
 
     def _cycle_active_field(self, direction: int = 1) -> None:
         fields = self._all_fields()
@@ -1705,12 +1979,21 @@ class PygameSyncPlayer:
                 )
                 value = parse_frame_field(field.text, field=label, frame_count=info.frame_count)
                 self._set_status(f"{label.capitalize()}: {value + 1}")
-            elif field.key.startswith("sync:"):
-                video_name = field.key.removeprefix("sync:")
+            elif field is self.goto_field:
+                self._set_active_field(None)
+                self._goto_frame(field.text)
+                return
+            elif field.key.partition(":")[0] in ("sync", "start", "end"):
+                prefix, _sep, video_name = field.key.partition(":")
+                label = {"sync": "Sync frame", "start": "Start", "end": "End"}[prefix]
                 info = next(item for item in self.video_infos if item.name == video_name)
+                if prefix != "sync" and not field.text.strip():
+                    self._set_status(f"{label} for {video_name} cleared: follows sync frame + fps")
+                    self._set_active_field(None)
+                    return
                 value = parse_frame_field(
                     field.text,
-                    field=f"sync frame for {video_name}",
+                    field=f"{label.lower()} for {video_name}",
                     frame_count=info.frame_count,
                 )
                 index = self.video_infos.index(info)
@@ -1718,7 +2001,7 @@ class PygameSyncPlayer:
                     self._open_video(index, target_frame=value)
                 else:
                     self._decode_at(value)
-                self._set_status(f"Sync frame for {video_name}: {value + 1}")
+                self._set_status(f"{label} for {video_name}: {value + 1}")
             self._set_active_field(None)
         except SyncWorkflowError as exc:
             self._set_status(str(exc), error=True)
@@ -1828,12 +2111,6 @@ class PygameSyncPlayer:
         overlay = pygame.Surface((viewport.width, 36), pygame.SRCALPHA)
         overlay.fill((10, 12, 16, 205))
         self.screen.blit(overlay, viewport.topleft)
-        info_label = self.small_font.render(
-            f"{self.current_index + 1}/{len(self.video_infos)}  {self.current_info.name}",
-            True,
-            (245, 247, 250),
-        )
-        self.screen.blit(info_label, (12, 9))
         zoom_text = f"Zoom {self.zoom_level:.1f}x  " if self.zoom_level > 1.0 else ""
         speed_label = self.small_font.render(
             f"{zoom_text}Speed {format_playback_speed(self.playback_speed)}x",
@@ -1841,6 +2118,14 @@ class PygameSyncPlayer:
             (245, 247, 250),
         )
         self.screen.blit(speed_label, (viewport.right - speed_label.get_width() - 12, 9))
+        info = self.current_info
+        info_text = self._fit_label(
+            f"{self.current_index + 1}/{len(self.video_infos)}  {info.name}  |  "
+            f"{info.fps:.3f} fps  |  {info.width}x{info.height}",
+            self.small_font,
+            viewport.width - speed_label.get_width() - 36,
+        )
+        self.screen.blit(self.small_font.render(info_text, True, (245, 247, 250)), (12, 9))
 
         controls = pygame.Rect(
             0,
@@ -1931,6 +2216,17 @@ class PygameSyncPlayer:
             self._draw_button(rect, label, active=action == "play" and self.playing)
             x += width + 7
 
+        goto_y = controls.y + 110
+        goto_label = self.small_font.render("Go to frame (G)", True, (198, 208, 218))
+        self.screen.blit(goto_label, (16, goto_y + 6))
+        goto_x = 16 + goto_label.get_width() + 8
+        self.goto_field.set_rect(pygame.Rect(goto_x, goto_y, 84, 28))
+        self.goto_field.placeholder = str(self.current_frame + 1)
+        self.goto_field.draw(self.screen, self.small_font)
+        go_rect = pygame.Rect(goto_x + 90, goto_y, 46, 28)
+        self.button_rects["goto"] = go_rect
+        self._draw_button(go_rect, "Go")
+
         hint = self.tiny_font.render(
             "Space play | hold arrows step | [/] speed | wheel zoom, drag pan, 0 reset | D repeat",
             True,
@@ -2015,17 +2311,28 @@ class PygameSyncPlayer:
             1,
         )
         self.screen.blit(
-            self.font.render("Sync frame per video (1-based)", True, (238, 242, 247)),
+            self.font.render("Frames per video (1-based)", True, (238, 242, 247)),
             (x, 188),
         )
         self.screen.blit(
             self.tiny_font.render(
-                "Click a camera name to open it; click its field to type.",
+                "Empty Start/End = from sync frame + fps (grey preview)",
                 True,
                 (168, 182, 196),
             ),
-            (x, 214),
+            (x, 210),
         )
+        field_width = 60
+        field_gap = 4
+        column_x = [
+            panel.right - 14 - 4 - (3 - column) * field_width - (2 - column) * field_gap
+            for column in range(3)
+        ]
+        for column, title in enumerate(("Sync", "Start", "End")):
+            rendered = self.tiny_font.render(title, True, (198, 208, 218))
+            self.screen.blit(
+                rendered, (column_x[column] + (field_width - rendered.get_width()) // 2, 229)
+            )
 
         self._clamp_list_scroll()
         visible_count = self._visible_row_count()
@@ -2036,18 +2343,20 @@ class PygameSyncPlayer:
             self.reference_field,
             self.start_field,
             self.end_field,
+            self.goto_field,
         ]
-        for field in self.sync_fields.values():
+        for field in (
+            *self.sync_fields.values(),
+            *self.range_start_fields.values(),
+            *self.range_end_fields.values(),
+        ):
             field.set_rect(pygame.Rect(-1, -1, 0, 0))
 
-        try:
-            reference_name = resolve_reference_video(self.reference_field.text, self.video_infos)
-        except SyncWorkflowError:
-            reference_name = None
+        reference_name = self._reference_name_or_none()
+        preview = self._plan_preview()
 
         list_y = 246
-        sync_width = 92
-        name_width = content_width - sync_width - 10
+        name_width = column_x[0] - x - 6
         for visible_index, index in enumerate(range(start, end)):
             info = self.video_infos[index]
             row_y = list_y + visible_index * self.ROW_HEIGHT
@@ -2069,19 +2378,38 @@ class PygameSyncPlayer:
             label = self._fit_label(prefix + info.name + suffix, self.tiny_font, name_width - 10)
             self.screen.blit(
                 self.tiny_font.render(label, True, (235, 239, 243)),
-                (row_rect.x + 6, row_rect.y + 11),
+                (row_rect.x + 6, row_rect.y + 3),
             )
-            field = self.sync_fields[info.name]
-            field.set_rect(
-                pygame.Rect(
-                    row_rect.right - sync_width - 4,
-                    row_rect.y + 4,
-                    sync_width,
-                    row_rect.height - 8,
+            self.screen.blit(
+                self.tiny_font.render(
+                    f"{info.fps:.3f} fps · {info.frame_count:,} fr", True, (168, 182, 196)
+                ),
+                (row_rect.x + 6, row_rect.y + 19),
+            )
+            row_fields = [self.sync_fields[info.name]]
+            if info.name != reference_name:
+                row_fields += [self.range_start_fields[info.name], self.range_end_fields[info.name]]
+                planned = preview.get(info.name)
+                self.range_start_fields[info.name].placeholder = (
+                    str(planned[0] + 1) if planned else ""
                 )
-            )
-            field.draw(self.screen, self.small_font)
-            self.visible_fields.append(field)
+                self.range_end_fields[info.name].placeholder = (
+                    str(planned[1] + 1) if planned else ""
+                )
+            for column, field in enumerate(row_fields):
+                field.set_rect(
+                    pygame.Rect(column_x[column], row_rect.y + 4, field_width, row_rect.height - 8)
+                )
+                field.draw(self.screen, self.small_font)
+                self.visible_fields.append(field)
+            if info.name == reference_name:
+                for column in (1, 2):
+                    cell = pygame.Rect(
+                        column_x[column], row_rect.y + 4, field_width, row_rect.height - 8
+                    )
+                    pygame.draw.rect(self.screen, (60, 67, 76), cell, border_radius=4)
+                    rendered = self.tiny_font.render("ref", True, (150, 160, 172))
+                    self.screen.blit(rendered, rendered.get_rect(center=cell.center))
 
         actions_top = self.window_height - self.ACTIONS_AREA_HEIGHT
         status_rect = pygame.Rect(x, actions_top - 47, content_width, 40)
@@ -2137,7 +2465,9 @@ class PygameSyncPlayer:
         return round(fraction * (self.current_info.frame_count - 1))
 
     def _handle_button(self, action: str) -> None:
-        if action.startswith("step:"):
+        if action == "goto":
+            self._goto_frame(self.goto_field.text or str(self.current_frame + 1))
+        elif action.startswith("step:"):
             self._seek_relative(int(action.removeprefix("step:")))
         elif action == "play":
             self.playing = not self.playing
@@ -2176,6 +2506,8 @@ class PygameSyncPlayer:
             self._start_nav_hold(event.key)
         elif event.key in (pygame.K_0, pygame.K_KP0):
             self._reset_zoom()
+        elif event.key == pygame.K_g:
+            self._set_active_field(self.goto_field)
         elif event.key in (pygame.K_d, pygame.K_DELETE):
             self._toggle_removed_frame()
         elif event.key == pygame.K_RIGHTBRACKET:
@@ -2351,6 +2683,7 @@ class PygameSyncPlayer:
             output_file=self.output_file,
             completed=completed,
             removed_frames=self.removed_frames,
+            ranges=self._range_texts(),
         )
 
     def _apply_checkpoint(self, data: Mapping[str, Any]) -> None:
@@ -2373,6 +2706,11 @@ class PygameSyncPlayer:
             self.removed_frames[info.name] = {
                 frame - 1 for frame in removed.get(info.name, []) if frame <= info.frame_count
             }
+        ranges = cast(dict[str, list[str]], data.get("ranges", {}))
+        for info in self.video_infos:
+            start_text, end_text = ranges.get(info.name, ["", ""])
+            self.range_start_fields[info.name].text = start_text
+            self.range_end_fields[info.name].text = end_text
         self.reference_field.text = cast(str, data["reference"])
         self.start_field.text = cast(str, data["start"])
         self.end_field.text = cast(str, data["end"])
@@ -2420,6 +2758,7 @@ class PygameSyncPlayer:
                 self.start_field.text,
                 self.end_field.text,
                 self.removed_frames,
+                self._range_texts(),
             )
         except SyncWorkflowError as exc:
             self._set_status(str(exc), error=True)
@@ -2448,6 +2787,10 @@ class PygameSyncPlayer:
         except OSError as exc:
             print(f">> vaila/syncvid: Warning: checkpoint was not saved ({exc})")
 
+        print(
+            ">> vaila/syncvid: Synchronized ranges (same time window in every camera)\n  "
+            + "\n  ".join(describe_sync_plan(entries, self.video_infos, reference_video))
+        )
         reference_path = next(
             info.path for info in self.video_infos if info.name == reference_video
         )

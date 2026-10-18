@@ -20,8 +20,9 @@ The generated versioned TXT maps one inclusive reference-camera interval into eq
 1. Select a directory containing at least two videos.
 2. Click a camera name in the right panel, or use **Page Up/Page Down**.
 3. Use playback, the timeline, or frame stepping to locate the common event.
-4. Type its displayed 1-based frame in that camera's **Sync frame** field.
-5. Repeat for every camera.
+4. Type its displayed 1-based frame in that camera's **Sync** field (the keyframe, e.g. ball contact).
+5. Repeat for every camera. **Start/End** of a non-reference camera are optional (see
+   *Cameras with different frame rates*).
 6. In **Reference video**, type any one of:
    - the 1-based row number;
    - the exact filename;
@@ -34,9 +35,43 @@ The generated versioned TXT maps one inclusive reference-camera interval into eq
 
 Clicking a field selects its current contents for quick replacement. **Tab/Shift+Tab** moves through all fields and **Enter** validates the active field. All displayed and saved frames are **1-based and inclusive**; internal Python calculations remain 0-based.
 
+## Cameras with different frame rates
+
+Each camera is aligned in **time** at its Sync (key) frame, at its **own fps**, so cameras at 59.94, 50,
+37.41, 30 or 22.96 fps can be cut to the same event window even when no frame is shared:
+
+```text
+start = sync + round((reference_start - reference_sync) / reference_fps * fps)
+end   = start + round((reference_end - reference_start) / reference_fps * fps)
+```
+
+Rounding the length keeps every cut within half a frame of the reference duration; with equal fps it is
+the same frame offset as before.
+
+- Every row shows the camera's fps and frame count; the video's top bar shows `fps` and resolution.
+- **Start/End** of a non-reference row are optional. Empty: they follow the reference from Sync + fps and
+  the computed frames appear in grey as a preview. Typed (both): that camera is cut there and its Sync
+  frame becomes optional; use it when the same event start and end can be seen in that camera.
+- On save, the terminal lists every camera's range, frames, fps and duration. When a typed Start/End
+  gives a duration that differs from the reference by more than one frame, it also shows the fps the
+  range implies, a hint that the camera's fps (or a mark) is wrong. The cut keeps the file's fps.
+- Cut Video renders each range at its own fps; the sync TXT format is unchanged.
+
+Example (`sync_videos_different_fps`, reference `cabine1.mp4` 39–111 with keyframe 50 = ball contact):
+
+| camera | fps | keyframe | range | frames |
+|---|---:|---:|---|---:|
+| cabine1.mp4 (reference) | 59.940 | 50 | 39–111 | 73 |
+| cobrador_norepeat_37.41fps.mp4 | 37.412 | 19 | 12–57 | 46 |
+| gol.mp4 | 59.940 | 42 | 31–103 | 73 |
+| lateral_norepeat_22.96fps.mp4 | 22.956 | 9 | 5–33 | 29 |
+| reporter_fundo.mp4 | 30.000 | 96 | 90–126 | 37 |
+
+All cuts last 1.20–1.22 s and show the ball contact at the same time (0.1835 s).
+
 ## Load / Resume
 
-Every **Save sync** or **Save + Cut Video** also writes a `.json` checkpoint next to the sync TXT (same name, `.json` extension) capturing every field's text, the current camera, the current playback frame, and the output path.
+Every **Save sync** or **Save + Cut Video** also writes a `.json` checkpoint next to the sync TXT (same name, `.json` extension) capturing every field's text (including each camera's optional Start/End), the current camera, the current playback frame, and the output path.
 
 Click **Load / Resume** at any time to reopen a checkpoint through a file picker and restore that state:
 
@@ -62,6 +97,7 @@ The **Help** button opens this page in a browser. It tries, in order, the `BROWS
 | Home / End | First/last frame of the active video |
 | Page Up / Page Down | Previous/next camera |
 | Timeline click/drag | Seek directly |
+| `G`, or **Go to frame** + Enter/**Go** | Jump to a typed 1-based frame of the current video |
 | `D` or Delete | Mark the current frame as repeated (red border, red timeline tick); again to keep it |
 | Mouse wheel over the video | Zoom in/out at the cursor (1× to 10×) |
 | Middle-button drag, or left drag when zoomed | Pan the zoomed video |
@@ -105,9 +141,14 @@ How **Detect repeats** judges each frame, as a viewer would:
 - The cut is chosen **per video**. Sorted scores show a gap of at least 2x between the noise group
   and the motion group. When several such gaps exist, the one that best separates the two groups is
   used. Without such a gap the video has no repeats (only changes scoring at most 1 grey level count).
-- On the 1080p examples: `cobrador.mp4` copies scored at most 16.5 and real frames at least 40.2;
-  `lateral.mp4` 8.4 against 30.6. `cabine1.mp4` and `gol.mp4` showed a continuous range (largest gap
-  1.09x) and no repeats.
+- **Interlaced sources** (e.g. 50 fps material on a 59.94 timeline) repeat a frame built from the other
+  field: the same image shifted about 1.2 px vertically. A small, purely vertical global shift
+  (phase correlation on the centre of the frame) is compensated before scoring again, and the lower
+  score is kept. Horizontal or larger shifts are real camera motion and are not compensated.
+- On the 1080p examples: `cobrador.mp4` copies scored at most 6.7 and real frames at least 40.2;
+  `lateral.mp4` 5.1 against 30.6; `gol.mp4` (field-shifted copies, raw score ~20 like slow real frames)
+  8.3 against 22.9, 24 repeats, about 49.88 fps, i.e. 50 fps material. `cabine1.mp4` and the four
+  30 fps phone videos showed a continuous range and no repeats.
 
 **Save w/o repeats** (or the CLI `--remove-repeated`, which uses the automatic marks) writes a copy of
 each video with marked frames in `processed_norepeat_<timestamp>/`, next to the videos:
@@ -116,7 +157,7 @@ each video with marked frames in `processed_norepeat_<timestamp>/`, next to the 
 |---|---|
 | `<name>_norepeat_<fps>fps.mp4` | H.264, only the distinct frames. The container frame rate is the estimated real rate, so the duration is kept; the rate is also in the file name and in the `comment` metadata. No audio |
 | `<name>_norepeat_frames.csv` | `new_frame`, `original_frame` (both 1-based), `original_time_s` |
-| `<name>_motion_scores.csv` | every video: `frame`, `motion_score`, `repeated` (1 = removed), to check the decision |
+| `<name>_motion_scores.csv` | every video: `frame`, `motion_score`, `repeated` (1 = removed), `shift_x_px`, `shift_y_px` (measured global shift), to check the decision |
 | `norepeat_summary.csv` | every video: frames, unique, repeated (marked), fps, estimated real fps, threshold, gap ratio, automatically detected repeats, repeated frame numbers |
 
 Estimated real fps = fps x unique frames / total frames. Example: `lateral.mp4`, 141 frames at
