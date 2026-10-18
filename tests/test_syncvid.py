@@ -513,3 +513,69 @@ def test_cutvideo_handoff_uses_argument_list_without_shell(monkeypatch, tmp_path
     assert captured["command"][1:3] == ["-m", "vaila.cutvideo"]
     assert captured["command"][-4:] == ["--video", str(video), "--sync-file", str(sync_file)]
     assert captured["kwargs"]["shell"] is False
+
+
+def _write_video_with_repeats(path: Path, unique: int, repeat_after: set[int]) -> int:
+    """Write a noisy moving-square video; frames listed in repeat_after are shown twice."""
+    import cv2
+    import numpy as np
+
+    rng = np.random.default_rng(0)
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), 60.0, (160, 120))
+    written = 0
+    for index in range(unique):
+        frame = rng.integers(0, 255, (120, 160, 3), dtype=np.uint8)
+        cv2.rectangle(frame, (index * 3, 20), (index * 3 + 30, 60), (255, 255, 255), -1)
+        for _ in range(2 if index in repeat_after else 1):
+            writer.write(frame)
+            written += 1
+    writer.release()
+    return written
+
+
+def test_remove_repeated_frames_drops_only_the_copies(tmp_path: Path) -> None:
+    video = tmp_path / "spliced.avi"
+    total = _write_video_with_repeats(video, 20, {3, 9, 10})
+    report = syncvid.find_repeated_frames(video)
+    assert report.total_frames == total == 23
+    # copies sit right after frames 3, 9 and 10 (0-based in the written stream: 4, 11, 13)
+    assert report.repeated_frames == (4, 11, 13)
+    assert len(report.kept_frames) == 20
+    assert report.estimated_fps == pytest.approx(60.0 * 20 / 23)
+
+    out_dir, reports = syncvid.remove_repeated_frames([video], tmp_path / "out")
+    assert [r.video for r in reports] == [video.resolve()]
+    output = out_dir / "spliced_norepeat.mp4"
+    assert syncvid.find_repeated_frames(output).total_frames == 20
+    rows = (out_dir / "spliced_norepeat_frames.csv").read_text().splitlines()
+    assert rows[0] == "new_frame,original_frame,original_time_s"
+    assert rows[5].split(",")[:2] == ["5", "6"]
+    summary = (out_dir / "norepeat_summary.csv").read_text().splitlines()
+    assert summary[1].split(",")[:4] == ["spliced.avi", "23", "20", "3"]
+
+
+def test_remove_repeated_frames_leaves_clean_video_unwritten(tmp_path: Path) -> None:
+    video = tmp_path / "clean.avi"
+    _write_video_with_repeats(video, 12, set())
+    out_dir, reports = syncvid.remove_repeated_frames([video], tmp_path / "out")
+    assert reports[0].repeated_frames == ()
+    assert not (out_dir / "clean_norepeat.mp4").exists()
+
+
+def test_pygame_player_held_arrow_starts_repeat_and_zero_resets_zoom() -> None:
+    pygame = syncvid.pygame
+    player = object.__new__(syncvid.PygameSyncPlayer)
+    player.playing = False
+    deltas = []
+    player._seek_relative = deltas.append
+    player.zoom_level = 3.0
+    player.offset_x = player.offset_y = 50.0
+
+    right = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_RIGHT, mod=0, unicode="")
+    player._handle_player_key(right)
+    assert deltas == [1]
+    assert player.nav_hold_key == pygame.K_RIGHT
+
+    zero = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_0, mod=0, unicode="0")
+    player._handle_player_key(zero)
+    assert (player.zoom_level, player.offset_x, player.offset_y) == (1.0, 0.0, 0.0)

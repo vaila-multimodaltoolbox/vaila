@@ -4,8 +4,8 @@
 
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
-- **Version:** 0.3.120
-- **Updated:** 2026-09-03
+- **Version:** 0.4.10
+- **Updated:** 2026-10-18
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 
@@ -55,13 +55,16 @@ The **Help** button opens this page in a browser. It tries, in order, the `BROWS
 | Control | Action |
 |---|---|
 | Space | Play/pause |
-| Left / Right | Previous/next frame while paused |
-| Down or `-` | Move 60 frames backward |
-| Up or `+` | Move 60 frames forward |
+| Left / Right | Previous/next frame while paused; hold to keep stepping (as in getpixelvideo) |
+| Down or `-` | Move 60 frames backward (repeats while held) |
+| Up or `+` | Move 60 frames forward (repeats while held) |
 | `[` / `]` | Slower/faster playback: 0.0625× through 16× |
 | Home / End | First/last frame of the active video |
 | Page Up / Page Down | Previous/next camera |
 | Timeline click/drag | Seek directly |
+| Mouse wheel over the video | Zoom in/out at the cursor (1× to 10×) |
+| Middle-button drag, or left drag when zoomed | Pan the zoomed video |
+| `0` | Reset zoom |
 | Mouse click | Select camera, field, or action |
 | Tab / Shift+Tab | Next/previous input field |
 | Enter | Validate the active field and seek to a typed sync frame |
@@ -71,6 +74,41 @@ The **Help** button opens this page in a browser. It tries, in order, the `BROWS
 The visible step buttons use the traditional ASCII labels **-60**, **-1**, **+1**, and **+60**.
 
 Playback reads consecutive frames sequentially and redraws cached paused frames, avoiding repeated random H.264 seeks. This is substantially smoother on long 120-fps recordings.
+
+## Remove repeated frames
+
+Videos edited for YouTube or a broadcast often splice several cameras into one timeline. When a camera
+ran slower than the timeline, the editor repeats some of its frames, so the file claims 59.94 fps but
+holds fewer real images, and the real frame rate is hidden.
+
+**Remove repeated frames (all videos)** in the side panel compares every frame with the previous one,
+pixel by pixel, in grey levels:
+
+- a frame is a repeat when at most 200 pixels (or 0.01 % of the image, if larger) change by more than
+  8 grey levels;
+- on the 1080p examples, repeats changed at most ~50 pixels, while consecutive real frames changed at
+  least ~24 000.
+
+Each video that repeats frames gets a repeat-free copy in `processed_norepeat_<timestamp>/`, next to
+the videos:
+
+| file | content |
+|---|---|
+| `<name>_norepeat.mp4` | H.264, only the distinct frames; frame rate = estimated real rate, so the duration is kept; no audio |
+| `<name>_norepeat_frames.csv` | `new_frame`, `original_frame` (both 1-based), `original_time_s` |
+| `norepeat_summary.csv` | every video: frames, unique, repeated, fps, estimated real fps, repeated frame numbers |
+
+Estimated real fps = fps × unique frames / total frames. Example: a 141-frame clip at 59.94 fps with
+40 repeats has 101 unique frames, about 42.94 fps. Videos without repeats are listed in the summary but
+not rewritten.
+
+A truly static shot (nothing moving and no sensor noise) would also look like repeats; check the
+summary before using the copy.
+
+```bash
+uv run vaila/syncvid.py -i /path/to/camera_directory --remove-repeated
+uv run vaila/syncvid.py -i /path/to/one_video.mp4 --remove-repeated
+```
 
 ## Synchronization file v2
 
@@ -112,6 +150,9 @@ uv run vaila/syncvid.py -i /path/to/camera_directory -o /path/to/session_sync.tx
 
 # Probe/decode all videos without opening Pygame
 uv run vaila/syncvid.py -i /path/to/camera_directory --dry-run
+
+# Write repeat-free copies of videos with editor-repeated frames
+uv run vaila/syncvid.py -i /path/to/camera_directory --remove-repeated
 ```
 
 ## Validation and security
@@ -125,4 +166,4 @@ uv run vaila/syncvid.py -i /path/to/camera_directory --dry-run
 
 ---
 
-Part of **vailá — Multimodal Toolbox**. Updated 2 September 2026.
+Part of *vailá* — Multimodal Toolbox. Updated 18 October 2026.
