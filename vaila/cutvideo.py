@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 04 October 2026
-Version: 0.4.7
+Update Date: 18 October 2026
+Version: 0.4.10
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -145,17 +145,21 @@ try:
     from .syncvid import (
         SyncFileError,
         find_sync_entry,
+        probe_video,
         read_sync_file,
         sync_entries_to_cutvideo_data,
         validate_sync_leaf_filename,
+        write_video_without_frames,
     )
 except ImportError:
     from syncvid import (  # ty: ignore[unresolved-import]
         SyncFileError,
         find_sync_entry,
+        probe_video,
         read_sync_file,
         sync_entries_to_cutvideo_data,
         validate_sync_leaf_filename,
+        write_video_without_frames,
     )
 
 ZOOM_MIN = 0.1
@@ -619,6 +623,16 @@ def get_precise_video_metadata(video_path):
                     rotation = int(float(rotate_tag))
 
         rotation = rotation % 360
+
+        # ffmpeg's input -ss counts from the container start; the first video
+        # frame may come later (audio often starts first).
+        video_start_offset = 0.0
+        with contextlib.suppress(ValueError, TypeError):
+            video_start_offset = max(
+                0.0,
+                float(video_stream.get("start_time", 0.0))
+                - float(data.get("format", {}).get("start_time", 0.0)),
+            )
         raw_width = int(video_stream.get("width"))
         raw_height = int(video_stream.get("height"))
 
@@ -642,6 +656,7 @@ def get_precise_video_metadata(video_path):
             "duration": duration if duration > 0 else None,
             "nb_frames": nb_frames,
             "rotation": rotation,
+            "video_start_offset": video_start_offset,
         }
     except (
         subprocess.CalledProcessError,
@@ -694,6 +709,20 @@ def check_and_rotate_frame(frame, metadata):
     return frame
 
 
+def ffmpeg_seek_time(start_frame: int, fps: float, video_start_offset: float = 0.0) -> float:
+    """Input ``-ss`` time whose first decoded frame is ``start_frame`` (0-based, as OpenCV).
+
+    ffmpeg counts ``-ss`` from the container start, so the delay of the first
+    video frame (``video_start_offset``) is added. Without the offset, a video
+    starting 22 ms after its audio was cut one frame early.
+    Aiming a tenth of a frame early absorbs timestamp rounding; half a frame
+    made the constant-rate output (``-r``) repeat its first frame.
+    """
+    if fps <= 0:
+        return 0.0
+    return max(0.0, float(video_start_offset) + (int(start_frame) - 0.1) / fps)
+
+
 def cut_video_with_ffmpeg(
     video_path,
     output_path,
@@ -729,7 +758,7 @@ def cut_video_with_ffmpeg(
 
     fps = metadata["fps"]
     frame_count = end_frame - start_frame + 1
-    start_time = start_frame / fps if fps > 0 else 0.0
+    start_time = ffmpeg_seek_time(start_frame, fps, metadata.get("video_start_offset", 0.0))
 
     for encoder in encoders_with_cpu_fallback():
         device = encoder_device_tag(encoder)
@@ -1384,6 +1413,31 @@ def _validated_sync_range(sync_info, video_file):
     return start_frame, end_frame, output_name
 
 
+def _write_sync_cut_without_repeats(output_path, output_dir, start_frame, end_frame, sync_info):
+    """Also save the cut without the source frames marked as repeated in Make Sync.
+
+    The synchronized cut itself is kept unchanged (frame-aligned with the other
+    cameras); the copy drops the marked frames and plays at the real frame rate.
+    """
+    removed = [
+        int(frame) - start_frame
+        for frame in sync_info.get("removed_frames") or ()
+        if start_frame <= int(frame) <= end_frame
+    ]
+    if not removed:
+        return None
+    cut_info = probe_video(output_path)
+    if cut_info.frame_count != end_frame - start_frame + 1:
+        print(
+            f"Warning: {Path(output_path).name} has {cut_info.frame_count} frames, expected "
+            f"{end_frame - start_frame + 1}; repeated frames were not removed"
+        )
+        return None
+    corrected = write_video_without_frames(cut_info, removed, output_dir, frame_offset=start_frame)
+    print(f"Without {len(removed)} repeated frames: {corrected.name}")
+    return corrected
+
+
 def batch_process_sync_videos(video_path, sync_data):
     """Process all videos in a sync file with visible, cancellable progress."""
     if not sync_data:
@@ -1445,6 +1499,9 @@ def batch_process_sync_videos(video_path, sync_data):
                 if success:
                     processed_count += 1
                     print(f"Processed: {video_file} -> {output_name} (FPS: {metadata['fps']:.6f})")
+                    _write_sync_cut_without_repeats(
+                        output_path, output_dir, start_frame, end_frame, sync_info
+                    )
                 else:
                     print(f"Error processing: {video_file}")
             except Exception as exc:
