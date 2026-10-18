@@ -10,23 +10,23 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.7
+Version: 0.4.9
 Created: 04 October 2026
-Update Date: 05 October 2026
+Update Date: 17 October 2026
 
 Description:
     The pitch is a known 3D object (``vaila/models/soccerfield_kiki.csv``,
     metres, z up). Once some of the 49 keypoints are found in a frame, a camera
     is fitted to them and predicts where every other keypoint must be:
 
-    * planar homography (world z = 0 -> image), RANSAC, from
-      ``freekiki_diag.fit_field_homography``;
+    * planar homography (world z = 0 -> image), RANSAC + Hartley-normalized SVD,
+      from ``freekiki_diag.fit_field_homography`` and ``fit_dlt2d_hartley_svd``;
     * full camera for the points off the ground (flag tops z = 1.5 m, goal
       post tops z = 2.44 m):
-        - DLT3D (11 parameters, ``dlt3d.calculate_dlt3d_params``) when >= 7
-          points including >= 2 off the ground are available, pruned of
-          points that disagree and checked with ``decompose_dlt3d``
-          (square pixels, no skew, camera above the ground);
+        - DLT3D (11 parameters via Hartley-normalized SVD,
+          ``fit_dlt3d_hartley_svd``) when >= 7 points including >= 2 off the
+          ground are available, pruned of points that disagree and checked with
+          ``decompose_dlt3d`` (square pixels, no skew, camera above the ground);
         - otherwise a pinhole camera recovered from the homography: principal
           point at the image centre, square pixels, focal from Zhang's two
           constraints (h1'w h2 = 0, h1'w h1 = h2'w h2 with w = diag(1/f^2,
@@ -35,6 +35,12 @@ Description:
     ``dlt_coefficients`` turns each frame camera into the vailá DLT2D (8) and
     DLT3D (11) coefficients that ``rec2d.py`` / ``rec3d.py`` read, so the
     field calibration can drive per-frame reconstruction of player tracks.
+
+    ``project_rigid_field`` forward-projects all metric coordinates from
+    ``soccerfield_kiki.csv`` (49 pts) or ``soccerfield_ref3d.csv`` (37 pts) as
+    an invariant rigid body into image space (including occluded and
+    out-of-FOV points) and assigns per-keypoint visibility flags
+    (``visible_in_fov``, ``occluded``, ``out_of_bounds``).
 
     ``refine_keypoints`` uses that camera on the network output:
       fill  a point the network did not accept (conf < kp_conf, or a
@@ -56,9 +62,11 @@ License:
 
 from __future__ import annotations
 
+import csv
 import math
 from collections import Counter
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -76,6 +84,9 @@ except ImportError:
     )
 
 NKP = diag.NKP
+REF3D_CSV = Path(__file__).resolve().parent / "models" / "soccerfield_ref3d.csv"
+REF3D_CENTER_SHIFT = np.array([-52.5, -34.0, 0.0], dtype=float)
+VISIBILITY_FLAGS = ("visible_in_fov", "occluded", "out_of_bounds")
 GEOM_MODES = ("fill", "fix", "off")
 GEOM_CODES = {
     "G": "filled by field geometry (network conf < kp_conf but >= min_conf; inside the image)",
@@ -98,6 +109,8 @@ GEOM_DEFAULTS: dict[str, Any] = {
     "max_aspect_dev": 0.25,  # |fy/fx - 1| of a DLT3D camera
     "max_skew": 0.15,  # |K01| / focal of a DLT3D camera
     "margin": 0.01,  # of the image width kept from every border
+    "smooth_window": 5,  # temporal rolling window for camera regularization (frames)
+    "pnl_alpha": 0.7,  # PnLCalib joint points + lines weight alpha in [0, 1]
 }
 FILLABLE = ("Rk", "Rd")  # network codes geometry may fill
 
@@ -112,6 +125,155 @@ def _field() -> tuple[np.ndarray, np.ndarray]:
     return xyz, planar
 
 
+@lru_cache(maxsize=1)
+def load_ref3d_points() -> tuple[list[str], np.ndarray]:
+    """``(names (37,), xyz (37, 3) metres)`` from ``soccerfield_ref3d.csv``.
+
+    Shifted by ``(-52.5, -34.0, 0.0)`` so ``center_field`` sits at ``(0, 0, 0)``
+    in the same rigid metric frame as ``soccerfield_kiki.csv`` while preserving
+    all pairwise Euclidean distances.
+    """
+    names: list[str] = []
+    coords: list[list[float]] = []
+    with REF3D_CSV.open(encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            names.append(row["point_name"].strip())
+            coords.append([float(row["x"]), float(row["y"]), float(row["z"])])
+    xyz = np.asarray(coords, dtype=float) + REF3D_CENTER_SHIFT
+    xyz.setflags(write=False)
+    return names, xyz
+
+
+@lru_cache(maxsize=1)
+def _ref3d_to_kiki_map() -> tuple[tuple[int, ...], ...]:
+    """Map each of the 37 ``soccerfield_ref3d.csv`` points to its closest kiki49 index(es)."""
+    kiki_xyz, _ = _field()
+    _, ref_xyz = load_ref3d_points()
+    mapping: list[tuple[int, ...]] = []
+    for j, pt in enumerate(ref_xyz):
+        dists = np.linalg.norm(kiki_xyz - pt, axis=1)
+        best = int(np.argmin(dists))
+        if dists[best] <= 0.15:
+            mapping.append((best,))
+        elif j == 22:  # left_penalty_arc_top -> adjacent arc crossings p10, p11
+            mapping.append((10, 11))
+        elif j == 34:  # right_penalty_arc_top -> adjacent arc crossings p18, p19
+            mapping.append((18, 19))
+        else:
+            mapping.append((best,))
+    return tuple(mapping)
+
+
+def hartley_normalize_2d(pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Isotropic Hartley normalization of 2D points (centroid at 0, mean distance sqrt(2))."""
+    pts = np.asarray(pts, dtype=float)[:, :2]
+    mean = np.mean(pts, axis=0)
+    centered = pts - mean
+    mean_dist = float(np.mean(np.linalg.norm(centered, axis=1)))
+    scale = math.sqrt(2.0) / mean_dist if mean_dist > 1e-12 else 1.0
+    T = np.array(
+        [[scale, 0.0, -scale * mean[0]], [0.0, scale, -scale * mean[1]], [0.0, 0.0, 1.0]],
+        dtype=float,
+    )
+    pts_h = np.c_[pts, np.ones(len(pts))] @ T.T
+    return pts_h[:, :2], T
+
+
+def hartley_normalize_3d(pts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Isotropic Hartley normalization of 3D points (centroid at 0, mean distance sqrt(3))."""
+    pts = np.asarray(pts, dtype=float)[:, :3]
+    mean = np.mean(pts, axis=0)
+    centered = pts - mean
+    mean_dist = float(np.mean(np.linalg.norm(centered, axis=1)))
+    scale = math.sqrt(3.0) / mean_dist if mean_dist > 1e-12 else 1.0
+    T = np.array(
+        [
+            [scale, 0.0, 0.0, -scale * mean[0]],
+            [0.0, scale, 0.0, -scale * mean[1]],
+            [0.0, 0.0, scale, -scale * mean[2]],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=float,
+    )
+    pts_h = np.c_[pts, np.ones(len(pts))] @ T.T
+    return pts_h[:, :3], T
+
+
+def fit_dlt2d_hartley_svd(xy: np.ndarray, xy_world: np.ndarray) -> np.ndarray | None:
+    """Planar homography H (H[2,2] = 1) from world (X, Y) -> image (u, v) via Hartley + SVD."""
+    xy = np.asarray(xy, dtype=float)[:, :2]
+    xy_w = np.asarray(xy_world, dtype=float)[:, :2]
+    if len(xy) < 4 or len(xy) != len(xy_w):
+        return None
+    uv_n, T_img = hartley_normalize_2d(xy)
+    XY_n, T_w = hartley_normalize_2d(xy_w)
+    n = len(xy)
+    A = np.zeros((2 * n, 9), dtype=float)
+    X, Y = XY_n[:, 0], XY_n[:, 1]
+    u, v = uv_n[:, 0], uv_n[:, 1]
+    A[0::2, 0] = -X
+    A[0::2, 1] = -Y
+    A[0::2, 2] = -1.0
+    A[0::2, 6] = u * X
+    A[0::2, 7] = u * Y
+    A[0::2, 8] = u
+    A[1::2, 3] = -X
+    A[1::2, 4] = -Y
+    A[1::2, 5] = -1.0
+    A[1::2, 6] = v * X
+    A[1::2, 7] = v * Y
+    A[1::2, 8] = v
+    try:
+        _, _, vt = np.linalg.svd(A)
+        H_tilde = vt[-1].reshape(3, 3)
+        H = np.linalg.inv(T_img) @ H_tilde @ T_w
+    except np.linalg.LinAlgError:
+        return None
+    if abs(float(H[2, 2])) <= 1e-12:
+        return None
+    return H / float(H[2, 2])
+
+
+def fit_dlt3d_hartley_svd(xy: np.ndarray, xyz_world: np.ndarray) -> np.ndarray | None:
+    """DLT3D 11 parameters (L1..L11, P[2,3] = 1) from world (X, Y, Z) -> image (u, v) via Hartley + SVD."""
+    xy = np.asarray(xy, dtype=float)[:, :2]
+    xyz_w = np.asarray(xyz_world, dtype=float)[:, :3]
+    if len(xy) < 6 or len(xy) != len(xyz_w):
+        return None
+    uv_n, T_img = hartley_normalize_2d(xy)
+    XYZ_n, T_w = hartley_normalize_3d(xyz_w)
+    n = len(xy)
+    A = np.zeros((2 * n, 12), dtype=float)
+    X, Y, Z = XYZ_n[:, 0], XYZ_n[:, 1], XYZ_n[:, 2]
+    u, v = uv_n[:, 0], uv_n[:, 1]
+    A[0::2, 0] = -X
+    A[0::2, 1] = -Y
+    A[0::2, 2] = -Z
+    A[0::2, 3] = -1.0
+    A[0::2, 8] = u * X
+    A[0::2, 9] = u * Y
+    A[0::2, 10] = u * Z
+    A[0::2, 11] = u
+    A[1::2, 4] = -X
+    A[1::2, 5] = -Y
+    A[1::2, 6] = -Z
+    A[1::2, 7] = -1.0
+    A[1::2, 8] = v * X
+    A[1::2, 9] = v * Y
+    A[1::2, 10] = v * Z
+    A[1::2, 11] = v
+    try:
+        _, _, vt = np.linalg.svd(A)
+        P_tilde = vt[-1].reshape(3, 4)
+        P = np.linalg.inv(T_img) @ P_tilde @ T_w
+    except np.linalg.LinAlgError:
+        return None
+    if abs(float(P[2, 3])) <= 1e-12:
+        return None
+    P = P / float(P[2, 3])
+    return P.ravel()[:11]
+
+
 def _settings(settings: dict | None) -> dict:
     return GEOM_DEFAULTS | dict(settings or {})
 
@@ -124,8 +286,187 @@ def _project(P: np.ndarray, xyz: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return uv, uvw[:, 2] > 0
 
 
+@lru_cache(maxsize=1)
+def _painted_line_models() -> tuple[tuple[str, np.ndarray, np.ndarray, tuple[int, ...]], ...]:
+    """Each painted line as ``(name, p1_3d, p2_3d, member_indices)``."""
+    try:
+        from . import freekiki_snap as fs
+    except ImportError:
+        import freekiki_snap as fs  # ty: ignore[unresolved-import]
+
+    xyz, _ = _field()
+    models: list[tuple[str, np.ndarray, np.ndarray, tuple[int, ...]]] = []
+    for name, members in fs.PAINTED_LINES.items():
+        pts = xyz[list(members)]
+        ia, ib = max(
+            ((a, b) for a in range(len(pts)) for b in range(a + 1, len(pts))),
+            key=lambda ab: float(np.linalg.norm(pts[ab[0]] - pts[ab[1]])),
+        )
+        models.append((name, pts[ia].copy(), pts[ib].copy(), tuple(int(m) for m in members)))
+    return tuple(models)
+
+
+def _clip_line_in_front(
+    P: np.ndarray, p1_3d: np.ndarray, p2_3d: np.ndarray, eps: float = 1e-3
+) -> tuple[np.ndarray, np.ndarray] | None:
+    """Project a 3D line segment through ``P`` (3x4), clipping against the camera frustum plane.
+
+    Adapts PnLCalib's 3D line-plane intersection so segments partially behind
+    the camera (``w < eps``) are clipped at ``w = eps`` instead of inverting
+    through the vanishing line.
+    """
+    X1 = np.array([p1_3d[0], p1_3d[1], p1_3d[2], 1.0], dtype=float)
+    X2 = np.array([p2_3d[0], p2_3d[1], p2_3d[2], 1.0], dtype=float)
+    uvw1 = P @ X1
+    uvw2 = P @ X2
+    w1, w2 = float(uvw1[2]), float(uvw2[2])
+    if w1 < eps and w2 < eps:
+        return None
+    if w1 < eps:
+        dw = w2 - w1
+        if abs(dw) <= 1e-12:
+            return None
+        t_clip = (eps - w1) / dw
+        X1 = X1 + t_clip * (X2 - X1)
+        uvw1 = P @ X1
+    elif w2 < eps:
+        dw = w1 - w2
+        if abs(dw) <= 1e-12:
+            return None
+        t_clip = (eps - w2) / dw
+        X2 = X2 + t_clip * (X1 - X2)
+        uvw2 = P @ X2
+    if abs(float(uvw1[2])) <= 1e-12 or abs(float(uvw2[2])) <= 1e-12:
+        return None
+    uv1 = uvw1[:2] / float(uvw1[2])
+    uv2 = uvw2[:2] / float(uvw2[2])
+    if not (np.isfinite(uv1).all() and np.isfinite(uv2).all()):
+        return None
+    return uv1, uv2
+
+
+def _active_painted_lines(
+    inliers_mask: np.ndarray,
+) -> list[tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    """Active painted lines with >= 2 inlier keypoints: ``(p1_3d, p2_3d, inlier_indices)``."""
+    active: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+    for _, p1, p2, members in _painted_line_models():
+        idx = np.array([m for m in members if inliers_mask[m]], dtype=int)
+        if len(idx) >= 2:
+            active.append((p1, p2, idx))
+    return active
+
+
+def _pnl_line_residuals(
+    P: np.ndarray,
+    xy: np.ndarray,
+    active_lines: list[tuple[np.ndarray, np.ndarray, np.ndarray]],
+) -> np.ndarray:
+    """Signed perpendicular point-to-projected-line residuals (pixels) across active lines."""
+    res_list: list[np.ndarray] = []
+    for p1_3d, p2_3d, idx in active_lines:
+        clipped = _clip_line_in_front(P, p1_3d, p2_3d)
+        if clipped is None:
+            res_list.append(np.zeros(len(idx), dtype=float))
+            continue
+        uv1, uv2 = clipped
+        d = uv2 - uv1
+        norm = float(math.hypot(float(d[0]), float(d[1])))
+        if norm <= 1e-6:
+            res_list.append(np.zeros(len(idx), dtype=float))
+            continue
+        nx, ny = -float(d[1]) / norm, float(d[0]) / norm
+        pts = xy[idx]
+        perp = (pts[:, 0] - float(uv1[0])) * nx + (pts[:, 1] - float(uv1[1])) * ny
+        res_list.append(perp)
+    if not res_list:
+        return np.zeros(0, dtype=float)
+    return np.concatenate(res_list)
+
+
+def _refine_homography_pnl(
+    H: np.ndarray,
+    xy: np.ndarray,
+    xyz: np.ndarray,
+    inliers: np.ndarray,
+    width: float,
+    s: dict,
+) -> np.ndarray:
+    """PnLCalib joint Points-and-Lines (PnL) homography refinement."""
+    alpha = float(s.get("pnl_alpha", 0.7))
+    if alpha <= 0.0 or int(inliers.sum()) < 4:
+        return H
+    active_lines = _active_painted_lines(inliers)
+    if not active_lines:
+        return H
+    from scipy.optimize import least_squares
+
+    H0 = np.asarray(H, dtype=float)
+    if abs(float(H0[2, 2])) <= 1e-12:
+        return H
+    H0 = H0 / float(H0[2, 2])
+    inl_xy = xy[inliers]
+    inl_XY = xyz[inliers, :2]
+    n_inl = len(inl_xy)
+    XY1 = np.c_[inl_XY, np.ones(n_inl)]
+    w_sign = float(np.sign(np.median((XY1 @ H0.T)[:, 2])) or 1.0)
+    w_pt = max(1e-3, 1.0 - alpha)
+    w_ln = alpha
+
+    def _fun(h8: np.ndarray) -> np.ndarray:
+        Hc = np.array(
+            [[h8[0], h8[1], h8[2]], [h8[3], h8[4], h8[5]], [h8[6], h8[7], 1.0]],
+            dtype=float,
+        )
+        ph = XY1 @ Hc.T
+        denom = np.where(np.abs(ph[:, 2:3]) > 1e-9, ph[:, 2:3], 1e-9)
+        uv = ph[:, :2] / denom
+        r_pts = w_pt * (uv - inl_xy).ravel()
+        # Lift planar Hc to 3x4 P (with sign so z=0 points have positive depth)
+        P_planar = w_sign * np.array(
+            [
+                [Hc[0, 0], Hc[0, 1], 0.0, Hc[0, 2]],
+                [Hc[1, 0], Hc[1, 1], 0.0, Hc[1, 2]],
+                [Hc[2, 0], Hc[2, 1], 0.0, Hc[2, 2]],
+            ],
+            dtype=float,
+        )
+        r_lines = w_ln * _pnl_line_residuals(P_planar, xy, active_lines)
+        return np.concatenate([r_pts, r_lines])
+
+    try:
+        sol = least_squares(_fun, H0.ravel()[:8], method="trf", loss="soft_l1", max_nfev=25)
+    except Exception:
+        return H
+    H_opt = np.array(
+        [
+            [sol.x[0], sol.x[1], sol.x[2]],
+            [sol.x[3], sol.x[4], sol.x[5]],
+            [sol.x[6], sol.x[7], 1.0],
+        ],
+        dtype=float,
+    )
+    scale = diag.REF_WIDTH / max(1.0, width)
+    ph_opt = XY1 @ H_opt.T
+    if not np.all(np.abs(ph_opt[:, 2]) > 1e-9):
+        return H
+    uv_opt = ph_opt[:, :2] / ph_opt[:, 2:3]
+    rmse_opt = float(np.sqrt(np.mean(np.sum((uv_opt - inl_xy) ** 2, axis=1)))) * scale
+    if rmse_opt <= s["max_rmse_px"] and diag._orientation(H_opt, inl_XY) > 0:
+        return H_opt
+    return H
+
+
 def camera_from_homography(
-    H, width: float, height: float, s: dict | None = None, obj=None, img=None
+    H,
+    width: float,
+    height: float,
+    s: dict | None = None,
+    obj=None,
+    img=None,
+    *,
+    full_xy: np.ndarray | None = None,
+    inliers_mask: np.ndarray | None = None,
 ) -> dict | None:
     """Pinhole camera (square pixels, centred principal point) behind a field homography.
 
@@ -165,7 +506,18 @@ def camera_from_homography(
         return None
     K = np.array([[f, 0.0, cx], [0.0, f, cy], [0.0, 0.0, 1.0]])
     if obj is not None and img is not None and len(obj) >= 4:
-        R, t, f, K = _refine_pinhole(obj, img, width, height, K, R, t)
+        R, t, f, K = _refine_pinhole(
+            obj,
+            img,
+            width,
+            height,
+            K,
+            R,
+            t,
+            full_xy=full_xy,
+            inliers_mask=inliers_mask,
+            pnl_alpha=float(s.get("pnl_alpha", 0.7)),
+        )
     if not s["min_focal_ratio"] * width <= f <= s["max_focal_ratio"] * width:
         return None
     C = -R.T @ t
@@ -175,8 +527,25 @@ def camera_from_homography(
     return {"P": P / P[2, 3], "focal_px": f, "C": C}
 
 
-def _refine_pinhole(obj, img, width, height, K, R, t):
-    """One-view calibration: focal + pose, principal point / aspect fixed, no distortion."""
+def _refine_pinhole(
+    obj,
+    img,
+    width,
+    height,
+    K,
+    R,
+    t,
+    *,
+    full_xy: np.ndarray | None = None,
+    inliers_mask: np.ndarray | None = None,
+    pnl_alpha: float = 0.7,
+):
+    """One-view calibration: focal + pose, principal point / aspect fixed, no distortion.
+
+    When ``full_xy`` and ``inliers_mask`` are provided and ``pnl_alpha > 0``,
+    further refines ``(rvec, tvec, f)`` with PnLCalib's joint points + lines
+    objective ``(1 - alpha) * err_pts + alpha * err_lines``.
+    """
     import cv2
 
     flags = (
@@ -197,10 +566,60 @@ def _refine_pinhole(obj, img, width, height, K, R, t):
             np.zeros(5),
             flags=flags,
         )
+        R2, _ = cv2.Rodrigues(rvecs[0])
+        t2 = tvecs[0].ravel()
+        f2 = float(K2[0, 0])
     except cv2.error:
-        return R, t, float(K[0, 0]), K
-    R2, _ = cv2.Rodrigues(rvecs[0])
-    return R2, tvecs[0].ravel(), float(K2[0, 0]), K2
+        R2, t2, f2, K2 = R, t, float(K[0, 0]), K
+
+    if full_xy is not None and inliers_mask is not None and pnl_alpha > 0.0:
+        active_lines = _active_painted_lines(inliers_mask)
+        if active_lines:
+            from scipy.optimize import least_squares
+
+            obj_arr = np.asarray(obj, dtype=float)[:, :3]
+            img_arr = np.asarray(img, dtype=float)[:, :2]
+            cx, cy = float(K2[0, 2]), float(K2[1, 2])
+            rvec0, _ = cv2.Rodrigues(R2)
+            p0 = np.array([*rvec0.ravel(), *t2.ravel(), f2], dtype=float)
+            w_pt = max(1e-3, 1.0 - pnl_alpha)
+            w_ln = pnl_alpha
+
+            def _pnl_cam_res(params: np.ndarray) -> np.ndarray:
+                rv = params[:3]
+                tv = params[3:6]
+                fc = float(params[6])
+                if fc <= 10.0:
+                    return np.full(2 * len(obj_arr), 1e4, dtype=float)
+                Rm, _ = cv2.Rodrigues(rv)
+                Km = np.array([[fc, 0.0, cx], [0.0, fc, cy], [0.0, 0.0, 1.0]], dtype=float)
+                Pm = Km @ np.c_[Rm, tv]
+                uv_p, front_p = _project(Pm, obj_arr)
+                if not front_p.all():
+                    return np.full(2 * len(obj_arr), 1e4, dtype=float)
+                r_pts = w_pt * (uv_p - img_arr).ravel()
+                r_lines = w_ln * _pnl_line_residuals(Pm, full_xy, active_lines)
+                return np.concatenate([r_pts, r_lines])
+
+            try:
+                r0 = _pnl_cam_res(p0)
+                if np.isfinite(r0).all() and float(r0 @ r0) < 1e7:
+                    sol = least_squares(
+                        _pnl_cam_res, p0, method="trf", loss="soft_l1", max_nfev=20
+                    )
+                    r1_vec = _pnl_cam_res(sol.x)
+                    if np.isfinite(r1_vec).all() and float(r1_vec @ r1_vec) <= float(r0 @ r0):
+                        R_opt, _ = cv2.Rodrigues(sol.x[:3])
+                        t_opt = sol.x[3:6].ravel()
+                        f_opt = float(sol.x[6])
+                        K_opt = np.array(
+                            [[f_opt, 0.0, cx], [0.0, f_opt, cy], [0.0, 0.0, 1.0]], dtype=float
+                        )
+                        return R_opt, t_opt, f_opt, K_opt
+            except Exception:
+                pass
+
+    return R2, t2, f2, K2
 
 
 def _fit_dlt3d(xy, xyz, use, offplane, width: float, s: dict) -> dict | None:
@@ -212,7 +631,9 @@ def _fit_dlt3d(xy, xyz, use, offplane, width: float, s: dict) -> dict | None:
     for _ in range(4):
         if use.sum() < s["min_dlt_points"] or (use & offplane).sum() < s["min_offplane"]:
             return None
-        L = calculate_dlt3d_params(xy[use], xyz[use])
+        L = fit_dlt3d_hartley_svd(xy[use], xyz[use])
+        if L is None:
+            L = calculate_dlt3d_params(xy[use], xyz[use])
         uv, front = _project(dlt_projection_matrix(L), xyz[use])
         res = np.linalg.norm(uv - xy[use], axis=1) * scale
         if not front.all():
@@ -264,6 +685,7 @@ def fit_field_camera(xy, ok, width: float, height: float, settings: dict | None 
         "cam_height_m": None,
         "rmse_px": None,
         "n_points": int(ok.sum()),
+        "inliers": np.zeros(NKP, dtype=bool),
     }
     use = ok & planar
     fit = diag.fit_field_homography(
@@ -275,8 +697,31 @@ def fit_field_camera(xy, ok, width: float, height: float, settings: dict | None 
     H = fit["H"]
     inliers = np.zeros(NKP, dtype=bool)
     inliers[np.flatnonzero(use)[fit["inliers"]]] = True
+    scale = diag.REF_WIDTH / max(1.0, width)
+    H_svd = fit_dlt2d_hartley_svd(xy[inliers], xyz[inliers, :2])
+    if H_svd is not None:
+        ph_svd = np.c_[xyz[inliers, :2], np.ones(int(inliers.sum()))] @ H_svd.T
+        if np.all(np.abs(ph_svd[:, 2]) > 1e-12):
+            uv_svd = ph_svd[:, :2] / ph_svd[:, 2:3]
+            rmse_svd = float(np.sqrt(np.mean(np.sum((uv_svd - xy[inliers]) ** 2, axis=1)))) * scale
+            if rmse_svd <= s["max_rmse_px"] and diag._orientation(H_svd, xyz[inliers, :2]) > 0:
+                H = H_svd
+                fit = fit | {"H": H, "rmse_px": round(rmse_svd, 3)}
+    H_pnl = _refine_homography_pnl(H, xy, xyz, inliers, width, s)
+    if H_pnl is not H:
+        ph_pnl = np.c_[xyz[inliers, :2], np.ones(int(inliers.sum()))] @ H_pnl.T
+        uv_pnl = ph_pnl[:, :2] / ph_pnl[:, 2:3]
+        rmse_pnl = float(np.sqrt(np.mean(np.sum((uv_pnl - xy[inliers]) ** 2, axis=1)))) * scale
+        H = H_pnl
+        fit = fit | {"H": H, "rmse_px": round(rmse_pnl, 3)}
     w = (np.c_[xyz[inliers, :2], np.ones(int(inliers.sum()))] @ H.T)[:, 2]
-    out.update(status="ok", source="planar", H=H, h_sign=float(np.sign(np.median(w)) or 1.0))
+    out.update(
+        status="ok",
+        source="planar",
+        H=H,
+        h_sign=float(np.sign(np.median(w)) or 1.0),
+        inliers=inliers,
+    )
     out["rmse_px"] = fit["rmse_px"]
     offplane = ok & ~planar
     cam = None
@@ -285,10 +730,18 @@ def fit_field_camera(xy, ok, width: float, height: float, settings: dict | None 
         if cam is not None:
             out["source"] = "dlt3d"
     if cam is None:
-        cam = camera_from_homography(H, width, height, s, xyz[inliers], xy[inliers])
+        cam = camera_from_homography(
+            H,
+            width,
+            height,
+            s,
+            xyz[inliers],
+            xy[inliers],
+            full_xy=xy,
+            inliers_mask=inliers,
+        )
         if cam is not None:
             uv, _ = _project(cam["P"], xyz[inliers])
-            scale = diag.REF_WIDTH / max(1.0, width)
             rmse = float(np.sqrt(np.mean(np.sum((uv - xy[inliers]) ** 2, axis=1)))) * scale
             if rmse <= s["max_rmse_px"]:
                 out["source"] = "homography"
@@ -334,6 +787,419 @@ def project_field(model: dict, width: float, height: float, margin: float = 0.01
     return xy, inside
 
 
+def project_rigid_field(
+    model: dict | None,
+    width: float,
+    height: float,
+    *,
+    raw_xy=None,
+    kc=None,
+    codes: list[str] | None = None,
+    kp_conf: float = 0.5,
+    margin: float = 0.0,
+    schema: str = "kiki49",
+    settings: dict | None = None,
+) -> tuple[np.ndarray, list[str]]:
+    """Forward-project the full rigid-body pitch model into image space ``(u, v)``.
+
+    Projects all points of ``schema`` (``"kiki49"`` = 49 points from
+    ``soccerfield_kiki.csv``, or ``"ref3d"`` = 37 planar points from
+    ``soccerfield_ref3d.csv``) using the frame's camera ``P`` (or planar
+    homography ``H`` when ``P`` is unavailable). Keeps finite ``(u, v)``
+    coordinates for all points in front of the camera (``w > 0``), including
+    occluded and out-of-FOV points, and assigns per-keypoint visibility flags:
+      * ``"visible_in_fov"``: inside the image FOV and seen/confirmed (or when
+        no detection array is supplied);
+      * ``"occluded"``: inside the image FOV on the pitch, but missed/rejected
+        or displaced by an obstacle in the detector output;
+      * ``"out_of_bounds"``: outside the image FOV or behind the camera.
+    """
+    if schema == "kiki49":
+        xyz, planar = _field()
+    elif schema == "ref3d":
+        _, xyz = load_ref3d_points()
+        planar = np.ones(len(xyz), dtype=bool)
+    else:
+        raise ValueError(f"Unknown field schema: {schema!r} (expected 'kiki49' or 'ref3d')")
+    n_pts = len(xyz)
+    if not model or model.get("status") != "ok":
+        return np.full((n_pts, 2), np.nan), ["out_of_bounds"] * n_pts
+
+    uv = np.full((n_pts, 2), np.nan)
+    front = np.zeros(n_pts, dtype=bool)
+    if model.get("P") is not None:
+        p_uv, p_front = _project(np.asarray(model["P"], dtype=float), xyz)
+        front = p_front & np.isfinite(p_uv).all(axis=1)
+        uv = np.where(front[:, None], p_uv, np.nan)
+    elif model.get("H") is not None:
+        H = np.asarray(model["H"], dtype=float)
+        ph = np.c_[xyz[:, :2], np.ones(n_pts)] @ H.T
+        h_sign = float(model.get("h_sign", 1.0))
+        front = planar & (np.sign(ph[:, 2]) == h_sign) & (np.abs(ph[:, 2]) > 1e-12)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            p_uv = ph[:, :2] / ph[:, 2:3]
+        front &= np.isfinite(p_uv).all(axis=1)
+        uv = np.where(front[:, None], p_uv, np.nan)
+    else:
+        return uv, ["out_of_bounds"] * n_pts
+
+    m = margin * width
+    with np.errstate(invalid="ignore"):
+        in_fov = (
+            front
+            & (uv[:, 0] >= m)
+            & (uv[:, 0] <= width - m)
+            & (uv[:, 1] >= m)
+            & (uv[:, 1] <= height - m)
+        )
+
+    if kc is None and codes is None:
+        flags = ["visible_in_fov" if in_fov[i] else "out_of_bounds" for i in range(n_pts)]
+        return uv, flags
+
+    s = _settings(settings)
+    scale = diag.REF_WIDTH / max(1.0, width)
+    kiki_uv, _ = (
+        (uv, front) if schema == "kiki49" else project_field(model, width, height, margin=margin)
+    )
+    raw_arr = np.asarray(raw_xy, dtype=float).reshape(-1, 2) if raw_xy is not None else None
+    kc_arr = np.asarray(kc, dtype=float).ravel() if kc is not None else None
+
+    def _point_seen(idx: int, proj_pt: np.ndarray) -> bool:
+        if codes is not None and idx < len(codes):
+            c = codes[idx]
+            if c == "G":
+                return True
+            if c == "D":
+                if raw_arr is not None and idx < len(raw_arr) and np.isfinite(raw_arr[idx]).all():
+                    err = float(np.linalg.norm(raw_arr[idx] - proj_pt)) * scale
+                    return err <= s["fix_px"]
+                return True
+            return False
+        if kc_arr is not None and idx < len(kc_arr):
+            if not (np.isfinite(kc_arr[idx]) and kc_arr[idx] >= kp_conf):
+                return False
+            if raw_arr is not None and idx < len(raw_arr) and np.isfinite(raw_arr[idx]).all():
+                err = float(np.linalg.norm(raw_arr[idx] - proj_pt)) * scale
+                return err <= s["fix_px"]
+            return True
+        return True
+
+    flags: list[str] = []
+    if schema == "kiki49":
+        for i in range(n_pts):
+            if not in_fov[i]:
+                flags.append("out_of_bounds")
+            elif _point_seen(i, kiki_uv[i]):
+                flags.append("visible_in_fov")
+            else:
+                flags.append("occluded")
+    else:
+        ref_map = _ref3d_to_kiki_map()
+        direct = (codes is not None and len(codes) == n_pts) or (
+            kc_arr is not None and len(kc_arr) == n_pts
+        )
+        for j in range(n_pts):
+            if not in_fov[j]:
+                flags.append("out_of_bounds")
+            elif direct:
+                flags.append("visible_in_fov" if _point_seen(j, uv[j]) else "occluded")
+            else:
+                seen = any(_point_seen(k_idx, kiki_uv[k_idx]) for k_idx in ref_map[j])
+                flags.append("visible_in_fov" if seen else "occluded")
+    return uv, flags
+
+
+def regularize_camera_sequence(
+    models: list[dict | None],
+    cuts: list[bool] | np.ndarray,
+    width: float,
+    height: float,
+    *,
+    xy_seq: list[np.ndarray | None] | None = None,
+    window: int | None = None,
+    settings: dict | None = None,
+) -> list[dict | None]:
+    """Shot-aware temporal regularization of per-frame camera matrices ``H`` and ``P``.
+
+    Applies a symmetric triangular rolling filter over normalized ``H``
+    (``H[2,2] = 1``) and ``P`` (``P[2,3] = 1``) within each contiguous shot
+    (never crossing ``cuts[t] == True``) to suppress high-frequency inter-frame
+    jitter while guarding each frame's inlier reprojection RMSE <= ``max_rmse_px``.
+    """
+    s = _settings(settings)
+    win = int(s["smooth_window"] if window is None else window)
+    n = len(models)
+    if win <= 1 or n <= 1:
+        return [dict(m) if isinstance(m, dict) else m for m in models]
+
+    cuts_arr = np.zeros(n, dtype=bool) if cuts is None else np.asarray(cuts, dtype=bool)
+    xyz, planar = _field()
+    scale = diag.REF_WIDTH / max(1.0, width)
+    radius = max(1, win // 2)
+
+    # Partition into contiguous shot ranges [s0, s1)
+    shots: list[tuple[int, int]] = []
+    start = 0
+    for t in range(1, n):
+        if cuts_arr[t]:
+            shots.append((start, t))
+            start = t
+    shots.append((start, n))
+
+    out: list[dict | None] = [dict(m) if isinstance(m, dict) else m for m in models]
+    for s0, s1 in shots:
+        if s1 - s0 <= 1:
+            continue
+        for t in range(s0, s1):
+            m_t = models[t]
+            if not m_t or m_t.get("status") != "ok":
+                continue
+            lo, hi = max(s0, t - radius), min(s1, t + radius + 1)
+            inl = m_t.get("inliers")
+            xy_t = (
+                np.asarray(xy_seq[t], dtype=float).reshape(NKP, 2)
+                if xy_seq is not None and t < len(xy_seq) and xy_seq[t] is not None
+                else None
+            )
+            if inl is not None and xy_t is not None:
+                inl = np.asarray(inl, dtype=bool) & np.isfinite(xy_t).all(axis=1)
+            else:
+                inl = None
+
+            # Smooth H
+            h_list, h_weights = [], []
+            for k in range(lo, hi):
+                mk = models[k]
+                if mk and mk.get("status") == "ok" and mk.get("H") is not None:
+                    Hk = np.asarray(mk["H"], dtype=float)
+                    if abs(float(Hk[2, 2])) > 1e-12:
+                        h_list.append(Hk / float(Hk[2, 2]))
+                        h_weights.append(float(radius + 1 - abs(k - t)))
+            H_new = m_t.get("H")
+            if len(h_list) > 1 and H_new is not None:
+                H_orig = np.asarray(H_new, dtype=float) / float(H_new[2, 2])
+                w_arr = np.asarray(h_weights, dtype=float)
+                H_bar = np.tensordot(w_arr, np.stack(h_list, axis=0), axes=(0, 0)) / w_arr.sum()
+                if abs(float(H_bar[2, 2])) > 1e-12:
+                    H_bar = H_bar / float(H_bar[2, 2])
+                    inl_p = (inl & planar) if inl is not None else None
+                    if inl_p is not None and inl_p.any() and xy_t is not None:
+                        for alpha in (1.0, 0.5, 0.25, 0.0):
+                            H_cand = alpha * H_bar + (1.0 - alpha) * H_orig
+                            H_cand = H_cand / float(H_cand[2, 2])
+                            ph = np.c_[xyz[inl_p, :2], np.ones(int(inl_p.sum()))] @ H_cand.T
+                            if np.all(np.abs(ph[:, 2]) > 1e-12):
+                                uv_h = ph[:, :2] / ph[:, 2:3]
+                                rmse_h = (
+                                    float(
+                                        np.sqrt(np.mean(np.sum((uv_h - xy_t[inl_p]) ** 2, axis=1)))
+                                    )
+                                    * scale
+                                )
+                                if rmse_h <= s["max_rmse_px"]:
+                                    H_new = H_cand
+                                    break
+                    else:
+                        H_new = H_bar
+
+            # Smooth P
+            p_list, p_weights = [], []
+            for k in range(lo, hi):
+                mk = models[k]
+                if mk and mk.get("status") == "ok" and mk.get("P") is not None:
+                    Pk = np.asarray(mk["P"], dtype=float)
+                    if abs(float(Pk[2, 3])) > 1e-12:
+                        p_list.append(Pk / float(Pk[2, 3]))
+                        p_weights.append(float(radius + 1 - abs(k - t)))
+            P_new = m_t.get("P")
+            rmse_new = m_t.get("rmse_px")
+            if len(p_list) > 1 and P_new is not None:
+                P_orig = np.asarray(P_new, dtype=float) / float(P_new[2, 3])
+                w_arr = np.asarray(p_weights, dtype=float)
+                P_bar = np.tensordot(w_arr, np.stack(p_list, axis=0), axes=(0, 0)) / w_arr.sum()
+                if abs(float(P_bar[2, 3])) > 1e-12:
+                    P_bar = P_bar / float(P_bar[2, 3])
+                    if inl is not None and inl.any() and xy_t is not None:
+                        for alpha in (1.0, 0.5, 0.25, 0.0):
+                            P_cand = alpha * P_bar + (1.0 - alpha) * P_orig
+                            P_cand = P_cand / float(P_cand[2, 3])
+                            uv_p, front_p = _project(P_cand, xyz[inl])
+                            if front_p.all():
+                                rmse_p = (
+                                    float(np.sqrt(np.mean(np.sum((uv_p - xy_t[inl]) ** 2, axis=1))))
+                                    * scale
+                                )
+                                if rmse_p <= s["max_rmse_px"]:
+                                    P_new = P_cand
+                                    rmse_new = round(rmse_p, 3)
+                                    break
+                    else:
+                        P_new = P_bar
+
+            updated = dict(m_t)
+            if H_new is not None:
+                updated["H"] = H_new
+                if inl is not None and (inl & planar).any():
+                    inl_p = inl & planar
+                    w_h = (np.c_[xyz[inl_p, :2], np.ones(int(inl_p.sum()))] @ H_new.T)[:, 2]
+                    updated["h_sign"] = float(np.sign(np.median(w_h)) or 1.0)
+            if P_new is not None:
+                updated["P"] = P_new
+                if rmse_new is not None:
+                    updated["rmse_px"] = rmse_new
+                try:
+                    cam = decompose_dlt3d(P_new.ravel()[:11])
+                    fx, fy = float(cam.K[0, 0]), float(cam.K[1, 1])
+                    if fx > 0 and fy > 0:
+                        updated["focal_px"] = round((fx + fy) / 2.0, 1)
+                        updated["cam_height_m"] = round(float(cam.C[2]), 2)
+                except (ValueError, np.linalg.LinAlgError):
+                    pass
+            out[t] = updated
+    return out
+
+
+@lru_cache(maxsize=1)
+def _painted_line_directions() -> dict[int, list[np.ndarray]]:
+    """For each planar keypoint on painted lines, the unit 2D world direction(s) of its line(s)."""
+    try:
+        from . import freekiki_snap as fs
+    except ImportError:
+        import freekiki_snap as fs  # ty: ignore[unresolved-import]
+
+    xyz, _ = _field()
+    line_dirs: dict[str, np.ndarray] = {}
+    for name, members in fs.PAINTED_LINES.items():
+        pts = xyz[list(members), :2]
+        # Take the two members farthest apart to define the exact line direction
+        ia, ib = max(
+            ((a, b) for a in range(len(pts)) for b in range(a + 1, len(pts))),
+            key=lambda ab: float(np.hypot(*(pts[ab[0]] - pts[ab[1]]))),
+        )
+        d = pts[ib] - pts[ia]
+        norm = float(np.hypot(*d))
+        if norm > 1e-9:
+            line_dirs[name] = d / norm
+    per_kp: dict[int, list[np.ndarray]] = {}
+    for k in range(NKP):
+        dirs = [line_dirs[n] for n in fs.lines_of(k) if n in line_dirs]
+        if dirs:
+            per_kp[k] = dirs
+    return per_kp
+
+
+def compute_frame_residuals(
+    model: dict | None,
+    raw_xy: np.ndarray | None,
+    snap_xy: np.ndarray | None,
+    acc: np.ndarray | list[bool] | None,
+    width: float,
+    height: float,
+) -> dict[str, float | None]:
+    """Per-frame reprojection RMSE breaking down raw network vs. white-line snapped points.
+
+    Returns:
+      * ``raw_reproj_rmse_px``: raw detected points vs. projected ground-truth model (px@1920)
+      * ``raw_reproj_rmse_m``: back-projected raw planar points vs. metric ground truth (m)
+      * ``snap_reproj_rmse_px``: white-line snapped points vs. projected ground-truth model (px@1920)
+      * ``snap_reproj_rmse_m``: back-projected snapped planar points vs. metric ground truth (m)
+      * ``snap_line_rmse_px``: perpendicular distance of snapped points to projected planar field lines (px@1920)
+    """
+    res: dict[str, float | None] = {
+        "raw_reproj_rmse_px": None,
+        "raw_reproj_rmse_m": None,
+        "snap_reproj_rmse_px": None,
+        "snap_reproj_rmse_m": None,
+        "snap_line_rmse_px": None,
+    }
+    if not model or model.get("status") != "ok" or acc is None:
+        return res
+    acc_mask = np.asarray(acc, dtype=bool).ravel()[:NKP]
+    if not acc_mask.any():
+        return res
+
+    xyz, planar = _field()
+    scale = diag.REF_WIDTH / max(1.0, width)
+    proj_uv, _ = project_rigid_field(model, width, height, schema="kiki49")
+    proj_ok = np.isfinite(proj_uv).all(axis=1)
+
+    H = model.get("H")
+    H_inv = None
+    if H is not None:
+        try:
+            H_inv = np.linalg.inv(np.asarray(H, dtype=float))
+        except np.linalg.LinAlgError:
+            H_inv = None
+
+    def _backproject_rmse_m(pts_2d: np.ndarray, mask: np.ndarray) -> float | None:
+        mask_p = mask & planar
+        if H_inv is None or not mask_p.any():
+            return None
+        ph = np.c_[pts_2d[mask_p], np.ones(int(mask_p.sum()))] @ H_inv.T
+        valid_w = np.abs(ph[:, 2]) > 1e-12
+        if not valid_w.any():
+            return None
+        xy_m = ph[valid_w, :2] / ph[valid_w, 2:3]
+        gt_m = xyz[mask_p, :2][valid_w]
+        err_m = np.linalg.norm(xy_m - gt_m, axis=1)
+        return round(float(np.sqrt(np.mean(err_m**2))), 4)
+
+    if raw_xy is not None:
+        raw_arr = np.asarray(raw_xy, dtype=float).reshape(NKP, 2)
+        v_raw = acc_mask & np.isfinite(raw_arr).all(axis=1) & proj_ok
+        if v_raw.any():
+            err_px = np.linalg.norm(raw_arr[v_raw] - proj_uv[v_raw], axis=1) * scale
+            res["raw_reproj_rmse_px"] = round(float(np.sqrt(np.mean(err_px**2))), 3)
+            res["raw_reproj_rmse_m"] = _backproject_rmse_m(raw_arr, v_raw)
+
+    if snap_xy is not None:
+        snap_arr = np.asarray(snap_xy, dtype=float).reshape(NKP, 2)
+        v_snap = acc_mask & np.isfinite(snap_arr).all(axis=1) & proj_ok
+        if v_snap.any():
+            err_px = np.linalg.norm(snap_arr[v_snap] - proj_uv[v_snap], axis=1) * scale
+            res["snap_reproj_rmse_px"] = round(float(np.sqrt(np.mean(err_px**2))), 3)
+            res["snap_reproj_rmse_m"] = _backproject_rmse_m(snap_arr, v_snap)
+
+            # Perpendicular distance to projected planar field lines
+            kp_dirs = _painted_line_directions()
+            line_errs: list[float] = []
+            P = model.get("P")
+            for k in np.flatnonzero(v_snap & planar):
+                k = int(k)
+                dirs = kp_dirs.get(k)
+                if not dirs:
+                    continue
+                p0 = proj_uv[k]
+                for u_dir in dirs:
+                    pt_step = np.array([[xyz[k, 0] + u_dir[0], xyz[k, 1] + u_dir[1], 0.0]])
+                    if P is not None:
+                        p1_arr, f1 = _project(np.asarray(P, dtype=float), pt_step)
+                        if not f1[0] or not np.isfinite(p1_arr[0]).all():
+                            continue
+                        p1 = p1_arr[0]
+                    elif H is not None:
+                        ph1 = (
+                            np.array([pt_step[0, 0], pt_step[0, 1], 1.0])
+                            @ np.asarray(H, dtype=float).T
+                        )
+                        if abs(float(ph1[2])) <= 1e-12:
+                            continue
+                        p1 = ph1[:2] / ph1[2]
+                    else:
+                        continue
+                    d_vec = p1 - p0
+                    d_len = float(np.hypot(d_vec[0], d_vec[1]))
+                    if d_len <= 1e-9:
+                        continue
+                    n_vec = np.array([-d_vec[1] / d_len, d_vec[0] / d_len])
+                    perp_px = abs(float((snap_arr[k] - p0) @ n_vec)) * scale
+                    line_errs.append(perp_px)
+            if line_errs:
+                res["snap_line_rmse_px"] = round(float(np.sqrt(np.mean(np.square(line_errs)))), 3)
+    return res
+
+
 def dlt_coefficients(model: dict | None) -> tuple[np.ndarray | None, np.ndarray | None]:
     """vailá DLT2D and DLT3D coefficients of a frame camera (``rec2d`` / ``rec3d`` layout).
 
@@ -357,7 +1223,16 @@ def dlt_coefficients(model: dict | None) -> tuple[np.ndarray | None, np.ndarray 
 
 
 def refine_keypoints(
-    raw_xy, raw_kc, codes, width: float, height: float, *, mode: str, kp_conf: float, settings=None
+    raw_xy,
+    raw_kc,
+    codes,
+    width: float,
+    height: float,
+    *,
+    mode: str,
+    kp_conf: float,
+    settings=None,
+    model: dict | None = None,
 ):
     """Fill / fix one frame's network keypoints with the field camera.
 
@@ -374,7 +1249,8 @@ def refine_keypoints(
     xy = np.array(raw_xy, dtype=float).reshape(NKP, 2)
     kc = np.array(raw_kc, dtype=float).reshape(NKP)
     ok = np.array([c == "D" for c in codes])
-    model = fit_field_camera(xy, ok, width, height, s)
+    if model is None:
+        model = fit_field_camera(xy, ok, width, height, s)
     if model["status"] != "ok":
         return xy, kc, gcodes, model
     proj, inside = project_field(model, width, height, s["margin"])

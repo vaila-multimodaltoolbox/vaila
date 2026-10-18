@@ -7,7 +7,7 @@
 | **Category** | Processing |
 | **File** | `vaila/quickmeasure.py` |
 | **Version** | 0.4.9 |
-| **Updated** | 07 October 2026 |
+| **Updated** | 17 October 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes (embedded in `getpixelvideo.py`) |
 | **CLI** | Yes (`python -m vaila.quickmeasure --points-csv ...`) |
@@ -19,7 +19,7 @@
 Kinovea-style on-image calibration and measurement engine for `getpixelvideo.py`. The host UI splits into two toolbar modes:
 
 - **CALIB** (`Shift+Q` / **CALIB** button) — build or load planar calibrations.
-- **MEASURE** (`Q` / **MEASURE** button) — click points and classify as **Distance**, **Area**, **Angle**, **Velocity**, or **Acceleration**. A checkbox beside **MEASURE** toggles didactic on-image badges (`#N · type · value unit`).
+- **MEASURE** (`Q` / **MEASURE** button) — click points and classify as **Distance**, **Area**, **Angle**, **Velocity**, **Acceleration**, or **Level** (H+V laser guide + axis-snapped tape). A checkbox beside **MEASURE** toggles didactic on-image badges; **Clear** / Backspace wipe drawn feedback (keeps calib); `Ctrl+Z` / `Ctrl+Y` undo/redo while MEASURE is on.
 
 This module owns measurement *state*, *math*, and pygame overlays. `getpixelvideo.py` only owns hotkeys, click routing, and toolbar buttons.
 
@@ -72,8 +72,12 @@ Digit keys after MEASURE is on:
 | `3` | Angle (3 or 4 points) |
 | `4` | Velocity (2 frames, needs FPS) |
 | `5` | Acceleration (3 frames, needs FPS) |
+| `6` | Level / tape (origin → H+V green crosshair; 2nd click snaps to nearer image axis) |
+| `7`–`0` | Reserved |
 
-Each completed set is stored with `result_frame`, pixel geometry, real coordinates, and `calibration_frame` (`-1` = default).
+**Clear** (toolbar) / Backspace clears draft, points, and drawn results (calibration stays). `Ctrl+Z` / `Ctrl+Y` undo/redo measure steps while MEASURE is active.
+
+Each completed set is stored with `result_frame`, pixel geometry, real coordinates, and `calibration_frame` (`-1` = default). Level results also store `axis` (`H` or `V`).
 
 ---
 

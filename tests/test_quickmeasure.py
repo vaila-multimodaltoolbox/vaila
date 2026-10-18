@@ -38,6 +38,7 @@ from vaila.quickmeasure import (
     measure_from_points_csv,
     needs_calibration,
     session_from_points_csv,
+    snap_level_endpoint,
 )
 
 FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures", "quickmeasure")
@@ -208,7 +209,14 @@ def test_session_measure_unknown_kind_raises():
     session.add_point(0, 1, 1)
     with pytest.raises(QuickMeasureError):
         session.measure("banana")
-    assert set(MEASURE_TYPES) == {"distance", "area", "angle", "velocity", "acceleration"}
+    assert set(MEASURE_TYPES) == {
+        "distance",
+        "area",
+        "angle",
+        "velocity",
+        "acceleration",
+        "level",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -850,7 +858,59 @@ def test_live_mode_keys_mapping():
         "3": "angle",
         "4": "velocity",
         "5": "acceleration",
+        "6": "level",
     }
+
+
+def test_snap_level_endpoint_horizontal_and_vertical():
+    assert snap_level_endpoint(10.0, 10.0, 50.0, 12.0) == (50.0, 10.0, "H")
+    assert snap_level_endpoint(10.0, 10.0, 12.0, 50.0) == (10.0, 50.0, "V")
+
+
+def test_live_mode_level_snaps_horizontal_tape():
+    session = QuickMeasureSession()
+    session.set_live_mode("6")
+    status, done = session.add_live_point(0, 10, 10)
+    assert done is None
+    assert "1/2" in status
+    status, done = session.add_live_point(0, 50, 12)
+    assert done is not None
+    assert done["type"] == "level"
+    assert done["axis"] == "H"
+    assert done["pixels"] == [(10.0, 10.0), (50.0, 10.0)]
+    assert math.isclose(done["value"], 40.0, abs_tol=1e-9)
+    assert "Level (H)" in format_result(done)
+
+
+def test_live_mode_level_snaps_vertical_tape():
+    session = QuickMeasureSession()
+    session.set_live_mode("6")
+    session.add_live_point(0, 10, 10)
+    _, done = session.add_live_point(0, 12, 50)
+    assert done is not None
+    assert done["axis"] == "V"
+    assert done["pixels"] == [(10.0, 10.0), (10.0, 50.0)]
+    assert math.isclose(done["value"], 40.0, abs_tol=1e-9)
+
+
+def test_measure_undo_redo_and_clear_feedback():
+    session = QuickMeasureSession()
+    session.set_live_mode("1")
+    session.add_live_point(0, 0, 0)
+    _, done = session.add_live_point(0, 3, 4)
+    assert done is not None
+    assert len(session.results) == 1
+    assert session.undo_measure() == "Measure: undo"
+    assert len(session.results) == 0
+    assert len(session.draft_points) == 1  # back to first click of the pair
+    assert session.redo_measure() == "Measure: redo"
+    assert len(session.results) == 1
+    assert session.clear_measure_feedback() == "Measure: points and results cleared"
+    assert session.results == []
+    assert session.points == []
+    assert session.draft_points == []
+    assert session.undo_measure() == "Measure: nothing to undo"
+    assert session.redo_measure() == "Measure: nothing to redo"
 
 
 def test_live_mode_distance_auto_finalizes_and_labels_geometry():

@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.9
 Created: 25 September 2026
-Update Date: 16 October 2026
+Update Date: 18 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -30,7 +30,8 @@ Description:
           runs/<name>/           Ultralytics training runs
           models/registry.csv    every finished run with its best-epoch metrics
           models/freekiki_<slot>.pt  best model per size: n s m l x (YOLO26-pose),
-                                 hm_n..hm_x (heatmap ResNet18..152)
+                                 hm_n..hm_x (heatmap ResNet18..152),
+                                 hm_hr32 (heatmap HRNet-W32, distilled from active)
           models/promotion_log.csv  every promotion decision and its reasons
           outputs/               evaluations, sweeps, audits, benchmarks
 
@@ -179,7 +180,10 @@ HEATMAP_SLOTS = {
     "resnet50": "hm_m",
     "resnet101": "hm_l",
     "resnet152": "hm_x",
+    "hrnet_w32": "hm_hr32",
 }
+HEATMAP_BACKBONES = tuple(HEATMAP_SLOTS)
+DISTILL_BACKBONES = ("hrnet_w32",)  # default --teacher active (YOLO -> HRNet distillation)
 SLOTS = MODEL_SCALES + tuple(HEATMAP_SLOTS.values())
 DEFAULT_SLOT = "m"
 OFFICIAL_BASE_RE = re.compile(r"^yolo26([nsmlx])-pose\.pt$")
@@ -1046,7 +1050,15 @@ def _publish_rows(ds: Path, fields: list[str], existing: list[dict], new_rows, c
 # --------------------------------------------------------------------------- #
 # External datasets (super-dataset): stage, then commit to train
 # --------------------------------------------------------------------------- #
-EXTERNAL_SOURCES = ("roboflow", "gsr", "soccernet-rescue")
+EXTERNAL_SOURCES = (
+    "roboflow",
+    "gsr",
+    "soccernet-rescue",
+    "wc14",
+    "ts-worldcup",
+    "worldpose",
+    "pnlcalib",
+)
 EXTERNAL_ROWS = "rows.csv"
 EXTERNAL_FIELDS = (
     "split",
@@ -1312,6 +1324,62 @@ def stage_external(
             "- GSR files give a game index, not the SoccerNet match name: the group is "
             "`gsr:<split>:game<id>` and near-duplicate dedupe is the leakage guard."
         )
+    elif source in ("wc14", "ts-worldcup", "worldpose", "pnlcalib"):
+        run_wc14 = source in ("wc14", "pnlcalib")
+        run_tswc = source in ("ts-worldcup", "pnlcalib")
+        run_wpose = source in ("worldpose", "pnlcalib")
+
+        if run_wc14:
+            wc_base = (
+                Path(root)
+                if (root and source == "wc14")
+                else kb.DATASET_ROOT / "worldcup2014_nhoma"
+            )
+            tasks_wc = ext.wc14_tasks(wc_base)
+            if not tasks_wc and source == "wc14":
+                raise FileNotFoundError(f"No WC14 .homographyMatrix files in {wc_base}")
+            before_wc = len(rows)
+            for sample, img in list(ext.wc14_samples(wc_base, opts))[:limit]:
+                keep(sample, img)
+            notes.append(
+                f"- WC14 (`{wc_base}`): {len(tasks_wc)} pairs, {len(rows) - before_wc} accepted"
+            )
+
+        if run_tswc:
+            ts_base = (
+                Path(root)
+                if (root and source == "ts-worldcup")
+                else kb.DATASET_ROOT / "ts_worldcup_kpsfr" / "TS-WorldCup"
+            )
+            clips_ts = ext.ts_worldcup_clips(ts_base)
+            if not clips_ts and source == "ts-worldcup":
+                raise FileNotFoundError(f"No TS-WorldCup clips in {ts_base}")
+            before_ts = len(rows)
+            for clip_info in clips_ts[:limit] if limit else clips_ts:
+                for sample, img in ext.ts_worldcup_samples(clip_info, opts):
+                    keep(sample, img)
+            notes.append(
+                f"- TS-WorldCup (`{ts_base}`): {len(clips_ts)} clips, {len(rows) - before_ts} accepted"
+            )
+
+        if run_wpose:
+            wp_base = (
+                Path(root)
+                if (root and source == "worldpose")
+                else kb.FIFA_ROOT / "data" / "cameras"
+            )
+            pairs_wp = ext.worldpose_clips(wp_base)
+            if not pairs_wp and source == "worldpose":
+                raise FileNotFoundError(
+                    f"No WorldPose / FIFA camera .npz + video pairs in {wp_base}"
+                )
+            before_wp = len(rows)
+            for pair in pairs_wp[:limit] if limit else pairs_wp:
+                for sample, img in ext.worldpose_samples(pair, opts):
+                    keep(sample, img)
+            notes.append(
+                f"- WorldPose / FIFA (`{wp_base}`): {len(pairs_wp)} clips, {len(rows) - before_wp} accepted"
+            )
     else:
         base = (
             Path(root)
@@ -1846,13 +1914,22 @@ def train(
     backbone: str = "resnet50",
     pretrained: bool = True,
     lr: float | None = None,
+    teacher: str | None = None,
+    distill_weight: float = 0.5,
 ) -> dict:
     """Train (from a base model) or retrain (``base='active'``) on the workspace dataset.
 
-    ``backend='heatmap'`` trains the vailá-native ResNet heatmap network
-    (:mod:`freekiki_heatmap`, torch/torchvision only) on the same labels instead
-    of Ultralytics YOLO; ``base`` is then only used when it is a heatmap
-    checkpoint (continued fine-tune). Heatmap runs are never auto-promoted.
+    ``backend='heatmap'`` trains the vailá-native heatmap network
+    (:mod:`freekiki_heatmap`, torch/torchvision only: ResNet or HRNet-W32) on
+    the same labels instead of Ultralytics YOLO; ``base`` is then only used
+    when it is a heatmap checkpoint (continued fine-tune). Heatmap runs are
+    never auto-promoted.
+
+    ``teacher`` (heatmap only): a model slot/path whose predictions on the same
+    augmented batch are distilled into the student, ``L = L_gt +
+    distill_weight * L_distill``. ``hrnet_w32`` defaults to ``teacher='active'``
+    (YOLO weights cannot be copied into HRNet; the transfer is distillation).
+    ``teacher='none'`` or ``distill_weight=0`` trains on GT only.
 
     ``manifest`` (e.g. ``v001``) trains on the oversampled list of
     ``manifests/<manifest>/`` instead of ``images/train`` (see
@@ -1893,6 +1970,8 @@ def train(
             backbone=backbone,
             pretrained=pretrained,
             lr=lr,
+            teacher=teacher,
+            distill_weight=distill_weight,
         )
     if backend != "yolo":
         raise ValueError(f"Unknown backend {backend!r} (yolo or heatmap)")
@@ -2003,6 +2082,8 @@ def _train_heatmap(
     backbone: str,
     pretrained: bool,
     lr,
+    teacher: str | None = None,
+    distill_weight: float = 0.5,
 ) -> dict:
     """``train --backend heatmap`` (see :func:`train`)."""
     fh = _heatmap()
@@ -2014,9 +2095,14 @@ def _train_heatmap(
             init = path
         else:
             _log(f"heatmap: --base {base} is not a heatmap checkpoint; ignored ({backbone} start)")
+    teacher_path = _resolve_teacher(ws, backbone, teacher, distill_weight)
+    distill_weight = float(distill_weight) if teacher_path else 0.0
     epochs = int(epochs or fh.DEFAULTS["epochs"])
     imgsz = int(imgsz or fh.DEFAULTS["imgsz"])
-    batch = int(batch) if batch and float(batch) >= 1 else fh.DEFAULTS["batch"]
+    default_batch = (
+        fh.DEFAULTS["batch_hrnet"] if backbone in DISTILL_BACKBONES else fh.DEFAULTS["batch"]
+    )
+    batch = int(batch) if batch and float(batch) >= 1 else default_batch
     workers = fh.DEFAULTS["workers"] if workers is None else int(workers)
     lr = float(lr or fh.DEFAULTS["lr"])
     _, flip_idx = load_schema()
@@ -2027,7 +2113,9 @@ def _train_heatmap(
         start = init or f"{backbone}-{'imagenet' if pretrained else 'scratch'}"
         _log(
             f"train: backend=heatmap start={start} epochs={epochs} imgsz={imgsz} "
-            f"batch={batch} lr={lr} run={name}" + (f" manifest={manifest}" if manifest else "")
+            f"batch={batch} lr={lr} run={name}"
+            + (f" manifest={manifest}" if manifest else "")
+            + (f" teacher={teacher_path} distill={distill_weight:g}" if teacher_path else "")
         )
         write_train_manifest(
             run_dir,
@@ -2045,6 +2133,9 @@ def _train_heatmap(
                 "device": device,
                 "seed": seed,
                 "fraction": fraction,
+                "teacher": teacher_path,
+                "teacher_sha256": file_sha256(teacher_path) if teacher_path else None,
+                "distill_weight": distill_weight,
             },
             dataset=dataset_dir(ws),
             sampling=sampling,
@@ -2065,9 +2156,39 @@ def _train_heatmap(
             device=device,
             seed=seed,
             extra_args={"fraction": fraction, "manifest": manifest},
+            teacher=teacher_path,
+            distill_weight=distill_weight,
             log=_log,
         )
     return register_run(ws, run_dir, base=init or start, epochs=epochs, imgsz=imgsz)
+
+
+def _resolve_teacher(ws: Path, backbone: str, teacher: str | None, distill_weight: float):
+    """Teacher file of a heatmap run, or None (GT-only training).
+
+    ``teacher=None`` means ``active`` for :data:`DISTILL_BACKBONES` (HRNet-W32)
+    and no teacher for ResNet. ``none``/``off`` or ``distill_weight <= 0``
+    disable distillation. A default ``active`` teacher that does not exist yet
+    (fresh workspace) falls back to GT-only with a log line; an explicit
+    teacher that cannot be found raises.
+    """
+    if float(distill_weight) <= 0:
+        return None
+    explicit = teacher is not None
+    if teacher is None:
+        teacher = "active" if backbone in DISTILL_BACKBONES else None
+    if teacher is None or str(teacher).strip().lower() in ("", "none", "off", "no"):
+        return None
+    try:
+        path = resolve_model(ws, str(teacher))
+    except FileNotFoundError:
+        if explicit and teacher != "active":
+            raise
+        _log(f"heatmap: no '{teacher}' teacher model in this workspace yet; training on GT only")
+        return None
+    if not Path(path).is_file():
+        raise FileNotFoundError(f"teacher model not found: {teacher}")
+    return str(Path(path).resolve())
 
 
 def write_train_manifest(
@@ -3825,12 +3946,26 @@ def select_windows(
 
 
 def find_videos(source, recursive: bool = True) -> list[Path]:
-    """Videos of a file or folder (every sub-folder with ``recursive``), sorted by path."""
+    """Videos of a file or folder (every sub-folder with ``recursive``), sorted by path.
+
+    Automatically ignores generated vailá output artifacts (processed directories
+    and *_overlay.mp4 videos) to avoid re-detecting on intermediate renders.
+    """
     source = Path(source).expanduser().resolve()
     if source.is_file():
         return [source]
     walk = source.rglob("*") if recursive else source.iterdir()
-    return sorted(p for p in walk if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
+    filtered = []
+    for p in walk:
+        if not p.is_file() or p.suffix.lower() not in VIDEO_EXTS:
+            continue
+        # Skip output batch/prediction folders and overlay videos
+        if any(part.startswith(("processed_", "freekiki_predict_")) for part in p.parts):
+            continue
+        if p.stem.endswith(("_freekiki_overlay", "_overlay")):
+            continue
+        filtered.append(p)
+    return sorted(filtered)
 
 
 def select_frames(
@@ -5420,9 +5555,20 @@ def keypoints_row(frame: int, xy, kconf, kp_conf: float) -> list:
     return row
 
 
-def getpixelvideo_header() -> list[str]:
+def rigid_keypoints_row(frame: int, xy, n_points: int = NKP) -> list:
+    """One full rigid-body projected row (keeps finite coordinates even outside FOV)."""
+    row: list = [frame]
+    for i in range(n_points):
+        if xy is None or i >= len(xy) or not all(map(math.isfinite, xy[i])):
+            row += ["", ""]
+        else:
+            row += [f"{float(xy[i][0]):.2f}", f"{float(xy[i][1]):.2f}"]
+    return row
+
+
+def getpixelvideo_header(n_points: int = NKP) -> list[str]:
     header = ["frame"]
-    for i in range(NKP):
+    for i in range(n_points):
         header += [f"p{i}_x", f"p{i}_y"]
     return header
 
@@ -5430,7 +5576,10 @@ def getpixelvideo_header() -> list[str]:
 def _draw_overlay(frame, xy, kconf, kp_conf: float, bones: list[tuple[int, int]]):
     import cv2
 
-    ok = [xy is not None and float(kconf[i]) >= kp_conf for i in range(NKP)]
+    ok = [
+        xy is not None and float(kconf[i]) >= kp_conf and all(map(math.isfinite, xy[i]))
+        for i in range(NKP)
+    ]
     for a, b in bones:
         if ok[a] and ok[b]:
             pa = (int(xy[a][0]), int(xy[a][1]))
@@ -5445,20 +5594,63 @@ def _draw_overlay(frame, xy, kconf, kp_conf: float, bones: list[tuple[int, int]]
 
 
 def _draw_diagnostic(frame, xy, kc, codes: list[str], names: list[str], header: str):
-    """Accepted points green (index, name, conf); rejected points with conf >= 0.1 red."""
+    """Accepted points green (index, name, conf); rejected points with conf >= 0.1 red.
+
+    Renders a clean badge with a solid dark background and sharp single-pass text
+    instead of blurred black/color outline stacking.
+    """
     import cv2
 
+    h, w = frame.shape[:2]
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.40
+    font_thick = 1
+
     for i in range(NKP):
-        if xy is None or not math.isfinite(float(kc[i])) or (codes[i] != "D" and kc[i] < 0.1):
+        if (
+            xy is None
+            or not math.isfinite(float(kc[i]))
+            or not all(map(math.isfinite, xy[i]))
+            or (codes[i] != "D" and kc[i] < 0.1)
+        ):
             continue
-        p = (int(xy[i][0]), int(xy[i][1]))
-        color = (0, 255, 0) if codes[i] == "D" else (0, 0, 255)
-        cv2.circle(frame, p, 5, color, -1 if codes[i] == "D" else 1)
-        label = f"p{i} {names[i]} {float(kc[i]):.2f}" + ("" if codes[i] == "D" else f" {codes[i]}")
-        cv2.putText(frame, label, (p[0] + 6, p[1] - 6), 0, 0.45, (0, 0, 0), 3, cv2.LINE_AA)
-        cv2.putText(frame, label, (p[0] + 6, p[1] - 6), 0, 0.45, color, 1, cv2.LINE_AA)
-    cv2.rectangle(frame, (0, 0), (frame.shape[1], 30), (0, 0, 0), -1)
-    cv2.putText(frame, header, (8, 21), 0, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
+        p = (int(round(xy[i][0])), int(round(xy[i][1])))
+        is_acc = codes[i] == "D"
+        color = (0, 255, 0) if is_acc else (0, 0, 255)
+        text_color = (255, 255, 255)
+
+        # Contrast dot on the ground
+        cv2.circle(frame, p, 5, (0, 0, 0), -1, cv2.LINE_AA)
+        cv2.circle(frame, p, 4, color, -1 if is_acc else 2, cv2.LINE_AA)
+
+        label = f"p{i} {names[i]} {float(kc[i]):.2f}" + ("" if is_acc else f" [{codes[i]}]")
+        (tw, th), baseline = cv2.getTextSize(label, font, font_scale, font_thick)
+
+        pad_x, pad_y = 4, 3
+        tx = p[0] + 8
+        ty = p[1] - 4
+        # Clamp horizontally within image bounds
+        if tx + tw + pad_x * 2 > w - 4:
+            tx = p[0] - tw - pad_x * 2 - 8
+        tx = max(4, min(tx, w - tw - pad_x * 2 - 4))
+        # Clamp vertically, avoiding the top header bar (y <= 32)
+        if ty - th - pad_y < 34:
+            ty = p[1] + th + pad_y + 8
+        ty = max(th + pad_y + 34, min(ty, h - pad_y - 4))
+
+        bx1 = tx - pad_x
+        by1 = ty - th - pad_y
+        bx2 = tx + tw + pad_x
+        by2 = ty + baseline + pad_y
+
+        # Solid badge background + status color border
+        cv2.rectangle(frame, (bx1, by1), (bx2, by2), (20, 20, 20), -1)
+        cv2.rectangle(frame, (bx1, by1), (bx2, by2), color, 1, cv2.LINE_AA)
+        cv2.putText(frame, label, (tx, ty), font, font_scale, text_color, font_thick, cv2.LINE_AA)
+
+    # Top header bar
+    cv2.rectangle(frame, (0, 0), (w, 30), (0, 0, 0), -1)
+    cv2.putText(frame, header, (8, 21), font, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
     return frame
 
 
@@ -5488,7 +5680,7 @@ def point_codes(xy, kc, box_conf: float, conf: float, kp_conf: float, size) -> l
         x, y = float(xy[i][0]), float(xy[i][1])
         if not float(kc[i]) >= kp_conf:
             codes.append("Rk")
-        elif not (0 <= x < w and 0 <= y < h):
+        elif not (1.0 <= x < w - 1.0 and 1.0 <= y < h - 1.0):
             codes.append("Ro")
         else:
             codes.append("D")
@@ -5671,7 +5863,9 @@ def detect_video(
                 np.where(acc[:, None], xy, np.nan) if xy is not None else np.full((NKP, 2), np.nan)
             )
             snaps.append(
-                np.where(acc[:, None], s_xy, np.nan) if s_xy is not None else np.full((NKP, 2), np.nan)
+                np.where(acc[:, None], s_xy, np.nan)
+                if s_xy is not None
+                else np.full((NKP, 2), np.nan)
             )
             processed += 1
             frame_idx += 1
@@ -5690,6 +5884,10 @@ def detect_video(
     frames, raw_rows, status_rows, issue_rows = [], [], [], []
     pix_rows, conf_rows, xy_seq, kc_seq, cuts, calib = [], [], [], [], [], []
     geom_rows, geom_status, geom_kps, dlt2d_rows, dlt3d_rows = [], [], [], [], []
+    rigid_kiki_rows, rigid_kiki_vis_rows = [], []
+    rigid_ref3d_rows, rigid_ref3d_vis_rows = [], []
+    frame_residuals: list[dict[str, float | None]] = []
+    vis_counts: Counter = Counter()
     geom_codes: Counter = Counter()
     geom_sources: Counter = Counter()
     geom_fills: Counter = Counter()
@@ -5697,6 +5895,31 @@ def detect_video(
     geom_rows_xy: list = []
     geom_rows_codes: list = []
     moves: list[dict] = []
+
+    reg_cam_models: list[dict | None] = []
+    n_ref3d = 37
+    if G is not None:
+        _, ref3d_xyz = G.load_ref3d_points()
+        n_ref3d = len(ref3d_xyz)
+        raw_cam_models: list[dict | None] = []
+        cam_xy_seq: list[np.ndarray | None] = []
+        frame_cuts = [bool(rf[6]) for rf in raw_frames]
+        for k, (_, box_conf, raw_xy, kc, codes, acc, _) in enumerate(raw_frames):
+            cur_pts = final_pts[k]
+            kc_acc = None if kc is None or box_conf < conf else np.where(acc, kc, np.nan)
+            xy_acc = None if kc_acc is None else np.where(acc[:, None], cur_pts, np.nan)
+            cam_in = xy_acc if xy_acc is not None else raw_xy
+            cam_xy_seq.append(cam_in)
+            if raw_xy is not None and kc_acc is not None:
+                ok_mask = np.array([c == "D" for c in codes])
+                raw_cam_models.append(
+                    G.fit_field_camera(cam_in, ok_mask, width, height, geom_settings)
+                )
+            else:
+                raw_cam_models.append(None)
+        reg_cam_models = G.regularize_camera_sequence(
+            raw_cam_models, frame_cuts, width, height, xy_seq=cam_xy_seq, settings=geom_settings
+        )
 
     for k, (f_idx, box_conf, raw_xy, kc, codes, acc, cut) in enumerate(raw_frames):
         cur_pts = final_pts[k]
@@ -5707,16 +5930,27 @@ def detect_video(
         if G is not None:
             gxy, gkc, gcodes, gmodel = (
                 G.refine_keypoints(
-                    xy_acc if xy_acc is not None else raw_xy, kc, codes, width, height, mode=geom_mode, kp_conf=kp_conf,
+                    xy_acc if xy_acc is not None else raw_xy,
+                    kc,
+                    codes,
+                    width,
+                    height,
+                    mode=geom_mode,
+                    kp_conf=kp_conf,
                     settings=geom_settings,
+                    model=reg_cam_models[k],
                 )
                 if raw_xy is not None and kc_acc is not None
                 else (raw_xy, kc, list(codes), None)
-            )  # fmt: skip
+            )
             gacc = np.array([c in GEOM_ACCEPTED for c in gcodes])
             gkc_acc = None if gxy is None else np.where(gacc, gkc, np.nan)
             geom_rows.append(keypoints_row(f_idx, gxy, gkc_acc, kp_conf))
             src = gmodel["source"] if gmodel and gmodel["status"] == "ok" else "none"
+            f_res = G.compute_frame_residuals(
+                gmodel, raw_xy, cur_pts if xy_acc is not None else None, acc, width, height
+            )
+            frame_residuals.append(f_res)
             geom_status.append(
                 [
                     f_idx,
@@ -5724,16 +5958,44 @@ def detect_video(
                     "" if gmodel is None else gmodel["focal_px"] or "",
                     "" if gmodel is None else gmodel["cam_height_m"] or "",
                     "" if gmodel is None else gmodel["rmse_px"] or "",
+                    "" if f_res["raw_reproj_rmse_px"] is None else f_res["raw_reproj_rmse_px"],
+                    "" if f_res["raw_reproj_rmse_m"] is None else f_res["raw_reproj_rmse_m"],
+                    "" if f_res["snap_reproj_rmse_px"] is None else f_res["snap_reproj_rmse_px"],
+                    "" if f_res["snap_reproj_rmse_m"] is None else f_res["snap_reproj_rmse_m"],
+                    "" if f_res["snap_line_rmse_px"] is None else f_res["snap_line_rmse_px"],
                 ]
                 + gcodes
             )
+            rigid_kiki_uv, rigid_kiki_vis = G.project_rigid_field(
+                gmodel,
+                width,
+                height,
+                raw_xy=raw_xy,
+                kc=kc,
+                codes=gcodes,
+                kp_conf=kp_conf,
+                schema="kiki49",
+                settings=geom_settings,
+            )
+            rigid_ref3d_uv, rigid_ref3d_vis = G.project_rigid_field(
+                gmodel,
+                width,
+                height,
+                raw_xy=raw_xy,
+                kc=kc,
+                codes=gcodes,
+                kp_conf=kp_conf,
+                schema="ref3d",
+                settings=geom_settings,
+            )
+            rigid_kiki_rows.append(rigid_keypoints_row(f_idx, rigid_kiki_uv, NKP))
+            rigid_kiki_vis_rows.append([f_idx] + rigid_kiki_vis)
+            rigid_ref3d_rows.append(rigid_keypoints_row(f_idx, rigid_ref3d_uv, n_ref3d))
+            rigid_ref3d_vis_rows.append([f_idx] + rigid_ref3d_vis)
+            vis_counts.update(rigid_kiki_vis)
             d2, d3 = G.dlt_coefficients(gmodel)
-            dlt2d_rows.append(
-                [f_idx] + ([""] * 8 if d2 is None else [f"{v:.10g}" for v in d2])
-            )
-            dlt3d_rows.append(
-                [f_idx] + ([""] * 11 if d3 is None else [f"{v:.10g}" for v in d3])
-            )
+            dlt2d_rows.append([f_idx] + ([""] * 8 if d2 is None else [f"{v:.10g}" for v in d2]))
+            dlt3d_rows.append([f_idx] + ([""] * 11 if d3 is None else [f"{v:.10g}" for v in d3]))
             geom_codes.update(gcodes)
             geom_sources[src] += 1
             geom_fills.update(f"p{i}" for i, c in enumerate(gcodes) if c == "G")
@@ -5844,9 +6106,21 @@ def detect_video(
                         f"frame {f_idx} | box {box_conf:.2f} | accepted {int(acc.sum())} | "
                         f"H {fit_status}" + (" | CUT" if cut else "")
                     )
+                    diag_xy = raw_xy.copy() if raw_xy is not None else None
+                    if diag_xy is not None and cur_xy_acc is not None:
+                        for i, a in enumerate(acc):
+                            if a and all(map(math.isfinite, cur_xy_acc[i])):
+                                diag_xy[i] = cur_xy_acc[i]
                     cv2.imwrite(
                         str(out / "diag_frames" / f"frame_{f_idx:06d}.jpg"),
-                        _draw_diagnostic(frame.copy(), cur_xy_acc if cur_xy_acc is not None else raw_xy, kc, codes, names, header),
+                        _draw_diagnostic(
+                            frame.copy(),
+                            diag_xy if diag_xy is not None else cur_xy_acc,
+                            kc,
+                            codes,
+                            names,
+                            header,
+                        ),
                     )
                 if writer is not None or p_idx == snapshot_at:
                     drawn = _draw_overlay(frame, cur_xy_acc, cur_kc_acc, kp_conf, bones)
@@ -5893,13 +6167,51 @@ def detect_video(
         write_rows("field_kps_geom_getpixelvideo.csv", getpixelvideo_header(), geom_rows)
         write_rows(
             "field_kps_geom_status.csv",
-            ["frame", "camera", "focal_px", "cam_height_m", "rmse_px"]
+            [
+                "frame",
+                "camera",
+                "focal_px",
+                "cam_height_m",
+                "rmse_px",
+                "raw_reproj_rmse_px",
+                "raw_reproj_rmse_m",
+                "snap_reproj_rmse_px",
+                "snap_reproj_rmse_m",
+                "snap_line_rmse_px",
+            ]
             + [f"p{i}" for i in range(NKP)],
             geom_status,
         )
+        write_rows("field_kps_rigid_getpixelvideo.csv", getpixelvideo_header(NKP), rigid_kiki_rows)
+        write_rows(
+            "field_kps_rigid_visibility.csv",
+            ["frame"] + [f"p{i}" for i in range(NKP)],
+            rigid_kiki_vis_rows,
+        )
+        write_rows("field_ref3d_getpixelvideo.csv", getpixelvideo_header(n_ref3d), rigid_ref3d_rows)
+        write_rows(
+            "field_ref3d_visibility.csv",
+            ["frame"] + [f"p{i}" for i in range(n_ref3d)],
+            rigid_ref3d_vis_rows,
+        )
         # Per-frame field calibration for rec2d.py / rec3d.py (blank row = no camera).
-        write_rows(f"{video.stem}.dlt2d", ["frame"] + [f"p{j}" for j in range(1, 9)], dlt2d_rows)
-        write_rows(f"{video.stem}.dlt3d", ["frame"] + [f"p{j}" for j in range(1, 12)], dlt3d_rows)
+        dlt2d_header = ["frame", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"]
+        dlt3d_header = [
+            "frame",
+            "L1",
+            "L2",
+            "L3",
+            "L4",
+            "L5",
+            "L6",
+            "L7",
+            "L8",
+            "L09",
+            "L10",
+            "L11",
+        ]
+        write_rows(f"{video.stem}.dlt2d", dlt2d_header, dlt2d_rows)
+        write_rows(f"{video.stem}.dlt3d", dlt3d_header, dlt3d_rows)
     if fill_gaps > 0:
         pts = (
             np.stack(
@@ -5955,7 +6267,12 @@ def detect_video(
             if G is None
             else "field_kps_geom_getpixelvideo.csv  network points + field-geometry fills/fixes\n"
             "field_kps_geom_status.csv    camera (dlt3d | homography | planar | none), focal,\n"
-            "                             camera height, fit RMSE and per-point codes G/Gx/Dg\n"
+            "                             camera height, fit RMSE, raw/snap reprojection RMSE\n"
+            "                             and per-point codes G/Gx/Dg\n"
+            "field_kps_rigid_getpixelvideo.csv full 49-kp rigid-body field projection (incl. out-of-FOV)\n"
+            "field_kps_rigid_visibility.csv    per-kp visibility (visible_in_fov | occluded | out_of_bounds)\n"
+            "field_ref3d_getpixelvideo.csv     full 37-kp soccerfield_ref3d.csv rigid-body projection\n"
+            "field_ref3d_visibility.csv        per-kp visibility for soccerfield_ref3d.csv\n"
             f"{video.stem}.dlt2d / .dlt3d   per-frame field calibration (8 / 11 DLT coefficients;\n"
             "                             blank = no camera) for rec2d.py / rec3d.py. World: metres,\n"
             "                             origin centre spot, x right goal, y top touchline, z up\n"
@@ -5997,6 +6314,22 @@ def detect_video(
         quality["snap"] = False
     if G is not None:
         n_geom = max(1, len(geom_kps))
+
+        def _stat_vals(key: str) -> list[float]:
+            return [float(v) for r in frame_residuals if (v := r.get(key)) is not None]
+
+        def _med(vals: list[float], ndigits: int = 3) -> float | None:
+            return round(float(np.median(vals)), ndigits) if vals else None
+
+        def _p90(vals: list[float], ndigits: int = 3) -> float | None:
+            return round(float(np.percentile(vals, 90)), ndigits) if vals else None
+
+        raw_px_v = _stat_vals("raw_reproj_rmse_px")
+        raw_m_v = _stat_vals("raw_reproj_rmse_m")
+        snap_px_v = _stat_vals("snap_reproj_rmse_px")
+        snap_m_v = _stat_vals("snap_reproj_rmse_m")
+        line_px_v = _stat_vals("snap_line_rmse_px")
+
         quality |= {
             "geom_mode": geom_mode,
             "geom_camera_ok_rate": round(
@@ -6009,6 +6342,17 @@ def detect_video(
             "geom_flagged": geom_codes.get("Dg", 0),
             "geom_dlt2d_rate": round(sum(r[1] != "" for r in dlt2d_rows) / n_geom, 4),
             "geom_dlt3d_rate": round(sum(r[1] != "" for r in dlt3d_rows) / n_geom, 4),
+            "raw_reproj_rmse_median_px": _med(raw_px_v, 3),
+            "raw_reproj_rmse_p90_px": _p90(raw_px_v, 3),
+            "raw_reproj_rmse_median_m": _med(raw_m_v, 4),
+            "snap_reproj_rmse_median_px": _med(snap_px_v, 3),
+            "snap_reproj_rmse_p90_px": _p90(snap_px_v, 3),
+            "snap_reproj_rmse_median_m": _med(snap_m_v, 4),
+            "snap_line_rmse_median_px": _med(line_px_v, 3),
+            "snap_line_rmse_p90_px": _p90(line_px_v, 3),
+            "rigid_visible_in_fov_mean": round(vis_counts.get("visible_in_fov", 0) / n_geom, 2),
+            "rigid_occluded_mean": round(vis_counts.get("occluded", 0) / n_geom, 2),
+            "rigid_out_of_bounds_mean": round(vis_counts.get("out_of_bounds", 0) / n_geom, 2),
         }
     (out / "quality.json").write_text(json.dumps(quality, indent=2), encoding="utf-8")
     _log(
@@ -6173,8 +6517,10 @@ def snap_run(
             if writer is not None or total > best[0]:
                 canvas = img.copy()
                 for i in np.flatnonzero(acc):
+                    if not all(map(math.isfinite, new[i])):
+                        continue
                     b = tuple(int(round(v)) for v in new[i])
-                    if show_network and i in how:
+                    if show_network and i in how and all(map(math.isfinite, xy[i])):
                         a = tuple(int(round(v)) for v in xy[i])
                         cv2.circle(canvas, a, max(2, r // 2), (0, 0, 255), -1)
                         cv2.line(canvas, a, b, (0, 255, 255), 1)
@@ -6342,6 +6688,8 @@ def detect_videos(
                 _log(f"WARNING {source.name}: {reason}; processing it because it was named")
         return detect_video(ws, source, output_dir=output_dir, **kwargs)
     videos = sorted(p for p in source.iterdir() if p.suffix.lower() in VIDEO_EXTS)
+    if not videos:
+        videos = find_videos(source, recursive=True)
     if not videos:
         raise FileNotFoundError(f"No videos ({', '.join(sorted(VIDEO_EXTS))}) in {source}")
     base_out = Path(output_dir).expanduser() if output_dir else source
@@ -6677,12 +7025,14 @@ def build_parser() -> argparse.ArgumentParser:
                 "--backend",
                 choices=("yolo", "heatmap"),
                 default="yolo",
-                help="yolo = Ultralytics pose; heatmap = vailá ResNet heatmap (torchvision only).",
+                help="yolo = Ultralytics pose; heatmap = vailá ResNet/HRNet heatmap (torch only).",
             )
             p.add_argument(
                 "--backbone",
                 default="resnet50",
-                help="Heatmap backbone (resnet18/34/50/101/152, ImageNet weights from torch cache).",
+                choices=HEATMAP_BACKBONES,
+                help="Heatmap backbone: resnet18/34/50/101/152 (ImageNet weights from torch "
+                "cache) or hrnet_w32 (HRNet-W32, distilled from --teacher).",
             )
             p.add_argument(
                 "--no-pretrained",
@@ -6691,6 +7041,17 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Heatmap: start from random weights (no ImageNet checkpoint needed).",
             )
             p.add_argument("--lr", type=float, help="Heatmap AdamW learning rate (default 1e-3).")
+            p.add_argument(
+                "--teacher",
+                help="Heatmap distillation teacher: 'active', a slot (l, hm_m) or a .pt; "
+                "'none' disables. Default: active for hrnet_w32, none for resnet*.",
+            )
+            p.add_argument(
+                "--distill-weight",
+                type=float,
+                default=0.5,
+                help="lambda of L = L_gt + lambda * L_distill (default 0.5; 0 = GT only).",
+            )
         elif cmd == "manifest":
             p.add_argument("--rfs-t", type=float, default=0.05, help="Repeat-factor threshold t.")
             p.add_argument("--cap", type=float, default=4.0, help="Max repeat factor per image.")
@@ -6968,6 +7329,8 @@ def main(argv: list[str] | None = None) -> int:
             backbone=args.backbone,
             pretrained=args.pretrained,
             lr=args.lr,
+            teacher=args.teacher,
+            distill_weight=args.distill_weight,
         )
     elif args.command == "manifest":
         make_manifest(
@@ -7089,6 +7452,9 @@ def run_freekiki() -> None:
         "src": tk.StringVar(),
         "base": tk.StringVar(value="yolo26m-pose.pt"),
         "backend": tk.StringVar(value="yolo"),
+        "backbone": tk.StringVar(value="hrnet_w32"),
+        "teacher": tk.StringVar(value="active"),
+        "distill": tk.StringVar(value="0.5"),
         "epochs": tk.StringVar(value="150"),
         "imgsz": tk.StringVar(value="1280"),
         "batch": tk.StringVar(value="-1"),
@@ -7192,6 +7558,12 @@ def run_freekiki() -> None:
         args = ["train", "--backend", "heatmap"] if heatmap else ["train"]
         if base and not (heatmap and Path(base).name.startswith("yolo")):
             args += ["--base", base]
+        if heatmap:
+            args += (
+                opt("--backbone", "backbone")
+                + opt("--teacher", "teacher")
+                + opt("--distill-weight", "distill")
+            )
         run_cli(
             args
             + opt("--epochs", "epochs")
@@ -7223,10 +7595,13 @@ def run_freekiki() -> None:
     def heatmap_preset():
         for key, value in (
             ("backend", "heatmap"),
+            ("backbone", "hrnet_w32"),
+            ("teacher", "active"),
+            ("distill", "0.5"),
             ("base", ""),
             ("epochs", "60"),
             ("imgsz", "1024"),
-            ("batch", "16"),
+            ("batch", "8"),
             ("fraction", "1.0"),
         ):
             v[key].set(value)
@@ -7426,6 +7801,18 @@ def run_freekiki() -> None:
     ttk.Combobox(
         grid, textvariable=v["backend"], values=("yolo", "heatmap"), width=8, state="readonly"
     ).grid(row=0, column=13)
+    hm_row = ttk.Frame(box)
+    hm_row.grid(row=8, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(hm_row, text="Heatmap backbone").pack(side="left", padx=(4, 2))
+    ttk.Combobox(
+        hm_row, textvariable=v["backbone"], values=HEATMAP_BACKBONES, width=10, state="readonly"
+    ).pack(side="left")
+    ttk.Label(hm_row, text="Teacher").pack(side="left", padx=(8, 2))
+    ttk.Combobox(
+        hm_row, textvariable=v["teacher"], values=("active", *MODEL_SCALES, "none"), width=8
+    ).pack(side="left")
+    ttk.Label(hm_row, text="Distill λ").pack(side="left", padx=(8, 2))
+    ttk.Entry(hm_row, textvariable=v["distill"], width=5).pack(side="left")
     bar = ttk.Frame(box)
     bar.grid(row=2, column=1, sticky="w", pady=2)
     ttk.Button(bar, text="Train", command=do_train).pack(side="left")
@@ -7495,8 +7882,10 @@ def run_freekiki() -> None:
         "Manifest = e.g. v001 from 'Build oversampling manifest' (rare points repeated; "
         "empty = plain train split).\n"
         "Stopped / crash / power loss? Every finished epoch is saved: press Resume interrupted.\n"
-        "Backend heatmap = vailá ResNet heatmap net (torch/torchvision only, no Ultralytics); "
-        "never auto-promoted: Evaluate + Compare on val first.",
+        "Backend heatmap = vailá ResNet/HRNet heatmap net (torch only, no Ultralytics); "
+        "never auto-promoted: Evaluate + Compare on val first.\n"
+        "Heatmap preset = HRNet-W32 distilled from the Teacher (active): "
+        "L = L_gt + λ·L_distill (λ 0.5; YOLO weights are not copied).",
     ).grid(row=4, column=0, columnspan=3, sticky="w", padx=4)
 
     box = ttk.LabelFrame(frm, text="4. Evaluate quality (labelled split)", padding=6)

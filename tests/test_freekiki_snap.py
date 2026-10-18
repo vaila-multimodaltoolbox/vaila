@@ -244,7 +244,9 @@ def test_detect_video_applies_snap_by_default_and_respects_no_snap(tmp_path, mon
     monkeypatch.setattr(freekiki, "load_predictor", lambda *_a, **_k: FakePredictor())
 
     # Default: snap=True
-    run1 = freekiki.detect_video(ws, video, output_dir=tmp_path / "out1", overlay=False, diag_frames=0)
+    run1 = freekiki.detect_video(
+        ws, video, output_dir=tmp_path / "out1", overlay=False, diag_frames=0
+    )
     assert (run1 / "field_kps_getpixelvideo.csv").is_file()
     assert (run1 / "field_kps_snap_getpixelvideo.csv").is_file()
     assert (run1 / "snap_moves.csv").is_file()
@@ -259,4 +261,121 @@ def test_detect_video_applies_snap_by_default_and_respects_no_snap(tmp_path, mon
     assert not (run2 / "snap_moves.csv").is_file()
     q2 = json.loads((run2 / "quality.json").read_text())
     assert q2["snap"] is False
+
+
+def test_barrel_distorted_box_side_snaps_top_corner_locally():
+    """On a zoom/wide lens where box_right_side bends ~2.5 deg from p20 to p17, p17 must snap to its local corner."""
+    import cv2
+
+    m = np.zeros((1080, 1920), dtype=np.uint8)
+    # True corner p17 at (400, 350), p25 at (1200, 310) -> shallow crossing
+    cv2.line(m, (400, 350), (1200, 310), 1, 3)
+    # Piecewise barrel-curved box_right_side: p17(400,350) -> p18(620,445) -> p19(950,600) -> p20(1350,805)
+    cv2.line(m, (400, 350), (620, 445), 1, 3)
+    cv2.line(m, (620, 445), (950, 600), 1, 3)
+    cv2.line(m, (950, 600), (1350, 805), 1, 4)
+    paint = m.astype(bool)
+
+    pts = np.full((49, 2), np.nan)
+    pts[17] = (402.0, 345.0)  # network slightly above the true corner (400, 350)
+    pts[18] = (620.0, 445.0)
+    pts[19] = (950.0, 600.0)
+    pts[20] = (1350.0, 805.0)
+    pts[25] = (1200.0, 310.0)
+    acc = np.isfinite(pts).all(axis=1)
+
+    new, _ = fs.snap_keypoints(pts, acc, paint)
+    # Must land near the true corner (400, 350), not 25-35 px to the right along the top line
+    assert np.hypot(*(new[17] - np.array([400.0, 350.0]))) < 4.0
+
+
+def test_stabilize_does_not_copy_stale_offset_outside_snapped_window():
+    """When the camera pans away and a point is no longer snapped for >window frames, do not copy old offsets."""
+    truth, net, base = _tracks(T=80)
+    N, S = base.copy(), base.copy()
+    N[:, 9] = net
+    S[:25, 9] = truth[:25]  # snapped during frames 0..24
+    S[25:, 9] = net[25:]  # untouched by snap from frame 25..79 (e.g. crossing line off-screen)
+    out = fs.stabilize(N, S, 1920)
+    assert np.allclose(out[40:, 9], net[40:])
+
+
+def test_corner_snap_rejects_perimeter_board_and_keeps_180_deg_colinearity():
+    """When an ad board above touch_top and a flagpole above p24 are bright white, p24 must stay colinear (~180 deg) with p25-p26-p27."""
+    import cv2
+
+    m = np.zeros((1080, 1920), dtype=np.uint8)
+    # True right goal line: p24(1041, 294) -> p25(1235, 341) -> p26(1391, 378) -> p27(1509, 407)
+    cv2.line(m, (1041, 294), (1509, 407), 1, 3)
+    # True top touchline: p13(350, 278) -> p24(1041, 294)
+    cv2.line(m, (350, 278), (1041, 294), 1, 2)
+    # Distractor: bright thick perimeter ad board 22 px above touch_top + vertical flagpole at p24
+    cv2.line(m, (350, 255), (1050, 272), 1, 8)
+    cv2.line(m, (1041, 294), (1044, 258), 1, 5)
+    # Penalty box right side & top for planar context
+    cv2.line(m, (841, 369), (1235, 341), 1, 3)
+    cv2.line(m, (841, 369), (1380, 505), 1, 3)
+    paint = m.astype(bool)
+
+    pts = np.full((49, 2), np.nan)
+    pts[13] = (350.0, 278.0)
+    pts[17] = (841.0, 369.0)
+    pts[18] = (1003.0, 410.0)
+    pts[19] = (1205.0, 461.0)
+    pts[20] = (1380.0, 505.0)
+    pts[24] = (1041.0, 294.0)
+    pts[25] = (1235.0, 341.0)
+    pts[26] = (1391.0, 378.0)
+    pts[27] = (1509.0, 407.0)
+    pts[47] = (1044.0, 258.0)  # top_right_flag_top directly above p24
+    acc = np.isfinite(pts).all(axis=1)
+
+    new, _ = fs.snap_keypoints(pts, acc, paint)
+    # p24 must not be pulled up onto the ad board / flagpole (y=272)
+    assert np.hypot(*(new[24] - np.array([1041.0, 294.0]))) < 4.0
+    # Verify 180-deg colinearity of p24-p25-p26
+    v1 = new[24] - new[25]
+    v2 = new[26] - new[25]
+    cos_ang = float(np.dot(v1, v2) / (np.linalg.norm(v1) * np.linalg.norm(v2)))
+    ang_deg = float(np.degrees(np.arccos(np.clip(cos_ang, -1.0, 1.0))))
+    assert ang_deg > 178.5
+
+
+def test_projective_1d_cross_ratio_along_line_and_vanishing_points():
+    """1D projective homography along a multi-point line predicts exact perspective spacing, and parallel lines yield their vanishing point."""
+    xyz, _ = fs._field_xyz()
+    # Build a synthetic perspective homography mapping pitch (X, Y) -> image (u, v)
+    H = np.array(
+        [
+            [24.0, -8.5, 960.0],
+            [3.2, -16.0, 540.0],
+            [0.0015, -0.008, 1.0],
+        ],
+        dtype=float,
+    )
+    ph = np.c_[xyz[:, :2], np.ones(len(xyz))] @ H.T
+    uv_gt = ph[:, :2] / ph[:, 2:3]
+
+    pts = uv_gt.copy()
+    pts[24] = np.nan
+    members_gr = list(fs.PAINTED_LINES["goal_line_right"])
+    d_gr = uv_gt[29] - uv_gt[25]
+    d_gr = d_gr / np.linalg.norm(d_gr)
+    line_gr = (uv_gt[25], d_gr)
+    pred_24 = fs._projective_1d_along_line("goal_line_right", 24, members_gr, pts, line_gr, 1.0)
+    assert pred_24 is not None
+    np.testing.assert_allclose(pred_24, uv_gt[24], atol=1e-3)
+
+    # Verify vanishing point of longitudinal lines matches H[:, 0] ideal point
+    fitted_long = {}
+    members_on = {}
+    for name in fs.LONGITUDINAL_LINES:
+        m = list(fs.PAINTED_LINES[name])
+        d = uv_gt[m[-1]] - uv_gt[m[0]]
+        fitted_long[name] = (uv_gt[m[0]], d / np.linalg.norm(d))
+        members_on[name] = m
+    vp_x = fs._vanishing_point(fitted_long, members_on, fs.LONGITUDINAL_LINES)
+    assert vp_x is not None
+    vp_gt = H[:2, 0] / H[2, 0]
+    np.testing.assert_allclose(vp_x, vp_gt, rtol=1e-3)
 

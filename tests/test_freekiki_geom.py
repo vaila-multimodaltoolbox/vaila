@@ -1,7 +1,7 @@
 """FreeKiki field geometry: camera from keypoints, fill / fix, evaluate scoring.
 
-Version: 0.4.7
-Update Date: 07 October 2026
+Version: 0.4.9
+Update Date: 17 October 2026
 """
 
 import numpy as np
@@ -221,8 +221,21 @@ def test_detect_writes_per_frame_dlt_files_for_rec2d_rec3d(tmp_path, monkeypatch
     run = freekiki.detect_video(ws, video, output_dir=tmp_path, overlay=False, diag_frames=0)
     d2 = pd.read_csv(run / "clip.dlt2d")
     d3 = pd.read_csv(run / "clip.dlt3d")
-    assert list(d2.columns) == ["frame"] + [f"p{j}" for j in range(1, 9)]
-    assert list(d3.columns) == ["frame"] + [f"p{j}" for j in range(1, 12)]
+    assert list(d2.columns) == ["frame", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"]
+    assert list(d3.columns) == [
+        "frame",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L09",
+        "L10",
+        "L11",
+    ]
     assert d3["frame"].tolist() == [0, 1, 2]
     assert d3.iloc[0, 1:].isna().all() and d2.iloc[0, 1:].isna().all()  # no camera
     L = np.append(d3.iloc[1, 1:].to_numpy(float), 1.0).reshape(3, 4)
@@ -278,3 +291,168 @@ def test_origin_view_hides_projected_labels_without_counting_them_as_errors():
     view = diag.score_predictions(diag.restrict_to_labelled(pred, mask), **kw)["per_keypoint"][5]
     assert full["n_ref"] == 3 and full["recall"] == round(2 / 3, 4)
     assert view["n_ref"] == 1 and view["recall"] == 1.0 and view["n_fp"] == 0
+
+
+def test_hartley_normalized_svd_dlt2d_and_dlt3d():
+    P = _camera()
+    uv, inside, planar = _view(P)
+    xyz, _ = freekiki_geom._field()
+
+    pts2d_n, T2 = freekiki_geom.hartley_normalize_2d(uv[inside])
+    assert np.allclose(pts2d_n.mean(axis=0), 0.0, atol=1e-9)
+    assert np.mean(np.linalg.norm(pts2d_n, axis=1)) == pytest.approx(np.sqrt(2.0), rel=1e-6)
+    assert T2.shape == (3, 3)
+
+    pts3d_n, T3 = freekiki_geom.hartley_normalize_3d(xyz[inside])
+    assert np.allclose(pts3d_n.mean(axis=0), 0.0, atol=1e-9)
+    assert np.mean(np.linalg.norm(pts3d_n, axis=1)) == pytest.approx(np.sqrt(3.0), rel=1e-6)
+    assert T3.shape == (4, 4)
+
+    use2d = inside & planar
+    H_svd = freekiki_geom.fit_dlt2d_hartley_svd(uv[use2d], xyz[use2d, :2])
+    assert H_svd is not None and H_svd.shape == (3, 3) and H_svd[2, 2] == pytest.approx(1.0)
+    ph = np.c_[xyz[use2d, :2], np.ones(int(use2d.sum()))] @ H_svd.T
+    np.testing.assert_allclose(ph[:, :2] / ph[:, 2:3], uv[use2d], atol=1e-5)
+
+    L_svd = freekiki_geom.fit_dlt3d_hartley_svd(uv[inside], xyz[inside])
+    assert L_svd is not None and len(L_svd) == 11
+    P_svd = np.append(L_svd, 1.0).reshape(3, 4)
+    proj, front = freekiki_geom._project(P_svd, xyz[inside])
+    assert front.all()
+    np.testing.assert_allclose(proj, uv[inside], atol=1e-4)
+
+
+def test_project_rigid_field_visibility_flags_and_full_field_invariance():
+    from vaila.rec2d import rec2d
+    from vaila.rec3d import rec3d_multicam
+
+    P1 = _camera(C=(10.0, -60.0, 25.0), target=(30.0, 0.0, 0.0), f=2000.0)
+    P2 = _camera(C=(-10.0, -60.0, 25.0), target=(30.0, 0.0, 0.0), f=2000.0)
+    uv1, inside1, planar = _view(P1)
+    uv2, inside2, _ = _view(P2)
+
+    m1 = freekiki_geom.fit_field_camera(uv1, inside1, W, H)
+    m2 = freekiki_geom.fit_field_camera(uv2, inside2, W, H)
+    assert m1["status"] == "ok" and m2["status"] == "ok"
+
+    # Simulate one in-FOV point missed by the detector (occluded)
+    in_fov_indices = np.flatnonzero(inside1)
+    occluded_idx = int(in_fov_indices[2])
+    codes = ["D" if inside1[i] else "Rk" for i in range(49)]
+    codes[occluded_idx] = "Rk"
+    kc = np.where(inside1, 0.9, 0.0)
+    kc[occluded_idx] = 0.0
+
+    uv_kiki, flags_kiki = freekiki_geom.project_rigid_field(
+        m1, W, H, raw_xy=uv1, kc=kc, codes=codes, schema="kiki49"
+    )
+    assert uv_kiki.shape == (49, 2) and len(flags_kiki) == 49
+    assert set(flags_kiki) <= set(freekiki_geom.VISIBILITY_FLAGS)
+    assert flags_kiki[occluded_idx] == "occluded"
+    assert "visible_in_fov" in flags_kiki and "out_of_bounds" in flags_kiki
+    # Out-of-FOV points in front of the camera still have finite projected coordinates
+    oob_idx = [i for i, f in enumerate(flags_kiki) if f == "out_of_bounds"]
+    assert oob_idx and np.isfinite(uv_kiki[oob_idx]).all()
+
+    # Check soccerfield_ref3d.csv (37 points) rigid projection & pairwise distance invariance
+    ref_names, ref_xyz = freekiki_geom.load_ref3d_points()
+    assert len(ref_names) == 37 and ref_xyz.shape == (37, 3)
+    uv_ref, flags_ref = freekiki_geom.project_rigid_field(
+        m1, W, H, raw_xy=uv1, kc=kc, codes=codes, schema="ref3d"
+    )
+    assert uv_ref.shape == (37, 2) and len(flags_ref) == 37
+    assert np.isfinite(uv_ref).all()
+
+    d2_1, d3_1 = freekiki_geom.dlt_coefficients(m1)
+    d2_2, d3_2 = freekiki_geom.dlt_coefficients(m2)
+    assert d2_1 is not None and d3_1 is not None and d3_2 is not None
+
+    # Reconstruct all 37 ref3d points (including out-of-FOV) via rec2d and verify rigid distances
+    rec_ref_xy = rec2d(d2_1, uv_ref)
+    d_gt_ref = np.linalg.norm(ref_xyz[:, None, :2] - ref_xyz[None, :, :2], axis=-1)
+    d_rec_ref = np.linalg.norm(rec_ref_xy[:, None, :] - rec_ref_xy[None, :, :], axis=-1)
+    np.testing.assert_allclose(d_rec_ref, d_gt_ref, atol=1e-3)
+
+    # Reconstruct all 49 3D points (including flags z=1.5m and crossbars z=2.44m) via rec3d_multicam
+    uv_kiki2, _ = freekiki_geom.project_rigid_field(m2, W, H, schema="kiki49")
+    dlt_list = [d3_1, d3_2]
+    rec_kiki_xyz = np.array(
+        [rec3d_multicam(dlt_list, [tuple(uv_kiki[i]), tuple(uv_kiki2[i])]) for i in range(49)]
+    )
+    kiki_xyz, _ = freekiki_geom._field()
+    d_gt_3d = np.linalg.norm(kiki_xyz[:, None, :] - kiki_xyz[None, :, :], axis=-1)
+    d_rec_3d = np.linalg.norm(rec_kiki_xyz[:, None, :] - rec_kiki_xyz[None, :, :], axis=-1)
+    np.testing.assert_allclose(d_rec_3d, d_gt_3d, atol=1e-3)
+
+
+def test_regularize_camera_sequence_reduces_jitter_and_respects_cuts():
+    P_shot1 = _camera(C=(10.0, -60.0, 25.0), target=(30.0, 0.0, 0.0), f=2000.0)
+    P_shot2 = _camera(C=(-15.0, -55.0, 22.0), target=(-25.0, 0.0, 0.0), f=1800.0)
+    uv_true1, inside1, _ = _view(P_shot1, noise=0.0)
+    uv_true2, inside2, _ = _view(P_shot2, noise=0.0)
+
+    models, xy_seq, cuts = [], [], []
+    for t in range(10):
+        P_cur = P_shot1 if t < 5 else P_shot2
+        uv, inside, _ = _view(P_cur, noise=1.2, seed=100 + t)
+        models.append(freekiki_geom.fit_field_camera(uv, inside, W, H))
+        xy_seq.append(uv)
+        cuts.append(t == 5)
+
+    reg = freekiki_geom.regularize_camera_sequence(models, cuts, W, H, xy_seq=xy_seq, window=5)
+    assert len(reg) == 10
+
+    # Measure inter-frame projection jitter in shot 1 before and after regularization
+    raw_uv1 = np.stack([freekiki_geom.project_rigid_field(models[t], W, H)[0] for t in range(5)])
+    reg_uv1 = np.stack([freekiki_geom.project_rigid_field(reg[t], W, H)[0] for t in range(5)])
+    raw_jitter = float(np.mean(np.linalg.norm(np.diff(raw_uv1[:, inside1], axis=0), axis=-1)))
+    reg_jitter = float(np.mean(np.linalg.norm(np.diff(reg_uv1[:, inside1], axis=0), axis=-1)))
+    assert reg_jitter < raw_jitter
+
+    # Verify shot boundary at t=5 was respected (frame 4 stays near shot 1, frame 5 near shot 2)
+    uv_f4, _ = freekiki_geom.project_rigid_field(reg[4], W, H)
+    uv_f5, _ = freekiki_geom.project_rigid_field(reg[5], W, H)
+    assert np.max(np.linalg.norm(uv_f4[inside1] - uv_true1[inside1], axis=1)) < 5.0
+    assert np.max(np.linalg.norm(uv_f5[inside2] - uv_true2[inside2], axis=1)) < 5.0
+
+
+def test_compute_frame_residuals_breaks_down_raw_and_snapped_errors():
+    uv_true, inside, planar = _view(noise=0.0)
+    model = freekiki_geom.fit_field_camera(uv_true, inside, W, H)
+    raw_xy = uv_true.copy()
+    # Add 12 px offset to raw detections on accepted planar points
+    raw_xy[inside & planar] += np.array([8.0, -9.0])
+    snap_xy = uv_true.copy()  # snapped back onto the exact painted lines
+
+    res = freekiki_geom.compute_frame_residuals(model, raw_xy, snap_xy, inside, W, H)
+    assert res["raw_reproj_rmse_px"] is not None and res["raw_reproj_rmse_px"] > 10.0
+    assert res["raw_reproj_rmse_m"] is not None and res["raw_reproj_rmse_m"] > 0.1
+    assert res["snap_reproj_rmse_px"] is not None and res["snap_reproj_rmse_px"] < 0.5
+    assert res["snap_reproj_rmse_m"] is not None and res["snap_reproj_rmse_m"] < 0.02
+    assert res["snap_line_rmse_px"] is not None and res["snap_line_rmse_px"] < 0.5
+
+
+def test_pnl_clip_line_in_front_and_joint_points_lines_refinement():
+    """PnLCalib frustum clipping handles segments crossing behind the camera, and PnL alpha refinement preserves/improves line colinearity."""
+    P = _camera(C=(0.0, -45.0, 15.0), target=(0.0, 10.0, 0.0), f=1800.0)
+    # Segment with one endpoint in front (y=10) and one behind the camera (y=-80)
+    p_front = np.array([0.0, 10.0, 0.0])
+    p_behind = np.array([0.0, -80.0, 0.0])
+    clipped = freekiki_geom._clip_line_in_front(P, p_front, p_behind)
+    assert clipped is not None
+    uv1, uv2 = clipped
+    assert np.isfinite(uv1).all() and np.isfinite(uv2).all()
+    # Both behind -> None
+    assert (
+        freekiki_geom._clip_line_in_front(
+            P, np.array([-10.0, -80.0, 0.0]), np.array([10.0, -80.0, 0.0])
+        )
+        is None
+    )
+
+    uv, inside, _ = _view(P, noise=0.8, seed=42)
+    m_pnl = freekiki_geom.fit_field_camera(uv, inside, W, H, {"pnl_alpha": 0.7})
+    m_pts = freekiki_geom.fit_field_camera(uv, inside, W, H, {"pnl_alpha": 0.0})
+    assert m_pnl["status"] == "ok" and m_pts["status"] == "ok"
+    assert m_pnl["P"] is not None and m_pnl["rmse_px"] <= freekiki_geom.GEOM_DEFAULTS["max_rmse_px"]
+

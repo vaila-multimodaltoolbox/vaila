@@ -1,4 +1,8 @@
-"""Tests for getpixelvideo auto media-type detection (no video/PNG chooser)."""
+"""Tests for getpixelvideo auto media-type detection (no video/PNG chooser).
+
+Version: 0.4.9
+Update Date: 17 October 2026
+"""
 
 from __future__ import annotations
 
@@ -105,6 +109,27 @@ def test_single_png_frame_source_reads_jpeg(tmp_path: Path) -> None:
     assert frame.shape[:2] == (3, 5)
 
 
+def test_run_getpixelvideo_opens_selected_jpeg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import cv2
+
+    jpg = tmp_path / "photo.jpeg"
+    cv2.imwrite(str(jpg), np.zeros((7, 11, 3), dtype=np.uint8))
+    monkeypatch.setattr(gpv, "get_media_path", lambda: (str(jpg), "single_png", 0))
+    received = {}
+
+    def fake_player(_video_path, _coordinates, _labels, **kwargs):
+        received["metadata"] = kwargs["metadata"]
+        source = kwargs["frame_source"]
+        received["read"] = source.read()
+        return None
+
+    monkeypatch.setattr(gpv, "play_video_with_controls", fake_player)
+    gpv.run_getpixelvideo()
+    assert received["metadata"]["width"] == 11
+    assert received["metadata"]["height"] == 7
+    assert received["read"][0]
+
+
 def test_imread_still_applies_exif_orientation(tmp_path: Path) -> None:
     pil_image = pytest.importorskip("PIL.Image")
     jpg = tmp_path / "phone.jpg"
@@ -189,6 +214,10 @@ def test_measure_overlay_toggle_wired_beside_measure_button() -> None:
     assert "show_measure_overlay = True" in source
     assert "measure_overlay_toggle_rect" in source
     assert "measure_overlay_toggle_rect.collidepoint" in source
+    assert "measure_clear_button_rect" in source
+    assert "measure_clear_button_rect.collidepoint" in source
+    assert "undo_measure" in source
+    assert "redo_measure" in source
     assert "show_results=show_measure_overlay" in source
     assert "letterbox_frame_to_canvas" in source
 

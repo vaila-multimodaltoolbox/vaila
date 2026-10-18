@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.4.6"
+version = "0.4.10"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -76,6 +76,7 @@ dependencies = [
     "boxmot",
     "trackers==2.4.0",
     "requests",
+    "huggingface-hub>=1.22,<2",
     # 3D processing
     "open3d",
     "glfw",
@@ -129,7 +130,6 @@ dependencies = [
     "ruff",
     "vpython",
     "pyvista",
-    "setuptools>=83",
 ]
 
 [project.optional-dependencies]
@@ -188,17 +188,15 @@ packages = ["vaila"]
 
 [tool.uv]
 # `cpu` ships in every default sync; `cuda` is opt-in (see [dependency-groups]).
+# uv sync is exact and selects no extras by default: bare `uv sync --upgrade`
+# removes CUDA and optional AI packages on NVIDIA workstations. Update with
+# `bash bin/setup_pyproject.sh --target=cuda --full --upgrade --yes` instead.
 default-groups = ["dev", "cpu"]
 conflicts = [
     [{ group = "cpu" }, { group = "cuda" }],
 ]
 override-dependencies = [
     "regex>=2025.11.3",
-    "setuptools>=83",
-    # hf CLI: hub<1.22 + typer>=0.26 dumps click.Exit(0) after success (exit 1).
-    # Also unsticks large gated downloads that stall at "0.00B (incomplete total)".
-    "huggingface-hub>=1.22.0",
-    "click>=8.4.2",
 ]
 
 [tool.uv.workspace]

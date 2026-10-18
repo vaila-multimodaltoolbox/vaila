@@ -6,9 +6,9 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 07 October 2026
-Version: 0.4.8
-Python Version: 3.12.14
+Update: 17 October 2026
+Version: 0.4.9
+Python Version: 3.12.15
 
 Description:
 ------------
@@ -72,14 +72,16 @@ Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
   after the last click, review the completed geometry and press ``Enter`` to
   type the real measurement(s), or right-click to correct a point.
   Future DLT3D (11 params) is reserved. **MEASURE** then uses digit keys:
-  ``1`` distance, ``2`` area, ``3`` angle, ``4`` velocity, ``5`` acceleration
-  (``6``–``0`` reserved); each completed set is drawn on the image with its
-  value. ``Enter`` closes an area polygon or opens the save menu. Hover shows
-  pixel and real-world coords when calibrated. The first save creates one
-  ``processed_quickmeasure_<timestamp>/`` for the session and later saves
-  update its CSVs and didactic HTML report. Velocity/accel need FPS:
-  metadata supplies it automatically; ``I`` or the **FPS … Hz** button overrides it.
-  Recompute via
+  ``1`` distance, ``2`` area, ``3`` angle, ``4`` velocity, ``5`` acceleration,
+  ``6`` level (H+V laser guide + axis-snapped tape); ``7``–``0`` reserved.
+  Each completed set is drawn on the image with its value. ``Enter`` closes an
+  area polygon or opens the save menu. Toolbar **Clear** / Backspace wipe drawn
+  feedback (keeps calib). ``Ctrl+Z`` / ``Ctrl+Y`` undo/redo measure actions while
+  MEASURE is on. Hover shows pixel and real-world coords when calibrated. The
+  first save creates one ``processed_quickmeasure_<timestamp>/`` for the session
+  and later saves update its CSVs and didactic HTML report. Velocity/accel need
+  FPS: metadata supplies it automatically; ``I`` or the **FPS … Hz** button
+  overrides it. Recompute via
   ``uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure distance``.
 
 Pose / ML:
@@ -141,7 +143,9 @@ Key bindings (see in-app **H** help for full list):
   Marker timeline strip Click or drag (above scrub bar) to jump
   Marker toolbar       Template (``Tpl:`` dialog: Free / Soccer-Kiki / skeletons); TOML via ``K`` when Soccer-Kiki; Mode (Mark/Seq/1-line)
   Ctrl+I / EditMode    Toggle VISUAL (safe browse) ↔ INSERT (edit markers)
-  Ctrl+Z               Undo last marker edit (INSERT only)
+  Ctrl+Z               Undo last marker edit (INSERT); in MEASURE undo last measure
+  Ctrl+Y               Redo last measure action (MEASURE mode only)
+  Clear (toolbar)      Wipe MEASURE draft / points / drawn results (keeps calib)
   Restore button       Revert markers to session open / last successful Save
 
 New in 0.4.3:
@@ -275,7 +279,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.8"
+GETPIXELVIDEO_VERSION = "0.4.9"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 
@@ -287,7 +291,7 @@ def blit_translucent(surface, rect, rgb, alpha: int) -> None:
     surface.blit(box, rect.topleft)
 
 
-GETPIXELVIDEO_UPDATE_DATE = "07 October 2026"
+GETPIXELVIDEO_UPDATE_DATE = "17 October 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -784,10 +788,11 @@ def _png_sequence_index_for_file(directory: str | Path, selected_file: str | Pat
     return 0
 
 
-def get_image_sequence_metadata(path, source_type):
+def get_image_sequence_metadata(path, source_type, start_index: int = 0):
     """Get metadata for a single still or an image sequence (same shape as video metadata).
 
     source_type: "single_png" | "png_sequence"
+    start_index: selected frame in a sequence, clamped to the available images.
     ``codec`` stays ``"png"`` for every still so image-source paths (measure, no audio)
     stay on for JPEG and the other still extensions.
     """
@@ -827,10 +832,11 @@ def get_image_sequence_metadata(path, source_type):
                         nb_frames = int(line.split(":", 1)[1].strip())
         except (ValueError, OSError):
             pass
-    if (width == 0 or height == 0) and paths:
-        first = _imread_still(paths[0])
-        if first is not None:
-            height, width = first.shape[:2]
+    if paths:
+        selected_index = max(0, min(int(start_index), len(paths) - 1))
+        selected = _imread_still(paths[selected_index])
+        if selected is not None:
+            height, width = selected.shape[:2]
     return {
         "fps": fps,
         "width": width,
@@ -2987,8 +2993,8 @@ def play_video_with_controls(
             unit = session.unit_label
             hint = "" if session.has_any_calibration() else " — pixels (use CALIB for real units)"
             return (
-                f"MEASURE ON ({unit}){hint} — 1=dist 2=area 3=angle 4=vel 5=accel; "
-                "click to measure; Enter: area close / menu; S in menu: save"
+                f"MEASURE ON ({unit}){hint} — 1=dist 2=area 3=angle 4=vel 5=accel "
+                "6=level; Clear / Ctrl+Z/Y; Enter: area close / menu; S in menu: save"
             )
         return "Measure mode OFF"
 
@@ -6424,6 +6430,7 @@ def play_video_with_controls(
         calib_button_width = 48 if is_compact else 54  # CALIB — Shift+Q
         measure_button_width = 50 if is_compact else 58  # MEASURE — hotkey Q
         measure_overlay_toggle_size = 10 if is_compact else 12
+        measure_clear_button_width = 36 if is_compact else 44  # Clear measure feedback
         fps_button_width = 72 if is_compact else 80  # Manual video frequency (same as hotkey I)
         guide_button_width = 56 if is_compact else 66  # Guide button (field / skeleton overlay)
         guide_toggle_size = 10 if is_compact else 12
@@ -6459,13 +6466,14 @@ def play_video_with_controls(
             + measure_button_width
             + 4
             + measure_overlay_toggle_size
+            + measure_clear_button_width
             + fps_button_width
             + guide_button_width
             + 4
             + guide_toggle_size
             + help_button_width
             + help_web_button_width
-            + (button_gap * 12)
+            + (button_gap * 13)
         )
 
         # Bottom row: Tracking, Model Weights, File I/O (Load/Save/Restore/Dataset)
@@ -6670,6 +6678,26 @@ def play_video_with_controls(
         else:
             pygame.draw.rect(control_surface, (60, 60, 60), measure_overlay_toggle_rect)
             pygame.draw.rect(control_surface, (150, 150, 150), measure_overlay_toggle_rect, 1)
+
+        measure_clear_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_top,
+            measure_clear_button_width,
+            button_height,
+        )
+        current_x += measure_clear_button_width + button_gap
+        _has_measure_feedback = (
+            measure_mode
+            and quickmeasure_session is not None
+            and quickmeasure_session.has_measure_feedback()
+        )
+        clear_color = (160, 60, 60) if _has_measure_feedback else (80, 80, 80)
+        pygame.draw.rect(control_surface, clear_color, measure_clear_button_rect)
+        clear_label = "Clr" if is_compact else "Clear"
+        clear_text = _top_btn_font.render(clear_label, True, (255, 255, 255))
+        control_surface.blit(
+            clear_text, clear_text.get_rect(center=measure_clear_button_rect.center)
+        )
 
         # 7c. Manual FPS button (same dialog as hotkey I); caption shows current Hz.
         fps_button_rect = pygame.Rect(
@@ -6984,6 +7012,7 @@ def play_video_with_controls(
             calib_button_rect,  # CALIB (Shift+Q)
             measure_button_rect,  # MEASURE (Q)
             measure_overlay_toggle_rect,  # Show/hide measure value overlays
+            measure_clear_button_rect,  # Clear MEASURE feedback
             fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
@@ -7613,7 +7642,17 @@ def play_video_with_controls(
             ),
             (
                 "Q  /  'MEASURE' button",
-                "Toggle MEASURE mode (distance / area / angle / velocity / accel)",
+                "Toggle MEASURE mode (distance / area / angle / velocity / accel / level)",
+                "item",
+            ),
+            (
+                "Clear button  /  Backspace",
+                "Wipe MEASURE draft, points, and drawn results (keeps calibration)",
+                "item",
+            ),
+            (
+                "Ctrl+Z  /  Ctrl+Y",
+                "Undo / redo MEASURE actions (while MEASURE is on)",
                 "item",
             ),
             (
@@ -7627,8 +7666,8 @@ def play_video_with_controls(
                 "item",
             ),
             (
-                "1 / 2 / 3 / 4 / 5",
-                "Measure: 1 Distance, 2 Area, 3 Angle, 4 Velocity, 5 Acceleration",
+                "1 / 2 / 3 / 4 / 5 / 6",
+                "Measure: Distance, Area, Angle, Velocity, Accel, Level (H+V tape)",
                 "item",
             ),
             ("Enter", "Close Area polygon or open MEASURE save / classify menu", "item"),
@@ -12780,6 +12819,7 @@ def play_video_with_controls(
             calib_button_rect,  # CALIB (Shift+Q)
             measure_button_rect,  # MEASURE (Q)
             measure_overlay_toggle_rect,  # Show/hide measure value overlays
+            measure_clear_button_rect,  # Clear MEASURE feedback
             fps_button_rect,  # Manual video FPS in Hz (same as I)
             guide_button_rect,  # Guide button (field/skeleton)
             guide_toggle_rect,  # Guide on/off indicator
@@ -13422,9 +13462,7 @@ def play_video_with_controls(
                     and measure_mode
                     and quickmeasure_session is not None
                 ):
-                    quickmeasure_session.clear()
-                    quickmeasure_session.clear_results()
-                    save_message_text = "Measure: points and results cleared"
+                    save_message_text = quickmeasure_session.clear_measure_feedback()
                     showing_save_message = True
                     save_message_timer = 30
                 elif event.key == pygame.K_DELETE and freekiki_session is not None:
@@ -13464,7 +13502,21 @@ def play_video_with_controls(
                     showing_save_message = True
                     save_message_timer = 90
                 elif event.key == pygame.K_z and (pygame.key.get_mods() & pygame.KMOD_CTRL):
-                    _undo_last_marker_edit()
+                    if measure_mode and quickmeasure_session is not None:
+                        save_message_text = quickmeasure_session.undo_measure()
+                        showing_save_message = True
+                        save_message_timer = 45
+                    else:
+                        _undo_last_marker_edit()
+                elif (
+                    event.key == pygame.K_y
+                    and (pygame.key.get_mods() & pygame.KMOD_CTRL)
+                    and measure_mode
+                    and quickmeasure_session is not None
+                ):
+                    save_message_text = quickmeasure_session.redo_measure()
+                    showing_save_message = True
+                    save_message_timer = 45
                 elif event.key == pygame.K_z and labeling_mode:
                     # Undo last box in current frame
                     if not _require_insert():
@@ -14205,6 +14257,13 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 90
+                    elif measure_clear_button_rect.collidepoint(x, rel_y):
+                        if quickmeasure_session is None:
+                            save_message_text = "Measure: nothing to clear"
+                        else:
+                            save_message_text = quickmeasure_session.clear_measure_feedback()
+                        showing_save_message = True
+                        save_message_timer = 60
                     elif fps_button_rect.collidepoint(x, rel_y):
                         save_message_text = _prompt_manual_fps()
                         showing_save_message = True
@@ -14429,6 +14488,7 @@ def play_video_with_controls(
                                 except quickmeasure.QuickMeasureError as exc:
                                     save_message_text = f"Measure: {exc}"
                             else:
+                                quickmeasure_session.push_measure_undo()
                                 n_pts = quickmeasure_session.add_point(
                                     frame_count, video_x, video_y
                                 )
@@ -14439,19 +14499,17 @@ def play_video_with_controls(
                                     f"Measure: point {n_pts} @ frame {frame_count + 1} = "
                                     f"({x_real:.3f}, {y_real:.3f}) "
                                     f"{quickmeasure_session.unit_label} "
-                                    f"— press 1–5 to choose a measure mode"
+                                    f"— press 1–6 to choose a measure mode"
                                 )
                             showing_save_message = True
                             save_message_timer = 60
-                        elif event.button == 3:  # Right click: undo draft / last point
-                            if quickmeasure_session.undo_last():
-                                save_message_text = (
-                                    quickmeasure_session.live_mode_status()
-                                    if quickmeasure_session.active_mode
-                                    else "Measure: last point removed"
-                                )
-                            else:
-                                save_message_text = "Measure: no points to remove"
+                        elif event.button == 3:  # Right click: undo draft / last measure step
+                            save_message_text = quickmeasure_session.undo_measure()
+                            if (
+                                save_message_text == "Measure: undo"
+                                and quickmeasure_session.active_mode
+                            ):
+                                save_message_text = quickmeasure_session.live_mode_status()
                             showing_save_message = True
                             save_message_timer = 45
                         elif event.button == 2:  # Middle click: still allow panning
@@ -17028,9 +17086,7 @@ def save_coordinates(
 
     # Never overwrite a filled markers CSV with a frame-only empty file
     # (Escape quit used to wipe Quick Measure exports this way).
-    if n_marked == 0 and not (
-        fixed_keypoints_count is not None and int(fixed_keypoints_count) > 0
-    ):
+    if n_marked == 0 and not (fixed_keypoints_count is not None and int(fixed_keypoints_count) > 0):
         print(
             f">> vaila/getpixelvideo: skip empty markers write "
             f"(keep existing if any): {output_file}"

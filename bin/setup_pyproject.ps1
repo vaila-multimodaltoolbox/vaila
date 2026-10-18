@@ -8,7 +8,7 @@
 
     There is a SINGLE committed pyproject.toml / uv.lock for every machine and
     OS: the hardware choice is a uv dependency group, not a file swap, so this
-    script never modifies anything tracked by git.
+    script only updates the shared uv.lock when -Upgrade is requested.
 
       cpu   -> torch trio from https://download.pytorch.org/whl/cpu
                (on macOS: the PyPI wheel, i.e. the Metal/MPS build)
@@ -33,6 +33,9 @@
 .PARAMETER Lock
     Re-run `uv lock` before syncing (normally unnecessary).
 
+.PARAMETER Upgrade
+    Upgrade uv.lock, then sync the selected hardware and extras.
+
 .PARAMETER NoLock
     Skip `uv lock` (default).
 
@@ -42,6 +45,7 @@
 .EXAMPLE
     pwsh bin/setup_pyproject.ps1
     pwsh bin/setup_pyproject.ps1 -Target cuda -Extras sam
+    pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Upgrade -Yes
     pwsh bin/setup_pyproject.ps1 -Target cpu -NonInteractive -Yes
 #>
 
@@ -54,6 +58,7 @@ param(
     [switch]$NonInteractive,
     [switch]$Yes,
     [switch]$Lock,
+    [switch]$Upgrade,
     [switch]$NoLock,
     [switch]$NoSync,
     [switch]$SkipWorktree,
@@ -228,13 +233,19 @@ if ($Invalid.Count -gt 0) {
 $ExtrasList = $Valid
 
 # ---------- lock ----------
-if ($Lock -and -not $NoLock) {
+if ($Upgrade -and $NoLock) {
+    throw '-Upgrade and -NoLock cannot be used together.'
+}
+if (($Lock -or $Upgrade) -and -not $NoLock) {
     if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
         Write-Error 'uv not found in PATH. Install: https://docs.astral.sh/uv/getting-started/installation/'
         exit 1
     }
-    Write-Host 'Running: uv lock' -ForegroundColor Cyan
-    & uv lock
+    $lockArgs = @('lock')
+    if ($Upgrade) { $lockArgs += '--upgrade' }
+    Write-Host "Running: uv $($lockArgs -join ' ')" -ForegroundColor Cyan
+    & uv @lockArgs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 } else {
     Write-Host 'Using the committed uv.lock (pass -Lock to re-resolve)' -ForegroundColor Cyan
 }
@@ -248,6 +259,7 @@ if (-not $NoSync) {
     foreach ($e in $ExtrasList) { $argList += @('--extra', $e) }
     Write-Host "Running: uv $($argList -join ' ')" -ForegroundColor Cyan
     & uv @argList
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
     # ---- persist UV_NO_SYNC=1 as a user-level environment variable (CUDA) ----
     if ($Target -eq 'cuda') {
@@ -261,6 +273,12 @@ if (-not $NoSync) {
     Write-Host ''
     Write-Host "Done. vailá ready for target='$Target' with extras=[$($ExtrasList -join ' ')]." -ForegroundColor Green
     Write-Host 'Run the GUI:   uv run vaila.py'
+    $updateExtras = $ExtrasList -join ','
+    if ($updateExtras) {
+        Write-Host "Update safely: pwsh bin/setup_pyproject.ps1 -Target $Target -Extras $updateExtras -Upgrade -Yes"
+    } else {
+        Write-Host "Update safely: pwsh bin/setup_pyproject.ps1 -Target $Target -Upgrade -Yes"
+    }
 } else {
     Write-Host "Skipping 'uv sync' (-NoSync)" -ForegroundColor Cyan
     Write-Host ''

@@ -28,14 +28,16 @@ uv sync --no-group cpu --group cuda      # NVIDIA CUDA 12.8 + TensorRT
 # Linux / macOS / WSL / Git Bash
 bash bin/setup_pyproject.sh                           # interactive, auto-detect
 bash bin/setup_pyproject.sh --target=cuda --full --yes  # all AI extras (gpu,sam,sapiens,fifa)
+bash bin/setup_pyproject.sh --target=cuda --full --upgrade --yes  # update lock and keep CUDA/extras
 bash bin/setup_pyproject.sh --target=cpu --non-interactive
 
 # Windows PowerShell
 pwsh bin/setup_pyproject.ps1                          # interactive, auto-detect
 pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Yes      # all AI extras
+pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Upgrade -Yes  # update lock and keep CUDA/extras
 ```
 
-Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--lock`, `--no-sync`, `--help` (legacy `linux-cuda`/`win-cuda`/`macos` targets still accepted). The bootstrap **never writes tracked files** — it only chooses the `uv sync` arguments, so the git tree stays clean.
+Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--lock`, `--upgrade`, `--no-sync`, `--help` (legacy `linux-cuda`/`win-cuda`/`macos` targets still accepted). Normal setup leaves tracked files unchanged; `--upgrade` intentionally updates the shared `uv.lock` before syncing.
 
 | Platform | Command (from repo root) |
 |----------|--------------------------|
@@ -43,8 +45,8 @@ Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`
 | CPU laptop | `uv sync` |
 | macOS (Metal/MPS) | `uv sync` |
 
-> **CUDA protection (automatic).** A bare `uv run` would re-sync the default
-> groups (`dev` + `cpu`) and replace the cu128 wheels with CPU ones. Three
+> **CUDA protection (automatic).** A bare `uv run` or `uv sync --upgrade` selects
+> the default groups (`dev` + `cpu`) and replaces cu128 wheels with CPU ones. Three
 > layers now prevent this:
 > 1. `bin/setup_pyproject.sh --target=cuda` **persists** `export UV_NO_SYNC=1`
 >    in the user's shell RC (`.bashrc`/`.zshrc`), so every future shell session

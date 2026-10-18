@@ -1,8 +1,8 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.9 (see `vaila.py`). **Package version:** 0.4.6 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.10 (see `vaila.py`). **Package version:** 0.4.10 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-10-16
+**Last updated:** 2026-10-18
 
 FreeKiki Kiki49 review: `uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS` opens a 49-point review session. After **Mark Reviewed** and **Export Reviewed**, preview with `uv run --no-sync vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH_ID`; add `--commit` to append validated frames to train. GetPixelCoord also opens a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp for CALIB/MEASURE. See [GetPixelVideo help](vaila/help/getpixelvideo.md) and [FreeKiki help](vaila/help/freekiki.md).
 
@@ -192,7 +192,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 16.Oct.2026 v0.4.9 (Python 3.12.14)
+vailá - 18.Oct.2026 v0.4.10 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -341,8 +341,8 @@ _vailá_ ships **one portable `pyproject.toml` and one `uv.lock` for every compu
 | CPU-only laptop | `uv sync` | PyTorch CPU wheels |
 | macOS Apple Silicon | `uv sync` | PyTorch PyPI wheel = Metal/MPS build |
 
-> **On a CUDA machine, never run a bare `uv run`.** It auto-syncs with the default
-> groups (`dev` + `cpu`) and silently replaces the cu128 wheels with the CPU ones
+> **On a CUDA machine, never run a bare `uv run` or `uv sync --upgrade`.** Both
+> select the default groups (`dev` + `cpu`) and replace cu128 wheels with CPU ones
 > (`torch.cuda.is_available()` becomes `False`). Use `uv run --no-sync ...`,
 > `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`. Explicit `uv sync --no-group cpu
 > --group cuda` is unaffected; the installers and `bin/setup_*` scripts already export
@@ -357,9 +357,11 @@ bash bin/setup_pyproject.sh                                       # Linux / macO
 pwsh bin/setup_pyproject.ps1                                      # Windows PowerShell (interactive)
 bash bin/setup_pyproject.sh --target=cuda --full --yes       # NVIDIA CUDA + all AI extras (sam,sapiens,fifa,upscaler)
 pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Yes          # Windows CUDA + all AI extras
+bash bin/setup_pyproject.sh --target=cuda --full --upgrade --yes  # Upgrade lock + preserve CUDA/extras
+pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Upgrade -Yes     # Same on Windows
 ```
 
-Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--lock`, `--no-sync`, `--help` (legacy `linux-cuda` / `win-cuda` / `macos` target names still accepted). See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
+Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`, `--yes`, `--lock`, `--upgrade`, `--no-sync`, `--help` (legacy `linux-cuda` / `win-cuda` / `macos` target names still accepted). `--upgrade` updates the shared `uv.lock`; normal setup leaves tracked files unchanged. See **[AGENTS.md](AGENTS.md)** for the full hybrid workflow.
 
 **How it works (step-by-step):**
 
@@ -467,7 +469,7 @@ The installation script automatically:
 - Checks for **uv**; if missing, installs it automatically
 - **Detects your hardware** (NVIDIA GPU) and prompts for GPU support preference
 - **Selects the PyTorch dependency group** (`cuda` or `cpu`) — the committed `pyproject.toml` is never modified
-- Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.15** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync` (with `--no-group cpu --group cuda` if GPU support was selected)
 - Installs **FFmpeg** and **Windows Terminal** (if running as Administrator)
@@ -597,7 +599,7 @@ The installation script automatically:
 - Checks for **uv**; if missing, installs it automatically
 - **Detects your hardware** (NVIDIA GPU via `nvidia-smi`) and prompts for GPU support preference
 - **Selects the PyTorch dependency group** (`cuda` or `cpu`) — the committed `pyproject.toml` is never modified
-- Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.15** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync` (with `--no-group cpu --group cuda` if GPU support was selected)
 - Installs system packages via package manager if needed (`python3-tk`, `ffmpeg`, etc.)
@@ -619,10 +621,10 @@ cd vaila
 # The same pyproject.toml works on every machine: the hardware is a uv group.
 
 # Initialize Python version
-uv python pin 3.12.14
+uv python pin 3.12.15
 
 # Create virtual environment
-uv venv --python 3.12.14
+uv venv --python 3.12.15
 
 # Install dependencies (committed uv.lock already covers CPU, CUDA and macOS)
 uv sync
@@ -697,7 +699,7 @@ The installation script automatically:
 - Installs system dependencies via Homebrew (if needed)
 - **Detects your architecture** (Apple Silicon vs Intel) and prompts for Metal/MPS acceleration
 - **Selects the PyTorch dependency group** (`cpu`, i.e. the Metal/MPS wheel on Apple Silicon) — the committed `pyproject.toml` is never modified
-- Installs **Python 3.12.14** (via uv) securely isolated for _vailá_
+- Installs **Python 3.12.15** (via uv) securely isolated for _vailá_
 - Creates a virtual environment (`.venv`) with the correct dependencies from the start
 - Syncs all dependencies using `uv sync`
 - Sets up the macOS application bundle with icon in Applications folder
@@ -970,7 +972,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` is now **`0.4.9`** (16 October 2026). The installable package in `pyproject.toml` stays **`0.4.6`** until the next packaging release. Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.10`** (18 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

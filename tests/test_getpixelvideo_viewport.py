@@ -1,4 +1,8 @@
-"""Unit tests for getpixelvideo letterbox viewport math."""
+"""Unit tests for getpixelvideo letterbox viewport math.
+
+Version: 0.4.9
+Update Date: 17 October 2026
+"""
 
 from __future__ import annotations
 
@@ -16,9 +20,9 @@ from vaila.getpixelvideo import (
 
 def test_build_stamp_matches_global_release() -> None:
     assert GETPIXELVIDEO_VERSION == "0.4.9"
-    assert GETPIXELVIDEO_UPDATE_DATE == "07 October 2026"
+    assert GETPIXELVIDEO_UPDATE_DATE == "17 October 2026"
     assert "0.4.9" in GETPIXELVIDEO_WINDOW_TITLE
-    assert "07 October 2026" in GETPIXELVIDEO_WINDOW_TITLE
+    assert "17 October 2026" in GETPIXELVIDEO_WINDOW_TITLE
     assert GETPIXELVIDEO_WINDOW_TITLE.startswith("vailá getpixelvideo")
 
 
