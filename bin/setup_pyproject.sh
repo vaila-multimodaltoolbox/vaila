@@ -7,8 +7,8 @@
 #
 # There is a SINGLE committed pyproject.toml / uv.lock for every machine and OS:
 # the hardware choice is a uv dependency group, not a file swap. Nothing in the
-# repository is modified by this script, so there is never a machine-specific
-# manifest to keep out of git.
+# repository is modified during a normal setup. --upgrade intentionally updates
+# the shared uv.lock, never a machine-specific manifest.
 #
 #   cpu   -> torch/torchvision/torchaudio from https://download.pytorch.org/whl/cpu
 #            (on macOS: the PyPI wheel, which is the Metal/MPS build)
@@ -21,6 +21,7 @@
 # Usage:
 #   bin/setup_pyproject.sh                                # interactive, auto-detect
 #   bin/setup_pyproject.sh --target=cuda --extras=sam
+#   bin/setup_pyproject.sh --target=cuda --full --upgrade --yes
 #   bin/setup_pyproject.sh --target=cpu --non-interactive --yes
 #   bin/setup_pyproject.sh --help
 #
@@ -31,6 +32,7 @@
 #   --non-interactive  Do not prompt; use detected/given values
 #   --yes, -y          Accept all suggested defaults (interactive but no prompts)
 #   --lock             Re-run `uv lock` before syncing (normally unnecessary)
+#   --upgrade          Upgrade uv.lock, then sync the selected hardware/extras
 #   --no-lock          Skip `uv lock` (default)
 #   --no-sync          Skip `uv sync`
 #   --help, -h         Show this help and exit
@@ -46,11 +48,12 @@ EXTRAS_CLI=""
 NON_INTERACTIVE=0
 ACCEPT_DEFAULTS=0
 RUN_LOCK=0
+UPGRADE=0
 RUN_SYNC=1
 
 # ---------- args ----------
 print_help() {
-    sed -n '2,36p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,/^$/p' "$0" | sed 's/^# \{0,1\}//'
 }
 
 for arg in "$@"; do
@@ -60,8 +63,9 @@ for arg in "$@"; do
         --full|--preset=full) EXTRAS_CLI="all" ;;
         --non-interactive) NON_INTERACTIVE=1 ;;
         -y|--yes)          ACCEPT_DEFAULTS=1 ;;
-        --lock)            RUN_LOCK=1 ;;
-        --no-lock)         RUN_LOCK=0 ;;
+        --lock)            RUN_LOCK=1; UPGRADE=0 ;;
+        --upgrade)         RUN_LOCK=1; UPGRADE=1 ;;
+        --no-lock)         RUN_LOCK=0; UPGRADE=0 ;;
         --no-sync)         RUN_SYNC=0 ;;
         --skip-worktree|--no-skip-worktree)
             # Kept for backward compatibility: pyproject.toml / uv.lock are now
@@ -278,8 +282,13 @@ if [[ "$RUN_LOCK" == 1 ]]; then
         err "uv not found in PATH. Install uv: https://docs.astral.sh/uv/getting-started/installation/"
         exit 1
     fi
-    info "Running: uv lock"
-    uv lock
+    if [[ "$UPGRADE" == 1 ]]; then
+        info "Running: uv lock --upgrade"
+        uv lock --upgrade
+    else
+        info "Running: uv lock"
+        uv lock
+    fi
 else
     info "Using the committed uv.lock (pass --lock to re-resolve)"
 fi
@@ -391,6 +400,12 @@ if [[ "$RUN_SYNC" == 1 ]]; then
     ok ""
     ok "Done. vailá ready for target='$TARGET' with extras=[$EXTRAS]."
     say "Run the GUI:   uv run vaila.py   (or: bash bin/run_vaila.sh)"
+    UPDATE_EXTRAS="$(echo "$EXTRAS" | tr ' ' ',')"
+    if [[ -n "$UPDATE_EXTRAS" ]]; then
+        say "Update safely: bash bin/setup_pyproject.sh --target=$TARGET --extras=$UPDATE_EXTRAS --upgrade --yes"
+    else
+        say "Update safely: bash bin/setup_pyproject.sh --target=$TARGET --upgrade --yes"
+    fi
 else
     info "Skipping 'uv sync' (--no-sync)"
     say ""

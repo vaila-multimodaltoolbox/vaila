@@ -10,14 +10,14 @@ Please see AUTHORS for contributors.
 Author: Paulo Santiago
 Version: 0.4.9
 Created: 06 September 2026
-Last Updated: 07 October 2026
+Last Updated: 17 October 2026
 ================================================================================
 Description:
     Kinovea-style on-image calibration and measurements for `getpixelvideo.py`.
 
     Host UI splits into **CALIB** (build / load planar calibrations) and
-    **MEASURE** (digit-key distance / area / angle / velocity / accel). A
-    session may hold one **default** (whole-video) calibration plus optional
+    **MEASURE** (digit-key distance / area / angle / velocity / accel / level).
+    A session may hold one **default** (whole-video) calibration plus optional
     **per-frame** overrides; measures resolve ``frame → override → default``.
 
     Calibration modes now: ``line``, ``plane`` (DLT2D), ``ref3d`` (drop one
@@ -30,7 +30,10 @@ Description:
       ``3`` angle      — 3 clicks (vertex in the middle) → angle label
       ``4`` velocity   — 2 clicks on different frames (needs FPS)
       ``5`` acceleration — 3 clicks on distinct frames (needs FPS)
-      ``6``–``0``      — reserved
+      ``6`` level      — laser-style H+V crosshair + axis-snapped tape (2 clicks)
+      ``7``–``0``      — reserved
+      Clear / Backspace — wipe draft + points + drawn results (keeps calib)
+      Ctrl+Z / Ctrl+Y  — undo / redo measure actions
 
     Calibration flow (CALIB button / Shift+Q):
       - ``line``  — 2 clicks on a segment of known length + the typed length.
@@ -71,11 +74,13 @@ License:
 
 from __future__ import annotations
 
+import copy
 import html
 import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -95,7 +100,14 @@ except ImportError:
     from rec2d_one_dlt2d import rec2d  # ty: ignore[unresolved-import]
 
 
-MEASURE_TYPES: tuple[str, ...] = ("distance", "area", "angle", "velocity", "acceleration")
+MEASURE_TYPES: tuple[str, ...] = (
+    "distance",
+    "area",
+    "angle",
+    "velocity",
+    "acceleration",
+    "level",
+)
 
 # Digit keys after ``Q`` select the live measure mode (see LIVE_MODE_KEYS).
 LIVE_MODE_KEYS: dict[str, str] = {
@@ -104,6 +116,7 @@ LIVE_MODE_KEYS: dict[str, str] = {
     "3": "angle",
     "4": "velocity",
     "5": "acceleration",
+    "6": "level",
 }
 # Auto-finalize after this many draft clicks. ``None`` means press Enter (area).
 LIVE_MODE_AUTO_POINTS: dict[str, int | None] = {
@@ -112,8 +125,25 @@ LIVE_MODE_AUTO_POINTS: dict[str, int | None] = {
     "angle": 3,
     "velocity": 2,
     "acceleration": 3,
+    "level": 2,
 }
 LIVE_MODE_NEEDS_FPS: frozenset[str] = frozenset({"velocity", "acceleration"})
+
+# In-memory undo depth for MEASURE draft / result edits (Ctrl+Z / Ctrl+Y).
+MEASURE_UNDO_STACK_MAX = 50
+
+
+def snap_level_endpoint(ox: float, oy: float, x: float, y: float) -> tuple[float, float, str]:
+    """Snap ``(x, y)`` to the nearer image-space axis through ``(ox, oy)``.
+
+    Returns ``(end_x, end_y, axis)`` where ``axis`` is ``\"H\"`` or ``\"V\"``.
+    """
+    dx = float(x) - float(ox)
+    dy = float(y) - float(oy)
+    if abs(dx) >= abs(dy):
+        return float(x), float(oy), "H"
+    return float(ox), float(y), "V"
+
 
 # Click-based calibration modes and how many image clicks each one needs.
 CALIBRATION_MODES: tuple[str, ...] = ("line", "plane")
@@ -884,13 +914,15 @@ class QuickMeasureSession:
     calibration_skipped: bool = False
     # Set when menu ``R`` starts a guided REF3D click calibration; host picks it up.
     pending_ref3d_draft: Ref3dCalibrationDraft | None = None
-    # Live digit-key mode (``1``–``5``): in-progress clicks + active type.
+    # Live digit-key mode (``1``–``6``): in-progress clicks + active type.
     active_mode: str | None = None
     draft_points: list[QuickMeasurePoint] = field(default_factory=list)
     # Created once on the first calibration/result save. Every later save from
     # this video session updates the same export instead of minting another
     # timestamped directory.
     export_dir: str | None = field(default=None, init=False, repr=False)
+    _measure_undo_stack: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
+    _measure_redo_stack: list[dict[str, Any]] = field(default_factory=list, init=False, repr=False)
 
     @property
     def default_calibration(self) -> QuickMeasureCalibration | None:
@@ -957,6 +989,7 @@ class QuickMeasureSession:
         return len(self.points)
 
     def undo_last(self) -> bool:
+        """Legacy single-step pop (draft then points). Prefer ``undo_measure``."""
         if self.draft_points:
             self.draft_points.pop()
             return True
@@ -972,13 +1005,68 @@ class QuickMeasureSession:
     def clear_results(self) -> None:
         self.results.clear()
 
+    def clear_measure_feedback(self) -> str:
+        """Wipe draft, points, and drawn results; keep calibration. Resets undo/redo."""
+        self.clear()
+        self.clear_results()
+        self.active_mode = None
+        self._measure_undo_stack.clear()
+        self._measure_redo_stack.clear()
+        return "Measure: points and results cleared"
+
+    def has_measure_feedback(self) -> bool:
+        return bool(self.points or self.results or self.draft_points)
+
+    def _clone_measure_state(self) -> dict[str, Any]:
+        return {
+            "points": [QuickMeasurePoint(p.frame, p.x, p.y) for p in self.points],
+            "results": copy.deepcopy(self.results),
+            "draft_points": [QuickMeasurePoint(p.frame, p.x, p.y) for p in self.draft_points],
+            "active_mode": self.active_mode,
+        }
+
+    def _restore_measure_state(self, state: dict[str, Any]) -> None:
+        self.points = list(state["points"])
+        self.results = copy.deepcopy(state["results"])
+        self.draft_points = list(state["draft_points"])
+        self.active_mode = state["active_mode"]
+
+    def push_measure_undo(self) -> None:
+        """Checkpoint current measure state; clears redo branch."""
+        self._measure_undo_stack.append(self._clone_measure_state())
+        if len(self._measure_undo_stack) > MEASURE_UNDO_STACK_MAX:
+            del self._measure_undo_stack[: len(self._measure_undo_stack) - MEASURE_UNDO_STACK_MAX]
+        self._measure_redo_stack.clear()
+
+    def undo_measure(self) -> str:
+        """Undo last measure action (draft click or completed result)."""
+        if not self._measure_undo_stack:
+            return "Measure: nothing to undo"
+        self._measure_redo_stack.append(self._clone_measure_state())
+        if len(self._measure_redo_stack) > MEASURE_UNDO_STACK_MAX:
+            del self._measure_redo_stack[: len(self._measure_redo_stack) - MEASURE_UNDO_STACK_MAX]
+        prev = self._measure_undo_stack.pop()
+        self._restore_measure_state(prev)
+        return "Measure: undo"
+
+    def redo_measure(self) -> str:
+        """Redo last undone measure action."""
+        if not self._measure_redo_stack:
+            return "Measure: nothing to redo"
+        self._measure_undo_stack.append(self._clone_measure_state())
+        if len(self._measure_undo_stack) > MEASURE_UNDO_STACK_MAX:
+            del self._measure_undo_stack[: len(self._measure_undo_stack) - MEASURE_UNDO_STACK_MAX]
+        nxt = self._measure_redo_stack.pop()
+        self._restore_measure_state(nxt)
+        return "Measure: redo"
+
     def live_mode_status(self) -> str:
         if self.active_mode is None:
             unit = self.unit_label
             hint = "" if self.has_any_calibration() else " (pixels — use CALIB for real units)"
             return (
                 f"MEASURE ({unit}){hint}: press 1=distance 2=area 3=angle "
-                "4=velocity 5=accel (6–0 reserved) then click"
+                "4=velocity 5=accel 6=level (7–0 reserved) then click"
             )
         n = len(self.draft_points)
         auto = LIVE_MODE_AUTO_POINTS.get(self.active_mode)
@@ -987,6 +1075,12 @@ class QuickMeasureSession:
                 f"MODE area: {n} vertex(es) — click more, Enter closes polygon "
                 f"(≥3), right-click undo"
             )
+        if self.active_mode == "level":
+            if n == 0:
+                return "MODE level: 0/2 — click origin (H+V laser guide)"
+            if n == 1:
+                return "MODE level: 1/2 — click tape end (snaps to H/V)"
+            return f"MODE level: {n}/2 point(s) (right-click undo)"
         if auto is None:
             return f"MODE {self.active_mode}: {n} point(s)"
         return f"MODE {self.active_mode}: {n}/{auto} point(s) (right-click undo)"
@@ -999,10 +1093,11 @@ class QuickMeasureSession:
         if digit not in LIVE_MODE_KEYS:
             self.active_mode = None
             self.draft_points.clear()
-            return f"Key {digit}: reserved (no measure mode yet). Use 1–5."
+            return f"Key {digit}: reserved (no measure mode yet). Use 1–6."
         mode = LIVE_MODE_KEYS[digit]
         if mode in LIVE_MODE_NEEDS_FPS:
             self._require_fps()
+        self.push_measure_undo()
         self.active_mode = mode
         self.draft_points.clear()
         return self.live_mode_status()
@@ -1014,11 +1109,12 @@ class QuickMeasureSession:
         """
         if self.active_mode is None:
             raise QuickMeasureError(
-                "No live measure mode — press 1–5 first (distance/area/angle/velocity/accel)."
+                "No live measure mode — press 1–6 first (distance/area/angle/velocity/accel/level)."
             )
         mode = self.active_mode
         if mode in LIVE_MODE_NEEDS_FPS:
             self._require_fps()
+        self.push_measure_undo()
         self.draft_points.append(QuickMeasurePoint(int(frame), float(x), float(y)))
         auto = LIVE_MODE_AUTO_POINTS.get(mode)
         if auto is not None and len(self.draft_points) >= auto:
@@ -1035,6 +1131,7 @@ class QuickMeasureSession:
                 f"Area needs ≥3 vertices, have {len(self.draft_points)} — keep clicking.",
                 None,
             )
+        self.push_measure_undo()
         result = self._finalize_draft(result_frame=int(result_frame))
         return format_result(result), result
 
@@ -1045,6 +1142,10 @@ class QuickMeasureSession:
         draft = list(self.draft_points)
         if not draft:
             raise QuickMeasureError("No draft points to finalize.")
+        if mode == "level" and len(draft) >= 2:
+            origin, end = draft[-2], draft[-1]
+            sx, sy, _axis = snap_level_endpoint(origin.x, origin.y, end.x, end.y)
+            draft[-1] = QuickMeasurePoint(end.frame, sx, sy)
         # Append draft into the session point list, then measure from those pts.
         start_id = len(self.points) + 1
         self.points.extend(draft)
@@ -1098,6 +1199,31 @@ class QuickMeasureSession:
         x2, y2 = self._to_units(p2)
         value = float(np.hypot(x2 - x1, y2 - y1))
         return {"type": "distance", "value": value, "unit": self.unit_label, "n_points": 2}
+
+    def measure_level(self) -> dict:
+        """Axis-snapped tape length (image H/V through the origin click)."""
+        if len(self.points) < 2:
+            raise QuickMeasureError("Level needs 2 points (origin + tape end).")
+        p1, p2 = self.points[-2], self.points[-1]
+        sx, sy, axis = snap_level_endpoint(p1.x, p1.y, p2.x, p2.y)
+        # Prefer geometry already snapped in ``_finalize_draft``.
+        if abs(p2.x - sx) > 1e-9 or abs(p2.y - sy) > 1e-9:
+            p2 = QuickMeasurePoint(p2.frame, sx, sy)
+            self.points[-1] = p2
+        if abs(p2.y - p1.y) <= 1e-9:
+            axis = "H"
+        elif abs(p2.x - p1.x) <= 1e-9:
+            axis = "V"
+        x1, y1 = self._to_units(p1)
+        x2, y2 = self._to_units(p2)
+        value = float(np.hypot(x2 - x1, y2 - y1))
+        return {
+            "type": "level",
+            "value": value,
+            "unit": self.unit_label,
+            "n_points": 2,
+            "axis": axis,
+        }
 
     def measure_area(self) -> dict:
         if len(self.points) < 3:
@@ -1195,6 +1321,7 @@ class QuickMeasureSession:
             "angle": self.measure_angle,
             "velocity": self.measure_velocity,
             "acceleration": self.measure_acceleration,
+            "level": self.measure_level,
         }
         if kind not in dispatch:
             raise QuickMeasureError(
@@ -1342,6 +1469,7 @@ class QuickMeasureSession:
             "type",
             "value",
             "unit",
+            "axis",
             "n_points",
             "result_frame",
             "fps",
@@ -1367,6 +1495,7 @@ class QuickMeasureSession:
                 "type": r.get("type"),
                 "value": r.get("value"),
                 "unit": r.get("unit"),
+                "axis": r.get("axis", ""),
                 "n_points": r.get("n_points"),
                 "result_frame": r.get("result_frame"),
                 "fps": r.get("fps"),
@@ -1536,6 +1665,7 @@ class QuickMeasureSession:
             "angle": "#d68910",
             "velocity": "#2471a3",
             "acceleration": "#117a65",
+            "level": "#27ae60",
         }
 
         def result_svg(result: dict, index: int) -> str:
@@ -1549,10 +1679,12 @@ class QuickMeasureSession:
             if not pixels:
                 return f'<p class="notice">{esc(title)} — no pixel geometry stored.</p>'
             parts = [svg_open(pixels, title)]
-            if rtype in {"distance", "velocity"} and len(pixels) >= 2:
+            if rtype in {"distance", "velocity", "level"} and len(pixels) >= 2:
                 (x1, y1), (x2, y2) = pixels[0], pixels[1]
                 parts.append(svg_line(x1, y1, x2, y2, color, 3.0))
-                parts.append(mid_label(x1, y1, x2, y2, value_txt, color))
+                axis = result.get("axis")
+                label = f"{value_txt}" + (f" ({axis})" if axis else "")
+                parts.append(mid_label(x1, y1, x2, y2, label, color))
             elif rtype == "area" and len(pixels) >= 3:
                 closed = list(pixels) + [pixels[0]]
                 parts.append(svg_polyline(closed, color, fill="#8e44ad33"))
@@ -1596,6 +1728,10 @@ class QuickMeasureSession:
                 "angle": "Smaller angle at the middle (vertex) click between the two rays.",
                 "velocity": "Displacement / elapsed time between two frames (needs FPS).",
                 "acceleration": "Change of segment speed / average Δt across three frames (needs FPS).",
+                "level": (
+                    "Laser-style level tape: origin click draws image-space H+V guides; "
+                    "second click snaps to the nearer axis and reports that length."
+                ),
             }.get(rtype, "Completed Quick Measure result.")
             parts.append(f"<p>{esc(how)}</p>")
             return "".join(parts)
@@ -1665,6 +1801,14 @@ class QuickMeasureSession:
                 "(velocity2-velocity1) / average(dt1,dt2)",
                 f"{self.unit_label}/s^2",
             ),
+            (
+                "Level (tape)",
+                "6",
+                "2 points: origin then tape end (snaps to H or V)",
+                "Axis-constrained length with green H+V laser guide at the origin.",
+                "snap to nearer image axis, then sqrt((x2-x1)^2 + (y2-y1)^2)",
+                self.unit_label,
+            ),
         ]
         file_descriptions = {
             "points": "Every clicked point in image pixels and calibrated coordinates.",
@@ -1678,14 +1822,16 @@ class QuickMeasureSession:
             "results_angle": "Angle results only.",
             "results_velocity": "Velocity results only.",
             "results_acceleration": "Acceleration results only.",
+            "results_level": "Level (axis-snapped tape) results only.",
             "report": "This guide with SVG figures of calibration and measurements.",
             "readme": "Compact plain-text file list and recomputation command.",
         }
         result_columns = [
             ("result_id", "Sequential result number in this session."),
-            ("type", "distance, area, angle, velocity, or acceleration."),
+            ("type", "distance, area, angle, velocity, acceleration, or level."),
             ("value", "Computed numeric metric."),
             ("unit", "Unit attached to value; calibrated unit, pixels, degrees, or rate."),
+            ("axis", "For level results: H (horizontal) or V (vertical); empty otherwise."),
             ("n_points", "Number of points used by this result."),
             ("result_frame", "Frame where the completed result is drawn."),
             ("fps", "Video frames per second used for time-based metrics."),
@@ -1809,7 +1955,7 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 </div>
 <div class="howto">
 <div><strong>1 · CALIB</strong>Shift+Q / CALIB button — build line, plane, or REF3D scale.</div>
-<div><strong>2 · MEASURE</strong>Q — press 1–5, click the required points; values draw on the image.</div>
+<div><strong>2 · MEASURE</strong>Q — press 1–6, click the required points; values draw on the image.</div>
 <div><strong>3 · Save</strong>Enter then S (or Save hub) writes this folder + report.</div>
 <div><strong>4 · Read</strong>Open this HTML first; CSVs hold the exact numbers.</div>
 </div>
@@ -1821,6 +1967,7 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 <span><i class="swatch" style="background:#d68910"></i>angle</span>
 <span><i class="swatch" style="background:#2471a3"></i>velocity</span>
 <span><i class="swatch" style="background:#117a65"></i>acceleration</span>
+<span><i class="swatch" style="background:#27ae60"></i>level</span>
 </p>
 <h2>Calibration figures</h2>
 <p>The known real-world segment or rectangle you clicked, drawn in image-pixel space.</p>
@@ -1973,6 +2120,9 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 
 def format_result(result: dict) -> str:
     label = result["type"].capitalize()
+    axis = result.get("axis")
+    if axis:
+        return f"{label} ({axis}): {result['value']:.4f} {result['unit']}"
     return f"{label}: {result['value']:.4f} {result['unit']}"
 
 
@@ -2157,20 +2307,26 @@ def draw_quickmeasure_overlay(
     def _to_screen(x: float, y: float) -> tuple[int, int]:
         return int((x * zoom_level) - crop_x + pad_x), int((y * zoom_level) - crop_y + pad_y)
 
-    def _badge(text: str, anchor: tuple[int, int]) -> None:
+    def _badge(text: str, anchor: tuple[int, int], *, border=(255, 0, 255)) -> None:
         rendered = font.render(text, True, (255, 255, 220))
         box = pygame.Surface(
             (rendered.get_width() + 10, rendered.get_height() + 6), pygame.SRCALPHA
         )
         box.fill((40, 10, 50, 220))
-        pygame.draw.rect(box, (255, 0, 255), box.get_rect(), 1)
+        pygame.draw.rect(box, border, box.get_rect(), 1)
         box.blit(rendered, (5, 3))
         rect = box.get_rect(midleft=(anchor[0] + 10, anchor[1] - 14))
         rect.clamp_ip(screen.get_rect())
         screen.blit(box, rect)
 
+    def _draw_level_crosshair(ox: int, oy: int, color: tuple[int, int, int]) -> None:
+        w, h = screen.get_size()
+        pygame.draw.line(screen, color, (0, oy), (w, oy), 1)
+        pygame.draw.line(screen, color, (ox, 0), (ox, h), 1)
+
     color_done = (255, 0, 255)
     color_draft = (255, 180, 0)
+    color_level = (0, 255, 80)
 
     if show_results:
         for idx, r in enumerate(session.results, start=1):
@@ -2179,13 +2335,16 @@ def draw_quickmeasure_overlay(
                 continue
             screen_pts = [_to_screen(px, py) for px, py in pixels]
             rtype = str(r.get("type", "") or "measure")
+            stroke = color_level if rtype == "level" else color_done
+            if rtype == "level" and screen_pts:
+                _draw_level_crosshair(screen_pts[0][0], screen_pts[0][1], color_level)
             if rtype == "area" and len(screen_pts) >= 3:
-                pygame.draw.polygon(screen, color_done, screen_pts, 2)
+                pygame.draw.polygon(screen, stroke, screen_pts, 2)
             elif len(screen_pts) >= 2:
-                pygame.draw.lines(screen, color_done, False, screen_pts, 3)
+                pygame.draw.lines(screen, stroke, False, screen_pts, 3)
             for sx, sy in screen_pts:
                 pygame.draw.circle(screen, (40, 10, 50), (sx, sy), 6)
-                pygame.draw.circle(screen, color_done, (sx, sy), 5, 2)
+                pygame.draw.circle(screen, stroke, (sx, sy), 5, 2)
             # Label near the geometric mid / vertex.
             if rtype == "angle" and len(screen_pts) >= 3:
                 lx, ly = screen_pts[1] if len(screen_pts) == 3 else screen_pts[0]
@@ -2200,20 +2359,37 @@ def draw_quickmeasure_overlay(
                 value_txt = f"{value:.3f}"
             except (TypeError, ValueError):
                 value_txt = str(r.get("value", "?"))
-            label = f"#{idx} · {rtype} · {value_txt}"
+            axis = str(r.get("axis") or "").strip()
+            if rtype == "level" and axis:
+                label = f"#{idx} · level · {axis} · {value_txt}"
+            else:
+                label = f"#{idx} · {rtype} · {value_txt}"
             if unit:
                 label = f"{label} {unit}"
-            _badge(label, (lx, ly))
+            _badge(label, (lx, ly), border=stroke)
 
     # In-progress draft for the active live mode.
     if session.draft_points:
         draft_pts = [_to_screen(p.x, p.y) for p in session.draft_points]
+        if session.active_mode == "level" and draft_pts:
+            _draw_level_crosshair(draft_pts[0][0], draft_pts[0][1], color_level)
+            draft_color = color_level
+        else:
+            draft_color = color_draft
         if len(draft_pts) >= 2:
             closed = session.active_mode == "area" and len(draft_pts) >= 3
-            pygame.draw.lines(screen, color_draft, closed, draft_pts, 2)
+            if session.active_mode == "level":
+                # Preview snapped tape toward the second click.
+                o = session.draft_points[0]
+                e = session.draft_points[1]
+                sx, sy, _ = snap_level_endpoint(o.x, o.y, e.x, e.y)
+                snapped = [_to_screen(o.x, o.y), _to_screen(sx, sy)]
+                pygame.draw.lines(screen, draft_color, False, snapped, 2)
+            else:
+                pygame.draw.lines(screen, draft_color, closed, draft_pts, 2)
         for i, (sx, sy) in enumerate(draft_pts):
-            pygame.draw.circle(screen, color_draft, (sx, sy), 5, 2)
-            screen.blit(font.render(str(i + 1), True, color_draft), (sx + 6, sy - 14))
+            pygame.draw.circle(screen, draft_color, (sx, sy), 5, 2)
+            screen.blit(font.render(str(i + 1), True, draft_color), (sx + 6, sy - 14))
 
     # Mode banner (only while measuring / drafting).
     if session.active_mode is not None or session.draft_points:
@@ -2608,18 +2784,18 @@ def show_quickmeasure_menu(
         "MEASURE — save / classify",
         "",
         f"Points: {n}   Results: {len(session.results)}   Unit: {session.unit_label}",
-        f"Live mode: {session.active_mode or '(press 1-5 on video)'}   FPS: {session.fps}",
+        f"Live mode: {session.active_mode or '(press 1-6 on video)'}   FPS: {session.fps}",
         f"Calibration: {calib_line}",
         "",
         "On the VIDEO (MEASURE / Q):",
-        "  1 distance  2 area  3 angle  4 velocity  5 accel",
-        "  6-0 reserved — value drawn on-image per completed set",
-        "  Enter closes area polygon; velocity/accel need FPS (I)",
+        "  1 distance  2 area  3 angle  4 velocity  5 accel  6 level",
+        "  7-0 reserved — value drawn on-image per completed set",
+        "  Enter closes area; Clear/Backspace wipe feedback; Ctrl+Z/Y undo/redo",
         "",
         "In this menu:",
         "1-5: classify current free points (legacy)",
         "S: Save points / calibration / results CSV",
-        "X: Clear all points (+ draft)",
+        "X: Clear all points (+ draft + results)",
         "",
         "Use CALIB (Shift+Q) to build or load calibrations.",
         "Esc: Close menu",
@@ -2694,10 +2870,7 @@ def show_quickmeasure_menu(
                     except QuickMeasureError as e:
                         result_message = f"Error: {e}"
                 elif event.key == pygame.K_x:
-                    session.clear()
-                    session.clear_results()
-                    session.active_mode = None
-                    result_message = "Points, draft and results cleared."
+                    result_message = session.clear_measure_feedback()
 
     return result_message or "Measure menu closed (no measurement taken)."
 

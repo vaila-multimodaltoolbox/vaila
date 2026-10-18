@@ -4,8 +4,8 @@ Geometry and decoding are checked on synthetic values; training runs a tiny
 ResNet-18 from scratch on CPU (64 px canvas, a few real images), so no
 weights are downloaded and no GPU is needed.
 
-Update Date: 28 September 2026
-Version: 0.4.6
+Update Date: 18 October 2026
+Version: 0.4.9
 """
 
 from __future__ import annotations
@@ -338,6 +338,22 @@ def test_parser_heatmap_options() -> None:
         5e-4,
         "resnet50",
     )
+    args = fk.build_parser().parse_args(
+        [
+            "train",
+            "-w",
+            "ws",
+            "--backend",
+            "heatmap",
+            "--backbone",
+            "hrnet_w32",
+            "--teacher",
+            "active",
+            "--distill-weight",
+            "0.5",
+        ]
+    )
+    assert (args.backbone, args.teacher, args.distill_weight) == ("hrnet_w32", "active", 0.5)
     args = fk.build_parser().parse_args(["train", "-w", "ws"])
     assert (args.backend, args.pretrained, args.lr) == ("yolo", True, None)
     with pytest.raises(SystemExit):
@@ -372,3 +388,111 @@ def test_workspace_heatmap_train_interrupt_and_resume(tmp_path: Path, monkeypatc
     assert (ws / row["model"]).is_file() and not list((ws / "models").glob("freekiki_*.pt"))
     with (run / "results.csv").open(encoding="utf-8") as f:
         assert [r["epoch"] for r in csv.DictReader(f)] == ["1", "2"]
+
+
+def test_hrnet_w32_forward_shape_and_params() -> None:
+    net = fh.KikiHeatNet("hrnet_w32", fk.NKP)
+    params = sum(p.numel() for p in net.parameters())
+    assert 29_000_000 < params < 30_000_000  # ~29.4M
+    x = torch.randn(2, 3, 64, 64)
+    out = net(x)
+    assert out.shape == (2, fk.NKP, 16, 16)  # stride 4
+
+
+def test_render_soft_heatmaps_and_distill_loss() -> None:
+    uv = torch.tensor([[[8.0, 8.0], [0.0, 0.0]]])
+    vis = torch.tensor([[1.0, 0.0]])
+    t_uv = torch.tensor([[[8.2, 7.9], [12.0, 12.0]]])
+    t_conf = torch.tensor([[0.85, 0.40]])
+
+    soft = fh.render_soft_heatmaps(t_uv, t_conf, (16, 16), min_conf=0.2)
+    assert soft.shape == (1, 2, 16, 16)
+    assert 0.8 < float(soft[0, 0].max()) <= 0.85
+    assert 0.35 < float(soft[0, 1].max()) <= 0.401  # emits soft peak even when GT vis=0
+
+    # Distill loss
+    pred = torch.randn(1, 2, 16, 16)
+    total, l_gt, l_kd = fh.compute_distill_loss(
+        pred, uv, vis, t_uv, t_conf, distill_weight=0.5, min_teacher_conf=0.2
+    )
+    assert torch.isclose(total, l_gt + 0.5 * l_kd)
+    assert l_kd > 0.0
+
+
+def test_train_distillation_with_mock_teacher(tmp_path: Path) -> None:
+    ds = _real_kiki49(tmp_path / "ds")
+    _, flip_idx = fk.load_schema()
+    images = fh.list_images(ds, "images/train")
+    run = tmp_path / "run_distill"
+
+    def mock_teacher(x: torch.Tensor):
+        b = x.shape[0]
+        # Return canvas coordinates (0..64) and confidences
+        xy = torch.full((b, fk.NKP, 2), 32.0, device=x.device)
+        conf = torch.full((b, fk.NKP), 0.75, device=x.device)
+        return xy, conf
+
+    best = fh.train_heatmap(
+        run,
+        train_images=images,
+        flip_idx=flip_idx,
+        epochs=1,
+        imgsz=64,
+        batch=2,
+        workers=0,
+        backbone="resnet18",
+        pretrained=False,
+        teacher=mock_teacher,
+        distill_weight=0.5,
+        device="cpu",
+    )
+    assert best.is_file()
+    args = yaml.safe_load((run / "args.yaml").read_text(encoding="utf-8"))
+    assert args["teacher"] == "function"
+    assert args["distill_weight"] == 0.5
+    with (run / "results.csv").open(encoding="utf-8") as f:
+        row = list(csv.DictReader(f))[0]
+    assert float(row["train/loss"]) > 0.0
+    assert float(row["train/loss_gt"]) > 0.0
+    assert float(row["train/loss_distill"]) > 0.0
+
+
+def test_hrnet_checkpoint_round_trip_and_slot(tmp_path: Path) -> None:
+    """HRNet-W32 best.pt loads, predicts, and maps to slot hm_hr32."""
+    net = fh.KikiHeatNet("hrnet_w32", fk.NKP)
+    (tmp_path / "weights").mkdir()
+    path = tmp_path / "weights" / "best.pt"
+    torch.save(
+        {
+            "backend": fh.BACKEND,
+            "backbone": "hrnet_w32",
+            "nkp": fk.NKP,
+            "input_wh": [64, 64],
+            "model": net.state_dict(),
+            "best_epoch": 1,
+        },
+        path,
+    )
+    assert fh.model_backend(path) == "heatmap"
+    assert fk.checkpoint_slot(path) == ("hm_hr32", "heatmap-hrnet_w32")
+    assert fk.run_slot(tmp_path, base="hrnet_w32-scratch") == ("hm_hr32", "heatmap-hrnet_w32")
+    pred = fh.HeatmapPredictor.load(path, "cpu")
+    conf, xy, kc = pred.predict(np.zeros((FRAME_H, FRAME_W, 3), np.uint8))
+    assert isinstance(conf, float) and xy.shape == (fk.NKP, 2) and kc.shape == (fk.NKP,)
+    assert np.isfinite(xy).all() and ((kc >= 0) & (kc <= 1)).all()
+
+
+def test_resolve_teacher_defaults_for_hrnet(tmp_path: Path) -> None:
+    ws = fk.init_workspace(tmp_path / "ws")
+    teacher = ws / fk.slot_file("l")
+    teacher.write_bytes(b"fake-yolo")
+    settings = fk.load_settings(ws)
+    settings["models"]["default"] = "l"
+    settings["models"]["l"] = {"file": fk.slot_file("l"), "arch": "yolo26l-pose"}
+    fk.save_settings(ws, settings)
+
+    path = fk._resolve_teacher(ws, "hrnet_w32", None, 0.5)
+    assert path == str(teacher.resolve())
+    assert fk._resolve_teacher(ws, "hrnet_w32", "none", 0.5) is None
+    assert fk._resolve_teacher(ws, "hrnet_w32", "active", 0.0) is None
+    assert fk._resolve_teacher(ws, "resnet50", None, 0.5) is None  # ResNet: no default teacher

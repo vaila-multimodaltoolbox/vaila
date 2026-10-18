@@ -32,7 +32,7 @@
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
         <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,models,sizes,grow,audit,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.9 · <strong>Updated:</strong> 16 October 2026
+        <strong>Version:</strong> 0.4.9 · <strong>Updated:</strong> 18 October 2026
       </div>
 
       <h2>Correct and retrain (3 steps)</h2>
@@ -188,7 +188,7 @@ uv run --no-sync vaila/freekiki.py evaluate -w WS --split hard --model runs/RUN/
         <tr><td>2. Dataset → <strong>Check dataset</strong></td><td><code>uv run vaila/freekiki.py check -w WS</code></td></tr>
         <tr><td>3. Train → <strong>Smoke preset</strong> then <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1</code></td></tr>
         <tr><td>3. Train → <strong>Full preset</strong> then <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --base yolo26m-pose.pt --epochs 150 --imgsz 1280 --batch -1</code></td></tr>
-        <tr><td>3. Train → <strong>Heatmap preset</strong> (Backend <code>heatmap</code>) then <strong>Train</strong></td><td><code>uv run vaila/freekiki.py train -w WS --backend heatmap --epochs 60 --imgsz 1024 --batch 16</code></td></tr>
+        <tr><td>3. Train → <strong>Heatmap preset</strong> (Backend <code>heatmap</code>, backbone <code>hrnet_w32</code>, teacher <code>active</code>) then <strong>Train</strong></td><td><code>uv run --no-sync vaila/freekiki.py train -w WS --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5 --epochs 60 --imgsz 1024 --batch 8</code></td></tr>
         <tr><td>3. Train → Base model <code>active</code> then <strong>Train</strong> (retrain)</td><td><code>uv run vaila/freekiki.py train -w WS --base active --epochs 60</code></td></tr>
         <tr><td>3. Train → <strong>Runs status</strong></td><td><code>uv run vaila/freekiki.py status -w WS</code></td></tr>
         <tr><td>3. Train → <strong>Resume interrupted</strong></td><td><code>uv run vaila/freekiki.py resume -w WS</code> (add <code>--name RUN</code> to choose the run)</td></tr>
@@ -470,6 +470,8 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
         <tr><td><code>field_kps_raw.csv</code></td><td>best instance down to box conf 0.01, no filtering (for re-analysis)</td></tr>
         <tr><td><code>field_kps_status.csv</code></td><td>per frame: cut flag, homography status/inliers/RMSE and one code per point</td></tr>
         <tr><td><code>field_kps_filled_getpixelvideo.csv</code> / <code>_source.csv</code></td><td>only with <code>--fill-gaps N</code>: gaps ≤ N frames inside one shot linearly interpolated, each point marked <code>D</code> or <code>I</code></td></tr>
+        <tr><td><code>field_kps_rigid_getpixelvideo.csv</code> / <code>field_kps_rigid_visibility.csv</code></td><td>full rigid-body reprojection of all 49 <code>soccerfield_kiki.csv</code> keypoints (including occluded and out-of-FOV points in front of the camera) and per-keypoint visibility flags (<code>visible_in_fov</code>, <code>occluded</code>, <code>out_of_bounds</code>)</td></tr>
+        <tr><td><code>field_ref3d_getpixelvideo.csv</code> / <code>field_ref3d_visibility.csv</code></td><td>full rigid-body reprojection of all 37 <code>soccerfield_ref3d.csv</code> keypoints and their per-keypoint visibility flags</td></tr>
         <tr><td><code>frame_issues.csv</code></td><td>frames with a cut, no box or no valid homography</td></tr>
         <tr><td><code>diag_frames/</code></td><td>a few annotated frames (<code>--diag-frames</code>)</td></tr>
         <tr><td><code>&lt;video&gt;_freekiki_overlay.mp4</code></td><td>keypoints + kiki49 skeleton (optional)</td></tr>
@@ -489,11 +491,13 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
         <strong>camera</strong> to the accepted keypoints, then predicts where every other keypoint must be.</p>
       <p>The camera:</p>
       <ul>
-        <li>a planar <strong>homography</strong> (RANSAC) of the z = 0 points;</li>
-        <li>a <strong>DLT3D</strong> (11 parameters, as in <code>dlt3d.py</code>) when ≥ 7 points including ≥ 2 off the
+        <li>a planar <strong>homography</strong> (RANSAC, refined with Hartley-normalised SVD) of the z = 0 points;</li>
+        <li>a <strong>DLT3D</strong> (11 parameters computed via Hartley-normalised SVD, as in <code>dlt3d.py</code>) when ≥ 7 points including ≥ 2 off the
           ground (flags 1.5 m, post tops 2.44 m) are found;</li>
         <li>otherwise a <strong>pinhole camera recovered from the homography</strong>: Zhang focal refined on the
-          points, centred principal point, square pixels.</li>
+          points, centred principal point, square pixels;</li>
+        <li><strong>temporal regularisation</strong>: within each contiguous shot (never crossing scene cuts),
+          normalised H<sub>t</sub> and P<sub>t</sub> camera matrices are smoothed with a rolling window (when inlier RMSE stays within threshold) to suppress inter-frame jitter.</li>
       </ul>
       <table>
         <tr><th>mode</th><th>effect</th></tr>
@@ -506,18 +510,18 @@ max_calib_correct_drop = 0.01   # valid AND <= 10 px@1920 vs labels</pre>
       </table>
       <p>Outputs:</p>
       <ul>
-        <li><code>field_kps_geom_getpixelvideo.csv</code> and <code>field_kps_geom_status.csv</code> (camera source,
-          focal, camera height, RMSE and the per-point codes);</li>
-        <li><code>geom_*</code> keys in <code>quality.json</code>;</li>
+        <li><code>field_kps_geom_getpixelvideo.csv</code>, <code>field_kps_rigid_getpixelvideo.csv</code>, <code>field_ref3d_getpixelvideo.csv</code>, and visibility tables <code>field_kps_rigid_visibility.csv</code> / <code>field_ref3d_visibility.csv</code>;</li>
+        <li><code>field_kps_geom_status.csv</code> (camera source, focal, camera height, RMSE, residual RMSE metrics <code>raw_reproj_rmse_px</code>, <code>raw_reproj_rmse_m</code>, <code>snap_reproj_rmse_px</code>, <code>snap_reproj_rmse_m</code>, <code>snap_line_rmse_px</code>, and per-point codes);</li>
+        <li><code>geom_*</code>, <code>rigid_*</code>, <code>raw_reproj_rmse_*</code>, <code>snap_reproj_rmse_*</code>, and <code>snap_line_rmse_*</code> keys in <code>quality.json</code> and <code>quality_summary.csv</code>;</li>
         <li>the network CSVs are not changed;</li>
         <li>a geometry point may be occluded.</li>
       </ul>
       <h3>Per-frame DLT calibration for rec2d / rec3d (tracking players)</h3>
       <ul>
-        <li><code>&lt;video&gt;.dlt2d</code> (<code>frame,p1..p8</code>): the ground homography (metres → pixels, H[2,2] = 1)
+        <li><code>&lt;video&gt;.dlt2d</code> (<code>frame,L1..L8</code>): the ground homography (metres → pixels, H[2,2] = 1, Hartley-normalised SVD + temporal regularisation)
           for <code>rec2d.py</code>. Use it for positions on the pitch: feet of pose keypoints, or the bottom of
           detection boxes.</li>
-        <li><code>&lt;video&gt;.dlt3d</code> (<code>frame,p1..p11</code>): the full camera for <code>rec3d.py</code>. 3D needs
+        <li><code>&lt;video&gt;.dlt3d</code> (<code>frame,L1,L2,L3,L4,L5,L6,L7,L8,L09,L10,L11</code>): the full camera (P[2,3] = 1, Hartley-normalised SVD + temporal regularisation) for <code>rec3d.py</code>. 3D needs
           ≥ 2 cameras of the same instant.</li>
         <li>World frame: metres, origin at the centre spot, x towards the right goal, y towards the top touchline, z up.</li>
         <li>A blank row means there was no camera in that frame (skipped by rec2d/rec3d). Use <code>--stride 1</code> so every
@@ -644,8 +648,10 @@ uv run vaila/freekiki.py train    -w /path/FreeKiki --manifest v001 --base activ
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1   # smoke
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26m-pose.pt --epochs 150 --imgsz 1280                           # full
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base active --epochs 60                                                  # retrain
-uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 1 --fraction 0.01                              # heatmap pilot
-uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 60 --imgsz 1024 --batch 16                     # heatmap full
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 1 --fraction 0.01                              # heatmap pilot (ResNet)
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5 --epochs 1 --fraction 0.01  # HRNet distill smoke
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5 --epochs 60 --imgsz 1024 --batch 8  # HRNet distill full
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 60 --imgsz 1024 --batch 16                     # heatmap ResNet full
 uv run vaila/freekiki.py status   -w /path/FreeKiki                        # runs, which can be resumed
 uv run vaila/freekiki.py resume   -w /path/FreeKiki [--name RUN]           # continue after stop / power loss
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split val            # choose / compare on val
@@ -665,7 +671,8 @@ uv run vaila/freekiki.py ingest   -w /path/FreeKiki --src /path/FreeKiki/incomin
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split hard</pre>
       <p>On NVIDIA/CUDA machines use <code>uv run --no-sync</code>. Useful options: <code>manifest --rfs-t --cap --seed --exclude FILE --name</code>;
         <code>train --manifest v001 --batch --device 0 --name
-        --patience --seed --workers --backend {yolo,heatmap} --backbone resnet50 --no-pretrained --lr</code>; <code>resume --name --device --batch</code>; <code>evaluate --model PATH.pt --split val
+        --patience --seed --workers --backend {yolo,heatmap} --backbone {resnet50,hrnet_w32}
+        --teacher active --distill-weight 0.5 --no-pretrained --lr</code>; <code>resume --name --device --batch</code>; <code>evaluate --model PATH.pt --split val
         --det-conf --kp-conf --match-px --pck 5,10,25 --max-images</code>; <code>--origin 1</code> adds a table scoring only human-annotated labels (2 = plane-projected, 3 = camera-projected); <code>compare --baseline SLOT --promote</code> (copies to
         <code>models/freekiki_&lt;slot&gt;.pt</code> only if the gate passes); <code>detect --model PATH.pt --start --max-frames --conf --kp-conf
         --imgsz --no-overlay --output-dir --fill-gaps N --diag-frames N</code>.</p>
@@ -682,21 +689,39 @@ uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split hard</pre>
 
       <h2>Heatmap backend (<i>vailá</i>-native, no company-owned framework)</h2>
       <p><code>train --backend heatmap</code> trains a second kind of network on the <strong>same labels</strong>
-        (<code>datasets/kiki49</code>, no rebuild): a torchvision ResNet trunk (default <code>resnet50</code>, ImageNet
-        weights from the local torch cache — nothing is downloaded) + 3 deconvolutions + one 49-channel heatmap head
-        (stride 4, Gaussian targets σ = 2). The pitch is one instance per frame, so no box head is needed. Code:
-        <code>vaila/freekiki_heatmap.py</code>, only PyTorch/torchvision (BSD-3-Clause) — the model and its training
-        loop are part of <i>vailá</i> (AGPL-3.0) and do not depend on Ultralytics or its enterprise license.</p>
+        (<code>datasets/kiki49</code>, no rebuild):</p>
+      <ul>
+        <li><strong>HRNet-W32 (<code>--backbone hrnet_w32</code>):</strong> Sun et al. (CVPR 2019) multi-scale architecture
+          keeping parallel high-to-low streams (strides 4, 8, 16, 32 with 32, 64, 128, 256 channels) alive throughout,
+          fused bilinearly into 480 stride-4 channels + 1×1 conv → 49 heatmaps (slot <code>hm_hr32</code>).</li>
+        <li><strong>ResNet (<code>--backbone resnet18/34/50/101/152</code>):</strong> torchvision trunk (ImageNet weights from
+          local cache) + 3 deconvolutions → 49 heatmaps (slots <code>hm_n</code>..<code>hm_x</code>).</li>
+      </ul>
+      <h3>Knowledge Distillation (<i>L = L<sub>gt</sub> + λ L<sub>distill</sub></i>)</h3>
+      <p>YOLO weights cannot be copied directly into HRNet; transfer is performed via knowledge distillation
+        (<code>--teacher active</code>, <code>--distill-weight 0.5</code>):</p>
+      <p style="text-align: center; font-weight: bold;"><i>L = L<sub>gt</sub> + 0.5 · L<sub>distill</sub></i></p>
+      <ul>
+        <li><i>L<sub>gt</sub></i>: MSE against ground-truth heatmaps (<i>v=0</i> produces a zero map).</li>
+        <li><i>L<sub>distill</sub></i>: MSE against soft Gaussian heatmaps emitted by the frozen YOLO teacher on the
+          <strong>exact same augmented canvas</strong> on GPU.</li>
+        <li>Where <i>v=0</i> in ground truth but teacher confidence ≥ 0.2, the student inherits the teacher's prediction
+          (soft Gaussian with peak = teacher confidence).</li>
+      </ul>
+      <p>Code: <code>vaila/freekiki_heatmap.py</code>, only PyTorch/torchvision (BSD-3-Clause) — part of <i>vailá</i>
+        (AGPL-3.0) and completely independent of Ultralytics.</p>
       <table>
         <tr><th>Item</th><th>Value</th></tr>
         <tr><td>Input</td><td>16:9 letterbox, <code>--imgsz</code> = canvas width (1024 → 1024×576)</td></tr>
         <tr><td>Augmentation</td><td>scale ±20 %, rotation ±5°, shift ±5 %, h-flip with <code>flip_idx</code>, brightness/contrast</td></tr>
-        <tr><td>Loss / optimizer</td><td>MSE on heatmaps (v=0 points have an empty target), AdamW + warmup + cosine, bf16 on CUDA</td></tr>
-        <tr><td>Decode</td><td>arg-max + log-parabola sub-cell refinement, then the inverse letterbox to frame pixels; conf = heatmap peak (0..1)</td></tr>
-        <tr><td>Per epoch</td><td><code>results.csv</code> (loss, val recall/precision/median error, <code>val/pck10_all</code> on ≤ 500 val images), <code>weights/last.pt</code> (resumable), <code>weights/best.pt</code></td></tr>
-        <tr><td><code>best.pt</code></td><td>epoch with the highest val PCK10 <strong>with misses</strong> (not mAP)</td></tr>
-        <tr><td>Resume</td><td><code>resume -w WS [--name RUN]</code>, same as YOLO (same train subset for <code>--fraction</code>)</td></tr>
-        <tr><td><code>--base</code></td><td>only a heatmap checkpoint (continued fine-tune); a <code>yolo*.pt</code> base is ignored</td></tr>
+        <tr><td>Loss / optimizer</td><td><i>L = L<sub>gt</sub> + λ L<sub>distill</sub></i>, AdamW + warmup + cosine, bf16 on CUDA</td></tr>
+        <tr><td>Teacher</td><td><code>--teacher active</code> (resolves to <code>freekiki_l.pt</code> in FreeKiki), any slot or <code>.pt</code></td></tr>
+        <tr><td>Default batch</td><td>ResNet 16; HRNet-W32 (+ teacher) <strong>8</strong> at 1024 (OOM on 24&nbsp;GiB with 16; try 4 if needed)</td></tr>
+        <tr><td>Decode</td><td>arg-max + log-parabola sub-cell refinement, then inverse letterbox to frame pixels; conf = heatmap peak (0..1)</td></tr>
+        <tr><td>Per epoch</td><td><code>results.csv</code> (train/loss, train/loss_gt, train/loss_distill, val recall/precision/median error, <code>val/pck10_all</code>), <code>weights/last.pt</code> (resumable), <code>weights/best.pt</code></td></tr>
+        <tr><td><code>best.pt</code></td><td>epoch with highest val PCK10 <strong>with misses</strong> (not mAP)</td></tr>
+        <tr><td>Resume</td><td><code>resume -w WS [--name RUN]</code>, continues distillation seamlessly</td></tr>
+        <tr><td><code>--base</code></td><td>only a heatmap checkpoint (continued fine-tune); <code>yolo*.pt</code> base ignored</td></tr>
       </table>
       <p><strong>Never promoted automatically.</strong> A heatmap run is registered (<code>backend = heatmap</code> in
         <code>models/registry.csv</code>) but no slot file is touched, even in a new workspace. Compare it

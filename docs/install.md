@@ -8,7 +8,7 @@ support matrix) is linked, not duplicated, so the two pages can't drift apart.
 
 _vailá_'s single, official install method on every platform is
 **[uv](https://github.com/astral-sh/uv)** — no separate Python distribution or Conda
-needed. The install scripts below install `uv`, pin Python `3.12.14`, pick the right
+needed. The install scripts below install `uv`, pin Python `3.12.15`, pick the right
 PyTorch **dependency group** (`cpu` or `cuda`) for your hardware, and run `uv sync`.
 There is a single portable `pyproject.toml` / `uv.lock` for every machine and OS —
 nothing tracked by git is rewritten per computer.
@@ -56,7 +56,7 @@ bash install_vaila_linux.sh
 ### What `install_vaila_linux.sh` does
 
 1. Installs system dependencies via `apt` and self-installs `uv` if missing.
-2. Pins Python `3.12.14` (`uv python pin 3.12.14`).
+2. Pins Python `3.12.15` (`uv python pin 3.12.15`).
 3. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
 4. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
    CUDA 12.8 + TensorRT, otherwise the default `cpu` group. No file is copied.
@@ -69,6 +69,11 @@ For the auto-detecting alternative (same logic, callable any time you want to
 switch backend), see [`bin/setup_pyproject.sh`](../bin/setup_pyproject.sh) in
 root `README.md`'s [Installation and Setup](../README.md#installation-and-setup)
 section.
+
+To update packages on an NVIDIA workstation without replacing CUDA wheels with
+CPU wheels, run `bash bin/setup_pyproject.sh --target=cuda --full --upgrade --yes`.
+This upgrades the shared `uv.lock` and syncs the CUDA group plus the AI extras.
+The Windows equivalent is `pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Upgrade -Yes`.
 
 ### GPU vs CPU-only
 
@@ -110,7 +115,7 @@ powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
 ### What `install_vaila_win.ps1` does
 
 1. Self-installs `uv` (winget or the official installer) if missing.
-2. Pins Python `3.12.14`.
+2. Pins Python `3.12.15`.
 3. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
 4. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
    CUDA 12.8 + TensorRT, otherwise the default `cpu` group. No file is copied.
@@ -165,7 +170,7 @@ bash install_vaila_mac.sh
 ### What `install_vaila_mac.sh` does
 
 1. Installs system dependencies via Homebrew and self-installs `uv` if missing.
-2. Pins Python `3.12.14`.
+2. Pins Python `3.12.15`.
 3. Prompts for optional extras (`sam`/`sapiens`/`fifa` as applicable to Apple
    hardware).
 4. Uses the default `cpu` dependency group — on macOS the PyPI PyTorch wheel **is**

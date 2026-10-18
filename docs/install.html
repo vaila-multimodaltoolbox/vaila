@@ -35,7 +35,7 @@ bash install_vaila_linux.sh</code></pre>
       <h3>What <code>install_vaila_linux.sh</code> does</h3>
       <ol>
         <li>Installs system dependencies via <code>apt</code>; self-installs <code>uv</code> if missing.</li>
-        <li>Pins Python <code>3.12.14</code>.</li>
+        <li>Pins Python <code>3.12.15</code>.</li>
         <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
         <li>Picks the PyTorch dependency group (<code>--no-group cpu --group cuda</code> for NVIDIA CUDA 12.8, otherwise the default <code>cpu</code> group). The committed <code>pyproject.toml</code> is never modified.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic; verifies CUDA wheels and the Sapiens2 editable install when selected.</li>
@@ -45,6 +45,9 @@ bash install_vaila_linux.sh</code></pre>
       <p>NVIDIA CUDA 12.8 + TensorRT is used automatically when a compatible GPU is
       detected; otherwise CPU-only. See README's Cross-Platform support note for the
       full matrix (SAM 3 video needs CUDA — no CPU/MPS path).</p>
+      <p>To upgrade packages while preserving CUDA and the AI extras, run
+      <code>bash bin/setup_pyproject.sh --target=cuda --full --upgrade --yes</code>.
+      A bare <code>uv sync --upgrade</code> installs the default CPU group.</p>
       <h3>Troubleshooting</h3>
       <ul class="tight">
         <li><strong>Permission denied (publickey)</strong> during Git LFS / clone / update check: your <code>origin</code> remote is SSH-based; re-clone with HTTPS instead, or add a GitHub SSH key.</li>
@@ -66,16 +69,16 @@ powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1</code></pre>
       <h3>What <code>install_vaila_win.ps1</code> does</h3>
       <ol>
         <li>Self-installs <code>uv</code> (winget or official installer) if missing.</li>
-        <li>Pins Python <code>3.12.14</code>.</li>
+        <li>Pins Python <code>3.12.15</code>.</li>
         <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
         <li>Picks the PyTorch dependency group (<code>--no-group cpu --group cuda</code> for NVIDIA CUDA 12.8, otherwise the default <code>cpu</code> group). The committed <code>pyproject.toml</code> is never modified.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>
         <li>Adds PowerShell/batch launchers, Desktop and Start Menu shortcuts, and a Windows Terminal profile.</li>
       </ol>
       <h3>GPU vs CPU-only</h3>
-      <p>NVIDIA CUDA 12.1 + TensorRT is used automatically when detected; otherwise
-      CPU-only. See README's Windows section for the Local/Portable vs profile-install
-      path choice.</p>
+      <p>NVIDIA CUDA 12.8 + TensorRT is used automatically when detected; otherwise
+      CPU-only. To upgrade while preserving CUDA and the AI extras, run
+      <code>pwsh bin/setup_pyproject.ps1 -Target cuda -Full -Upgrade -Yes</code>.</p>
       <h3>Troubleshooting</h3>
       <ul class="tight">
         <li><strong>"Running scripts is disabled":</strong> run <code>Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass</code> first, or use the <code>-ExecutionPolicy Bypass -File</code> form shown above.</li>
@@ -94,7 +97,7 @@ bash install_vaila_mac.sh</code></pre>
       <h3>What <code>install_vaila_mac.sh</code> does</h3>
       <ol>
         <li>Installs system dependencies via Homebrew; self-installs <code>uv</code> if missing.</li>
-        <li>Pins Python <code>3.12.14</code>.</li>
+        <li>Pins Python <code>3.12.15</code>.</li>
         <li>Prompts for optional extras (<code>gpu</code>/<code>sam</code>/<code>sapiens</code>/<code>fifa</code> as applicable to Apple hardware).</li>
         <li>Uses the default <code>cpu</code> dependency group — on macOS the PyPI PyTorch wheel <em>is</em> the Metal/MPS build, so no file is swapped.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>

@@ -1,7 +1,7 @@
 """Tests for vaila/freekiki.py (workspace, dataset, registry, CSV rows, quality metrics).
 
-Update Date: 02 October 2026
-Version: 0.4.7
+Update Date: 17 October 2026
+Version: 0.4.9
 """
 
 from __future__ import annotations
@@ -670,3 +670,183 @@ def test_grow_m_to_l_keeps_the_function(tmp_path: Path) -> None:
         fs.grow(src, tmp_path / "l.pt")
     with pytest.raises(ValueError, match="widths differ"):
         fs.grow(tmp_path / "l.pt", tmp_path / "x.pt")
+
+
+def test_draw_overlay_and_diagnostic_robust_to_nans() -> None:
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    # xy with partial NaNs (simulating unaccepted snapped points)
+    xy = np.full((fk.NKP, 2), np.nan)
+    xy[0] = [100.0, 100.0]
+    xy[1] = [200.0, 200.0]
+    kc = np.full(fk.NKP, 0.9)
+    codes = ["D", "D"] + ["Rk"] * (fk.NKP - 2)
+    names = [f"p{i}" for i in range(fk.NKP)]
+    bones = [(0, 1), (1, 2)]
+
+    # Neither function should raise ValueError: cannot convert float NaN to integer
+    res_overlay = fk._draw_overlay(frame.copy(), xy, kc, 0.5, bones)
+    assert res_overlay is not None and res_overlay.shape == frame.shape
+
+    res_diag = fk._draw_diagnostic(frame.copy(), xy, kc, codes, names, "test header")
+    assert res_diag is not None and res_diag.shape == frame.shape
+
+
+def test_detect_batch_exports_rigid_field_dlt_and_residual_metrics_in_quality_summary(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import cv2
+    import pandas as pd
+
+    from vaila import freekiki_geom
+    from vaila.rec2d import rec2d
+
+    w, h = 640, 360
+    C = np.array([10.0, -60.0, 25.0], dtype=float)
+    target = np.array([30.0, 0.0, 0.0], dtype=float)
+    z = (target - C) / np.linalg.norm(target - C)
+    x = np.cross(z, [0.0, 0.0, 1.0])
+    x /= np.linalg.norm(x)
+    R = np.vstack([x, np.cross(z, x), z])
+    K = np.array(
+        [[2000.0 * w / 1920.0, 0, w / 2.0], [0, 2000.0 * h / 1080.0, h / 2.0], [0, 0, 1.0]]
+    )
+    P = K @ np.c_[R, -R @ C]
+    P = P / P[2, 3]
+
+    xyz, _ = freekiki_geom._field()
+    uv, front = freekiki_geom._project(P, xyz)
+    seen = front & (uv[:, 0] > 5) & (uv[:, 0] < w - 5) & (uv[:, 1] > 5) & (uv[:, 1] < h - 5)
+    # Mark one in-FOV keypoint as missed (occluded)
+    seen_indices = np.flatnonzero(seen)
+    occluded_kp = int(seen_indices[0])
+    kc = np.where(seen, 0.9, 0.0)
+    kc[occluded_kp] = 0.0
+
+    vid_dir = tmp_path / "clips"
+    vid_dir.mkdir()
+    video = vid_dir / "tactical_clip.mp4"
+    writer = cv2.VideoWriter(str(video), cv2.VideoWriter_fourcc(*"mp4v"), 25, (w, h))  # ty: ignore[unresolved-attribute]
+    for _ in range(4):
+        writer.write(np.zeros((h, w, 3), np.uint8))
+    writer.release()
+
+    ws = fk.init_workspace(tmp_path / "ws")
+    model = ws / fk.slot_file("m")
+    model.write_bytes(b"fake")
+
+    class FakePredictor:
+        backend, imgsz = "fake", 640
+
+        def predict(self, frame):
+            return 0.92, uv.copy(), kc.copy()
+
+    monkeypatch.setattr(fk, "resolve_model", lambda *_a, **_k: str(model))
+    monkeypatch.setattr(fk, "load_predictor", lambda *_a, **_k: FakePredictor())
+
+    batch_out = fk.detect_videos(
+        ws, vid_dir, output_dir=tmp_path / "out", screen=False, overlay=False, diag_frames=0
+    )
+    summary_csv = batch_out / "quality_summary.csv"
+    assert summary_csv.is_file()
+    summary_df = pd.read_csv(summary_csv)
+    for col in (
+        "raw_reproj_rmse_median_px",
+        "raw_reproj_rmse_p90_px",
+        "raw_reproj_rmse_median_m",
+        "snap_reproj_rmse_median_px",
+        "snap_reproj_rmse_p90_px",
+        "snap_reproj_rmse_median_m",
+        "snap_line_rmse_median_px",
+        "snap_line_rmse_p90_px",
+        "rigid_visible_in_fov_mean",
+        "rigid_occluded_mean",
+        "rigid_out_of_bounds_mean",
+    ):
+        assert col in summary_df.columns
+        assert pd.notna(summary_df.loc[0, col])
+
+    run_dir = next(batch_out.glob("freekiki_predict_tactical_clip_*"))
+    rigid_kiki_df = pd.read_csv(run_dir / "field_kps_rigid_getpixelvideo.csv")
+    rigid_vis_df = pd.read_csv(run_dir / "field_kps_rigid_visibility.csv")
+    ref3d_df = pd.read_csv(run_dir / "field_ref3d_getpixelvideo.csv")
+    ref3d_vis_df = pd.read_csv(run_dir / "field_ref3d_visibility.csv")
+    geom_status_df = pd.read_csv(run_dir / "field_kps_geom_status.csv")
+    dlt2d_df = pd.read_csv(run_dir / "tactical_clip.dlt2d")
+    dlt3d_df = pd.read_csv(run_dir / "tactical_clip.dlt3d")
+    assert list(dlt2d_df.columns) == ["frame", "L1", "L2", "L3", "L4", "L5", "L6", "L7", "L8"]
+    assert list(dlt3d_df.columns) == [
+        "frame",
+        "L1",
+        "L2",
+        "L3",
+        "L4",
+        "L5",
+        "L6",
+        "L7",
+        "L8",
+        "L09",
+        "L10",
+        "L11",
+    ]
+
+    assert len(rigid_kiki_df) == 4 and len(ref3d_df) == 4
+    assert list(ref3d_df.columns) == ["frame"] + [
+        f"p{i}_{c}" for i in range(37) for c in ("x", "y")
+    ]
+    assert rigid_vis_df.loc[0, f"p{occluded_kp}"] == "occluded"
+    vis_set = set(rigid_vis_df.iloc[0, 1:].tolist())
+    assert vis_set == {"visible_in_fov", "occluded", "out_of_bounds"}
+    assert set(ref3d_vis_df.iloc[0, 1:].tolist()) <= {"visible_in_fov", "occluded", "out_of_bounds"}
+    for col in (
+        "raw_reproj_rmse_px",
+        "raw_reproj_rmse_m",
+        "snap_reproj_rmse_px",
+        "snap_reproj_rmse_m",
+        "snap_line_rmse_px",
+    ):
+        assert col in geom_status_df.columns
+
+    # Reconstruct full 37-point soccerfield_ref3d.csv from frame 0's DLT2D and verify rigid distances
+    d2_row = dlt2d_df.iloc[0, 1:].to_numpy(float)
+    assert len(d2_row) == 8 and np.isfinite(d2_row).all()
+    d3_row = dlt3d_df.iloc[0, 1:].to_numpy(float)
+    assert len(d3_row) == 11 and np.isfinite(d3_row).all()
+    uv_ref_row = ref3d_df.iloc[0, 1:].to_numpy(float).reshape(37, 2)
+    assert np.isfinite(uv_ref_row).all()
+    rec_xy = rec2d(d2_row, uv_ref_row)
+    _, ref_xyz = freekiki_geom.load_ref3d_points()
+    d_gt = np.linalg.norm(ref_xyz[:, None, :2] - ref_xyz[None, :, :2], axis=-1)
+    d_rec = np.linalg.norm(rec_xy[:, None, :] - rec_xy[None, :, :], axis=-1)
+    np.testing.assert_allclose(d_rec, d_gt, atol=0.02)
+
+
+def test_pnlcalib_dataset_converters_and_border_clamped_point_codes():
+    """Verify WC14 and TS-WorldCup yard-to-kiki homography conversion, EXTERNAL_SOURCES, and border-clamped point_codes."""
+    from vaila.kiki49_build import external as ext
+
+    assert {"wc14", "ts-worldcup", "worldpose", "pnlcalib"} <= set(fk.EXTERNAL_SOURCES)
+
+    # Border-clamped keypoint (x=0.0, y=290.6) must be flagged as Ro (outside/border)
+    xy = np.full((fk.NKP, 2), 300.0)
+    xy[:, 0] += np.arange(fk.NKP) * 15.0
+    kc = np.full(fk.NKP, 0.9)
+    xy[41] = (0.0, 290.6)
+    codes = fk.point_codes(xy, kc, 0.9, 0.25, 0.5, (1920, 1080))
+    assert codes[41] == "Ro"
+
+    # Synthetic kiki -> image homography
+    H_kiki_gt = np.array(
+        [[14.0, -3.0, 640.0], [1.5, -12.0, 360.0], [0.0005, -0.003, 1.0]], dtype=float
+    )
+    # Invert wc14 formula: H_kiki = inv(H_raw) @ _WC14_T_YD @ _YD_TO_M_SCALE => H_raw = _WC14_T_YD @ _YD_TO_M_SCALE @ inv(H_kiki)
+    H_raw_wc14 = ext._WC14_T_YD @ ext._YD_TO_M_SCALE @ np.linalg.inv(H_kiki_gt)
+    H_rec_wc14 = ext.wc14_homography_to_kiki(H_raw_wc14)
+    assert H_rec_wc14 is not None
+    np.testing.assert_allclose(H_rec_wc14, H_kiki_gt / H_kiki_gt[2, 2], atol=1e-6)
+
+    # Invert ts-worldcup formula
+    H_raw_ts = ext._TSWC_T_YD @ ext._YD_TO_M_SCALE @ np.linalg.inv(H_kiki_gt)
+    H_rec_ts = ext.ts_worldcup_homography_to_kiki(H_raw_ts)
+    assert H_rec_ts is not None
+    np.testing.assert_allclose(H_rec_ts, H_kiki_gt / H_kiki_gt[2, 2], atol=1e-6)
+

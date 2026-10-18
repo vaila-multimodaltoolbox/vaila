@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.8
+**Version:** 0.4.9
 **Date:** 22 July 2025  
-**Updated:** 07 October 2026
+**Updated:** 17 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -71,7 +71,7 @@ it does not create train/val/test splits. See the FreeKiki help page for ingest.
   - **MediaPipe / YOLO:** stick-figure pose guide
   - **Other Tpl presets:** name-list reference (scrolls with selected keypoint) + skeleton lines from the JSON when markers are present
   Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).
-- **Quick Measure (`Q` / toolbar `MEASURE`):** calibration first (Line / Plane / REF3D mode1–3 with plane drop + CSV or guided clicks), then free measuring; Enter classifies Distance/Area/Angle/Velocity/Acceleration and `S` saves the calibrated points/results CSVs (see `quickmeasure` help). A small checkbox beside **MEASURE** toggles on-image value badges (`#N · type · value unit`).
+- **Quick Measure (`Q` / toolbar `MEASURE`):** calibration first (Line / Plane / REF3D mode1–3 with plane drop + CSV or guided clicks), then free measuring; digit keys classify Distance/Area/Angle/Velocity/Acceleration/**Level** and `S` saves the calibrated points/results CSVs (see `quickmeasure` help). A checkbox beside **MEASURE** toggles on-image value badges; **Clear** wipes drawn feedback; `Ctrl+Z`/`Ctrl+Y` undo/redo measures.
 - **Zoom & Navigation:** Full zoom capabilities with frame-by-frame navigation
 - **Persistence Mode:** View marker trails across multiple frames
 - **Auto-detection:** Automatically detect CSV format or manual selection
@@ -383,7 +383,7 @@ Kinovea-style quick on-image measurements, implemented in the companion module `
 
 1. Press **Q** or click toolbar **QMeas** to toggle Quick Measure mode (disables Labeling/1 Line/Sequential mode while active).
 2. **Calibration comes first.** Choose **1** Line, **2** Plane, **3** REF3D (`.ref3d` mode1/2/3 + drop X/Y/Z + pixel CSV or guided clicks with scheme overlay), or **0** Skip (pixels). Then type the unit (default `m`). Line and Plane show a persistent guide, named points, a live edge preview, and `LENGTH`/`WIDTH`/`HEIGHT` labels. After the last point, review the complete geometry and press **Enter** to type the real measures; right-click still undoes the last point.
-3. **Live measure modes (digit keys on the video):** **1** distance (2 clicks), **2** area (≥3 clicks + Enter), **3** angle (3 clicks), **4** velocity (2 frames, needs FPS), **5** acceleration (3 frames, needs FPS), **6–0** reserved. Each completed set draws its value on the image.
+3. **Live measure modes (digit keys on the video):** **1** distance (2 clicks), **2** area (≥3 clicks + Enter), **3** angle (3 clicks), **4** velocity (2 frames, needs FPS), **5** acceleration (3 frames, needs FPS), **6** level (H+V laser guide + axis-snapped tape), **7–0** reserved. Each completed set draws its value on the image. Toolbar **Clear** / Backspace wipe feedback; `Ctrl+Z` / `Ctrl+Y` undo/redo.
 4. FPS is detected automatically. Override it when needed with **I** or the **FPS … Hz** toolbar button; enter a positive decimal or fraction such as `60000/1001`. The manual value is used by velocity/acceleration. Right-click undoes the last draft point.
 5. **Enter** closes an area polygon, or opens the submenu (**S** save, **C**/**R** calibration, **X** clear).
 6. The first calibration/result save creates one `processed_quickmeasure_<timestamp>/` next to the video. **S** updates that same session directory with all points, calibration, `.dlt2d`, optional dropped-plane `.ref2d`, combined + per-type results CSVs, `README_quickmeasure.txt`, and a didactic `quickmeasure_report.html`; it also prints the equivalent CLI. Results are rectangular matrices: one measurement per row and separate `point_N_*` columns for every frame, ID, pixel coordinate, and calibrated coordinate—never space-delimited lists in a cell.
@@ -718,6 +718,12 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.9 (17 October 2026) — MEASURE Level+Tape, Clear, Undo/Redo
+
+- Digit **6** Level: green image-space H+V laser guide at the origin click; second click snaps to the nearer axis and reports calibrated length (tape).
+- Toolbar **Clear** / Backspace wipe MEASURE draft, points, and drawn results (calibration kept).
+- `Ctrl+Z` / `Ctrl+Y` undo/redo measure actions while MEASURE is on (INSERT marker undo unchanged when MEASURE is off).
 
 ### Version 0.4.8 (07 October 2026) — Still images for measurement
 

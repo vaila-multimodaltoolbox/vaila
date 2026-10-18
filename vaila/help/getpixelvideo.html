@@ -237,9 +237,9 @@
       </section>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.8<br />
+        <strong>Version:</strong> 0.4.9<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 07 October 2026<br />
+        <strong>Updated:</strong> 17 October 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -906,7 +906,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">Q</span></td>
-                <td>Toggle Quick Measure mode (calibration first, then click points and press <span class="key">Enter</span> to classify as Distance/Area/Velocity/Acceleration — see <a href="quickmeasure.html">quickmeasure.html</a>)</td>
+                <td>Toggle MEASURE (distance/area/angle/velocity/accel/level). Clear / Ctrl+Z/Y for feedback. See <a href="quickmeasure.html">quickmeasure.html</a></td>
               </tr>
               <tr>
                 <td><span class="key">T</span> / <span class="key">AI Track</span></td>
@@ -949,7 +949,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <li><strong>Calibration comes first.</strong> On an uncalibrated session the prompt asks for the calibration type: <span class="key">1</span> Line (2 clicks on a segment of known length), <span class="key">2</span> Plane (4 clicks around a known rectangle), <span class="key">0</span> Skip (keep pixels). Then type the real-world unit (default <code>m</code>).</li>
               <li>Line and Plane show a persistent guide, named points, a live edge preview, and <code>LENGTH</code>/<code>WIDTH</code>/<code>HEIGHT</code> labels. After the last click, inspect the complete geometry; right-click corrects the last point and <span class="key">Enter</span> opens the real measurement fields. Cancelling or entering an invalid value keeps the drawing for another attempt.</li>
               <li>Once the calibration is accepted, click freely to measure: each left-click adds a point and the status bar shows its calibrated coordinates; right-click undoes the last point; middle-click still pans. Video FPS is detected automatically; press <span class="key">I</span> or click <span class="key">FPS … Hz</span> to override it manually for velocity and acceleration.</li>
-              <li>Press <span class="key">Enter</span> to close an Area polygon or open the save/calibration submenu. Live types are <span class="key">1</span> Distance, <span class="key">2</span> Area, <span class="key">3</span> Angle, <span class="key">4</span> Velocity, and <span class="key">5</span> Acceleration.</li>
+              <li>Press <span class="key">Enter</span> to close an Area polygon or open the save/calibration submenu. Live types are <span class="key">1</span> Distance, <span class="key">2</span> Area, <span class="key">3</span> Angle, <span class="key">4</span> Velocity, <span class="key">5</span> Acceleration, and <span class="key">6</span> Level (H+V laser guide + axis-snapped tape). Toolbar <strong>Clear</strong> / <span class="key">Backspace</span> wipe drawn feedback; <span class="key">Ctrl+Z</span> / <span class="key">Ctrl+Y</span> undo/redo.</li>
               <li>The first calibration/result save creates one <code>processed_quickmeasure_&lt;timestamp&gt;/</code> next to the video. Press <span class="key">S</span> inside the submenu to update that same directory with all points, calibration, combined + per-type result CSVs, and <code>quickmeasure_report.html</code>. Result CSVs are rectangular matrices: one measurement per row and separate <code>point_N_*</code> columns for every frame, ID, pixel coordinate, and calibrated coordinate—never space-delimited lists in one cell. Open the report in a browser for a clear column dictionary. The terminal prints the equivalent <code>uv run python -m vaila.quickmeasure --points-csv ... --measure distance</code> command.</li>
               <li>Press <span class="key">C</span> inside the submenu to load a calibration from files instead (an existing <code>.dlt2d</code> file, or a pixel-calibration CSV + <code>.ref2d</code> pair computed on the fly via <code>dlt2d.py</code>).</li>
               <li>Press <span class="key">Backspace</span> to clear all quick-measure points (<span class="key">X</span> inside the submenu does the same).</li>
@@ -1820,6 +1820,13 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.9 (17 October 2026) &mdash; MEASURE Level+Tape, Clear, Undo/Redo</h3>
+        <ul>
+          <li>Digit <span class="key">6</span> Level: green image-space H+V laser guide; second click snaps to nearer axis (tape).</li>
+          <li>Toolbar <strong>Clear</strong> / Backspace wipe MEASURE feedback (calibration kept).</li>
+          <li><span class="key">Ctrl+Z</span> / <span class="key">Ctrl+Y</span> undo/redo while MEASURE is on.</li>
+        </ul>
 
         <h3>Version 0.4.8 (07 October 2026) &mdash; Still images for measurement</h3>
         <ul>

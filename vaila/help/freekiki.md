@@ -5,7 +5,7 @@
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
 - **Version:** 0.4.9
-- **Updated:** 16 October 2026
+- **Updated:** 18 October 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
 - **CLI Interface:** Yes
@@ -225,7 +225,7 @@ directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder.
 | 2. Dataset → **Check dataset** | `uv run vaila/freekiki.py check -w WS` |
 | 3. Train → **Smoke preset** then **Train** | `uv run vaila/freekiki.py train -w WS --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1` |
 | 3. Train → **Full preset** then **Train** | `uv run vaila/freekiki.py train -w WS --base yolo26m-pose.pt --epochs 150 --imgsz 1280 --batch -1` |
-| 3. Train → **Heatmap preset** (Backend `heatmap`) then **Train** | `uv run vaila/freekiki.py train -w WS --backend heatmap --epochs 60 --imgsz 1024 --batch 16` |
+| 3. Train → **Heatmap preset** (Backend `heatmap`, backbone `hrnet_w32`, teacher `active`) then **Train** | `uv run --no-sync vaila/freekiki.py train -w WS --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5 --epochs 60 --imgsz 1024 --batch 8` |
 | 3. Train → Base model `active` then **Train** (retrain) | `uv run vaila/freekiki.py train -w WS --base active --epochs 60` |
 | 3. Train → **Runs status** | `uv run vaila/freekiki.py status -w WS` |
 | 3. Train → **Resume interrupted** | `uv run vaila/freekiki.py resume -w WS` (add `--name RUN` to choose the run) |
@@ -580,6 +580,8 @@ Older runs named `processed_freekiki_<video>_<timestamp>/` still open.
 | `field_kps_raw.csv` | best instance down to box conf 0.01, no filtering (for re-analysis) |
 | `field_kps_status.csv` | per frame: cut flag, homography status/inliers/RMSE and one code per point |
 | `field_kps_filled_getpixelvideo.csv` / `_source.csv` | only with `--fill-gaps N`: gaps ≤ N frames inside one shot linearly interpolated, each point marked `D` or `I` |
+| `field_kps_rigid_getpixelvideo.csv` / `field_kps_rigid_visibility.csv` | full rigid-body reprojection of all 49 `soccerfield_kiki.csv` keypoints (including occluded and out-of-FOV points in front of the camera) and per-keypoint visibility flags (`visible_in_fov`, `occluded`, `out_of_bounds`) |
+| `field_ref3d_getpixelvideo.csv` / `field_ref3d_visibility.csv` | full rigid-body reprojection of all 37 `soccerfield_ref3d.csv` keypoints and their per-keypoint visibility flags |
 | `frame_issues.csv` | frames with a cut, no box or no valid homography |
 | `diag_frames/` | a few annotated frames (`--diag-frames`) |
 | `<video>_freekiki_overlay.mp4` | keypoints + kiki49 skeleton lines (optional) |
@@ -603,16 +605,19 @@ accepted, then predicts where every other keypoint must be.
 
 The camera:
 
-- **Planar homography** of the z = 0 points (RANSAC).
+- **Planar homography** of the z = 0 points (RANSAC, refined with Hartley-normalised SVD).
 - With ≥ 7 points including ≥ 2 off the ground (flag tops z = 1.5 m, goal-post
-  tops z = 2.44 m): a **DLT3D** of 11 parameters, the same as `dlt3d.py`. It is
-  pruned of points that disagree and checked for square pixels, no skew and
-  the camera above the pitch.
+  tops z = 2.44 m): a **DLT3D** of 11 parameters computed via Hartley-normalised SVD,
+  the same as `dlt3d.py`. It is pruned of points that disagree and checked for square
+  pixels, no skew and the camera above the pitch.
 - Otherwise a **pinhole camera recovered from the homography**:
   - closed-form focal length (Zhang), refined on the points;
   - principal point at the image centre, square pixels.
   - This is what places flags and post tops when only line intersections are
     seen.
+- **Temporal regularisation**: within each contiguous shot (never crossing scene cuts),
+  normalised $H_t$ and $P_t$ camera matrices are smoothed with a rolling window
+  (accepted when the inlier RMSE stays within threshold) to suppress inter-frame jitter.
 
 What each mode does (`detect --geom`, GUI section 5 *Geometry*):
 
@@ -625,11 +630,11 @@ What each mode does (`detect --geom`, GUI section 5 *Geometry*):
 Outputs:
 
 - `field_kps_geom_getpixelvideo.csv` holds the network points plus geometry.
+- `field_kps_rigid_getpixelvideo.csv` and `field_ref3d_getpixelvideo.csv` hold the complete rigid-body forward projection of `soccerfield_kiki.csv` (49 pts) and `soccerfield_ref3d.csv` (37 pts), accompanied by `field_kps_rigid_visibility.csv` and `field_ref3d_visibility.csv` (`visible_in_fov`, `occluded`, `out_of_bounds`).
 - `field_kps_geom_status.csv` has, per frame: the camera source
   (dlt3d / homography / planar / none), the focal length, the camera height,
-  the fit RMSE and one code per point.
-- `quality.json` gets the `geom_*` keys: camera rate, fills and fixes per
-  point.
+  the fit RMSE, residual metrics (`raw_reproj_rmse_px`, `raw_reproj_rmse_m`, `snap_reproj_rmse_px`, `snap_reproj_rmse_m`, `snap_line_rmse_px`), and one code per point.
+- `quality.json` (and `quality_summary.csv` in batch runs) gets the `geom_*`, `rigid_*`, `raw_reproj_rmse_*`, `snap_reproj_rmse_*`, and `snap_line_rmse_*` keys.
 - The network CSVs are never changed.
 - A geometry point says where the keypoint **must be**; it may be occluded by a
   player.
@@ -639,11 +644,11 @@ Outputs:
 With geometry on, every detect run also writes the field calibration of each
 processed frame:
 
-- **`<video>.dlt2d`**: columns `frame,p1..p8`. The ground-plane homography
-  (pitch metres → pixels, H[2,2] = 1) for `rec2d.py`. Use it for **positions on
+- **`<video>.dlt2d`**: columns `frame,L1..L8`. The ground-plane homography
+  (pitch metres → pixels, H[2,2] = 1, Hartley-normalised SVD + temporal regularisation) for `rec2d.py`. Use it for **positions on
   the pitch**: feet / ground contact of pose keypoints, or the bottom-centre of
   detection boxes.
-- **`<video>.dlt3d`**: columns `frame,p1..p11`, the full camera (P[2,3] = 1)
+- **`<video>.dlt3d`**: columns `frame,L1,L2,L3,L4,L5,L6,L7,L8,L09,L10,L11`, the full camera (P[2,3] = 1, Hartley-normalised SVD + temporal regularisation)
   for `rec3d.py`. 3D reconstruction needs **≥ 2 cameras** of the same instant;
   with one broadcast camera, use the DLT2D for ground positions.
 - The world frame is in metres, with the origin at the centre spot, x towards
@@ -809,8 +814,10 @@ uv run vaila/freekiki.py train    -w /path/FreeKiki --manifest v001 --base activ
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26n-pose.pt --epochs 5 --imgsz 640 --batch 16 --fraction 0.1   # smoke
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base yolo26m-pose.pt --epochs 150 --imgsz 1280                           # full
 uv run vaila/freekiki.py train    -w /path/FreeKiki --base active --epochs 60                                                  # retrain
-uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 1 --fraction 0.01                              # heatmap pilot
-uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 60 --imgsz 1024 --batch 16                     # heatmap full
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 1 --fraction 0.01                              # heatmap pilot (ResNet)
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5 --epochs 1 --fraction 0.01  # HRNet distill smoke
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5 --epochs 60 --imgsz 1024 --batch 8  # HRNet distill full
+uv run vaila/freekiki.py train    -w /path/FreeKiki --backend heatmap --epochs 60 --imgsz 1024 --batch 16                     # heatmap ResNet full
 uv run vaila/freekiki.py status   -w /path/FreeKiki                        # runs, which can be resumed
 uv run vaila/freekiki.py resume   -w /path/FreeKiki [--name RUN]           # continue after stop / power loss
 uv run vaila/freekiki.py evaluate -w /path/FreeKiki --split val            # choose / compare on val
@@ -839,7 +846,7 @@ On NVIDIA/CUDA machines use `uv run --no-sync`.
 
 Useful options: `manifest --rfs-t --cap --seed --exclude FILE --name`;
 `train --manifest v001 --batch --device 0 --name --patience --seed --workers
---backend {yolo,heatmap} --backbone resnet50 --no-pretrained --lr`;
+--backend {yolo,heatmap} --backbone {resnet50,hrnet_w32} --teacher active --distill-weight 0.5 --no-pretrained --lr`;
 `resume --name --device --batch`;
 `evaluate --model PATH.pt --split val --det-conf --kp-conf --match-px --pck 5,10,25 --max-images --origin 1`
 (`--origin`: extra table `per_keypoint_origin_<digits>.csv` that scores only labels of that provenance, 1 annotated,
@@ -866,24 +873,43 @@ the only size change that keeps the trained weights is `grow` m → l.
 ## Heatmap backend (vailá-native, no company-owned framework)
 
 `train --backend heatmap` trains a second kind of network on the **same
-labels** (`datasets/kiki49`, no rebuild): a torchvision ResNet trunk
-(default `resnet50`, ImageNet weights from the local torch cache — nothing is
-downloaded) + 3 deconvolutions + one 49-channel heatmap head (stride 4,
-Gaussian targets σ = 2). The pitch is one instance per frame, so no box head
-is needed. Code: `vaila/freekiki_heatmap.py`, only PyTorch/torchvision
-(BSD-3-Clause) — the model and its training loop are part of *vailá*
-(AGPL-3.0) and do not depend on Ultralytics or its enterprise license.
+labels** (`datasets/kiki49`, no rebuild):
+
+- **HRNet-W32 (`--backbone hrnet_w32`):** Sun et al. (CVPR 2019) multi-scale
+  architecture keeping parallel high-to-low streams (strides 4, 8, 16, 32 with
+  32, 64, 128, 256 channels) alive throughout, fused bilinearly into 480
+  stride-4 channels + 1×1 conv → 49 heatmaps (slot `hm_hr32`).
+- **ResNet (`--backbone resnet18/34/50/101/152`):** torchvision trunk (ImageNet
+  weights from local cache) + 3 deconvolutions → 49 heatmaps (slots `hm_n`..`hm_x`).
+
+### Knowledge Distillation ($L = L_{gt} + \lambda L_{distill}$)
+
+YOLO weights cannot be copied directly into HRNet; transfer is performed via
+knowledge distillation (`--teacher active`, `--distill-weight 0.5`):
+
+$$L = L_{gt} + 0.5 \cdot L_{distill}$$
+
+- $L_{gt}$: MSE against ground-truth heatmaps ($v=0 \implies$ zero map).
+- $L_{distill}$: MSE against soft Gaussian heatmaps emitted by the frozen YOLO
+  teacher on the **exact same augmented canvas** on GPU.
+- Where $v=0$ in ground truth but teacher confidence $\ge 0.2$, the student
+  inherits the teacher's prediction (soft Gaussian with peak = teacher confidence).
+
+Code: `vaila/freekiki_heatmap.py`, only PyTorch/torchvision (BSD-3-Clause) — part
+of *vailá* (AGPL-3.0) and completely independent of Ultralytics.
 
 | Item | Value |
 |---|---|
 | Input | 16:9 letterbox, `--imgsz` = canvas width (1024 → 1024×576) |
 | Augmentation | scale ±20 %, rotation ±5°, shift ±5 %, h-flip with `flip_idx`, brightness/contrast |
-| Loss / optimizer | MSE on heatmaps (v=0 points have an empty target), AdamW + warmup + cosine, bf16 on CUDA |
-| Decode | arg-max + log-parabola sub-cell refinement, then the inverse letterbox to frame pixels; conf = heatmap peak (0..1) |
-| Per epoch | `results.csv` (loss, val recall/precision/median error, `val/pck10_all` on ≤ 500 val images), `weights/last.pt` (resumable), `weights/best.pt` |
-| `best.pt` | epoch with the highest val PCK10 **with misses** (not mAP) |
-| Resume | `resume -w WS [--name RUN]`, same as YOLO (same train subset for `--fraction`) |
-| `--base` | only a heatmap checkpoint (continued fine-tune); a `yolo*.pt` base is ignored |
+| Loss / optimizer | $L = L_{gt} + \lambda L_{distill}$, AdamW + warmup + cosine, bf16 on CUDA |
+| Teacher | `--teacher active` (resolves to `freekiki_l.pt` in FreeKiki), any slot or `.pt` |
+| Default batch | ResNet 16; HRNet-W32 (+ teacher) **8** at 1024 (OOM on 24 GiB with 16; try 4 if needed) |
+| Decode | arg-max + log-parabola sub-cell refinement, then inverse letterbox to frame pixels; conf = heatmap peak (0..1) |
+| Per epoch | `results.csv` (train/loss, train/loss_gt, train/loss_distill, val recall/precision/median error, `val/pck10_all`), `weights/last.pt` (resumable), `weights/best.pt` |
+| `best.pt` | epoch with highest val PCK10 **with misses** (not mAP) |
+| Resume | `resume -w WS [--name RUN]`, continues distillation seamlessly |
+| `--base` | only a heatmap checkpoint (continued fine-tune); `yolo*.pt` base ignored |
 
 **Never promoted automatically.** A heatmap run is registered
 (`backend = heatmap` in `models/registry.csv`) but no slot file is

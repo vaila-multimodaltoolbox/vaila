@@ -1,6 +1,6 @@
 """
 ================================================================================
-Script: freekiki_heatmap.py - FreeKiki heatmap backend (ResNet + deconv head)
+Script: freekiki_heatmap.py - FreeKiki heatmap backend (HRNet-W32 / ResNet + distillation)
 ================================================================================
 
 vailá - Multimodal Toolbox
@@ -10,19 +10,28 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.6
+Version: 0.4.9
 Created: 28 September 2026
-Update Date: 28 September 2026
+Update Date: 18 October 2026
 
 Description:
     Second network family for ``freekiki.py`` so the 49 soccer-field keypoints
     do not depend on one detector framework. Pure PyTorch + torchvision (BSD):
 
-      * model: torchvision ResNet (default ``resnet50``, ImageNet weights read
-        only from the local torch hub cache, never downloaded here) + three
-        4x4 stride-2 deconvolutions (256 ch) + 1x1 conv -> 49 heatmaps at
-        stride 4 (SimpleBaseline, Xiao et al. 2018). The pitch is one instance
-        per frame, so no detection head is needed;
+      * model:
+          - ``hrnet_w32`` (Sun et al., CVPR 2019): parallel multi-resolution
+            branches at strides 4/8/16/32 (32/64/128/256 ch) keeping the
+            stride-4 high-resolution stream alive from stem to head, with
+            multi-scale bilinear fusion -> 49 heatmaps at stride 4;
+          - ``resnet18/34/50/101/152``: torchvision ResNet (ImageNet weights
+            read only from the local torch hub cache) + three 4x4 stride-2
+            deconvolutions (256 ch) + 1x1 conv -> 49 heatmaps at stride 4;
+      * knowledge distillation (``L = L_gt + lambda * L_distill``, default
+        ``lambda = 0.5``): YOLO -> HRNet cannot copy weights directly; instead
+        the promoted teacher (``active``, e.g. ``freekiki_l.pt``) evaluates the
+        same augmented canvas in ``eval()`` / ``no_grad`` mode and provides soft
+        Gaussian targets (including unlabelled visible points where GT vis=0
+        and teacher conf >= 0.2);
       * input: the frame letterboxed into a fixed 16:9 canvas (default
         1024x576, both sides multiples of 32), one affine for letterbox and
         augmentation (scale, rotation, shift, horizontal flip with the kiki
@@ -44,7 +53,7 @@ Description:
     Dataset: the same YOLO-pose labels of ``datasets/kiki49`` (read only).
 
 Usage:
-    uv run --no-sync vaila/freekiki.py train -w WS --backend heatmap --epochs 1 --fraction 0.01
+    uv run --no-sync vaila/freekiki.py train -w WS --backend heatmap --backbone hrnet_w32 --teacher active --distill-weight 0.5
 
 License:
     GNU Affero General Public License v3.0
@@ -70,15 +79,27 @@ from torch import nn
 BACKEND = "freekiki_heatmap_v1"
 STRIDE = 4
 SIGMA = 2.0
+DISTILL_WEIGHT = 0.5
+TEACHER_MIN_CONF = 0.2
 PAD_VALUE = (114, 114, 114)
 MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
-DEFAULTS = {"epochs": 60, "imgsz": 1024, "batch": 16, "lr": 1e-3, "workers": 8}
+DEFAULTS = {
+    "epochs": 60,
+    "imgsz": 1024,
+    "batch": 16,  # ResNet heatmap (GT only)
+    "batch_hrnet": 8,  # HRNet-W32 + YOLO teacher at 1024 (~2x VRAM); start 4 on 24 GiB
+    "lr": 1e-3,
+    "workers": 8,
+    "distill_weight": DISTILL_WEIGHT,
+}
 RESULTS_FIELDS = [
     "epoch",
     "time",
     "lr",
     "train/loss",
+    "train/loss_gt",
+    "train/loss_distill",
     "val/recall",
     "val/precision",
     "val/err_median",
@@ -149,6 +170,71 @@ def render_heatmaps(uv, vis, shape: tuple[int, int], sigma: float = SIGMA):
     v = uv[..., 1].float().unsqueeze(-1).unsqueeze(-1)
     g = torch.exp(-((xs - u) ** 2 + (ys - v) ** 2) / (2 * sigma**2))
     return g * (vis > 0).float().unsqueeze(-1).unsqueeze(-1)
+
+
+def render_soft_heatmaps(
+    uv: torch.Tensor,
+    conf: torch.Tensor,
+    shape: tuple[int, int],
+    *,
+    sigma: float = SIGMA,
+    min_conf: float = TEACHER_MIN_CONF,
+) -> torch.Tensor:
+    """Soft Gaussian teacher heatmaps ``(B, K, h, w)`` scaled by teacher confidence ``conf (B, K)``.
+
+    Only teacher predictions inside ``shape`` with ``conf >= min_conf`` emit a
+    Gaussian peak (amplitude = ``conf``); others produce a zero map.
+    """
+    h, w = shape
+    uv_f = torch.nan_to_num(uv.float(), nan=-1e6)
+    conf_f = torch.nan_to_num(conf.float(), nan=0.0).clamp(0.0, 1.0)
+    inside = (
+        (uv_f[..., 0] >= -0.5)
+        & (uv_f[..., 0] <= w - 0.5)
+        & (uv_f[..., 1] >= -0.5)
+        & (uv_f[..., 1] <= h - 0.5)
+    )
+    weight = torch.where((conf_f >= min_conf) & inside, conf_f, torch.zeros_like(conf_f))
+    ys = torch.arange(h, device=uv.device, dtype=torch.float32).view(1, 1, h, 1)
+    xs = torch.arange(w, device=uv.device, dtype=torch.float32).view(1, 1, 1, w)
+    u = uv_f[..., 0].unsqueeze(-1).unsqueeze(-1)
+    v = uv_f[..., 1].unsqueeze(-1).unsqueeze(-1)
+    g = torch.exp(-((xs - u) ** 2 + (ys - v) ** 2) / (2 * sigma**2))
+    return g * weight.unsqueeze(-1).unsqueeze(-1)
+
+
+def compute_distill_loss(
+    pred: torch.Tensor,
+    gt_uv: torch.Tensor,
+    gt_vis: torch.Tensor,
+    teacher_uv: torch.Tensor | None = None,
+    teacher_conf: torch.Tensor | None = None,
+    *,
+    distill_weight: float = DISTILL_WEIGHT,
+    min_teacher_conf: float = TEACHER_MIN_CONF,
+    sigma: float = SIGMA,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    """Combined heatmap loss ``L = L_gt + distill_weight * L_distill``.
+
+    * ``L_gt``: MSE vs ground-truth heatmaps (``vis=0`` -> zero map).
+    * ``L_distill``: MSE vs teacher soft heatmaps on the same augmented canvas.
+      Where ``GT vis=0`` and ``teacher_conf >= min_teacher_conf``, the student
+      inherits the teacher's soft peak; where ``GT vis>0``, GT remains dominant
+      while the distillation term stays active at ``distill_weight``.
+    """
+    shape = (int(pred.shape[-2]), int(pred.shape[-1]))
+    pred_f = pred.float()
+    gt_hm = render_heatmaps(gt_uv, gt_vis, shape, sigma=sigma)
+    loss_gt = nn.functional.mse_loss(pred_f, gt_hm)
+    if teacher_uv is None or teacher_conf is None or float(distill_weight) <= 0.0:
+        zero = torch.zeros((), device=pred.device, dtype=torch.float32)
+        return loss_gt, loss_gt.detach(), zero
+    soft_hm = render_soft_heatmaps(
+        teacher_uv, teacher_conf, shape, sigma=sigma, min_conf=min_teacher_conf
+    )
+    loss_distill = nn.functional.mse_loss(pred_f, soft_hm)
+    total = loss_gt + float(distill_weight) * loss_distill
+    return total, loss_gt.detach(), loss_distill.detach()
 
 
 def decode_heatmaps(hm: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -277,8 +363,201 @@ class KikiHeatDataset(torch.utils.data.Dataset):
 # --------------------------------------------------------------------------- #
 # Model
 # --------------------------------------------------------------------------- #
-def cached_imagenet_state(backbone: str) -> dict:
-    """ImageNet weights of a torchvision model from the local hub cache (no download)."""
+HRNET_BACKBONES = ("hrnet_w32",)
+HRNET_W32_CHANNELS = (32, 64, 128, 256)
+
+
+class _HRBasicBlock(nn.Module):
+    expansion = 1
+
+    def __init__(self, inplanes: int, planes: int, stride: int = 1, downsample=None):
+        super().__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, 3, stride, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.relu = nn.ReLU(inplace=True)
+        self.conv2 = nn.Conv2d(planes, planes, 3, 1, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.downsample = downsample
+
+    def forward(self, x):  # ty: ignore[invalid-mutable-override]
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        res = x if self.downsample is None else self.downsample(x)
+        return self.relu(out + res)
+
+
+class _HRBottleneck(nn.Module):
+    expansion = 4
+
+    def __init__(self, inplanes: int, planes: int, stride: int = 1, downsample=None):
+        super().__init__()
+        self.conv1 = nn.Conv2d(inplanes, planes, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes)
+        self.conv2 = nn.Conv2d(planes, planes, 3, stride, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(planes)
+        self.conv3 = nn.Conv2d(planes, planes * 4, 1, bias=False)
+        self.bn3 = nn.BatchNorm2d(planes * 4)
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+
+    def forward(self, x):  # ty: ignore[invalid-mutable-override]
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.relu(self.bn2(self.conv2(out)))
+        out = self.bn3(self.conv3(out))
+        res = x if self.downsample is None else self.downsample(x)
+        return self.relu(out + res)
+
+
+def _conv_bn(cin: int, cout: int, k: int, stride: int, relu: bool) -> nn.Sequential:
+    layers: list[nn.Module] = [
+        nn.Conv2d(cin, cout, k, stride, k // 2, bias=False),
+        nn.BatchNorm2d(cout),
+    ]
+    if relu:
+        layers.append(nn.ReLU(inplace=True))
+    return nn.Sequential(*layers)
+
+
+class _HRModule(nn.Module):
+    """One HRNet exchange unit: 4 BasicBlocks per branch, then all-to-all fusion."""
+
+    def __init__(self, channels: tuple[int, ...], blocks: int = 4):
+        super().__init__()
+        n = len(channels)
+        self.branches = nn.ModuleList(
+            nn.Sequential(*[_HRBasicBlock(c, c) for _ in range(blocks)]) for c in channels
+        )
+        fuse = nn.ModuleList()
+        for i in range(n):
+            row = nn.ModuleList()
+            for j in range(n):
+                if j > i:  # lower resolution -> 1x1 conv, upsampled in forward
+                    row.append(_conv_bn(channels[j], channels[i], 1, 1, relu=False))
+                elif j == i:
+                    row.append(nn.Identity())
+                else:  # higher resolution -> (i - j) stride-2 3x3 convs
+                    steps = [
+                        _conv_bn(channels[j], channels[j], 3, 2, relu=True)
+                        for _ in range(i - j - 1)
+                    ]
+                    steps.append(_conv_bn(channels[j], channels[i], 3, 2, relu=False))
+                    row.append(nn.Sequential(*steps))
+            fuse.append(row)
+        self.fuse_layers = fuse
+        self.relu = nn.ReLU(inplace=True)
+
+    def forward(self, xs: list[torch.Tensor]) -> list[torch.Tensor]:  # ty: ignore[invalid-mutable-override]
+        xs = [branch(x) for branch, x in zip(self.branches, xs, strict=True)]
+        out = []
+        for i, row in enumerate(self.fuse_layers):
+            assert isinstance(row, nn.ModuleList)
+            size = xs[i].shape[-2:]
+            y = xs[i]
+            for j, layer in enumerate(row):
+                if j == i:
+                    continue
+                z = layer(xs[j])
+                if j > i:
+                    z = nn.functional.interpolate(
+                        z, size=size, mode="bilinear", align_corners=False
+                    )
+                y = y + z
+            out.append(self.relu(y))
+        return out
+
+
+class HRNetW32(nn.Module):
+    """HRNet-W32 trunk (Sun et al. 2019) -> concatenated multi-scale features at stride 4.
+
+    Stem (2x stride-2 3x3, 64 ch) -> stage 1 (4 Bottlenecks, 256 ch) -> stages
+    2/3/4 with 1/4/3 exchange modules over 2/3/4 parallel branches
+    (32/64/128/256 ch at strides 4/8/16/32). The output upsamples every branch
+    bilinearly to stride 4 and concatenates them (``480`` channels). Module
+    names follow the official implementation, so a locally cached
+    HRNetV2-W32 ImageNet checkpoint loads with ``strict=False``.
+    """
+
+    out_channels = sum(HRNET_W32_CHANNELS)
+
+    def __init__(self):
+        super().__init__()
+        c = HRNET_W32_CHANNELS
+        self.conv1 = nn.Conv2d(3, 64, 3, 2, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(64)
+        self.conv2 = nn.Conv2d(64, 64, 3, 2, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(64)
+        self.relu = nn.ReLU(inplace=True)
+        down = nn.Sequential(nn.Conv2d(64, 256, 1, bias=False), nn.BatchNorm2d(256))
+        self.layer1 = nn.Sequential(
+            _HRBottleneck(64, 64, downsample=down), *[_HRBottleneck(256, 64) for _ in range(3)]
+        )
+        self.transition1 = nn.ModuleList(
+            [
+                _conv_bn(256, c[0], 3, 1, relu=True),
+                nn.Sequential(_conv_bn(256, c[1], 3, 2, relu=True)),
+            ]
+        )
+        self.stage2 = nn.Sequential(_HRModule(c[:2]))
+        self.transition2 = self._transition(c[:2], c[:3])
+        self.stage3 = nn.Sequential(*[_HRModule(c[:3]) for _ in range(4)])
+        self.transition3 = self._transition(c[:3], c[:4])
+        self.stage4 = nn.Sequential(*[_HRModule(c[:4]) for _ in range(3)])
+        for mod in self.modules():
+            if isinstance(mod, nn.Conv2d):
+                nn.init.kaiming_normal_(mod.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(mod, nn.BatchNorm2d):
+                nn.init.ones_(mod.weight)
+                nn.init.zeros_(mod.bias)
+
+    @staticmethod
+    def _transition(prev: tuple[int, ...], cur: tuple[int, ...]) -> nn.ModuleList:
+        layers = nn.ModuleList(nn.Identity() for _ in prev)
+        layers.append(nn.Sequential(_conv_bn(prev[-1], cur[-1], 3, 2, relu=True)))
+        return layers
+
+    def forward(self, x):  # ty: ignore[invalid-mutable-override]
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = self.relu(self.bn2(self.conv2(x)))
+        x = self.layer1(x)
+        xs = [t(x) for t in self.transition1]
+        for stage in self.stage2:
+            xs = stage(xs)
+        xs = [t(xs[min(i, len(xs) - 1)]) for i, t in enumerate(self.transition2)]
+        for stage in self.stage3:
+            xs = stage(xs)
+        xs = [t(xs[min(i, len(xs) - 1)]) for i, t in enumerate(self.transition3)]
+        for stage in self.stage4:
+            xs = stage(xs)
+        size = xs[0].shape[-2:]
+        ups = [xs[0]] + [
+            nn.functional.interpolate(t, size=size, mode="bilinear", align_corners=False)
+            for t in xs[1:]
+        ]
+        return torch.cat(ups, dim=1)
+
+
+def _cached_hrnet_state(backbone: str) -> dict | None:
+    """Local HRNet ImageNet checkpoint (``*hrnet*w32*.pth`` in the hub cache) or None."""
+    ckdir = Path(torch.hub.get_dir()) / "checkpoints"
+    tag = backbone.split("_")[-1]  # "w32"
+    files = sorted(ckdir.glob(f"*hrnet*{tag}*.pth")) if ckdir.is_dir() else []
+    if not files:
+        return None
+    state = torch.load(files[0], map_location="cpu", weights_only=True)
+    if isinstance(state, dict) and isinstance(state.get("state_dict"), dict):
+        state = state["state_dict"]
+    return {k.removeprefix("module."): v for k, v in state.items()}
+
+
+def cached_imagenet_state(backbone: str) -> dict | None:
+    """ImageNet weights of a torchvision model from the local hub cache (no download).
+
+    ``hrnet_w32`` is not in torchvision: a local ``*hrnet*w32*.pth`` is used when
+    present, otherwise ``None`` (Kaiming init; the teacher distillation carries
+    the transfer) instead of raising.
+    """
+    if backbone in HRNET_BACKBONES:
+        return _cached_hrnet_state(backbone)
     import torchvision
 
     weights = torchvision.models.get_model_weights(backbone).DEFAULT  # ty: ignore[unresolved-attribute]
@@ -292,12 +571,38 @@ def cached_imagenet_state(backbone: str) -> dict:
 
 
 class KikiHeatNet(nn.Module):
-    """torchvision ResNet trunk (stride 32) + 3 deconvolutions (stride 4) + 1x1 heatmap head."""
+    """Trunk + stride-4 neck + 1x1 heatmap head.
+
+    * ``resnet*``: torchvision ResNet (stride 32) + 3 deconvolutions (stride 4).
+    * ``hrnet_w32``: :class:`HRNetW32` (480 ch at stride 4) + 1x1 conv 480 -> 256.
+    """
 
     def __init__(self, backbone: str = "resnet50", nkp: int = 49, *, imagenet: dict | None = None):
+        super().__init__()
+        if backbone in HRNET_BACKBONES:
+            trunk = HRNetW32()
+            if imagenet is not None:
+                own = trunk.state_dict()
+                match = {k: v for k, v in imagenet.items() if k in own and own[k].shape == v.shape}
+                trunk.load_state_dict(match, strict=False)
+            self.backbone = trunk
+            self.deconv = nn.Sequential(
+                nn.Conv2d(HRNetW32.out_channels, 256, 1, bias=False),
+                nn.BatchNorm2d(256),
+                nn.ReLU(inplace=True),
+            )
+            self.head = nn.Conv2d(256, nkp, 1)
+            for mod in [*self.deconv.modules(), self.head]:
+                if isinstance(mod, nn.Conv2d):
+                    nn.init.normal_(mod.weight, std=0.001)
+                    if mod.bias is not None:
+                        nn.init.zeros_(mod.bias)
+            return
+        self._init_resnet(backbone, nkp, imagenet)
+
+    def _init_resnet(self, backbone: str, nkp: int, imagenet: dict | None) -> None:
         import torchvision
 
-        super().__init__()
         net = getattr(torchvision.models, backbone)(weights=None)
         if imagenet is not None:
             net.load_state_dict(imagenet)
@@ -328,7 +633,7 @@ class KikiHeatNet(nn.Module):
             if isinstance(mod, nn.Conv2d) and mod.bias is not None:
                 nn.init.zeros_(mod.bias)
 
-    def forward(self, x):
+    def forward(self, x):  # ty: ignore[invalid-mutable-override]
         return self.head(self.deconv(self.backbone(x)))
 
 
@@ -390,6 +695,102 @@ class HeatmapPredictor:
 
 
 # --------------------------------------------------------------------------- #
+# Teacher (knowledge distillation)
+# --------------------------------------------------------------------------- #
+def teacher_label(teacher: Any) -> str | None:
+    """Printable/serialisable name of a teacher (path string, class name or None)."""
+    if teacher is None:
+        return None
+    if isinstance(teacher, (str, Path)):
+        return str(teacher)
+    return type(teacher).__name__
+
+
+def _yolo_teacher_fn(path, input_wh, dev: torch.device, nkp: int):
+    from ultralytics import YOLO
+
+    model = YOLO(str(path))
+    width, height = input_wh
+    device = "cpu" if dev.type == "cpu" else str(dev.index or 0)
+    mean = torch.tensor(MEAN, device=dev).view(1, 3, 1, 1)
+    std = torch.tensor(STD, device=dev).view(1, 3, 1, 1)
+
+    def fn(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x01 = (x.float() * std + mean).clamp(0.0, 1.0).contiguous()
+        results = model.predict(x01, imgsz=(height, width), conf=0.01, device=device, verbose=False)
+        xy = torch.zeros((x.shape[0], nkp, 2), device=dev)
+        conf = torch.zeros((x.shape[0], nkp), device=dev)
+        for b, r in enumerate(results):
+            kp, boxes = getattr(r, "keypoints", None), getattr(r, "boxes", None)
+            if kp is None or boxes is None or len(boxes) == 0 or kp.xy.shape[-2] != nkp:
+                continue
+            i = int(boxes.conf.argmax())
+            xy[b] = kp.xy[i].to(dev).float()
+            if kp.conf is not None:
+                conf[b] = kp.conf[i].to(dev).float()
+            else:
+                conf[b] = float(boxes.conf[i])
+        return xy, conf
+
+    return fn
+
+
+def _heatmap_teacher_fn(pred: HeatmapPredictor, dev: torch.device):
+    net = pred.net.to(dev).eval()
+
+    def fn(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=dev.type == "cuda"):
+            hm = net(x.to(memory_format=torch.channels_last)).float().cpu().numpy()
+        out = [decode_heatmaps(h) for h in hm]
+        xy = np.stack([from_cells(uv) for uv, _ in out])
+        conf = np.stack([c for _, c in out])
+        return (
+            torch.as_tensor(xy, dtype=torch.float32, device=dev),
+            torch.as_tensor(conf, dtype=torch.float32, device=dev),
+        )
+
+    return fn
+
+
+def build_teacher_fn(teacher: Any, input_wh, dev: torch.device, nkp: int, stride: int = STRIDE):
+    """``fn(x normalised (B,3,H,W)) -> (uv cells (B,K,2), conf (B,K))`` for the student grid.
+
+    ``teacher``: an Ultralytics YOLO-pose ``.pt`` path (e.g. the promoted
+    ``freekiki_l.pt``), a FreeKiki heatmap checkpoint path, a
+    :class:`HeatmapPredictor`, or any callable ``teacher(x) -> (xy canvas px,
+    conf)``. The teacher runs frozen (``no_grad``) on the exact augmented
+    canvas the student sees, so its keypoint ``k`` is already in the flipped
+    label convention of that canvas (YOLO-pose trains with the same
+    ``flip_idx`` swap). Returns ``None`` when ``teacher`` is None.
+    """
+    if teacher is None:
+        return None
+    if isinstance(teacher, HeatmapPredictor):
+        raw = _heatmap_teacher_fn(teacher, dev)
+    elif isinstance(teacher, (str, Path)):
+        path = Path(teacher)
+        if not path.is_file():
+            raise FileNotFoundError(f"teacher model not found: {path}")
+        if model_backend(path) == "heatmap":
+            raw = _heatmap_teacher_fn(HeatmapPredictor.load(path, dev), dev)
+        else:
+            raw = _yolo_teacher_fn(path, input_wh, dev, nkp)
+    elif callable(teacher):
+        raw = teacher
+    else:
+        raise TypeError(f"unsupported teacher: {teacher!r}")
+
+    def fn(x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        with torch.no_grad():
+            xy, conf = raw(x)
+        xy = torch.as_tensor(xy, dtype=torch.float32, device=x.device).clone()
+        conf = torch.as_tensor(conf, dtype=torch.float32, device=x.device).clone()
+        return (xy + 0.5) / stride - 0.5, conf
+
+    return fn
+
+
+# --------------------------------------------------------------------------- #
 # Training
 # --------------------------------------------------------------------------- #
 def _lr_lambda(total_steps: int, warmup: int):
@@ -409,9 +810,15 @@ def _save(path: Path, payload: dict) -> None:
 
 
 def _append_result(path: Path, row: dict) -> None:
+    """Append one epoch row; an existing file keeps its own header (older runs resume aligned)."""
+    fields = RESULTS_FIELDS
     new = not path.is_file()
+    if not new:
+        with path.open(encoding="utf-8") as f:
+            header = next(csv.reader(f), None)
+        fields = header or RESULTS_FIELDS
     with path.open("a", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=RESULTS_FIELDS, extrasaction="ignore")
+        writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
         if new:
             writer.writeheader()
         writer.writerow(row)
@@ -450,6 +857,9 @@ def train_heatmap(
     seed: int = 0,
     resume: bool = False,
     extra_args: dict | None = None,
+    teacher: Any = None,
+    distill_weight: float = DISTILL_WEIGHT,
+    teacher_min_conf: float = TEACHER_MIN_CONF,
     log=print,
 ) -> Path:
     """Train (or ``resume``) a heatmap model in ``run_dir``; returns ``weights/best.pt``.
@@ -461,6 +871,10 @@ def train_heatmap(
     start this run (continued fine-tune) instead of ImageNet. ``extra_args``
     (e.g. fraction, manifest) is stored in ``args.yaml`` and the checkpoint so
     ``resume`` can rebuild the same train list.
+
+    ``teacher`` (see :func:`build_teacher_fn`) enables knowledge distillation:
+    ``L = L_gt + distill_weight * L_distill`` with the frozen teacher evaluated
+    on the same augmented batch. ``distill_weight <= 0`` or no teacher -> GT only.
     """
     run_dir = Path(run_dir)
     wdir = run_dir / "weights"
@@ -475,7 +889,12 @@ def train_heatmap(
         a = ckpt["args"]
         epochs, imgsz, batch, lr = a["epochs"], a["imgsz"], batch or a["batch"], a["lr"]
         backbone, seed, workers = a["backbone"], a["seed"], workers or a["workers"]
-    batch = int(batch or DEFAULTS["batch"])
+        if teacher is None and a.get("teacher") and Path(a["teacher"]).is_file():
+            teacher = a["teacher"]
+        distill_weight = float(a.get("distill_weight", distill_weight if teacher else 0.0))
+        teacher_min_conf = float(a.get("teacher_min_conf", teacher_min_conf))
+    default_batch = DEFAULTS["batch_hrnet"] if backbone in HRNET_BACKBONES else DEFAULTS["batch"]
+    batch = int(batch or default_batch)
     workers = int(DEFAULTS["workers"] if workers is None else workers)
     torch.manual_seed(seed)
     input_wh = input_size(imgsz)
@@ -483,6 +902,11 @@ def train_heatmap(
     imagenet = None
     if not resume and init is None and pretrained:
         imagenet = cached_imagenet_state(backbone)
+        if imagenet is None:
+            log(
+                f"{backbone}: no local ImageNet checkpoint in the torch hub cache -> Kaiming "
+                "init (transfer comes from teacher distillation)"
+            )
     net = KikiHeatNet(backbone, nkp, imagenet=imagenet)
     if resume:
         net.load_state_dict(ckpt["model"])
@@ -492,6 +916,13 @@ def train_heatmap(
             raise ValueError(f"--base {init} is not a {backbone} heatmap checkpoint")
         net.load_state_dict(start["model"])
     net = net.to(dev).to(memory_format=torch.channels_last)  # ty: ignore[no-matching-overload]
+    distill_weight = float(distill_weight)
+    teacher_fn = build_teacher_fn(teacher, input_wh, dev, nkp) if distill_weight > 0 else None
+    if teacher_fn is not None:
+        log(
+            f"distillation: teacher {teacher_label(teacher)} | lambda {distill_weight:g} | "
+            f"min conf {teacher_min_conf:g}"
+        )
 
     ds = KikiHeatDataset(train_images, flip_idx, input_wh, train=True, seed=seed)
     loader = torch.utils.data.DataLoader(
@@ -510,7 +941,7 @@ def train_heatmap(
     args = {
         "backend": "heatmap",
         "backbone": backbone,
-        "model": f"{backbone}-{'imagenet' if pretrained else 'scratch'}"
+        "model": f"{backbone}-{'imagenet' if imagenet is not None else 'scratch'}"
         if init is None
         else str(init),
         "epochs": int(epochs),
@@ -524,6 +955,9 @@ def train_heatmap(
         "stride": STRIDE,
         "sigma": SIGMA,
         "train_images": len(ds),
+        "teacher": teacher_label(teacher) if teacher_fn is not None else None,
+        "distill_weight": distill_weight if teacher_fn is not None else 0.0,
+        "teacher_min_conf": float(teacher_min_conf),
     } | dict(extra_args or {})
     if resume:
         opt.load_state_dict(ckpt["optimizer"])
@@ -541,24 +975,41 @@ def train_heatmap(
     for epoch in range(first, epochs + 1):
         ds.epoch = epoch
         net.train()
-        total, n = 0.0, 0
+        total, total_gt, total_kd, n = 0.0, 0.0, 0.0, 0
         for step, (x, uv, vis) in enumerate(loader, 1):
             x = x.to(dev, non_blocking=True).to(memory_format=torch.channels_last)
             uv, vis = uv.to(dev, non_blocking=True), vis.to(dev, non_blocking=True)
+            t_uv = t_conf = None
+            if teacher_fn is not None:
+                t_uv, t_conf = teacher_fn(x)
             with torch.autocast(dev.type, dtype=torch.bfloat16, enabled=amp):
                 out = net(x)
-            loss = nn.functional.mse_loss(out.float(), render_heatmaps(uv, vis, out.shape[-2:]))
+            loss, loss_gt, loss_kd = compute_distill_loss(
+                out,
+                uv,
+                vis,
+                t_uv,
+                t_conf,
+                distill_weight=distill_weight,
+                min_teacher_conf=teacher_min_conf,
+            )
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()
             sched.step()
             total, n = total + loss.item(), n + 1
+            total_gt, total_kd = total_gt + loss_gt.item(), total_kd + loss_kd.item()
             if step % 200 == 0:
-                log(f"  epoch {epoch}/{epochs} batch {step}/{len(loader)} loss {total / n:.3e}")
+                log(
+                    f"  epoch {epoch}/{epochs} batch {step}/{len(loader)} loss {total / n:.3e} "
+                    f"(gt {total_gt / n:.3e} kd {total_kd / n:.3e})"
+                )
         row: dict[str, Any] = {
             "epoch": epoch,
             "lr": f"{sched.get_last_lr()[0]:.3e}",
             "train/loss": f"{total / max(1, n):.4e}",
+            "train/loss_gt": f"{total_gt / max(1, n):.4e}",
+            "train/loss_distill": f"{total_kd / max(1, n):.4e}",
         }
         if val_fn is not None:
             m = val_fn(HeatmapPredictor(net, input_wh, dev))

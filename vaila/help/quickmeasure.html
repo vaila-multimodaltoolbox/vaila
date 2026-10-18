@@ -31,7 +31,7 @@
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/quickmeasure.py</p>
             <p><strong>Version:</strong> 0.4.9</p>
-            <p><strong>Updated:</strong> 07 October 2026</p>
+            <p><strong>Updated:</strong> 17 October 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> Yes (<code>python -m vaila.quickmeasure</code>)</p>
         </div>
@@ -40,7 +40,9 @@
         <p>Kinovea-style on-image calibration and measurement for <code>getpixelvideo.py</code>.
         Toolbar splits into <strong>CALIB</strong> (<code>Shift+Q</code>) and <strong>MEASURE</strong> (<code>Q</code>).
         MEASURE classifies clicks as <strong>Distance</strong>, <strong>Area</strong>, <strong>Angle</strong>,
-        <strong>Velocity</strong>, or <strong>Acceleration</strong>.</p>
+        <strong>Velocity</strong>, <strong>Acceleration</strong>, or <strong>Level</strong>
+        (H+V laser guide + axis-snapped tape). Toolbar <strong>Clear</strong> / Backspace wipe drawn
+        feedback; <code>Ctrl+Z</code> / <code>Ctrl+Y</code> undo/redo while MEASURE is on.</p>
 
         <h2>CALIB + MEASURE (v0.4.9)</h2>
         <p><strong>CALIB</strong> builds or loads planar calibrations. The chooser dialog lists
@@ -74,7 +76,8 @@
             <tr><td><strong>3</strong></td><td>angle</td><td>3 (auto)</td><td>Degrees at vertex</td></tr>
             <tr><td><strong>4</strong></td><td>velocity</td><td>2 different frames</td><td>FPS via <code>I</code> or <strong>FPS … Hz</strong></td></tr>
             <tr><td><strong>5</strong></td><td>acceleration</td><td>3 distinct frames</td><td>Same FPS</td></tr>
-            <tr><td><strong>6–0</strong></td><td>reserved</td><td>—</td><td>—</td></tr>
+            <tr><td><strong>6</strong></td><td>level</td><td>2 (auto)</td><td>Green H+V crosshair + axis-snapped tape</td></tr>
+            <tr><td><strong>7–0</strong></td><td>reserved</td><td>—</td><td>—</td></tr>
         </table>
         <p>The first calibration/result save creates one <code>processed_quickmeasure_&lt;timestamp&gt;/</code>
         next to the video. Later saves update the same directory. Exports include
@@ -90,6 +93,7 @@
             <tr><td>Angle</td><td>3 points (vertex in the middle) or 4 points (two lines)</td></tr>
             <tr><td>Velocity</td><td>Last 2 clicked points (needs fps + 2 distinct frames)</td></tr>
             <tr><td>Acceleration</td><td>Last 3 clicked points (needs fps + 3 distinct frames)</td></tr>
+            <tr><td>Level</td><td>Origin + tape end snapped to nearer image H/V axis</td></tr>
         </table>
 
         <h2>Units</h2>
@@ -108,7 +112,8 @@
             <tr><td>Right-click</td><td>Undo the last point</td></tr>
             <tr><td>Middle-click</td><td>Pan (unchanged)</td></tr>
             <tr><td><code>Enter</code></td><td>In CALIB after all points: confirm the visible geometry and enter real measures. In MEASURE: close area or open save menu (<code>S</code> save, <code>X</code> clear)</td></tr>
-            <tr><td><code>Backspace</code></td><td>Clear all measure points/results</td></tr>
+            <tr><td><strong>Clear</strong> / <code>Backspace</code></td><td>Clear draft, points, and drawn results (keeps calibration)</td></tr>
+            <tr><td><code>Ctrl+Z</code> / <code>Ctrl+Y</code></td><td>Undo / redo MEASURE actions</td></tr>
         </table>
         <p><code>Esc</code> in the main tool always means save-and-quit the whole application — press <code>Q</code> / <code>Shift+Q</code> again to leave MEASURE / CALIB.</p>
 
