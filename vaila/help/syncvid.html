@@ -32,13 +32,25 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <li>Open a target directory containing at least two videos.</li>
 <li>Click a camera name, or use Page Up/Page Down.</li>
 <li>Locate the common event with playback, the timeline or frame stepping.</li>
-<li>Type its displayed 1-based frame in that camera's <strong>Sync frame</strong> field.</li>
-<li>Repeat for every camera.</li>
+<li>Type its displayed 1-based frame in that camera's <strong>Sync</strong> field (the keyframe, e.g. ball contact).</li>
+<li>Repeat for every camera. <strong>Start/End</strong> of a non-reference camera are optional (see <em>Cameras with different frame rates</em>).</li>
 <li>Type the <strong>Reference video</strong> as a row number, filename, stem or unique fragment such as <code>frontal</code>.</li>
 <li>Type the inclusive <strong>Reference start</strong> and <strong>Reference end</strong>.</li>
 <li>Save the TXT, or save and open Cut Video directly.</li>
 </ol>
 <p>Clicking a field selects it for replacement. Tab/Shift+Tab navigates fields and Enter validates. Displayed and saved frames are 1-based and inclusive.</p>
+
+<h2>Cameras with different frame rates</h2>
+<p>Each camera is aligned in <strong>time</strong> at its Sync (key) frame, at its <strong>own fps</strong>, so cameras at 59.94, 50, 37.41, 30 or 22.96 fps can be cut to the same event window even when no frame is shared:</p>
+<pre>start = sync + round((reference_start - reference_sync) / reference_fps * fps)
+end   = start + round((reference_end - reference_start) / reference_fps * fps)</pre>
+<ul>
+<li>Every row shows the camera's fps and frame count; the video's top bar shows fps and resolution.</li>
+<li><strong>Start/End</strong> of a non-reference row are optional. Empty: they follow the reference from Sync + fps, and the computed frames appear in grey as a preview. Typed (both): that camera is cut there and its Sync frame becomes optional.</li>
+<li>On save, the terminal lists every camera's range, frames, fps and duration; a typed Start/End whose duration differs from the reference by more than one frame also shows the fps it implies. The cut keeps the file's fps.</li>
+<li>Cut Video renders each range at its own fps; the sync TXT format is unchanged.</li>
+</ul>
+<p>Example: reference <code>cabine1.mp4</code> 39–111 (keyframe 50, ball contact, 59.94 fps); <code>cobrador_norepeat_37.41fps.mp4</code> keyframe 19 gives 12–57; <code>lateral_norepeat_22.96fps.mp4</code> keyframe 9 gives 5–33; <code>reporter_fundo.mp4</code> (30 fps) keyframe 96 gives 90–126. All cuts last 1.20–1.22 s and show the contact at 0.1835 s.</p>
 
 <h2>Load / Resume</h2>
 <p>Every <strong>Save sync</strong> or <strong>Save + Cut Video</strong> also writes a <code>.json</code> checkpoint next to the sync TXT (same name, <code>.json</code> extension) capturing every field's text, the current camera, the current playback frame, and the output path.</p>
@@ -65,6 +77,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <tr><td>Home / End</td><td>First/last frame</td></tr>
 <tr><td>Page Up / Page Down</td><td>Previous/next camera</td></tr>
 <tr><td>Timeline click/drag</td><td>Seek directly</td></tr>
+<tr><td><code>G</code>, or <strong>Go to frame</strong> + Enter/<strong>Go</strong></td><td>Jump to a typed 1-based frame of the current video</td></tr>
 <tr><td><code>D</code> or Delete</td><td>Mark the current frame as repeated (red border, red timeline tick); again to keep it</td></tr>
 <tr><td>Mouse wheel over the video</td><td>Zoom in/out at the cursor (1× to 10×)</td></tr>
 <tr><td>Middle-button drag, or left drag when zoomed</td><td>Pan the zoomed video</td></tr>
@@ -90,14 +103,15 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <ul>
 <li>A copy re-encoded by the editor (H.264/H.265) is never pixel-identical: edges and the image top and bottom flicker a little. That codec noise scores low everywhere; a real new frame scores high where something moved.</li>
 <li>The cut is chosen per video, at a gap of at least 2x between the noise group and the motion group of the sorted scores. When several such gaps exist, the one that best separates the two groups is used. Without such a gap the video has no repeats (only changes of at most 1 grey level count).</li>
-<li>On the 1080p examples: <code>cobrador.mp4</code> copies scored at most 16.5 and real frames at least 40.2; <code>lateral.mp4</code> 8.4 against 30.6. <code>cabine1.mp4</code> and <code>gol.mp4</code> showed a continuous range (largest gap 1.09x) and no repeats.</li>
+<li><strong>Interlaced sources</strong> (e.g. 50 fps material on a 59.94 timeline) repeat a frame built from the other field: the same image shifted about 1.2 px vertically. A small, purely vertical global shift is compensated before scoring again; horizontal or larger shifts are real camera motion.</li>
+<li>On the 1080p examples: <code>cobrador.mp4</code> copies scored at most 6.7 and real frames at least 40.2; <code>lateral.mp4</code> 5.1 against 30.6; <code>gol.mp4</code> (field-shifted copies) 8.3 against 22.9: 24 repeats, about 49.88 fps (50 fps material). <code>cabine1.mp4</code> and the 30 fps phone videos showed no repeats.</li>
 </ul>
 <p><strong>Save w/o repeats</strong> (or the CLI <code>--remove-repeated</code>, which uses the automatic marks) writes a copy of each video with marked frames in <code>processed_norepeat_&lt;timestamp&gt;/</code>, next to the videos:</p>
 <table>
 <tr><th>File</th><th>Content</th></tr>
 <tr><td><code>&lt;name&gt;_norepeat_&lt;fps&gt;fps.mp4</code></td><td>H.264, distinct frames only. Container frame rate = estimated real rate, so the duration is kept; the rate is also in the file name and the <code>comment</code> metadata. No audio</td></tr>
 <tr><td><code>&lt;name&gt;_norepeat_frames.csv</code></td><td><code>new_frame</code>, <code>original_frame</code> (1-based), <code>original_time_s</code></td></tr>
-<tr><td><code>&lt;name&gt;_motion_scores.csv</code></td><td>Every video: <code>frame</code>, <code>motion_score</code>, <code>repeated</code> (1 = removed)</td></tr>
+<tr><td><code>&lt;name&gt;_motion_scores.csv</code></td><td>Every video: <code>frame</code>, <code>motion_score</code>, <code>repeated</code> (1 = removed), <code>shift_x_px</code>, <code>shift_y_px</code></td></tr>
 <tr><td><code>norepeat_summary.csv</code></td><td>Every video: frames, unique, repeated, fps, estimated real fps, threshold, gap ratio, repeated frame numbers</td></tr>
 </table>
 <p>Estimated real fps = fps × unique / total frames (example: <code>lateral.mp4</code>, 141 frames at 59.94 fps, keeps 54 frames, about 22.96 fps). The real frames are not evenly spaced in the source, so the new video spaces them evenly at the average rate; the frame map keeps the original times. Videos without repeats are listed but not rewritten. A shot where nothing moves at all scores like codec noise: check the motion scores before using such a copy.</p>

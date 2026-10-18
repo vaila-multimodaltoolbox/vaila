@@ -694,3 +694,182 @@ def test_write_video_without_frames_maps_cut_frames_to_source(tmp_path: Path) ->
     rows = (tmp_path / "cut_norepeat_frames.csv").read_text().splitlines()
     # new frame 5 is cut frame 5 (0-based), i.e. source frame 106 (1-based)
     assert rows[5].split(",")[:2] == ["5", "106"]
+
+
+def _rate_info(path: Path, frame_count: int, fps: float) -> syncvid.VideoInfo:
+    return syncvid.VideoInfo(path=path, frame_count=frame_count, fps=fps, width=640, height=360)
+
+
+def test_build_sync_plan_maps_keyframes_across_frame_rates(tmp_path: Path) -> None:
+    infos = [
+        _rate_info(tmp_path / "ref.mp4", 600, 60.0),
+        _rate_info(tmp_path / "phone.mp4", 300, 30.0),
+        _rate_info(tmp_path / "slow.mp4", 300, 22.956),
+    ]
+    # Reference keyframe 100, cut 80..200 (2 s); phone keyframe 40 at 30 fps.
+    plan = syncvid.build_sync_plan(
+        infos, {"ref.mp4": 100, "phone.mp4": 40, "slow.mp4": 30}, "ref.mp4", 80, 200
+    )
+    ranges = {entry.video_file: (entry.start_frame, entry.end_frame) for entry in plan}
+    assert ranges["ref.mp4"] == (80, 200)
+    assert ranges["phone.mp4"] == (30, 90)  # 40 - 10, then 2 s at 30 fps
+    assert ranges["slow.mp4"] == (30 + round(-20 / 60 * 22.956), 22 + round(2 * 22.956))
+    for entry in plan:
+        fps = next(info.fps for info in infos if info.name == entry.video_file)
+        assert abs((entry.end_frame - entry.start_frame) / fps - 2.0) <= 0.5 / fps
+    lines = syncvid.describe_sync_plan(plan, infos, "ref.mp4")
+    assert lines[0].endswith("[reference]")
+    assert all("imply" not in line for line in lines)
+
+
+def test_build_sync_plan_uses_own_start_end_without_sync_frame(tmp_path: Path) -> None:
+    infos = [_rate_info(tmp_path / "ref.mp4", 600, 60.0), _rate_info(tmp_path / "b.mp4", 300, 30.0)]
+    reference, plan = syncvid.build_sync_plan_from_fields(
+        infos,
+        {"ref.mp4": "", "b.mp4": ""},
+        "ref",
+        "81",
+        "201",
+        range_texts={"b.mp4": ("31", "100")},
+    )
+    assert reference == "ref.mp4"
+    assert [(e.start_frame, e.end_frame, e.sync_frame) for e in plan] == [
+        (80, 200, None),
+        (30, 99, None),
+    ]
+    assert plan[1].output_file == "b_frames_31_to_100.mp4"
+    # 69 frames over the reference's 2 s: a 34.5 fps camera, not 30.
+    assert "imply 34.500 fps" in syncvid.describe_sync_plan(plan, infos, reference)[1]
+
+
+@pytest.mark.parametrize(
+    ("sync_texts", "range_texts", "message"),
+    [
+        ({"ref.mp4": "100", "b.mp4": ""}, {"b.mp4": ("31", "")}, "both Start and End"),
+        ({"ref.mp4": "", "b.mp4": "40"}, {}, "sync frame for ref.mp4"),
+        ({"ref.mp4": "100", "b.mp4": ""}, {}, "sync frame for b.mp4"),
+        ({"ref.mp4": "100", "b.mp4": "295"}, {}, "common interval"),
+    ],
+)
+def test_build_sync_plan_from_fields_reports_missing_or_bad_values(
+    tmp_path: Path, sync_texts: dict[str, str], range_texts: dict, message: str
+) -> None:
+    infos = [_rate_info(tmp_path / "ref.mp4", 600, 60.0), _rate_info(tmp_path / "b.mp4", 300, 30.0)]
+    with pytest.raises(syncvid.SyncWorkflowError, match=message):
+        syncvid.build_sync_plan_from_fields(
+            infos, sync_texts, "ref", "81", "201", range_texts=range_texts
+        )
+
+
+def test_common_reference_bounds_is_time_based(tmp_path: Path) -> None:
+    infos = [_rate_info(tmp_path / "ref.mp4", 600, 60.0), _rate_info(tmp_path / "b.mp4", 100, 30.0)]
+    # b covers 1.0 s before its keyframe 30 and 2.3 s after: reference frames 40..238.
+    assert syncvid.common_reference_bounds(infos, {"ref.mp4": 100, "b.mp4": 30}, "ref.mp4") == (
+        40,
+        238,
+    )
+
+
+def test_checkpoint_round_trips_per_camera_ranges(tmp_path: Path) -> None:
+    state = syncvid.build_checkpoint_state(
+        reference="a.mp4",
+        start="1",
+        end="9",
+        sync_frames={"a.mp4": "1", "b.mp4": ""},
+        current_video="a.mp4",
+        current_frame=0,
+        output_file=None,
+        completed=False,
+        ranges={"a.mp4": ("", ""), "b.mp4": ("3", "8")},
+    )
+    assert state["ranges"] == {"b.mp4": ["3", "8"]}
+    path = syncvid.write_checkpoint_file(state, tmp_path / "c.json")
+    assert syncvid.read_checkpoint_file(path)["ranges"] == {"b.mp4": ["3", "8"]}
+
+    state["ranges"] = {"b.mp4": ["3"]}
+    syncvid.write_checkpoint_file(state, path)
+    with pytest.raises(syncvid.SyncFileError, match="ranges"):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_pygame_player_g_focuses_go_to_and_enter_seeks(tmp_path: Path) -> None:
+    pygame = syncvid.pygame
+    player = object.__new__(syncvid.PygameSyncPlayer)
+    info = _video_info(tmp_path / "a.mp4", 50)
+    player.video_infos = [info]
+    player.current_index = 0
+    player.current_frame = 4
+    player.playing = False
+    player.reference_field = syncvid.PygameTextField("reference", "a.mp4")
+    player.start_field = syncvid.PygameTextField("reference_start", "1")
+    player.end_field = syncvid.PygameTextField("reference_end", "50")
+    player.sync_fields = {"a.mp4": syncvid.PygameTextField("sync:a.mp4")}
+    player.range_start_fields = {"a.mp4": syncvid.PygameTextField("start:a.mp4")}
+    player.range_end_fields = {"a.mp4": syncvid.PygameTextField("end:a.mp4")}
+    player.goto_field = syncvid.PygameTextField("goto")
+    player.active_field = None
+    decoded = []
+
+    def decode(frame: int) -> bool:
+        decoded.append(frame)
+        player.current_frame = frame
+        return True
+
+    player._decode_at = decode
+
+    player._handle_player_key(
+        pygame.event.Event(pygame.KEYDOWN, key=pygame.K_g, mod=0, unicode="g")
+    )
+    assert player.active_field is player.goto_field
+    assert player.goto_field.text == "5"  # starts at the current frame, selected
+    for char in "37":
+        key = getattr(pygame, f"K_{char}")
+        player.goto_field.handle_key(
+            pygame.event.Event(pygame.KEYDOWN, key=key, mod=0, unicode=char)
+        )
+    player._commit_active_field()
+    assert decoded == [36]
+    assert player.active_field is None
+
+    player._handle_button("goto")  # Go button re-uses the typed frame
+    assert decoded == [36, 36]
+    player.goto_field.text = "999"
+    player._handle_button("goto")
+    assert decoded == [36, 36]
+
+
+def test_find_repeated_frames_compensates_field_shift_but_not_pans(tmp_path: Path) -> None:
+    import cv2
+    import numpy as np
+
+    rng = np.random.default_rng(3)
+    # Broadcast-like detail: a 1 px shift alone changes the raw score a lot (~30).
+    base = rng.integers(0, 255, (90, 160), dtype=np.uint8)
+    texture = cv2.cvtColor(
+        cv2.resize(base, (640, 360), interpolation=cv2.INTER_CUBIC), cv2.COLOR_GRAY2BGR
+    )
+
+    def write(path: Path, frames: list) -> None:
+        writer = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"MJPG"), 60.0, (320, 180))
+        for frame in frames:
+            writer.write(frame)
+        writer.release()
+
+    # Interlaced-style copies: frames 4, 9 and 14 repeat the previous one shifted 1 px down.
+    frames = []
+    for index in range(18):
+        if index in (4, 9, 14):
+            frames.append(np.roll(frames[-1], 1, axis=0))
+            continue
+        frame = texture[40:220, 40:360].copy()
+        cv2.circle(frame, (20 + index * 15, 90), 14, (255, 255, 255), -1)
+        frames.append(frame)
+    write(tmp_path / "field.avi", frames)
+    report = syncvid.find_repeated_frames(tmp_path / "field.avi")
+    assert report.repeated_frames == (4, 9, 14)
+    assert abs(report.shifts[3][1]) > 0.5  # the measured vertical field shift
+
+    # A slow horizontal pan over a static scene is real motion: nothing is removed.
+    pan = [texture[40:220, 40 + index : 360 + index].copy() for index in range(18)]
+    write(tmp_path / "pan.avi", pan)
+    assert syncvid.find_repeated_frames(tmp_path / "pan.avi").repeated_frames == ()
