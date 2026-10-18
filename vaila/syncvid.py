@@ -22,10 +22,14 @@ video and the generated sync file already selected.
 Holding Left/Right (or Up/Down) keeps stepping frame by frame, as in
 getpixelvideo. The mouse wheel zooms at the cursor; drag pans; ``0`` resets.
 
-``Remove repeated frames`` finds frames an editor repeated when it spliced
-several cameras into one timeline (each repeat differs from the previous
-frame only by codec noise) and writes repeat-free copies, a frame map and the
-estimated real frame rate to ``processed_norepeat_<timestamp>/``.
+Repeated frames: an editor that splices several cameras into one timeline
+repeats frames (a re-encoded copy differs from the previous frame only by
+codec noise, far below the video's own motion). ``Detect repeats`` marks them
+in every video; ``D``/Delete marks or keeps the current frame by hand.
+``Save w/o repeats`` writes repeat-free copies at the estimated real frame
+rate, a frame map and per-frame motion scores to
+``processed_norepeat_<timestamp>/``. The marks also go into the sync file, so
+Cut Video saves each synchronized cut with and without them.
 
 Frame convention:
 - GUI and sync file: 1-based, inclusive.
@@ -49,7 +53,7 @@ import sys
 import tempfile
 import tkinter as tk
 import webbrowser
-from collections.abc import Callable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tkinter import filedialog, messagebox
@@ -139,6 +143,9 @@ def _resilient_open_local_html(path: Path) -> None:
 VIDEO_EXTENSIONS = frozenset({".mp4", ".avi", ".mov", ".mkv", ".webm", ".m4v"})
 SYNC_FORMAT_HEADER = "# vaila sync file v2"
 SYNC_COLUMNS = ("video_file", "output_file", "start_frame", "end_frame", "sync_frame")
+# Optional sixth column, written only when frames were marked as repeated:
+# space-separated 1-based source frames that Cut Video drops from its output.
+SYNC_REMOVED_COLUMN = "removed_frames"
 MAX_SYNC_FILE_BYTES = 1_000_000
 MAX_SYNC_ENTRIES = 10_000
 MAX_FRAME_NUMBER = 2_147_483_647
@@ -212,6 +219,8 @@ class SyncPlanEntry:
     start_frame: int
     end_frame: int
     sync_frame: int | None = None
+    # Source frames (0-based, inside start..end) marked as repeated.
+    removed_frames: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -376,8 +385,13 @@ def build_sync_plan(
     reference_video: str,
     reference_start: int,
     reference_end: int,
+    removed_frames: Mapping[str, Collection[int]] | None = None,
 ) -> list[SyncPlanEntry]:
-    """Build equal-duration synchronized ranges for all videos."""
+    """Build equal-duration synchronized ranges for all videos.
+
+    ``removed_frames`` maps a video name to source frames (0-based) marked as
+    repeated; those inside the computed range are kept on its entry.
+    """
     if reference_start > reference_end:
         raise SyncWorkflowError("Reference start frame must not be after the end frame")
     lower, upper = common_reference_bounds(video_infos, sync_frames, reference_video)
@@ -408,6 +422,13 @@ def build_sync_plan(
                 start_frame=start_frame,
                 end_frame=end_frame,
                 sync_frame=sync_frame,
+                removed_frames=tuple(
+                    sorted(
+                        frame
+                        for frame in set((removed_frames or {}).get(info.name, ()))
+                        if start_frame <= frame <= end_frame
+                    )
+                ),
             )
         )
     return entries
@@ -491,6 +512,7 @@ def build_sync_plan_from_fields(
     reference_text: str,
     reference_start_text: str,
     reference_end_text: str,
+    removed_frames: Mapping[str, Collection[int]] | None = None,
 ) -> tuple[str, list[SyncPlanEntry]]:
     """Validate the Pygame text fields and build the regular synchronization plan."""
     reference_video = resolve_reference_video(reference_text, video_infos)
@@ -520,6 +542,7 @@ def build_sync_plan_from_fields(
         reference_video,
         reference_start,
         reference_end,
+        removed_frames,
     )
 
 
@@ -530,7 +553,8 @@ def _sync_file_text(entries: Sequence[SyncPlanEntry]) -> str:
     stream.write(f"{SYNC_FORMAT_HEADER}\n")
     stream.write("# frame_base=1; frame ranges are inclusive\n")
     writer = csv.writer(stream, delimiter="\t", lineterminator="\n", quoting=csv.QUOTE_MINIMAL)
-    writer.writerow(SYNC_COLUMNS)
+    with_removed = any(entry.removed_frames for entry in entries)
+    writer.writerow((*SYNC_COLUMNS, SYNC_REMOVED_COLUMN) if with_removed else SYNC_COLUMNS)
     seen: set[str] = set()
     for entry in entries:
         video_file = validate_sync_leaf_filename(entry.video_file, field="video_file")
@@ -543,15 +567,17 @@ def _sync_file_text(entries: Sequence[SyncPlanEntry]) -> str:
             raise SyncFileError(f"Invalid frame range for {video_file}")
         if entry.sync_frame is not None and not 0 <= entry.sync_frame <= MAX_FRAME_NUMBER:
             raise SyncFileError(f"Invalid sync frame for {video_file}")
-        writer.writerow(
-            (
-                video_file,
-                output_file,
-                entry.start_frame + 1,
-                entry.end_frame + 1,
-                "" if entry.sync_frame is None else entry.sync_frame + 1,
-            )
-        )
+        _validate_removed_frames(entry.removed_frames, entry, video_file)
+        row: list[str | int] = [
+            video_file,
+            output_file,
+            entry.start_frame + 1,
+            entry.end_frame + 1,
+            "" if entry.sync_frame is None else entry.sync_frame + 1,
+        ]
+        if with_removed:
+            row.append(" ".join(str(frame + 1) for frame in entry.removed_frames))
+        writer.writerow(row)
     return stream.getvalue()
 
 
@@ -582,28 +608,44 @@ def write_sync_file(entries: Sequence[SyncPlanEntry], output_file: str | Path) -
     return output_path
 
 
+def _validate_removed_frames(removed: Sequence[int], entry: SyncPlanEntry, video_file: str) -> None:
+    if list(removed) != sorted(set(removed)):
+        raise SyncFileError(f"Removed frames for {video_file} must be unique and sorted")
+    if any(not entry.start_frame <= frame <= entry.end_frame for frame in removed):
+        raise SyncFileError(f"Removed frames for {video_file} must lie inside its frame range")
+    if len(removed) > entry.end_frame - entry.start_frame:
+        raise SyncFileError(f"Removed frames for {video_file} would leave no frame")
+
+
 def _parse_sync_row(parts: Sequence[str], line_number: int) -> SyncPlanEntry:
-    if len(parts) not in {4, 5}:
-        raise SyncFileError(f"Line {line_number}: expected 4 or 5 fields, received {len(parts)}")
+    if len(parts) not in {4, 5, 6}:
+        raise SyncFileError(f"Line {line_number}: expected 4 to 6 fields, received {len(parts)}")
     video_file = validate_sync_leaf_filename(parts[0], field=f"line {line_number} video_file")
     output_file = validate_sync_leaf_filename(parts[1], field=f"line {line_number} output_file")
     try:
         start_1based = int(parts[2])
         end_1based = int(parts[3])
-        sync_1based = int(parts[4]) if len(parts) == 5 and parts[4].strip() else None
+        sync_1based = int(parts[4]) if len(parts) >= 5 and parts[4].strip() else None
+        removed_1based = [int(value) for value in parts[5].split()] if len(parts) == 6 else []
     except ValueError as exc:
         raise SyncFileError(f"Line {line_number}: frame fields must be integers") from exc
     if not 1 <= start_1based <= end_1based <= MAX_FRAME_NUMBER:
         raise SyncFileError(f"Line {line_number}: expected 1 <= start_frame <= end_frame")
     if sync_1based is not None and not 1 <= sync_1based <= MAX_FRAME_NUMBER:
         raise SyncFileError(f"Line {line_number}: sync_frame must be positive")
-    return SyncPlanEntry(
+    entry = SyncPlanEntry(
         video_file=video_file,
         output_file=output_file,
         start_frame=start_1based - 1,
         end_frame=end_1based - 1,
         sync_frame=None if sync_1based is None else sync_1based - 1,
+        removed_frames=tuple(frame - 1 for frame in removed_1based),
     )
+    try:
+        _validate_removed_frames(entry.removed_frames, entry, video_file)
+    except SyncFileError as exc:
+        raise SyncFileError(f"Line {line_number}: {exc}") from exc
+    return entry
 
 
 def read_sync_file(sync_file: str | Path) -> list[SyncPlanEntry]:
@@ -658,9 +700,18 @@ def build_checkpoint_state(
     current_frame: int,
     output_file: str | Path | None,
     completed: bool,
+    removed_frames: Mapping[str, Collection[int]] | None = None,
 ) -> dict[str, Any]:
-    """Build the JSON-serializable "Load / Resume" checkpoint for the current UI state."""
+    """Build the JSON-serializable "Load / Resume" checkpoint for the current UI state.
+
+    ``removed_frames`` (0-based) is stored 1-based, like every frame the user sees.
+    """
     return {
+        "removed_frames": {
+            name: sorted(int(frame) + 1 for frame in frames)
+            for name, frames in (removed_frames or {}).items()
+            if frames
+        },
         "vaila_checkpoint": CHECKPOINT_SCHEMA_VERSION,
         "reference": reference,
         "start": start,
@@ -754,6 +805,19 @@ def read_checkpoint_file(checkpoint_file: str | Path) -> dict[str, Any]:
     output_file = data.get("output_file")
     if output_file is not None and not isinstance(output_file, str):
         raise SyncFileError(f"Checkpoint 'output_file' must be text or null: {path}")
+    removed = data.get("removed_frames", {})
+    if not isinstance(removed, dict) or not all(
+        isinstance(name, str)
+        and isinstance(frames, list)
+        and all(
+            isinstance(frame, int) and not isinstance(frame, bool) and frame >= 1
+            for frame in frames
+        )
+        for name, frames in removed.items()
+    ):
+        raise SyncFileError(
+            f"Checkpoint 'removed_frames' must map video names to 1-based frame lists: {path}"
+        )
     return data
 
 
@@ -777,7 +841,7 @@ def find_sync_entry(
 
 def sync_entries_to_cutvideo_data(
     entries: Sequence[SyncPlanEntry],
-) -> dict[str, dict[str, int | str | None]]:
+) -> dict[str, dict[str, Any]]:
     """Convert validated entries to cutvideo's batch mapping."""
     return {
         entry.video_file: {
@@ -785,6 +849,7 @@ def sync_entries_to_cutvideo_data(
             "initial_frame": entry.start_frame,
             "final_frame": entry.end_frame,
             "sync_frame": entry.sync_frame,
+            "removed_frames": entry.removed_frames,
         }
         for entry in entries
     }
@@ -828,55 +893,114 @@ def launch_cutvideo(reference_video: str | Path, sync_file: str | Path) -> subpr
 
 
 # Repeated-frame detection. Editors that splice several cameras into one
-# timeline repeat a source frame whenever the camera rate is lower than the
-# timeline rate. A repeated frame differs from the previous one only by codec
-# noise: on the real 1080p examples at most ~50 pixels change by more than 8
-# grey levels, while consecutive real frames change at least ~24 000 pixels.
-REPEAT_PIXEL_DIFF = 8
-REPEAT_MIN_CHANGED_PIXELS = 200
-REPEAT_MAX_CHANGED_FRACTION = 1e-4
+# timeline repeat a source frame whenever the camera (or replay) rate is lower
+# than the timeline rate. Re-encoding makes the copy differ slightly from the
+# original (H.264/H.265 noise along edges), so an exact pixel test misses it.
+# Each frame is scored like a viewer would: the largest local change, i.e. the
+# maximum over a 32 x 18 grid of the mean absolute difference (grey levels)
+# between the blurred frame and the previous one. Repeats score at codec-noise
+# level; real frames score where something moved. The cut is chosen per video
+# at a gap of at least REPEAT_MIN_GAP_RATIO between sorted scores (see
+# repeat_threshold). On the real 1080p examples copies scored <= 16.5 against
+# motion >= 40.2, and <= 8.4 against >= 30.6; videos without repeats show a
+# continuous range (largest gap 1.09x). Scores at or below
+# REPEAT_INVISIBLE_SCORE are invisible and always count as repeats.
+REPEAT_GRID = (32, 18)
+REPEAT_INVISIBLE_SCORE = 1.0
+REPEAT_MIN_GAP_RATIO = 2.0
 
 ProgressCallback = Callable[[str, int, int], None]
 
 
 @dataclass(frozen=True)
 class RepeatedFrameReport:
-    """Repeated-frame analysis of one video (0-based frame indices)."""
+    """Repeated-frame analysis of one video (0-based frame indices).
+
+    ``motion_scores[i]`` scores frame ``i + 1`` against frame ``i``; a frame is
+    repeated when its score is at or below ``threshold``.
+    """
 
     video: Path
     fps: float
     width: int
     height: int
-    total_frames: int
-    kept_frames: tuple[int, ...]
+    motion_scores: tuple[float, ...]
+    threshold: float
+    gap_ratio: float
+
+    @property
+    def total_frames(self) -> int:
+        return len(self.motion_scores) + 1
+
+    @property
+    def info(self) -> VideoInfo:
+        """The analyzed video, with the decoded frame count."""
+        return VideoInfo(
+            path=self.video,
+            frame_count=self.total_frames,
+            fps=self.fps,
+            width=self.width,
+            height=self.height,
+        )
 
     @property
     def repeated_frames(self) -> tuple[int, ...]:
-        kept = set(self.kept_frames)
-        return tuple(index for index in range(self.total_frames) if index not in kept)
+        return tuple(
+            index + 1 for index, score in enumerate(self.motion_scores) if score <= self.threshold
+        )
+
+    @property
+    def kept_frames(self) -> tuple[int, ...]:
+        repeated = set(self.repeated_frames)
+        return tuple(index for index in range(self.total_frames) if index not in repeated)
 
     @property
     def estimated_fps(self) -> float:
         """Rate of distinct frames over the same duration (fps x unique / total)."""
-        if self.total_frames <= 0:
-            return self.fps
         return self.fps * len(self.kept_frames) / self.total_frames
 
 
-def frame_is_repeat(previous_gray: Any, gray: Any) -> bool:
-    """True when ``gray`` repeats ``previous_gray`` apart from codec noise."""
-    changed = int(np.count_nonzero(cv2.absdiff(previous_gray, gray) > REPEAT_PIXEL_DIFF))
-    limit = max(REPEAT_MIN_CHANGED_PIXELS, int(gray.size * REPEAT_MAX_CHANGED_FRACTION))
-    return changed <= limit
+def frame_motion_score(previous_blurred: Any, blurred: Any) -> float:
+    """Largest local mean grey-level change between two blurred grey frames."""
+    diff = cv2.absdiff(previous_blurred, blurred).astype(np.float32)
+    blocks = cv2.resize(diff, REPEAT_GRID, interpolation=cv2.INTER_AREA)
+    return float(blocks.max())
+
+
+def repeat_threshold(scores: Sequence[float]) -> tuple[float, float]:
+    """Return (threshold, gap ratio) separating codec noise from real motion.
+
+    Candidate cuts are the gaps between sorted visible scores that reach
+    REPEAT_MIN_GAP_RATIO. Of those, the cut that best separates the two groups
+    (largest between-class variance of log scores, as in Otsu's method) wins,
+    so a lone gap inside the noise group does not beat the noise/motion gap.
+    Without a candidate, only invisible changes count as repeats. The returned
+    ratio is that of the chosen gap, or the widest gap when none qualifies.
+    """
+    raw = np.sort([score for score in scores if score > REPEAT_INVISIBLE_SCORE])
+    visible = np.log(raw)
+    if visible.size < 2:
+        return REPEAT_INVISIBLE_SCORE, 1.0
+    gaps = np.diff(visible)
+    total = visible.size
+    best_cut, best_spread = -1, -1.0
+    for cut in np.flatnonzero(gaps >= np.log(REPEAT_MIN_GAP_RATIO)):
+        low, high = visible[: cut + 1], visible[cut + 1 :]
+        spread = low.size * high.size / total**2 * (high.mean() - low.mean()) ** 2
+        if spread > best_spread:
+            best_cut, best_spread = int(cut), float(spread)
+    if best_cut < 0:
+        return REPEAT_INVISIBLE_SCORE, float(np.exp(gaps.max()))
+    return float(raw[best_cut]), float(raw[best_cut + 1] / raw[best_cut])
 
 
 def find_repeated_frames(
     video_path: str | Path, progress: ProgressCallback | None = None
 ) -> RepeatedFrameReport:
-    """Decode every frame and keep each one that differs from the previous frame."""
+    """Score every frame against the previous one and mark codec-noise copies."""
     info = probe_video(video_path)
     cap = cv2.VideoCapture(str(info.path))
-    kept: list[int] = []
+    scores: list[float] = []
     previous = None
     index = 0
     try:
@@ -884,10 +1008,10 @@ def find_repeated_frames(
             ok, frame = cap.read()
             if not ok or frame is None:
                 break
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            if previous is None or not frame_is_repeat(previous, gray):
-                kept.append(index)
-            previous = gray
+            blurred = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (5, 5), 0)
+            if previous is not None:
+                scores.append(frame_motion_score(previous, blurred))
+            previous = blurred
             index += 1
             if progress is not None and index % 30 == 0:
                 progress("analyze", index, info.frame_count)
@@ -895,23 +1019,30 @@ def find_repeated_frames(
         cap.release()
     if index == 0:
         raise SyncWorkflowError(f"OpenCV could not decode any frame: {info.path}")
+    threshold, gap_ratio = repeat_threshold(scores)
     return RepeatedFrameReport(
         video=info.path,
         fps=info.fps,
         width=info.width,
         height=info.height,
-        total_frames=index,
-        kept_frames=tuple(kept),
+        motion_scores=tuple(scores),
+        threshold=threshold,
+        gap_ratio=gap_ratio,
     )
 
 
-def _encode_kept_frames(
-    report: RepeatedFrameReport,
+def _encode_without_frames(
+    info: VideoInfo,
+    removed: frozenset[int],
+    output_fps: float,
     output_video: Path,
     encoder: str,
     progress: ProgressCallback | None,
-) -> None:
-    """Pipe the kept frames as raw BGR into one FFmpeg H.264 encode."""
+) -> list[int]:
+    """Pipe every decoded frame not in ``removed`` as raw BGR into one H.264 encode.
+
+    Returns the source indices written, in order.
+    """
     try:
         from .ffmpeg_utils import get_ffmpeg_video_encoding_args, get_video_encode_ffmpeg_path
     except ImportError:
@@ -931,20 +1062,26 @@ def _encode_kept_frames(
         "-pix_fmt",
         "bgr24",
         "-s",
-        f"{report.width}x{report.height}",
+        f"{info.width}x{info.height}",
         "-framerate",
-        f"{report.estimated_fps:.6f}",
+        f"{output_fps:.6f}",
         "-i",
         "-",
     ]
-    if report.width % 2 or report.height % 2:
+    if info.width % 2 or info.height % 2:
         command += ["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2"]
     command += [*get_ffmpeg_video_encoding_args(encoder), "-movflags", "+faststart"]
-    command.append(str(output_video))
+    command += [
+        "-metadata",
+        f"comment=vaila syncvid norepeat: source={info.name} source_fps={info.fps:.6f} "
+        f"unique_frames={info.frame_count - len(removed)}/{info.frame_count} "
+        f"estimated_real_fps={output_fps:.6f}",
+        str(output_video),
+    ]
 
-    kept = set(report.kept_frames)
-    written = 0
-    cap = cv2.VideoCapture(str(report.video))
+    written: list[int] = []
+    expected = info.frame_count - len(removed)
+    cap = cv2.VideoCapture(str(info.path))
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
     stdin = cast(io.BufferedWriter, process.stdin)
     try:
@@ -953,11 +1090,11 @@ def _encode_kept_frames(
             ok, frame = cap.read()
             if not ok or frame is None:
                 break
-            if index in kept:
+            if index not in removed:
                 stdin.write(frame.tobytes())
-                written += 1
-                if progress is not None and written % 30 == 0:
-                    progress("encode", written, len(report.kept_frames))
+                written.append(index)
+                if progress is not None and len(written) % 30 == 0:
+                    progress("encode", len(written), expected)
             index += 1
     except BrokenPipeError:
         pass
@@ -967,23 +1104,30 @@ def _encode_kept_frames(
             stdin.close()
         stderr = process.stderr.read().decode(errors="replace") if process.stderr else ""
         process.wait()
-    if process.returncode != 0 or written != len(report.kept_frames):
+    if process.returncode != 0 or not written:
         raise RuntimeError(
             f"FFmpeg {encoder} encode failed (exit {process.returncode}, "
-            f"{written}/{len(report.kept_frames)} frames): {stderr.strip()[-400:]}"
+            f"{len(written)}/{expected} frames): {stderr.strip()[-400:]}"
         )
+    return written
 
 
-def write_video_without_repeats(
-    report: RepeatedFrameReport,
+def write_video_without_frames(
+    info: VideoInfo,
+    removed: Collection[int],
     output_dir: str | Path,
     progress: ProgressCallback | None = None,
+    *,
+    frame_offset: int = 0,
 ) -> Path:
-    """Write ``<stem>_norepeat.mp4`` and its frame map; return the video path.
+    """Write ``<stem>_norepeat_<fps>fps.mp4`` without ``removed`` (0-based) frames.
 
-    The output keeps the original duration: its frame rate is the estimated
-    real rate (fps x unique / total). Audio is not copied. The CSV maps every
-    new frame to its original frame (both 1-based) and original time.
+    The output keeps the original duration: its container frame rate is the
+    estimated real rate (fps x kept / total), also written in the file name
+    and the ``comment`` metadata. Audio is not copied. ``<stem>_norepeat_frames.csv``
+    maps every new frame to its source frame (both 1-based) and source time;
+    ``frame_offset`` is added when ``info`` is a cut that starts at that
+    source frame. Returns the video path.
     """
     try:
         from .ffmpeg_utils import encoders_with_cpu_fallback, is_hardware_video_encoder
@@ -993,13 +1137,20 @@ def write_video_without_repeats(
             is_hardware_video_encoder,
         )
 
+    dropped = frozenset(int(frame) for frame in removed if 0 <= int(frame) < info.frame_count)
+    if len(dropped) >= info.frame_count:
+        raise SyncWorkflowError(f"Removing {len(dropped)} frames would leave {info.name} empty")
+    output_fps = info.fps * (info.frame_count - len(dropped)) / info.frame_count
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = report.video.stem
-    output_video = out_dir / f"{stem}_norepeat.mp4"
+    stem = info.path.stem
+    output_video = out_dir / f"{stem}_norepeat_{output_fps:.2f}fps.mp4"
+    written: list[int] = []
     for encoder in encoders_with_cpu_fallback():
         try:
-            _encode_kept_frames(report, output_video, encoder, progress)
+            written = _encode_without_frames(
+                info, dropped, output_fps, output_video, encoder, progress
+            )
             break
         except RuntimeError as exc:
             if not is_hardware_video_encoder(encoder):
@@ -1009,55 +1160,68 @@ def write_video_without_repeats(
     with open(out_dir / f"{stem}_norepeat_frames.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["new_frame", "original_frame", "original_time_s"])
-        for new_index, original in enumerate(report.kept_frames):
-            writer.writerow([new_index + 1, original + 1, f"{original / report.fps:.6f}"])
+        for new_index, original in enumerate(written):
+            source = original + frame_offset
+            writer.writerow([new_index + 1, source + 1, f"{source / info.fps:.6f}"])
     return output_video
 
 
-def remove_repeated_frames(
-    videos: Sequence[str | Path],
+def save_videos_without_frames(
+    items: Sequence[tuple[VideoInfo, Collection[int], RepeatedFrameReport | None]],
     output_dir: str | Path | None = None,
     progress: ProgressCallback | None = None,
-) -> tuple[Path, list[RepeatedFrameReport]]:
-    """Analyze every video; write a repeat-free copy of those that repeat frames.
+) -> Path:
+    """Write repeat-free copies of the videos that have frames to remove.
 
-    Results go to ``processed_norepeat_<timestamp>/`` next to the first video
-    (or ``output_dir``), with ``norepeat_summary.csv`` for every video.
+    ``items`` holds (video, frames to remove 0-based, automatic analysis or
+    None). Results go to ``processed_norepeat_<timestamp>/`` next to the first
+    video (or ``output_dir``): one copy per video with removed frames,
+    ``<stem>_motion_scores.csv`` for each analyzed video, and a line of
+    ``norepeat_summary.csv`` for every video.
     """
-    if not videos:
+    if not items:
         raise SyncWorkflowError("No videos were given for repeated-frame removal")
     if output_dir is None:
         timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_dir = Path(videos[0]).expanduser().resolve().parent / (
-            f"processed_norepeat_{timestamp}"
-        )
+        output_dir = items[0][0].path.parent / f"processed_norepeat_{timestamp}"
     out_dir = Path(output_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    reports: list[RepeatedFrameReport] = []
     rows: list[list[Any]] = []
-    for video in videos:
-        report = find_repeated_frames(video, progress)
-        reports.append(report)
-        repeated = report.repeated_frames
+    for info, removed_frames, report in items:
+        removed = sorted({int(frame) for frame in removed_frames if 0 <= frame < info.frame_count})
+        if report is not None:
+            scores_csv = out_dir / f"{info.path.stem}_motion_scores.csv"
+            with open(scores_csv, "w", newline="", encoding="utf-8") as f:
+                writer = csv.writer(f)
+                writer.writerow(["frame", "motion_score", "repeated"])
+                writer.writerow([1, "", int(0 in removed)])
+                removed_set = set(removed)
+                for index, score in enumerate(report.motion_scores, start=1):
+                    writer.writerow([index + 1, f"{score:.3f}", int(index in removed_set)])
         output_name = ""
-        if repeated:
-            output_name = write_video_without_repeats(report, out_dir, progress).name
+        if removed:
+            output_name = write_video_without_frames(info, removed, out_dir, progress).name
+        kept = info.frame_count - len(removed)
+        estimated_fps = info.fps * kept / info.frame_count
         rows.append(
             [
-                report.video.name,
-                report.total_frames,
-                len(report.kept_frames),
-                len(repeated),
-                f"{report.fps:.6f}",
-                f"{report.estimated_fps:.6f}",
-                " ".join(str(index + 1) for index in repeated),
+                info.name,
+                info.frame_count,
+                kept,
+                len(removed),
+                f"{info.fps:.6f}",
+                f"{estimated_fps:.6f}",
+                "" if report is None else f"{report.threshold:.3f}",
+                "" if report is None else f"{report.gap_ratio:.2f}",
+                "" if report is None else len(report.repeated_frames),
+                " ".join(str(index + 1) for index in removed),
                 output_name,
             ]
         )
         print(
-            f"  {report.video.name}: {report.total_frames} frames, {len(repeated)} repeated, "
-            f"{len(report.kept_frames)} unique, real fps ~{report.estimated_fps:.3f}"
+            f"  {info.name}: {info.frame_count} frames, {len(removed)} repeated, "
+            f"{kept} unique, real fps ~{estimated_fps:.3f}"
             + (f" -> {output_name}" if output_name else " (no repeats, not rewritten)")
         )
 
@@ -1071,11 +1235,31 @@ def remove_repeated_frames(
                 "repeated_frames",
                 "fps",
                 "estimated_real_fps",
+                "repeat_threshold",
+                "noise_motion_gap_ratio",
+                "auto_detected_repeats",
                 "repeated_frame_numbers",
                 "output_video",
             ]
         )
         writer.writerows(rows)
+    return out_dir
+
+
+def remove_repeated_frames(
+    videos: Sequence[str | Path],
+    output_dir: str | Path | None = None,
+    progress: ProgressCallback | None = None,
+) -> tuple[Path, list[RepeatedFrameReport]]:
+    """Detect repeated frames in every video and save repeat-free copies (CLI path)."""
+    if not videos:
+        raise SyncWorkflowError("No videos were given for repeated-frame removal")
+    reports = [find_repeated_frames(video, progress) for video in videos]
+    out_dir = save_videos_without_frames(
+        [(report.info, report.repeated_frames, report) for report in reports],
+        output_dir,
+        progress,
+    )
     return out_dir, reports
 
 
@@ -1264,10 +1448,15 @@ class PygameSyncPlayer:
         self.nav_hold_key: int | None = None
         self.nav_hold_started_ms = 0
         self.nav_hold_last_ms = 0
+        # Frames (0-based) marked as repeated per video: D/Delete toggles,
+        # "Detect repeats" adds the automatic ones. Saved into the sync file,
+        # the checkpoint and the repeat-free copies.
+        self.removed_frames: dict[str, set[int]] = {info.name: set() for info in self.video_infos}
+        self.repeat_reports: dict[str, RepeatedFrameReport] = {}
 
         pygame.display.set_caption(
             "vailá Sync | Space Play/Pause | hold Left/Right 1 frame | "
-            "Up/Down or -/+ 60 frames | wheel zoom, 0 reset | [/] Speed | PgUp/PgDn Video"
+            "Up/Down or -/+ 60 frames | wheel zoom, 0 reset | D mark repeat | PgUp/PgDn Video"
         )
         icon_path = Path(__file__).resolve().parent / "images" / "vaila_ico_mac.png"
         if icon_path.is_file():
@@ -1368,6 +1557,23 @@ class PygameSyncPlayer:
         ):
             self._seek_relative(delta)
             self.nav_hold_last_ms = now_ms
+
+    def _toggle_removed_frame(self) -> None:
+        """Mark or unmark the current frame of the current video as repeated."""
+        self.playing = False
+        marks = self.removed_frames[self.current_info.name]
+        frame = self.current_frame
+        if frame in marks:
+            marks.discard(frame)
+            self._set_status(f"Frame {frame + 1} kept in {self.current_info.name}")
+        elif len(marks) + 1 >= self.current_info.frame_count:
+            self._set_status("Cannot mark every frame of a video as repeated", error=True)
+        else:
+            marks.add(frame)
+            self._set_status(
+                f"Frame {frame + 1} marked as repeated in {self.current_info.name} "
+                f"({len(marks)} marked; D again to keep it)"
+            )
 
     def _reset_zoom(self) -> None:
         self.zoom_level = 1.0
@@ -1609,6 +1815,15 @@ class PygameSyncPlayer:
         if video_surface is not None:
             self._video_dest = video_surface.get_rect(center=viewport.center)
             self.screen.blit(video_surface, self._video_dest)
+        marks = self.removed_frames[self.current_info.name]
+        if self.current_frame in marks:
+            pygame.draw.rect(self.screen, (230, 60, 60), self._video_dest.clip(viewport), 4)
+            removed_label = self.font.render(
+                "REPEATED - removed in saved videos (D to keep)", True, (255, 235, 235)
+            )
+            label_rect = removed_label.get_rect(midbottom=(viewport.centerx, viewport.bottom - 10))
+            pygame.draw.rect(self.screen, (170, 35, 35), label_rect.inflate(16, 8), border_radius=4)
+            self.screen.blit(removed_label, label_rect)
 
         overlay = pygame.Surface((viewport.width, 36), pygame.SRCALPHA)
         overlay.fill((10, 12, 16, 205))
@@ -1636,8 +1851,16 @@ class PygameSyncPlayer:
         pygame.draw.rect(self.screen, (28, 32, 38), controls)
         seconds = self.current_frame / self.current_info.fps
         duration = (self.current_info.frame_count - 1) / self.current_info.fps
+        recount = ""
+        if marks:
+            kept_total = self.current_info.frame_count - len(marks)
+            if self.current_frame in marks:
+                recount = f"  (new -/{kept_total:,})"
+            else:
+                new_index = self.current_frame - sum(1 for f in marks if f < self.current_frame)
+                recount = f"  (new {new_index + 1:,}/{kept_total:,})"
         frame_text = self.font.render(
-            f"Frame {self.current_frame + 1:,}/{self.current_info.frame_count:,}"
+            f"Frame {self.current_frame + 1:,}/{self.current_info.frame_count:,}{recount}"
             f"    {seconds:.6f}s / {duration:.6f}s",
             True,
             (238, 242, 247),
@@ -1668,6 +1891,18 @@ class PygameSyncPlayer:
             ),
             border_radius=4,
         )
+        if self.current_info.frame_count > 1:
+            for frame in marks:
+                tick_x = self.timeline_rect.left + round(
+                    frame / (self.current_info.frame_count - 1) * self.timeline_rect.width
+                )
+                pygame.draw.line(
+                    self.screen,
+                    (235, 70, 70),
+                    (tick_x, self.timeline_rect.top - 4),
+                    (tick_x, self.timeline_rect.bottom + 3),
+                    2,
+                )
         pygame.draw.circle(
             self.screen,
             (250, 252, 255),
@@ -1697,8 +1932,7 @@ class PygameSyncPlayer:
             x += width + 7
 
         hint = self.tiny_font.render(
-            "Space play | hold Left/Right 1 | Up/Down or -/+ 60 | [/] speed | "
-            "wheel zoom, drag pan, 0 reset",
+            "Space play | hold arrows step | [/] speed | wheel zoom, drag pan, 0 reset | D repeat",
             True,
             (174, 188, 202),
         )
@@ -1830,7 +2064,9 @@ class PygameSyncPlayer:
             prefix = f"{index + 1}. "
             if info.name == reference_name:
                 prefix += "[REF] "
-            label = self._fit_label(prefix + info.name, self.tiny_font, name_width - 10)
+            marked = len(self.removed_frames[info.name])
+            suffix = f" (-{marked})" if marked else ""
+            label = self._fit_label(prefix + info.name + suffix, self.tiny_font, name_width - 10)
             self.screen.blit(
                 self.tiny_font.render(label, True, (235, 239, 243)),
                 (row_rect.x + 6, row_rect.y + 11),
@@ -1863,19 +2099,22 @@ class PygameSyncPlayer:
             32,
         )
         load_rect = pygame.Rect(x, actions_top + 86, content_width, 32)
-        repeat_rect = pygame.Rect(x, actions_top + 129, content_width, 32)
+        detect_rect = pygame.Rect(x, actions_top + 129, first_width, 32)
+        write_rect = pygame.Rect(x + first_width + gap, actions_top + 129, first_width, 32)
         self.button_rects["side:save"] = save_rect
         self.button_rects["side:save_cutvideo"] = save_cut_rect
         self.button_rects["side:help"] = help_rect
         self.button_rects["side:cancel"] = cancel_rect
         self.button_rects["side:load"] = load_rect
-        self.button_rects["side:remove_repeated"] = repeat_rect
+        self.button_rects["side:detect_repeats"] = detect_rect
+        self.button_rects["side:save_without_repeats"] = write_rect
         self._draw_button(save_rect, "Save sync", accent=True)
         self._draw_button(save_cut_rect, "Save + Cut Video", accent=True)
         self._draw_button(help_rect, "Help")
         self._draw_button(cancel_rect, "Cancel")
         self._draw_button(load_rect, "Load / Resume")
-        self._draw_button(repeat_rect, "Remove repeated frames (all videos)")
+        self._draw_button(detect_rect, "Detect repeats")
+        self._draw_button(write_rect, "Save w/o repeats")
 
         footer = self.tiny_font.render(
             "Tab fields | Enter validate | Ctrl+S save | Esc cancel",
@@ -1916,8 +2155,10 @@ class PygameSyncPlayer:
             self._open_help()
         elif action == "side:load":
             self._load_checkpoint()
-        elif action == "side:remove_repeated":
-            self._remove_repeated_frames()
+        elif action == "side:detect_repeats":
+            self._detect_repeated_frames()
+        elif action == "side:save_without_repeats":
+            self._save_without_repeats()
         elif action == "side:cancel":
             self.running = False
 
@@ -1935,6 +2176,8 @@ class PygameSyncPlayer:
             self._start_nav_hold(event.key)
         elif event.key in (pygame.K_0, pygame.K_KP0):
             self._reset_zoom()
+        elif event.key in (pygame.K_d, pygame.K_DELETE):
+            self._toggle_removed_frame()
         elif event.key == pygame.K_RIGHTBRACKET:
             self.playback_speed = step_playback_speed(self.playback_speed, 1)
             self.slow_motion_accumulator = 0.0
@@ -2107,6 +2350,7 @@ class PygameSyncPlayer:
             current_frame=self.current_frame,
             output_file=self.output_file,
             completed=completed,
+            removed_frames=self.removed_frames,
         )
 
     def _apply_checkpoint(self, data: Mapping[str, Any]) -> None:
@@ -2124,6 +2368,11 @@ class PygameSyncPlayer:
             if field is not None:
                 field.text = text
 
+        removed = cast(dict[str, list[int]], data.get("removed_frames", {}))
+        for info in self.video_infos:
+            self.removed_frames[info.name] = {
+                frame - 1 for frame in removed.get(info.name, []) if frame <= info.frame_count
+            }
         self.reference_field.text = cast(str, data["reference"])
         self.start_field.text = cast(str, data["start"])
         self.end_field.text = cast(str, data["end"])
@@ -2170,6 +2419,7 @@ class PygameSyncPlayer:
                 self.reference_field.text,
                 self.start_field.text,
                 self.end_field.text,
+                self.removed_frames,
             )
         except SyncWorkflowError as exc:
             self._set_status(str(exc), error=True)
@@ -2223,12 +2473,17 @@ class PygameSyncPlayer:
         )
         self.running = False
 
-    def _remove_repeated_frames(self) -> None:
-        """Analyze every loaded video and write repeat-free copies of the ones that repeat."""
+    def _repeat_progress(self, phase: str, done: int, total: int) -> None:
+        label = "Analyzing" if phase == "analyze" else "Writing"
+        self._set_status(f"{label} repeated frames: {done}/{total} ...")
+        pygame.event.pump()
+        self._draw()
+
+    def _detect_repeated_frames(self) -> None:
+        """Mark the automatically detected repeats of every video for review."""
         self.playing = False
-        videos = [info.path for info in self.video_infos]
         print(
-            ">> vaila/syncvid: Equivalent CLI (remove repeated frames)\n"
+            ">> vaila/syncvid: Equivalent CLI (detect and remove repeated frames)\n"
             + shlex.join(
                 [
                     "uv",
@@ -2237,33 +2492,54 @@ class PygameSyncPlayer:
                     "vaila/syncvid.py",
                     "--remove-repeated",
                     "-i",
-                    str(videos[0].parent),
+                    str(self.current_info.path.parent),
                 ]
             )
         )
-
-        def progress(phase: str, done: int, total: int) -> None:
-            label = "Analyzing" if phase == "analyze" else "Writing"
-            self._set_status(f"{label} repeated frames: {done}/{total} ...")
-            pygame.event.pump()
-            self._draw()
-
-        progress("analyze", 0, len(videos))
+        parts = []
         try:
-            out_dir, reports = remove_repeated_frames(videos, progress=progress)
-        except (OSError, RuntimeError, SyncWorkflowError) as exc:
-            self._set_status(f"Remove repeated frames failed: {exc}", error=True)
+            for info in self.video_infos:
+                self._repeat_progress("analyze", 0, info.frame_count)
+                report = find_repeated_frames(info.path, self._repeat_progress)
+                self.repeat_reports[info.name] = report
+                self.removed_frames[info.name] |= set(report.repeated_frames)
+                if report.repeated_frames:
+                    parts.append(f"{info.name} {len(report.repeated_frames)}")
+        except (OSError, SyncWorkflowError) as exc:
+            self._set_status(f"Detect repeats failed: {exc}", error=True)
             return
-        repeating = [report for report in reports if report.repeated_frames]
-        if not repeating:
-            self._set_status(f"No repeated frames in {len(reports)} videos. Report: {out_dir}")
+        self._cached_video_surface = None
+        if not parts:
+            self._set_status(f"No repeated frames detected in {len(self.video_infos)} videos.")
+            return
+        self._set_status(
+            f"Marked repeats: {'; '.join(parts)}. Review with D, then Save w/o repeats or Save sync."
+        )
+
+    def _save_without_repeats(self) -> None:
+        """Write repeat-free copies of every video with marked frames."""
+        self.playing = False
+        if not any(self.removed_frames.values()):
+            self._set_status("No frames marked. Use Detect repeats or D on a frame.", error=True)
+            return
+        try:
+            out_dir = save_videos_without_frames(
+                [
+                    (info, self.removed_frames[info.name], self.repeat_reports.get(info.name))
+                    for info in self.video_infos
+                ],
+                progress=self._repeat_progress,
+            )
+        except (OSError, RuntimeError, SyncWorkflowError) as exc:
+            self._set_status(f"Save without repeats failed: {exc}", error=True)
             return
         parts = [
-            f"{report.video.name} {report.total_frames}->{len(report.kept_frames)} "
-            f"(~{report.estimated_fps:.2f} fps)"
-            for report in repeating
+            f"{info.name} {info.frame_count}->{info.frame_count - len(marks)}"
+            for info in self.video_infos
+            if (marks := self.removed_frames[info.name])
         ]
-        self._set_status(f"Fixed {'; '.join(parts)}. Saved in {out_dir}")
+        print(f">> vaila/syncvid: Repeat-free videos saved in {out_dir}")
+        self._set_status(f"Saved {'; '.join(parts)} in {out_dir}")
 
     @staticmethod
     def _open_help() -> None:

@@ -25,8 +25,8 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.4.7</p>
-        <p><strong>Updated:</strong> 04 October 2026</p>
+        <p><strong>Version:</strong> 0.4.10</p>
+        <p><strong>Updated:</strong> 18 October 2026</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -43,6 +43,8 @@
         <h2>Key Updates</h2>
         <p><strong>Shift+S:</strong> save the displayed frame as a full-resolution PNG with video orientation applied, without overlays or zoom cropping, while paused or playing. Saved beside the video in <code>&lt;video_stem&gt;_frames/&lt;video_stem&gt;_frame_00000001.png</code> (1-based). Saving the same frame again replaces its PNG. The window confirms the filename and the terminal prints the path or error. <strong>S</strong> still marks a cut start when paused.</p>
         <ul>
+            <li><strong>Frame-exact cuts when the video starts after the audio (v0.4.10):</strong> ffmpeg counts <code>-ss</code> from the container start, and many MP4s start their first video frame later (22 ms on the 59.94 fps examples), so every cut began one frame early. The seek now adds that delay and aims a tenth of a frame early.</li>
+            <li><strong>Repeated frames from Make Sync (v0.4.10):</strong> a sync row may carry <code>removed_frames</code>. Sync rendering keeps the synchronized cut and also writes <code>&lt;cut&gt;_norepeat_&lt;fps&gt;fps.mp4</code> without those frames, at the real frame rate, plus <code>&lt;cut&gt;_norepeat_frames.csv</code>.</li>
             <li><strong>Fewer confirmations on the syncvid handoff (v0.3.119):</strong> when <strong>syncvid → Save + Cut Video</strong> launches Cut Video directly, Escape no longer asks "Sync mode detected. Process all videos...?" before rendering &mdash; clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (<code>F</code> key) still asks. The redundant "Sync Processing Complete" dialog was also dropped in favor of the final Success dialog.</li>
             <li><strong>Direct syncvid handoff (v0.3.85):</strong> accepts <code>--video</code> + <code>--sync-file</code>, validates every source, and opens with the synchronized interval preloaded.</li>
             <li><strong>Safe sync v2:</strong> versioned TSV plus legacy TXT support; exact matching and traversal/symlink/range rejection.</li>
@@ -113,7 +115,7 @@
         <ul>
             <li><strong>Input videos:</strong> .mp4, .avi, .mov, .mkv.</li>
             <li><strong>Cuts file:</strong> <code>{basename}_cuts.toml</code> (1-based frames, <code>output_file</code> per cut).</li>
-            <li><strong>Sync v2 TXT/TSV:</strong> <code>video_file, output_file, start_frame, end_frame, sync_frame</code> with 1-based inclusive frames; legacy four-field rows remain readable.</li>
+            <li><strong>Sync v2 TXT/TSV:</strong> <code>video_file, output_file, start_frame, end_frame, sync_frame</code> and optional <code>removed_frames</code>, with 1-based inclusive frames; legacy four-field rows remain readable.</li>
             <li><strong>Outputs:</strong>
                 <ul>
                     <li>Folder: <code>{video}_vailacut_{timestamp}</code> (or <code>_sync_vailacut_</code> in sync mode).</li>
@@ -145,7 +147,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 04 October 2026 (v0.4.7; hold arrows and zoom 10×)</p>
+        <p>📅 Last Updated: 18 October 2026 (v0.4.10; frame-exact sync cuts, repeated frames)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

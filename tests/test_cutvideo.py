@@ -345,3 +345,34 @@ def test_batch_sync_reports_success_only_after_every_video(monkeypatch, tmp_path
     }
     assert cutvideo.batch_process_sync_videos(first, data) is True
     assert rendered == [first.name, second.name]
+
+
+def test_ffmpeg_seek_time_adds_video_start_delay_and_stays_before_the_frame():
+    fps = 60000 / 1001
+    # Video starting 22 ms after the container (audio first): frame 10 sits at 0.022 + 10/fps.
+    seek = cutvideo.ffmpeg_seek_time(10, fps, 0.022)
+    assert 0.022 + 9 / fps < seek < 0.022 + 10 / fps
+    assert cutvideo.ffmpeg_seek_time(0, fps) == 0.0
+    assert cutvideo.ffmpeg_seek_time(5, 0.0) == 0.0
+
+
+def test_sync_cut_without_repeats_uses_source_frame_numbers(tmp_path: Path):
+    import cv2
+    import numpy as np
+
+    rng = np.random.default_rng(1)
+    cut = tmp_path / "cam_sync.avi"
+    writer = cv2.VideoWriter(str(cut), cv2.VideoWriter_fourcc(*"MJPG"), 60.0, (96, 64))
+    for _ in range(12):
+        writer.write(rng.integers(0, 255, (64, 96, 3), dtype=np.uint8))
+    writer.release()
+
+    sync_info = {"removed_frames": (95, 103, 105, 120)}  # 95 and 120 are outside 100..111
+    corrected = cutvideo._write_sync_cut_without_repeats(cut, tmp_path, 100, 111, sync_info)
+    assert corrected is not None
+    assert syncvid.probe_video(corrected).frame_count == 10
+    rows = (tmp_path / "cam_sync_norepeat_frames.csv").read_text().splitlines()
+    assert [row.split(",")[1] for row in rows[1:5]] == ["101", "102", "103", "105"]
+
+    # A cut whose length does not match its range is left alone.
+    assert cutvideo._write_sync_cut_without_repeats(cut, tmp_path, 100, 150, sync_info) is None

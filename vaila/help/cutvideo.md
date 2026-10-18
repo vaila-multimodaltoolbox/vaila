@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.4.7
+- **Version:** 0.4.10
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -15,6 +15,8 @@
 Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with inclusive frame counts and high-resolution timestamps (.6f).
 
 ### Key Updates
+- **Frame-exact cuts when the video starts after the audio (v0.4.10):** ffmpeg counts `-ss` from the container start, and many MP4s start their first video frame later (22 ms on the 59.94 fps examples), so every cut began one frame early. The seek now adds that delay and aims a tenth of a frame early; checked frame by frame on 59.94 fps and 22.96 fps videos.
+- **Repeated frames from Make Sync (v0.4.10):** a sync row may carry `removed_frames` (frames marked as repeated in syncvid). Sync rendering keeps the synchronized cut unchanged and also writes `<cut>_norepeat_<fps>fps.mp4` without those frames, at the real frame rate, plus `<cut>_norepeat_frames.csv` (new frame → source frame).
 - **Fewer confirmations on the syncvid handoff (v0.3.119):** when `syncvid`'s **Save + Cut Video** launches Cut Video directly (`--sync-file`), Escape no longer asks *"Sync mode detected. Process all videos...?"* before rendering — clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (**F** key) still asks, since the user may only be reviewing an old file. The follow-up "Sync Processing Complete" dialog was also dropped as redundant with the final Success dialog.
 - **Direct Sync Video handoff (v0.3.85):** `syncvid` launches Cut Video with `--video` and `--sync-file`; the reference and exact sync interval are preloaded without reopening either chooser.
 - **Safe sync v2:** strict versioned TSV parser with legacy TXT compatibility, exact filename/unique-stem matching, 1-based file ↔ 0-based internal conversion, atomic writes, and traversal/symlink/range validation.
@@ -94,7 +96,7 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Cuts file:** `{basename}_cuts.toml`
   - Metadata: `video_name`, `fps` (.6f), `created`, `source_file` (POSIX), `output_dir` (POSIX).
   - Cuts (1-based): `index`, `start_frame`, `end_frame`, `frame_count`, `start_time`, `end_time`, `duration` (= `frame_count/fps`), `output_file`, `output_dir` (POSIX).
-- **Sync file v2 (TXT/TSV):** header plus `video_file`, `output_file`, `start_frame`, `end_frame`, `sync_frame`; frames are 1-based and inclusive. Legacy four-field whitespace rows remain supported.
+- **Sync file v2 (TXT/TSV):** header plus `video_file`, `output_file`, `start_frame`, `end_frame`, `sync_frame`, and optionally `removed_frames` (space-separated source frames inside the range); frames are 1-based and inclusive. Legacy four-field whitespace rows remain supported.
 - **Outputs:**
   - Folder (single): `{video}_vailacut_{timestamp}` (or `{video}_sync_vailacut_{timestamp}` when using sync).
   - Folder (batch): `vailacut_{prefix}{source}_batch_{timestamp}`.
@@ -121,7 +123,7 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 04 October 2026
+📅 **Last Updated:** 18 October 2026
 🔗 **Part of vailá - Multimodal Toolbox**
 
 ### Save current frame as PNG

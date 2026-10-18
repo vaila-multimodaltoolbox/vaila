@@ -516,7 +516,11 @@ def test_cutvideo_handoff_uses_argument_list_without_shell(monkeypatch, tmp_path
 
 
 def _write_video_with_repeats(path: Path, unique: int, repeat_after: set[int]) -> int:
-    """Write a noisy moving-square video; frames listed in repeat_after are shown twice."""
+    """Write a noisy moving-square video; frames in repeat_after get one re-encoded copy.
+
+    The copy adds grey-level noise, as an editor's H.264 re-encode does, so it is
+    not pixel-identical to the frame it repeats.
+    """
     import cv2
     import numpy as np
 
@@ -526,11 +530,27 @@ def _write_video_with_repeats(path: Path, unique: int, repeat_after: set[int]) -
     for index in range(unique):
         frame = rng.integers(0, 255, (120, 160, 3), dtype=np.uint8)
         cv2.rectangle(frame, (index * 3, 20), (index * 3 + 30, 60), (255, 255, 255), -1)
-        for _ in range(2 if index in repeat_after else 1):
-            writer.write(frame)
+        writer.write(frame)
+        written += 1
+        if index in repeat_after:
+            noise = rng.normal(0.0, 6.0, frame.shape)
+            writer.write(np.clip(frame + noise, 0, 255).astype(np.uint8))
             written += 1
     writer.release()
     return written
+
+
+def test_repeat_threshold_cuts_at_noise_motion_gap() -> None:
+    # Scores measured on the real cobrador.mp4: copies <= 16.5, motion >= 40.2.
+    copies = [0.2, 0.6, 3.0, 8.9, 16.5]
+    motion = [40.2, 61.4, 95.8, 133.7]
+    threshold, ratio = syncvid.repeat_threshold(copies + motion)
+    assert threshold == 16.5
+    assert ratio == pytest.approx(40.2 / 16.5)
+
+    # A video without repeats (cabine1.mp4 range) has no wide gap: only invisible changes repeat.
+    continuous = [11.3, 12.4, 13.7, 15.1, 16.9, 18.9, 21.1, 23.7, 26.3, 29.2]
+    assert syncvid.repeat_threshold([*continuous, 0.4])[0] == syncvid.REPEAT_INVISIBLE_SCORE
 
 
 def test_remove_repeated_frames_drops_only_the_copies(tmp_path: Path) -> None:
@@ -540,16 +560,21 @@ def test_remove_repeated_frames_drops_only_the_copies(tmp_path: Path) -> None:
     assert report.total_frames == total == 23
     # copies sit right after frames 3, 9 and 10 (0-based in the written stream: 4, 11, 13)
     assert report.repeated_frames == (4, 11, 13)
+    assert report.threshold > syncvid.REPEAT_INVISIBLE_SCORE
     assert len(report.kept_frames) == 20
     assert report.estimated_fps == pytest.approx(60.0 * 20 / 23)
 
     out_dir, reports = syncvid.remove_repeated_frames([video], tmp_path / "out")
     assert [r.video for r in reports] == [video.resolve()]
-    output = out_dir / "spliced_norepeat.mp4"
-    assert syncvid.find_repeated_frames(output).total_frames == 20
+    output = out_dir / f"spliced_norepeat_{60.0 * 20 / 23:.2f}fps.mp4"
+    out_report = syncvid.find_repeated_frames(output)
+    assert out_report.total_frames == 20
+    assert out_report.fps == pytest.approx(60.0 * 20 / 23, rel=1e-3)
     rows = (out_dir / "spliced_norepeat_frames.csv").read_text().splitlines()
     assert rows[0] == "new_frame,original_frame,original_time_s"
     assert rows[5].split(",")[:2] == ["5", "6"]
+    scores = (out_dir / "spliced_motion_scores.csv").read_text().splitlines()
+    assert scores[5].split(",")[2] == "1"
     summary = (out_dir / "norepeat_summary.csv").read_text().splitlines()
     assert summary[1].split(",")[:4] == ["spliced.avi", "23", "20", "3"]
 
@@ -559,7 +584,7 @@ def test_remove_repeated_frames_leaves_clean_video_unwritten(tmp_path: Path) -> 
     _write_video_with_repeats(video, 12, set())
     out_dir, reports = syncvid.remove_repeated_frames([video], tmp_path / "out")
     assert reports[0].repeated_frames == ()
-    assert not (out_dir / "clean_norepeat.mp4").exists()
+    assert not list(out_dir.glob("clean_norepeat*.mp4"))
 
 
 def test_pygame_player_held_arrow_starts_repeat_and_zero_resets_zoom() -> None:
@@ -579,3 +604,93 @@ def test_pygame_player_held_arrow_starts_repeat_and_zero_resets_zoom() -> None:
     zero = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_0, mod=0, unicode="0")
     player._handle_player_key(zero)
     assert (player.zoom_level, player.offset_x, player.offset_y) == (1.0, 0.0, 0.0)
+
+
+def test_sync_file_round_trips_removed_frames_inside_range(tmp_path: Path) -> None:
+    infos = [_video_info(tmp_path / "a.mp4", 200), _video_info(tmp_path / "b.mp4", 200)]
+    _reference, entries = syncvid.build_sync_plan_from_fields(
+        infos,
+        {"a.mp4": "11", "b.mp4": "21"},
+        "a",
+        "11",
+        "60",
+        {"b.mp4": {5, 25, 30, 199}},  # 5 and 199 fall outside b's range 21..70
+    )
+    assert entries[0].removed_frames == ()
+    assert entries[1].removed_frames == (25, 30)
+
+    sync = syncvid.write_sync_file(entries, tmp_path / "sync.txt")
+    text = sync.read_text()
+    assert "\tremoved_frames\n" in text
+    assert text.splitlines()[-1].endswith("\t26 31")
+    assert syncvid.read_sync_file(sync) == entries
+    data = syncvid.sync_entries_to_cutvideo_data(entries)
+    assert data["b.mp4"]["removed_frames"] == (25, 30)
+
+    # Without marks the file keeps the five classic columns.
+    plain = syncvid.write_sync_file(
+        syncvid.build_sync_plan_from_fields(infos, {"a.mp4": "1", "b.mp4": "1"}, "a", "1", "9")[1],
+        tmp_path / "plain.txt",
+    )
+    assert "removed_frames" not in plain.read_text()
+
+
+@pytest.mark.parametrize("removed", ["5", "12 12", "x"])
+def test_read_sync_file_rejects_bad_removed_frames(tmp_path: Path, removed: str) -> None:
+    sync = tmp_path / "sync.txt"
+    sync.write_text(
+        "video_file\toutput_file\tstart_frame\tend_frame\tsync_frame\tremoved_frames\n"
+        f"a.mp4\ta_out.mp4\t10\t20\t10\t{removed}\n"
+    )
+    with pytest.raises(syncvid.SyncFileError):
+        syncvid.read_sync_file(sync)
+
+
+def test_checkpoint_round_trips_removed_frames(tmp_path: Path) -> None:
+    state = syncvid.build_checkpoint_state(
+        reference="a.mp4",
+        start="1",
+        end="9",
+        sync_frames={"a.mp4": "1"},
+        current_video="a.mp4",
+        current_frame=0,
+        output_file=None,
+        completed=False,
+        removed_frames={"a.mp4": {4, 2}, "b.mp4": set()},
+    )
+    assert state["removed_frames"] == {"a.mp4": [3, 5]}
+    path = syncvid.write_checkpoint_file(state, tmp_path / "c.json")
+    assert syncvid.read_checkpoint_file(path)["removed_frames"] == {"a.mp4": [3, 5]}
+
+    state["removed_frames"] = {"a.mp4": [0]}
+    syncvid.write_checkpoint_file(state, path)
+    with pytest.raises(syncvid.SyncFileError):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_pygame_player_d_toggles_the_current_frame_mark(tmp_path: Path) -> None:
+    pygame = syncvid.pygame
+    player = object.__new__(syncvid.PygameSyncPlayer)
+    player.video_infos = [_video_info(tmp_path / "a.mp4", 50)]
+    player.current_index = 0
+    player.current_frame = 7
+    player.playing = False
+    player.removed_frames = {"a.mp4": set()}
+
+    key_d = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d, mod=0, unicode="d")
+    player._handle_player_key(key_d)
+    assert player.removed_frames["a.mp4"] == {7}
+    delete = pygame.event.Event(pygame.KEYDOWN, key=pygame.K_DELETE, mod=0, unicode="")
+    player._handle_player_key(delete)
+    assert player.removed_frames["a.mp4"] == set()
+
+
+def test_write_video_without_frames_maps_cut_frames_to_source(tmp_path: Path) -> None:
+    cut = tmp_path / "cut.avi"
+    _write_video_with_repeats(cut, 20, {3, 9, 10})  # copies at 4, 11, 13
+    info = syncvid.probe_video(cut)
+    output = syncvid.write_video_without_frames(info, {4, 11, 13}, tmp_path, frame_offset=100)
+    assert syncvid.find_repeated_frames(output).total_frames == 20
+    rows = (tmp_path / "cut_norepeat_frames.csv").read_text().splitlines()
+    # new frame 5 is cut frame 5 (0-based), i.e. source frame 106 (1-based)
+    assert rows[5].split(",")[:2] == ["5", "106"]
