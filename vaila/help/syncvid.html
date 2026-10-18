@@ -21,7 +21,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.3.120 · <strong>Updated:</strong> 2026-09-03<br>
+<strong>Version:</strong> 0.4.10 · <strong>Updated:</strong> 2026-10-18<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
@@ -58,19 +58,34 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <table>
 <tr><th>Control</th><th>Action</th></tr>
 <tr><td>Space</td><td>Play/pause</td></tr>
-<tr><td>Left / Right</td><td>Previous/next frame while paused</td></tr>
-<tr><td>Down or <code>-</code></td><td>60 frames backward</td></tr>
-<tr><td>Up or <code>+</code></td><td>60 frames forward</td></tr>
+<tr><td>Left / Right</td><td>Previous/next frame while paused; hold to keep stepping</td></tr>
+<tr><td>Down or <code>-</code></td><td>60 frames backward (repeats while held)</td></tr>
+<tr><td>Up or <code>+</code></td><td>60 frames forward (repeats while held)</td></tr>
 <tr><td><code>[</code> / <code>]</code></td><td>Playback speed from 0.0625× through 16×</td></tr>
 <tr><td>Home / End</td><td>First/last frame</td></tr>
 <tr><td>Page Up / Page Down</td><td>Previous/next camera</td></tr>
 <tr><td>Timeline click/drag</td><td>Seek directly</td></tr>
+<tr><td>Mouse wheel over the video</td><td>Zoom in/out at the cursor (1× to 10×)</td></tr>
+<tr><td>Middle-button drag, or left drag when zoomed</td><td>Pan the zoomed video</td></tr>
+<tr><td><code>0</code></td><td>Reset zoom</td></tr>
 <tr><td>Tab / Shift+Tab</td><td>Next/previous field</td></tr>
 <tr><td>Enter</td><td>Validate the active field and seek to a typed sync frame</td></tr>
 <tr><td>Ctrl+S</td><td>Save the synchronization file</td></tr>
 <tr><td>Escape</td><td>Leave a field, then cancel</td></tr>
 </table>
 <p>The player buttons use the traditional ASCII labels <strong>-60</strong>, <strong>-1</strong>, <strong>+1</strong> and <strong>+60</strong>. Consecutive frames are decoded sequentially and paused frames are cached for fluid 120-fps navigation.</p>
+
+<h2>Remove repeated frames</h2>
+<p>Videos edited for YouTube or a broadcast often splice several cameras into one timeline. When a camera ran slower than the timeline, the editor repeats some of its frames: the file claims 59.94 fps but holds fewer real images.</p>
+<p><strong>Remove repeated frames (all videos)</strong> compares every frame with the previous one, pixel by pixel, in grey levels. A frame is a repeat when at most 200 pixels (or 0.01 % of the image, if larger) change by more than 8 grey levels. On the 1080p examples, repeats changed at most ~50 pixels and real frames at least ~24 000.</p>
+<p>Each video that repeats frames gets a copy in <code>processed_norepeat_&lt;timestamp&gt;/</code>, next to the videos:</p>
+<table>
+<tr><th>File</th><th>Content</th></tr>
+<tr><td><code>&lt;name&gt;_norepeat.mp4</code></td><td>H.264, distinct frames only; frame rate = estimated real rate, so the duration is kept; no audio</td></tr>
+<tr><td><code>&lt;name&gt;_norepeat_frames.csv</code></td><td><code>new_frame</code>, <code>original_frame</code> (1-based), <code>original_time_s</code></td></tr>
+<tr><td><code>norepeat_summary.csv</code></td><td>Every video: frames, unique, repeated, fps, estimated real fps, repeated frame numbers</td></tr>
+</table>
+<p>Estimated real fps = fps × unique / total frames (example: 141 frames at 59.94 fps with 40 repeats gives about 42.94 fps). Videos without repeats are listed but not rewritten. A truly static shot would also look like repeats; check the summary.</p>
 
 <h2>Versioned sync format</h2>
 <pre># vaila sync file v2
@@ -86,8 +101,9 @@ camera 01.mp4 camera_01_sync.mp4 901 1101 1001</pre>
 <h2>CLI</h2>
 <pre>uv run vaila/syncvid.py -i /path/to/cameras
 uv run vaila/syncvid.py -i /path/to/cameras -o /path/to/session_sync.txt
-uv run vaila/syncvid.py -i /path/to/cameras --dry-run</pre>
+uv run vaila/syncvid.py -i /path/to/cameras --dry-run
+uv run vaila/syncvid.py -i /path/to/cameras --remove-repeated</pre>
 
 <div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
-<div class="footer">Part of vailá — Multimodal Toolbox · Updated 3 September 2026 (v0.3.120)</div>
+<div class="footer">Part of vailá — Multimodal Toolbox · Updated 18 October 2026 (v0.4.10)</div>
 </div></body></html>

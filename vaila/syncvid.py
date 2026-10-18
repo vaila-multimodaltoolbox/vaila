@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 18 October 2026
+Version: 0.4.10
 
 Description:
 Create a frame-accurate synchronization plan with a fast Pygame player. Every
@@ -18,6 +18,14 @@ reference start/end are entered directly in editable on-screen fields.
 The versioned TSV sync file is consumed directly by ``vaila.cutvideo``. The
 ``Save + Open Cut Video`` button launches Cut Video with both the reference
 video and the generated sync file already selected.
+
+Holding Left/Right (or Up/Down) keeps stepping frame by frame, as in
+getpixelvideo. The mouse wheel zooms at the cursor; drag pans; ``0`` resets.
+
+``Remove repeated frames`` finds frames an editor repeated when it spliced
+several cameras into one timeline (each repeat differs from the previous
+frame only by codec noise) and writes repeat-free copies, a frame map and the
+estimated real frame rate to ``processed_norepeat_<timestamp>/``.
 
 Frame convention:
 - GUI and sync file: 1-based, inclusive.
@@ -41,13 +49,14 @@ import sys
 import tempfile
 import tkinter as tk
 import webbrowser
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tkinter import filedialog, messagebox
 from typing import Any, cast
 
 import cv2
+import numpy as np
 import pygame
 from rich import print
 
@@ -148,6 +157,21 @@ PLAYBACK_SPEED_STEPS: tuple[float, ...] = (
     8.0,
     16.0,
 )
+# Held navigation keys repeat like Cut Video / getpixelvideo (values from
+# vaila.cutvideo, imported lazily because cutvideo imports this module).
+PLAYER_NAV_KEYS: dict[int, int] = {
+    pygame.K_RIGHT: 1,
+    pygame.K_LEFT: -1,
+    pygame.K_UP: 60,
+    pygame.K_EQUALS: 60,
+    pygame.K_KP_PLUS: 60,
+    getattr(pygame, "K_PLUS", pygame.K_EQUALS): 60,
+    pygame.K_DOWN: -60,
+    pygame.K_MINUS: -60,
+    pygame.K_KP_MINUS: -60,
+}
+PLAYER_ZOOM_MAX = 10.0
+PLAYER_ZOOM_STEP = 1.1
 PLAYER_STEP_BUTTONS: tuple[tuple[str, int], ...] = (
     ("-60", -60),
     ("-1", -1),
@@ -803,6 +827,258 @@ def launch_cutvideo(reference_video: str | Path, sync_file: str | Path) -> subpr
     return subprocess.Popen(command, **kwargs)
 
 
+# Repeated-frame detection. Editors that splice several cameras into one
+# timeline repeat a source frame whenever the camera rate is lower than the
+# timeline rate. A repeated frame differs from the previous one only by codec
+# noise: on the real 1080p examples at most ~50 pixels change by more than 8
+# grey levels, while consecutive real frames change at least ~24 000 pixels.
+REPEAT_PIXEL_DIFF = 8
+REPEAT_MIN_CHANGED_PIXELS = 200
+REPEAT_MAX_CHANGED_FRACTION = 1e-4
+
+ProgressCallback = Callable[[str, int, int], None]
+
+
+@dataclass(frozen=True)
+class RepeatedFrameReport:
+    """Repeated-frame analysis of one video (0-based frame indices)."""
+
+    video: Path
+    fps: float
+    width: int
+    height: int
+    total_frames: int
+    kept_frames: tuple[int, ...]
+
+    @property
+    def repeated_frames(self) -> tuple[int, ...]:
+        kept = set(self.kept_frames)
+        return tuple(index for index in range(self.total_frames) if index not in kept)
+
+    @property
+    def estimated_fps(self) -> float:
+        """Rate of distinct frames over the same duration (fps x unique / total)."""
+        if self.total_frames <= 0:
+            return self.fps
+        return self.fps * len(self.kept_frames) / self.total_frames
+
+
+def frame_is_repeat(previous_gray: Any, gray: Any) -> bool:
+    """True when ``gray`` repeats ``previous_gray`` apart from codec noise."""
+    changed = int(np.count_nonzero(cv2.absdiff(previous_gray, gray) > REPEAT_PIXEL_DIFF))
+    limit = max(REPEAT_MIN_CHANGED_PIXELS, int(gray.size * REPEAT_MAX_CHANGED_FRACTION))
+    return changed <= limit
+
+
+def find_repeated_frames(
+    video_path: str | Path, progress: ProgressCallback | None = None
+) -> RepeatedFrameReport:
+    """Decode every frame and keep each one that differs from the previous frame."""
+    info = probe_video(video_path)
+    cap = cv2.VideoCapture(str(info.path))
+    kept: list[int] = []
+    previous = None
+    index = 0
+    try:
+        while True:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            if previous is None or not frame_is_repeat(previous, gray):
+                kept.append(index)
+            previous = gray
+            index += 1
+            if progress is not None and index % 30 == 0:
+                progress("analyze", index, info.frame_count)
+    finally:
+        cap.release()
+    if index == 0:
+        raise SyncWorkflowError(f"OpenCV could not decode any frame: {info.path}")
+    return RepeatedFrameReport(
+        video=info.path,
+        fps=info.fps,
+        width=info.width,
+        height=info.height,
+        total_frames=index,
+        kept_frames=tuple(kept),
+    )
+
+
+def _encode_kept_frames(
+    report: RepeatedFrameReport,
+    output_video: Path,
+    encoder: str,
+    progress: ProgressCallback | None,
+) -> None:
+    """Pipe the kept frames as raw BGR into one FFmpeg H.264 encode."""
+    try:
+        from .ffmpeg_utils import get_ffmpeg_video_encoding_args, get_video_encode_ffmpeg_path
+    except ImportError:
+        from ffmpeg_utils import (  # ty: ignore[unresolved-import]
+            get_ffmpeg_video_encoding_args,
+            get_video_encode_ffmpeg_path,
+        )
+
+    command = [
+        get_video_encode_ffmpeg_path(encoder),
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "bgr24",
+        "-s",
+        f"{report.width}x{report.height}",
+        "-framerate",
+        f"{report.estimated_fps:.6f}",
+        "-i",
+        "-",
+    ]
+    if report.width % 2 or report.height % 2:
+        command += ["-vf", "crop=trunc(iw/2)*2:trunc(ih/2)*2"]
+    command += [*get_ffmpeg_video_encoding_args(encoder), "-movflags", "+faststart"]
+    command.append(str(output_video))
+
+    kept = set(report.kept_frames)
+    written = 0
+    cap = cv2.VideoCapture(str(report.video))
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdin = cast(io.BufferedWriter, process.stdin)
+    try:
+        index = 0
+        while True:
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                break
+            if index in kept:
+                stdin.write(frame.tobytes())
+                written += 1
+                if progress is not None and written % 30 == 0:
+                    progress("encode", written, len(report.kept_frames))
+            index += 1
+    except BrokenPipeError:
+        pass
+    finally:
+        cap.release()
+        with contextlib.suppress(BrokenPipeError):
+            stdin.close()
+        stderr = process.stderr.read().decode(errors="replace") if process.stderr else ""
+        process.wait()
+    if process.returncode != 0 or written != len(report.kept_frames):
+        raise RuntimeError(
+            f"FFmpeg {encoder} encode failed (exit {process.returncode}, "
+            f"{written}/{len(report.kept_frames)} frames): {stderr.strip()[-400:]}"
+        )
+
+
+def write_video_without_repeats(
+    report: RepeatedFrameReport,
+    output_dir: str | Path,
+    progress: ProgressCallback | None = None,
+) -> Path:
+    """Write ``<stem>_norepeat.mp4`` and its frame map; return the video path.
+
+    The output keeps the original duration: its frame rate is the estimated
+    real rate (fps x unique / total). Audio is not copied. The CSV maps every
+    new frame to its original frame (both 1-based) and original time.
+    """
+    try:
+        from .ffmpeg_utils import encoders_with_cpu_fallback, is_hardware_video_encoder
+    except ImportError:
+        from ffmpeg_utils import (  # ty: ignore[unresolved-import]
+            encoders_with_cpu_fallback,
+            is_hardware_video_encoder,
+        )
+
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = report.video.stem
+    output_video = out_dir / f"{stem}_norepeat.mp4"
+    for encoder in encoders_with_cpu_fallback():
+        try:
+            _encode_kept_frames(report, output_video, encoder, progress)
+            break
+        except RuntimeError as exc:
+            if not is_hardware_video_encoder(encoder):
+                raise
+            print(f"[yellow]{exc}; retrying with CPU encoder[/]")
+
+    with open(out_dir / f"{stem}_norepeat_frames.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["new_frame", "original_frame", "original_time_s"])
+        for new_index, original in enumerate(report.kept_frames):
+            writer.writerow([new_index + 1, original + 1, f"{original / report.fps:.6f}"])
+    return output_video
+
+
+def remove_repeated_frames(
+    videos: Sequence[str | Path],
+    output_dir: str | Path | None = None,
+    progress: ProgressCallback | None = None,
+) -> tuple[Path, list[RepeatedFrameReport]]:
+    """Analyze every video; write a repeat-free copy of those that repeat frames.
+
+    Results go to ``processed_norepeat_<timestamp>/`` next to the first video
+    (or ``output_dir``), with ``norepeat_summary.csv`` for every video.
+    """
+    if not videos:
+        raise SyncWorkflowError("No videos were given for repeated-frame removal")
+    if output_dir is None:
+        timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_dir = Path(videos[0]).expanduser().resolve().parent / (
+            f"processed_norepeat_{timestamp}"
+        )
+    out_dir = Path(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    reports: list[RepeatedFrameReport] = []
+    rows: list[list[Any]] = []
+    for video in videos:
+        report = find_repeated_frames(video, progress)
+        reports.append(report)
+        repeated = report.repeated_frames
+        output_name = ""
+        if repeated:
+            output_name = write_video_without_repeats(report, out_dir, progress).name
+        rows.append(
+            [
+                report.video.name,
+                report.total_frames,
+                len(report.kept_frames),
+                len(repeated),
+                f"{report.fps:.6f}",
+                f"{report.estimated_fps:.6f}",
+                " ".join(str(index + 1) for index in repeated),
+                output_name,
+            ]
+        )
+        print(
+            f"  {report.video.name}: {report.total_frames} frames, {len(repeated)} repeated, "
+            f"{len(report.kept_frames)} unique, real fps ~{report.estimated_fps:.3f}"
+            + (f" -> {output_name}" if output_name else " (no repeats, not rewritten)")
+        )
+
+    with open(out_dir / "norepeat_summary.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            [
+                "video",
+                "frames",
+                "unique_frames",
+                "repeated_frames",
+                "fps",
+                "estimated_real_fps",
+                "repeated_frame_numbers",
+                "output_video",
+            ]
+        )
+        writer.writerows(rows)
+    return out_dir, reports
+
+
 class PygameTextField:
     """Small editable text field rendered directly in the Pygame window."""
 
@@ -913,8 +1189,8 @@ class PygameSyncPlayer:
     CONTROL_HEIGHT = 146
     ROW_HEIGHT = 40
     # Reserved height (px) at the bottom of the side panel for the status
-    # line, the three action-button rows, and the footer hint.
-    ACTIONS_AREA_HEIGHT = 179
+    # line, the four action-button rows, and the footer hint.
+    ACTIONS_AREA_HEIGHT = 222
 
     def __init__(
         self,
@@ -979,11 +1255,19 @@ class PygameSyncPlayer:
         self.visible_fields: list[PygameTextField] = []
         self.timeline_rect = pygame.Rect(0, 0, 1, 1)
         self._cached_video_surface: pygame.Surface | None = None
-        self._cached_video_key: tuple[int, int, int] | None = None
+        self._cached_video_key: tuple[Any, ...] | None = None
+        self._video_dest = pygame.Rect(0, 0, 1, 1)
+        self.zoom_level = 1.0
+        self.offset_x = 0.0
+        self.offset_y = 0.0
+        self.panning = False
+        self.nav_hold_key: int | None = None
+        self.nav_hold_started_ms = 0
+        self.nav_hold_last_ms = 0
 
         pygame.display.set_caption(
-            "vailá Sync | Space Play/Pause | Left/Right 1 frame | "
-            "Up/Down or -/+ 60 frames | [/] Speed | PgUp/PgDn Video"
+            "vailá Sync | Space Play/Pause | hold Left/Right 1 frame | "
+            "Up/Down or -/+ 60 frames | wheel zoom, 0 reset | [/] Speed | PgUp/PgDn Video"
         )
         icon_path = Path(__file__).resolve().parent / "images" / "vaila_ico_mac.png"
         if icon_path.is_file():
@@ -1010,6 +1294,7 @@ class PygameSyncPlayer:
         self.playing = False
         self._release_capture()
         self.current_index = max(0, min(int(index), len(self.video_infos) - 1))
+        self._reset_zoom()
         info = self.current_info
         self.capture = cv2.VideoCapture(str(info.path))
         if not self.capture.isOpened():
@@ -1038,7 +1323,90 @@ class PygameSyncPlayer:
     def _seek_relative(self, delta: int) -> None:
         self.playing = False
         target = frame_after_navigation(self.current_frame, self.current_info.frame_count, delta)
+        if (
+            target == self.current_frame + 1
+            and self.capture is not None
+            and int(self.capture.get(cv2.CAP_PROP_POS_FRAMES)) == target
+        ):
+            # Next frame: a sequential read avoids a keyframe seek while held.
+            ok, frame = self.capture.read()
+            if ok and frame is not None:
+                self.current_frame = target
+                self.positions[self.current_info.name] = target
+                self.frame = frame
+                self._cached_video_surface = None
+                self._cached_video_key = None
+                return
         self._decode_at(target)
+
+    def _start_nav_hold(self, key: int) -> None:
+        """Step once now; ``_tick_nav_hold`` repeats while the key stays down."""
+        self._seek_relative(PLAYER_NAV_KEYS[key])
+        self.nav_hold_key = key
+        self.nav_hold_started_ms = pygame.time.get_ticks()
+        self.nav_hold_last_ms = self.nav_hold_started_ms
+
+    def _tick_nav_hold(self) -> None:
+        if self.nav_hold_key is None:
+            return
+        if (
+            self.playing
+            or self.active_field is not None
+            or not pygame.key.get_pressed()[self.nav_hold_key]
+        ):
+            self.nav_hold_key = None
+            return
+        try:
+            from .cutvideo import nav_hold_should_step
+        except ImportError:
+            from cutvideo import nav_hold_should_step  # ty: ignore[unresolved-import]
+
+        now_ms = pygame.time.get_ticks()
+        delta = PLAYER_NAV_KEYS[self.nav_hold_key]
+        if nav_hold_should_step(
+            now_ms, self.nav_hold_started_ms, self.nav_hold_last_ms, vertical=abs(delta) > 1
+        ):
+            self._seek_relative(delta)
+            self.nav_hold_last_ms = now_ms
+
+    def _reset_zoom(self) -> None:
+        self.zoom_level = 1.0
+        self.offset_x = 0.0
+        self.offset_y = 0.0
+        self._cached_video_surface = None
+        self._cached_video_key = None
+
+    def _zoomed_size(self, viewport: pygame.Rect) -> tuple[float, int, int]:
+        """Effective scale and zoomed frame size for the current zoom level."""
+        height, width = self.frame.shape[:2]
+        effective = min(viewport.width / width, viewport.height / height) * self.zoom_level
+        return effective, max(1, round(width * effective)), max(1, round(height * effective))
+
+    def _clamp_pan(self, viewport: pygame.Rect) -> None:
+        if self.frame is None:
+            return
+        _effective, zoomed_w, zoomed_h = self._zoomed_size(viewport)
+        self.offset_x = max(0.0, min(float(max(0, zoomed_w - viewport.width)), self.offset_x))
+        self.offset_y = max(0.0, min(float(max(0, zoomed_h - viewport.height)), self.offset_y))
+
+    def _zoom_at(self, pos: tuple[int, int], factor: float) -> None:
+        """Zoom by ``factor`` keeping the frame point under ``pos`` in place."""
+        if self.frame is None:
+            return
+        viewport = self._video_viewport()
+        old_effective, _w, _h = self._zoomed_size(viewport)
+        zoom = max(1.0, min(PLAYER_ZOOM_MAX, self.zoom_level * factor))
+        if zoom == self.zoom_level:
+            return
+        source_x = (pos[0] - self._video_dest.x + self.offset_x) / old_effective
+        source_y = (pos[1] - self._video_dest.y + self.offset_y) / old_effective
+        self.zoom_level = zoom
+        new_effective, zoomed_w, zoomed_h = self._zoomed_size(viewport)
+        dest_x = viewport.x + max(0, (viewport.width - zoomed_w) // 2)
+        dest_y = viewport.y + max(0, (viewport.height - zoomed_h) // 2)
+        self.offset_x = source_x * new_effective - (pos[0] - dest_x)
+        self.offset_y = source_y * new_effective - (pos[1] - dest_y)
+        self._clamp_pan(viewport)
 
     def _advance_playback(self) -> None:
         if not self.playing or self.capture is None:
@@ -1167,17 +1535,38 @@ class PygameSyncPlayer:
     def _get_video_surface(self, viewport: pygame.Rect) -> pygame.Surface | None:
         if self.frame is None:
             return None
-        key = (self.current_frame, viewport.width, viewport.height)
+        try:
+            from .cutvideo import visible_source_rect
+        except ImportError:
+            from cutvideo import visible_source_rect  # ty: ignore[unresolved-import]
+
+        self._clamp_pan(viewport)
+        key = (
+            self.current_frame,
+            viewport.width,
+            viewport.height,
+            self.zoom_level,
+            int(self.offset_x),
+            int(self.offset_y),
+        )
         if self._cached_video_surface is not None and self._cached_video_key == key:
             return self._cached_video_surface
         height, width = self.frame.shape[:2]
-        scale = min(viewport.width / width, viewport.height / height)
-        scaled_width = max(1, int(width * scale))
-        scaled_height = max(1, int(height * scale))
+        # Resize only the visible crop, so a 10x zoom never builds a huge frame.
+        x0, y0, x1, y1, dest_w, dest_h = visible_source_rect(
+            width,
+            height,
+            viewport.width,
+            viewport.height,
+            self.zoom_level,
+            self.offset_x,
+            self.offset_y,
+        )
+        shrinking = dest_w < x1 - x0
         resized = cv2.resize(
-            self.frame,
-            (scaled_width, scaled_height),
-            interpolation=cv2.INTER_AREA if scale < 1.0 else cv2.INTER_LINEAR,
+            self.frame[y0:y1, x0:x1],
+            (dest_w, dest_h),
+            interpolation=cv2.INTER_AREA if shrinking else cv2.INTER_LINEAR,
         )
         rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
         self._cached_video_surface = pygame.surfarray.make_surface(rgb.swapaxes(0, 1))
@@ -1218,8 +1607,8 @@ class PygameSyncPlayer:
         pygame.draw.rect(self.screen, (8, 10, 13), viewport)
         video_surface = self._get_video_surface(viewport)
         if video_surface is not None:
-            destination = video_surface.get_rect(center=viewport.center)
-            self.screen.blit(video_surface, destination)
+            self._video_dest = video_surface.get_rect(center=viewport.center)
+            self.screen.blit(video_surface, self._video_dest)
 
         overlay = pygame.Surface((viewport.width, 36), pygame.SRCALPHA)
         overlay.fill((10, 12, 16, 205))
@@ -1230,8 +1619,9 @@ class PygameSyncPlayer:
             (245, 247, 250),
         )
         self.screen.blit(info_label, (12, 9))
+        zoom_text = f"Zoom {self.zoom_level:.1f}x  " if self.zoom_level > 1.0 else ""
         speed_label = self.small_font.render(
-            f"Speed {format_playback_speed(self.playback_speed)}x",
+            f"{zoom_text}Speed {format_playback_speed(self.playback_speed)}x",
             True,
             (245, 247, 250),
         )
@@ -1307,7 +1697,8 @@ class PygameSyncPlayer:
             x += width + 7
 
         hint = self.tiny_font.render(
-            "Space play/pause | Left/Right 1 | Up/Down or -/+ 60 | [/] speed | timeline seek",
+            "Space play | hold Left/Right 1 | Up/Down or -/+ 60 | [/] speed | "
+            "wheel zoom, drag pan, 0 reset",
             True,
             (174, 188, 202),
         )
@@ -1472,23 +1863,26 @@ class PygameSyncPlayer:
             32,
         )
         load_rect = pygame.Rect(x, actions_top + 86, content_width, 32)
+        repeat_rect = pygame.Rect(x, actions_top + 129, content_width, 32)
         self.button_rects["side:save"] = save_rect
         self.button_rects["side:save_cutvideo"] = save_cut_rect
         self.button_rects["side:help"] = help_rect
         self.button_rects["side:cancel"] = cancel_rect
         self.button_rects["side:load"] = load_rect
+        self.button_rects["side:remove_repeated"] = repeat_rect
         self._draw_button(save_rect, "Save sync", accent=True)
         self._draw_button(save_cut_rect, "Save + Cut Video", accent=True)
         self._draw_button(help_rect, "Help")
         self._draw_button(cancel_rect, "Cancel")
         self._draw_button(load_rect, "Load / Resume")
+        self._draw_button(repeat_rect, "Remove repeated frames (all videos)")
 
         footer = self.tiny_font.render(
             "Tab fields | Enter validate | Ctrl+S save | Esc cancel",
             True,
             (164, 177, 190),
         )
-        self.screen.blit(footer, (x, actions_top + 127))
+        self.screen.blit(footer, (x, actions_top + 170))
 
     def _draw(self) -> None:
         self.screen.fill((18, 21, 25))
@@ -1522,6 +1916,8 @@ class PygameSyncPlayer:
             self._open_help()
         elif action == "side:load":
             self._load_checkpoint()
+        elif action == "side:remove_repeated":
+            self._remove_repeated_frames()
         elif action == "side:cancel":
             self.running = False
 
@@ -1535,31 +1931,10 @@ class PygameSyncPlayer:
             self._save(True)
         elif event.key == pygame.K_SPACE:
             self.playing = not self.playing
-        elif event.key == pygame.K_RIGHT and not self.playing:
-            self._seek_relative(1)
-        elif event.key == pygame.K_LEFT and not self.playing:
-            self._seek_relative(-1)
-        elif (
-            event.key
-            in (
-                pygame.K_DOWN,
-                pygame.K_MINUS,
-                pygame.K_KP_MINUS,
-            )
-            and not self.playing
-        ):
-            self._seek_relative(-60)
-        elif (
-            event.key
-            in (
-                pygame.K_UP,
-                pygame.K_EQUALS,
-                pygame.K_KP_PLUS,
-                getattr(pygame, "K_PLUS", pygame.K_EQUALS),
-            )
-            and not self.playing
-        ):
-            self._seek_relative(60)
+        elif event.key in PLAYER_NAV_KEYS and not self.playing:
+            self._start_nav_hold(event.key)
+        elif event.key in (pygame.K_0, pygame.K_KP0):
+            self._reset_zoom()
         elif event.key == pygame.K_RIGHTBRACKET:
             self.playback_speed = step_playback_speed(self.playback_speed, 1)
             self.slow_motion_accumulator = 0.0
@@ -1611,6 +1986,9 @@ class PygameSyncPlayer:
                 self.list_scroll += 1
                 self._clamp_list_scroll()
             return
+        if event.button == 2 and self._video_viewport().collidepoint(event.pos):
+            self.panning = True
+            return
         if event.button != 1:
             return
 
@@ -1633,6 +2011,8 @@ class PygameSyncPlayer:
             self.dragging_timeline = True
             self.playing = False
             self._decode_at(self._timeline_frame_from_x(event.pos[0]))
+        elif self.zoom_level > 1.0 and self._video_viewport().collidepoint(event.pos):
+            self.panning = True
 
     def _handle_event(self, event: pygame.event.Event) -> None:
         close_event = getattr(pygame, "WINDOWCLOSE", -1)
@@ -1651,15 +2031,23 @@ class PygameSyncPlayer:
             self._handle_key(event)
         elif event.type == pygame.MOUSEBUTTONDOWN:
             self._handle_mouse_down(event)
-        elif event.type == pygame.MOUSEBUTTONUP and event.button == 1:
+        elif event.type == pygame.MOUSEBUTTONUP and event.button in (1, 2):
             self.dragging_timeline = False
+            self.panning = False
         elif event.type == pygame.MOUSEMOTION and self.dragging_timeline:
             self._decode_at(self._timeline_frame_from_x(event.pos[0]))
+        elif event.type == pygame.MOUSEMOTION and self.panning:
+            self.offset_x -= event.rel[0]
+            self.offset_y -= event.rel[1]
+            self._clamp_pan(self._video_viewport())
         elif event.type == pygame.MOUSEWHEEL:
-            mouse_x, _mouse_y = pygame.mouse.get_pos()
-            if mouse_x >= self.window_width - self._panel_width():
+            mouse_pos = pygame.mouse.get_pos()
+            if mouse_pos[0] >= self.window_width - self._panel_width():
                 self.list_scroll -= int(event.y)
                 self._clamp_list_scroll()
+            elif self._video_viewport().collidepoint(mouse_pos) and event.y:
+                factor = PLAYER_ZOOM_STEP if event.y > 0 else 1.0 / PLAYER_ZOOM_STEP
+                self._zoom_at(mouse_pos, factor)
 
     @contextlib.contextmanager
     def _sdl_window_minimized_for_dialog(self) -> Iterator[None]:
@@ -1835,6 +2223,48 @@ class PygameSyncPlayer:
         )
         self.running = False
 
+    def _remove_repeated_frames(self) -> None:
+        """Analyze every loaded video and write repeat-free copies of the ones that repeat."""
+        self.playing = False
+        videos = [info.path for info in self.video_infos]
+        print(
+            ">> vaila/syncvid: Equivalent CLI (remove repeated frames)\n"
+            + shlex.join(
+                [
+                    "uv",
+                    "run",
+                    "--no-sync",
+                    "vaila/syncvid.py",
+                    "--remove-repeated",
+                    "-i",
+                    str(videos[0].parent),
+                ]
+            )
+        )
+
+        def progress(phase: str, done: int, total: int) -> None:
+            label = "Analyzing" if phase == "analyze" else "Writing"
+            self._set_status(f"{label} repeated frames: {done}/{total} ...")
+            pygame.event.pump()
+            self._draw()
+
+        progress("analyze", 0, len(videos))
+        try:
+            out_dir, reports = remove_repeated_frames(videos, progress=progress)
+        except (OSError, RuntimeError, SyncWorkflowError) as exc:
+            self._set_status(f"Remove repeated frames failed: {exc}", error=True)
+            return
+        repeating = [report for report in reports if report.repeated_frames]
+        if not repeating:
+            self._set_status(f"No repeated frames in {len(reports)} videos. Report: {out_dir}")
+            return
+        parts = [
+            f"{report.video.name} {report.total_frames}->{len(report.kept_frames)} "
+            f"(~{report.estimated_fps:.2f} fps)"
+            for report in repeating
+        ]
+        self._set_status(f"Fixed {'; '.join(parts)}. Saved in {out_dir}")
+
     @staticmethod
     def _open_help() -> None:
         help_path = Path(__file__).resolve().parent / "help" / "syncvid.html"
@@ -1847,6 +2277,7 @@ class PygameSyncPlayer:
             while self.running:
                 for event in pygame.event.get():
                     self._handle_event(event)
+                self._tick_nav_hold()
                 self._advance_playback()
                 self._draw()
                 target_fps = max(1, round(self.current_info.fps)) if self.playing else 60
@@ -1958,7 +2389,30 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Probe/decode all target videos and exit without opening the GUI",
     )
+    parser.add_argument(
+        "--remove-repeated",
+        action="store_true",
+        help=(
+            "Find repeated (editor-duplicated) frames in every video of --input-dir "
+            "(or one video file), write repeat-free copies to "
+            "processed_norepeat_<timestamp>/ and exit without opening the GUI"
+        ),
+    )
     args = parser.parse_args(argv)
+
+    if args.remove_repeated:
+        if args.input_dir is None:
+            parser.error("--remove-repeated requires --input-dir (directory or video file)")
+        source = args.input_dir.expanduser().resolve()
+        try:
+            videos = [source] if source.is_file() else discover_video_files(source)
+            if not videos:
+                raise SyncWorkflowError(f"No supported videos found in {source}")
+            out_dir, _reports = remove_repeated_frames(videos)
+        except (OSError, RuntimeError, SyncWorkflowError) as exc:
+            parser.error(str(exc))
+        print(f"Saved in: {out_dir}")
+        return 0
 
     if args.dry_run:
         if args.input_dir is None:
