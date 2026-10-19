@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 17 October 2026
-Version: 0.4.9
+Update: 19 October 2026
+Version: 0.4.10
 Python Version: 3.12.15
 
 Description:
@@ -279,7 +279,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.9"
+GETPIXELVIDEO_VERSION = "0.4.10"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 
@@ -291,7 +291,7 @@ def blit_translucent(surface, rect, rgb, alpha: int) -> None:
     surface.blit(box, rect.topleft)
 
 
-GETPIXELVIDEO_UPDATE_DATE = "17 October 2026"
+GETPIXELVIDEO_UPDATE_DATE = "19 October 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -2899,13 +2899,29 @@ def play_video_with_controls(
             )
 
         if choice in ("l", "load", "file", "c"):
+            calib, msg = quickmeasure._ask_calibration_via_dialog(
+                video_path, total_frames=total_frames
+            )
+            if calib is None:
+                return f"Calib: {msg}"
+            if isinstance(calib, list):
+                # The complete sequence has been validated before replacing state.
+                session.calibration = None
+                session.calibrations_by_frame.clear()
+                for index, frame_calib in enumerate(calib):
+                    session.set_calibration(frame_calib, frame=index)
+                session.calibration_skipped = False
+                try:
+                    out_dir, stem = _media_out_dir_and_stem(frame_count)
+                    paths = session.save_session(out_dir, stem=stem)
+                    print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
+                except (quickmeasure.QuickMeasureError, OSError) as exc:
+                    return f"Calib: {msg} Auto-save failed: {exc}"
+                return f"Calib: {msg}"
             scope = _ask_calib_scope()
             if scope is None:
                 return "Calib: cancelled."
-            scope_frame, scope_label = scope
-            calib, msg = quickmeasure._ask_calibration_via_dialog(video_path)
-            if calib is None:
-                return f"Calib: {msg}"
+            scope_frame, _scope_label = scope
             return _store_and_autosave_calib(calib, scope_frame) + f" ({msg})"
 
         unit_answer = show_input_dialog("Real-world unit for the calibration (e.g. m, mm, cm)", "m")

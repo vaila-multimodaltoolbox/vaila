@@ -1,4 +1,7 @@
 """
+Version: 0.4.10
+Update Date: 19 October 2026
+
 Tests for vaila/quickmeasure.py — Kinovea-style quick on-image measurements
 for getpixelvideo.py (Distance / Area / Velocity / Acceleration), with and
 without a DLT2D calibration.
@@ -1030,3 +1033,81 @@ def test_results_dataframe_expands_area_vertices_as_scalar_columns():
     assert df.loc[0, "point_5_x_real"] == pytest.approx(0.0)
     assert df.loc[0, "point_5_y_real"] == pytest.approx(3.0)
     assert all(not isinstance(value, (list, tuple)) for value in df.iloc[0])
+
+
+@pytest.mark.parametrize(
+    "headers", [[f"L{i}" for i in range(1, 9)], [f"dlt_param_{i}" for i in range(1, 9)]]
+)
+def test_dlt_sequence_row_order_reconstruction_and_export(tmp_path, headers):
+    import numpy as np
+
+    from vaila.rec2d import rec2d
+
+    path = tmp_path / "moving.dlt2d"
+    rows = [[39 + i, 100, 0, 100 + i * 10, 0, 100, 100, 0, 0] for i in range(3)]
+    pd.DataFrame(rows, columns=["frame", *headers]).to_csv(path, index=False)
+    calibrations = QuickMeasureCalibration.from_dlt2d_sequence(str(path), total_frames=3)
+    session = QuickMeasureSession()
+    for frame, calib in enumerate(calibrations):
+        session.set_calibration(calib, frame=frame)
+        session.add_point(frame, 150, 150)
+        expected = rec2d(np.asarray(rows[frame][1:]), np.array([[150, 150]]))[0]
+        assert calib.pixel_to_real(150, 150) == pytest.approx(expected)
+        assert calib.pixel_to_real(150, 150) == pytest.approx((0.5 - frame * 0.1, 0.5))
+    assert session.points_dataframe()["x_real"].tolist() == pytest.approx([0.5, 0.4, 0.3])
+    paths = session.save_session(str(tmp_path), stem="moving")
+    exported = pd.read_csv(paths["dlt2d"])
+    assert exported["frame"].tolist() == [1, 2, 3]
+    loaded = QuickMeasureCalibration.from_dlt2d_sequence(paths["dlt2d"], total_frames=3)
+    for original, restored in zip(calibrations, loaded, strict=True):
+        assert restored.dlt_params == pytest.approx(original.dlt_params)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), "invalid"])
+def test_dlt_sequence_invalid_later_row(tmp_path, bad):
+    path = tmp_path / "bad.dlt2d"
+    rows = [[0, 100, 0, 100, 0, 100, 100, 0, 0], [1, 100, 0, bad, 0, 100, 100, 0, 0]]
+    pd.DataFrame(rows).to_csv(path, index=False)
+    with pytest.raises(QuickMeasureError):
+        QuickMeasureCalibration.from_dlt2d_sequence(str(path), total_frames=2)
+
+
+def test_dlt_sequence_count_and_empty(tmp_path):
+    path = tmp_path / "counts.dlt2d"
+    pd.DataFrame([[0, 100, 0, 100, 0, 100, 100, 0, 0]] * 2).to_csv(path, index=False)
+    with pytest.raises(QuickMeasureError, match="2 rows; video has 3 frames"):
+        QuickMeasureCalibration.from_dlt2d_sequence(str(path), total_frames=3)
+    path.write_text("")
+    with pytest.raises(QuickMeasureError):
+        QuickMeasureCalibration.from_dlt2d_sequence(str(path), total_frames=3)
+    assert (
+        len(QuickMeasureCalibration.from_dlt2d_sequence(_fixture("sample.dlt2d"), total_frames=73))
+        == 1
+    )
+
+
+@pytest.mark.parametrize("count", [1, 3, 2])
+def test_dlt_dialog_fixed_sequence_and_mismatch(tmp_path, monkeypatch, count):
+    from unittest.mock import Mock
+
+    from vaila.quickmeasure import _ask_calibration_via_dialog
+
+    path = tmp_path / "dialog.dlt2d"
+    pd.DataFrame([[i, 100, 0, 100, 0, 100, 100, 0, 0] for i in range(count)]).to_csv(
+        path, index=False
+    )
+    root = Mock()
+    error = Mock()
+    monkeypatch.setattr("tkinter.Tk", lambda: root)
+    monkeypatch.setattr("tkinter.messagebox.askyesnocancel", lambda *a, **k: True)
+    monkeypatch.setattr("tkinter.filedialog.askopenfilename", lambda **k: str(path))
+    monkeypatch.setattr("tkinter.messagebox.showerror", error)
+    result, _ = _ask_calibration_via_dialog(total_frames=3)
+    if count == 1:
+        assert isinstance(result, QuickMeasureCalibration)
+    elif count == 3:
+        assert isinstance(result, list) and len(result) == 3
+    else:
+        assert result is None
+        error.assert_called_once()
+    root.destroy.assert_called_once()

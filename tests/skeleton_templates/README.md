@@ -23,7 +23,8 @@ vailá tests, markerless 2D/3D tracking pipelines, and DLT reconstructions:
 | soccerfield_pitch32.json | soccerfield_pitch_32 | 32 | 37 | Soccer Field 32 Canonical Pitch Keypoints |
 | mediapipe_pose33.json | mediapipe_pose_33_pn | 33 | 32 | MediaPipe BlazePose (33 keypoints) |
 | mediapipe_hands42.json | mediapipe_hands_42 | 42 | 42 | MediaPipe Both Hands (Left 21 + Right 21) |
-| sam3dinov3_mhr70.json | sam3dinov3_mhr70 | 70 | 30 | SAM3+DINOv3 (SAM 3D Body MHR-70) |
+| sam3dinov3_mhr70.json | sam3dinov3_mhr70 | 70 | 88 | SAM3+DINOv3 MHR-70 full (body+hands) |
+| sam3dinov3_mhr70_body.json | sam3dinov3_mhr70_body | 70 | 48 | SAM3+DINOv3 MHR-70 body-only (no fingers) |
 | mediapipe_holistic75.json | mediapipe_holistic_75 | 75 | 76 | MediaPipe Holistic (Body 33 + Hands 42) |
 | coco_wholebody133.json | coco_wholebody_133 | 133 | 71 | COCO WholeBody / Sapiens-133 |
 | sapiens2_goliath308.json | sapiens2_goliath_308 | 308 | 71 | Sapiens2 Sociopticon / Goliath (308 points) |

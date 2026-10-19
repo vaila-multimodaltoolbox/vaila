@@ -30,8 +30,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/quickmeasure.py</p>
-            <p><strong>Version:</strong> 0.4.9</p>
-            <p><strong>Updated:</strong> 17 October 2026</p>
+            <p><strong>Version:</strong> 0.4.10</p>
+            <p><strong>Updated:</strong> 19 October 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes (embedded in getpixelvideo.py) &nbsp; <strong>CLI:</strong> Yes (<code>python -m vaila.quickmeasure</code>)</p>
         </div>
@@ -44,7 +44,7 @@
         (H+V laser guide + axis-snapped tape). Toolbar <strong>Clear</strong> / Backspace wipe drawn
         feedback; <code>Ctrl+Z</code> / <code>Ctrl+Y</code> undo/redo while MEASURE is on.</p>
 
-        <h2>CALIB + MEASURE (v0.4.9)</h2>
+        <h2>CALIB + MEASURE (v0.4.10)</h2>
         <p><strong>CALIB</strong> builds or loads planar calibrations. The chooser dialog lists
         each mode on its own line (column layout) so options fit the pygame window. Scope:
         <em>default (whole video)</em> or <em>this frame only</em> (also one option per line).
@@ -163,5 +163,6 @@ uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure area --poi
             <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
         </div>
     </div>
+<section><h2>Moving-camera DLT2D calibration</h2><p>In CALIB → L, a DLT2D file with one data row per video frame automatically loads per-frame calibration. Rows map by position: the first data row calibrates the first video frame, regardless of the identifiers in the frame column. The file must contain a frame column and eight finite numeric coefficients (L1…L8 or the usual vailá parameter headers). A single row keeps the fixed calibration scope dialog. Other row counts are rejected without replacing the current calibration. Cursor coordinates and measurements use each frame's calibration; the sequence is saved once after loading. Exported DLT2D frame identifiers retain the existing convention (1-based per-frame, 0 for default). Video and calibration must already be synchronized and describe the same plane.</p></section>
 </body>
 </html>

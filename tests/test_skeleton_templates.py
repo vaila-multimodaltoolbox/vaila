@@ -1,7 +1,7 @@
 """Tests for skeleton templates and presets in vaila/skeletons and tests/skeleton_templates.
 
-Update Date: 25 September 2026
-Version: 0.4.5
+Update Date: 18 October 2026
+Version: 0.4.7
 """
 
 from __future__ import annotations
@@ -32,6 +32,7 @@ EXPECTED_PRESETS = [
     ("mediapipe_hands42.json", 42),
     ("soccerfield_kiki49.json", 49),
     ("sam3dinov3_mhr70.json", 70),
+    ("sam3dinov3_mhr70_body.json", 70),
     ("mediapipe_holistic75.json", 75),
     ("coco_wholebody133.json", 133),
     ("sapiens2_goliath308.json", 308),
@@ -241,7 +242,9 @@ def test_rec3d_one_dlt3d_cli_with_skeleton_templates(tmp_path: Path, template_fi
         capture_output=True,
         text=True,
     )
-    assert res.returncode == 0, f"rec3d_one_dlt3d failed with {template_file}: {res.stderr}\nSTDOUT: {res.stdout}"
+    assert res.returncode == 0, (
+        f"rec3d_one_dlt3d failed with {template_file}: {res.stderr}\nSTDOUT: {res.stdout}"
+    )
 
     # Check that companion script was generated and contains custom connections
     viz_scripts = list(output_dir.rglob("*_blender_skeleton_viz.py"))
@@ -259,3 +262,29 @@ def test_tugturn_loads_skeleton_template() -> None:
     assert len(conns) >= 30
     # verify 0-based indices for tugturn
     assert all(0 <= a < 33 and 0 <= b < 33 for a, b in conns)
+
+
+def test_sam3dinov3_mhr70_body_is_full_without_fingers() -> None:
+    """Body preset keeps MHR70 slots but drops thumb/index/middle/ring/pinky edges."""
+    full = json.loads((SKEL_DIR / "sam3dinov3_mhr70.json").read_text(encoding="utf-8"))
+    body = json.loads((SKEL_DIR / "sam3dinov3_mhr70_body.json").read_text(encoding="utf-8"))
+    assert body["schema"] == "sam3dinov3_mhr70_body"
+    assert full["keypoints"] == body["keypoints"]
+    assert len(full["connections"]) == 88
+    assert len(body["connections"]) == 48
+
+    names = full["keypoints"]
+    finger_sub = ("thumb", "index", "middle", "ring", "pinky")
+
+    def touches_finger(pair: list[str]) -> bool:
+        return any(any(s in names[int(token[1:])] for s in finger_sub) for token in pair)
+
+    full_set = {tuple(sorted(pair)) for pair in full["connections"]}
+    for pair in body["connections"]:
+        assert tuple(sorted(pair)) in full_set
+        assert not touches_finger(pair)
+    assert all(
+        touches_finger(pair)
+        for pair in full["connections"]
+        if tuple(sorted(pair)) not in {tuple(sorted(p)) for p in body["connections"]}
+    )

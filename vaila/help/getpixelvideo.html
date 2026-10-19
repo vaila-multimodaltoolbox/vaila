@@ -237,9 +237,9 @@
       </section>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.9<br />
+        <strong>Version:</strong> 0.4.10<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 17 October 2026<br />
+        <strong>Updated:</strong> 19 October 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -1821,7 +1821,7 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
       <section id="version-history">
         <h2>11. Version History</h2>
 
-        <h3>Version 0.4.9 (17 October 2026) &mdash; MEASURE Level+Tape, Clear, Undo/Redo</h3>
+        <h3>Version 0.4.10 (19 October 2026) &mdash; MEASURE Level+Tape, Clear, Undo/Redo</h3>
         <ul>
           <li>Digit <span class="key">6</span> Level: green image-space H+V laser guide; second click snaps to nearer axis (tape).</li>
           <li>Toolbar <strong>Clear</strong> / Backspace wipe MEASURE feedback (calibration kept).</li>
@@ -2101,5 +2101,6 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
       </div>
     </div>
   <p>FreeKiki correction: Delete marks only the selected keypoint in the current frame as not visible (Undo supported). Save the session with F4 or close normally. Reopen the original video and Load the original detect CSV/folder, or the corrected dataset/session.json: saved corrections, hidden points, review states and the last frame/keypoint are restored automatically. F9 exports reviewed frames; F4 also preserves unfinished drafts.</p>
+<section><h2>Moving-camera DLT2D calibration</h2><p>In CALIB → L, a DLT2D file with one data row per video frame automatically loads per-frame calibration. Rows map by position: the first data row calibrates the first video frame, regardless of the identifiers in the frame column. The file must contain a frame column and eight finite numeric coefficients (L1…L8 or the usual vailá parameter headers). A single row keeps the fixed calibration scope dialog. Other row counts are rejected without replacing the current calibration. Cursor coordinates and measurements use each frame's calibration; the sequence is saved once after loading. Exported DLT2D frame identifiers retain the existing convention (1-based per-frame, 0 for default). Video and calibration must already be synchronized and describe the same plane.</p></section>
 </body>
 </html>

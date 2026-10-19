@@ -1,10 +1,10 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID</title></head>
+<head><meta charset="utf-8"><title>SAM3+DINOv3 3D — Visualize selected ID(s)</title></head>
 <body>
-<h1>SAM3+DINOv3 3D — Visualize selected ID</h1>
-<p><strong>Version:</strong> 0.4.5 &nbsp; <strong>Updated:</strong> 2026-09-25</p>
-<p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one person, draw its SAM contour, bounding box, ID and reprojected MHR70 skeleton, and write filtered keypoint/camera/contour/predictions artifacts plus an overlay video (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
+<h1>SAM3+DINOv3 3D — Visualize selected ID(s)</h1>
+<p><strong>Version:</strong> 0.4.10 &nbsp; <strong>Updated:</strong> 2026-10-19</p>
+<p>This CPU-only tool rerenders an existing <code>processed_sam3dinov3_*</code> (SAM3+DINOv3 3D / SAM 3D Body) result. It does not load SAM3 or SAM 3D Body weights. Select one or more people, draw each SAM contour, bounding box, ID and reprojected MHR70 skeleton on one composite overlay, and write filtered keypoint/camera/contour/predictions artifacts (and a filtered per-frame mesh, when the source run has <code>meshes/</code>).</p>
 <h2>Overlay style (v0.3.96)</h2>
 <ol>
   <li><strong>SAM3 contour</strong> — semi-transparent silhouette fill (anti-aliased edge, alpha 0.45) + outline, bbox</li>
@@ -41,18 +41,24 @@
 <pre>uv run python -u vaila/sam3dinov3_visualize.py \
   --sam3d-results /path/to/processed_sam3dinov3_.../video_stem \
   --video /path/to/video.mp4 --id 2 --output /path/to/selected_id_02</pre>
-<p><code>--id</code> selects the SAM/person identity. If you omit <code>--id</code> while supplying <code>--sam3d-results</code>, <code>--video</code>, and <code>--output</code>, the CLI prints the available IDs and <strong>prompts interactively</strong> until a valid ID is entered.</p>
+<h3>Multiple IDs (composite overlay)</h3>
+<pre>uv run python -u vaila/sam3dinov3_visualize.py \
+  --sam3d-results /path/to/processed_sam3dinov3_.../video_stem \
+  --id 0 1 2 -o /path/to/selected_ids_00_01_02
+# Equivalent: --id 0,1,2</pre>
+<p>Multi-ID writes <code>visualized_ids_…</code> / <code>*_sam3dinov3_ids_…_overlay.mp4</code>; single ID keeps <code>visualized_id_NN</code>. <code>--markers-csv</code> applies only for exactly one ID.</p>
+<p><code>--id</code> selects one or more SAM/person identities. If you omit <code>--id</code> while supplying <code>--sam3d-results</code>, <code>--video</code>, and <code>--output</code>, the CLI prints the available IDs and <strong>prompts interactively</strong> (comma/space-separated list OK).</p>
 <pre>uv run python -u vaila/sam3dinov3_visualize.py \
   --sam3d-results /path/to/processed_sam3dinov3_.../video_stem \
   --video /path/to/video.mp4 --output /path/to/selected_id_out
 # &gt;&gt; Available person IDs: [0, 1, 2, 4]
-# &gt;&gt; Enter SAM/person ID to visualize: 4</pre>
+# &gt;&gt; Enter SAM/person ID(s) to visualize (comma/space-separated): 0,2,4</pre>
 <p>Use <code>--list-ids</code> to discover IDs and exit without rendering. <code>--dry-run</code> validates paths and the source video's frame count/dimensions against the run. <code>--overwrite</code> allows a non-empty output directory. <code>--export-mesh {obj,ply}</code> writes the Blender mesh sequence described above (default <code>none</code>).</p>
 <h3>Recursive batch across subdirectories (CLI-only)</h3>
 <pre><code>uv run python -u vaila/sam3dinov3_visualize.py \
   --sam3d-results /path/to/root -r -d -1
 </code></pre>
-<p><code>--recursive</code>/<code>-r</code> walks <code>--sam3d-results</code> for every completed <code>processed_sam3dinov3_*</code> run directory found below it, instead of a single run — <code>--video</code> is not used in this mode, each run's source video is auto-discovered. <code>--depth</code>/<code>-d N</code> bounds the walk (<code>-1</code> unlimited — default, <code>0</code> root only, <code>1-99</code> levels). If <code>--id</code> is omitted, <strong>every</strong> available ID is rendered per video (no "best ID" heuristic); if given, it is applied to every discovered video, skipped with a warning where that ID is unavailable. An ID already rendered is never re-rendered. This mode is CLI-only — the GUI stays single-run/single-ID.</p>
+<p><code>--recursive</code>/<code>-r</code> walks <code>--sam3d-results</code> for every completed <code>processed_sam3dinov3_*</code> run directory found below it, instead of a single run — <code>--video</code> is not used in this mode, each run's source video is auto-discovered. <code>--depth</code>/<code>-d N</code> bounds the walk (<code>-1</code> unlimited — default, <code>0</code> root only, <code>1-99</code> levels). If <code>--id</code> is omitted, <strong>every</strong> available ID is rendered <strong>separately</strong> per video; with <code>--id 1 3</code> one <strong>composite</strong> multi-ID output is written per video. An ID/set already rendered is never re-rendered. This mode is CLI-only.</p>
 <h3>Manual Marker Correction Override (<code>--markers-csv</code>) (v0.4.5)</h3>
 <p>When keypoint tracking coordinates are manually edited frame-by-frame in <code>getpixelvideo.py</code>, the corrected coordinates can be fed back into <code>sam3dinov3_visualize.py</code> without re-running SAM3 or SAM 3D Body model inference:</p>
 <pre>uv run python -u vaila/sam3dinov3_visualize.py \
@@ -61,11 +67,12 @@
 <p><strong>Resolution Priority:</strong> (1) Explicit <code>--markers-csv</code>; (2) GUI-selected CSV; (3) Auto-detected unambiguous <code>*overlay_markers.csv</code> or <code>*_markers_corrected.csv</code>; (4) Original model predictions.</p>
 <p><strong>Regenerated vs. Preserved:</strong> Regenerates <code>*_sam3dinov3_id_NN_overlay.mp4</code>, <code>keypoints2d.csv</code>, <code>*_markers.csv</code>, and <code>predictions.json.gz</code> with corrected coordinates. Preserves SAM3 contours, bounding boxes, 3D meshes, and camera translations. Provenance is recorded in <code>sam3dinov3_selected_id_manifest.json</code>.</p>
 <h2>GUI</h2>
-<p>Frame B → <strong>Markerless 3D</strong> → <strong>SAM3+DINOv3 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3dinov3_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. If a corrected marker file is present, it is auto-detected into <strong>Markers CSV (optional)</strong>, or you can browse for a corrected CSV. Choose an <strong>output parent</strong> and an ID from the combobox. Check <strong>"Export mesh sequence (.obj, for Blender)"</strong> to also write the OBJ sequence (needs <code>--save-mesh</code> in the source run). The GUI creates a new ID-specific child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
+<p>Frame B → <strong>Markerless 3D</strong> → <strong>SAM3+DINOv3 Visualize ID</strong> (or run with no arguments). Choose the processed run first. The matching source video is filled automatically from <code>sam3dinov3_summary.json</code>; if the run was moved, choose the synchronized/cropped source video manually. If a corrected marker file is present, it is auto-detected into <strong>Markers CSV (optional)</strong>, or you can browse for a corrected CSV. Choose an <strong>output parent</strong> and type one or more IDs (<code>0</code> or <code>0,1,2</code>). Check <strong>"Export mesh sequence (.obj, for Blender)"</strong> to also write the OBJ sequence (needs <code>--save-mesh</code> in the source run). The GUI creates a new ID-specific (or multi-ID) child directory, so an existing non-empty parent is safe and repeated runs receive a numeric suffix.</p>
 <h2>Outputs</h2>
 <table>
 <tr><th>File</th><th>Content</th></tr>
-<tr><td><code>&lt;video&gt;_sam3dinov3_id_NN_overlay.mp4</code></td><td>SAM contour/bbox/ID + reprojected MHR70 skeleton, one person only</td></tr>
+<tr><td><code>&lt;video&gt;_sam3dinov3_id_NN_overlay.mp4</code></td><td>Single-ID overlay (SAM contour/bbox/ID + MHR70 skeleton)</td></tr>
+<tr><td><code>&lt;video&gt;_sam3dinov3_ids_AA_BB_…_overlay.mp4</code></td><td>Multi-ID composite overlay</td></tr>
 <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints3d.csv</code></td><td>Long table filtered to <code>person_id == NN</code></td></tr>
 <tr><td><code>&lt;video&gt;_sam3dinov3_keypoints2d.csv</code></td><td>Long table filtered to <code>person_id == NN</code></td></tr>
 <tr><td><code>&lt;video&gt;_sam3dinov3_camera.csv</code></td><td>Per-frame focal/<code>cam_t</code>/bbox filtered to <code>person_id == NN</code></td></tr>

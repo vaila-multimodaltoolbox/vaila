@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/quickmeasure.py` |
-| **Version** | 0.4.9 |
-| **Updated** | 17 October 2026 |
+| **Version** | 0.4.10 |
+| **Updated** | 19 October 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes (embedded in `getpixelvideo.py`) |
 | **CLI** | Yes (`python -m vaila.quickmeasure --points-csv ...`) |
@@ -147,3 +147,16 @@ The first calibration or result save creates one `processed_quickmeasure_<timest
 | **dlt2d** | DLT2D coefficients from calibration |
 | **rec2d_one_dlt2d** | Apply fixed DLT2D to pixels |
 | **getpixelvideo** | Host: CALIB + MEASURE buttons and hotkeys |
+
+### Moving-camera DLT2D calibration
+
+In **CALIB → L**, a DLT2D file with one data row per video frame automatically
+loads per-frame calibration. Rows map by position: the first data row calibrates
+the first video frame, regardless of the identifiers in the `frame` column.
+The file must contain a frame column and eight finite numeric coefficients
+(`L1…L8` or the usual vailá parameter headers). A single row keeps the fixed
+calibration scope dialog. Other row counts are rejected without replacing the
+current calibration. Cursor coordinates and measurements use each frame's
+calibration; the sequence is saved once after loading. Exported DLT2D frame
+identifiers retain the existing convention (1-based per-frame, 0 for default).
+Video and calibration must already be synchronized and describe the same plane.
