@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.9
+Version: 0.4.10
 Created: 06 September 2026
-Last Updated: 17 October 2026
+Last Updated: 19 October 2026
 ================================================================================
 Description:
     Kinovea-style on-image calibration and measurements for `getpixelvideo.py`.
@@ -523,23 +523,40 @@ class QuickMeasureCalibration:
     def from_dlt2d_file(cls, dlt2d_file: str, unit_label: str = "m") -> QuickMeasureCalibration:
         """Load an existing `.dlt2d` coefficients CSV (as saved by
         `dlt2d.py`'s `save_dlt_parameters`): columns `frame,
-        dlt_param_1..8`. Uses the FIRST row — a quick-measure session is one
-        fixed camera, matching `rec2d_one_dlt2d.py`'s own single-row
-        convention.
+        dlt_param_1..8`. Legacy single-calibration API: returns the first row.
+        Use ``from_dlt2d_sequence`` for moving-camera video calibration.
         """
-        if not os.path.isfile(dlt2d_file):
-            raise QuickMeasureError(f"DLT2D file not found: {dlt2d_file}")
-        df = pd.read_csv(dlt2d_file)
-        if df.shape[0] < 1:
-            raise QuickMeasureError(f"DLT2D file has no rows: {dlt2d_file}")
-        params = df.iloc[0, 1:].to_numpy(dtype=float)
-        if params.size != 8:
-            raise QuickMeasureError(
-                f"Expected 8 DLT2D parameters, found {params.size} in {dlt2d_file}"
-            )
-        if np.isnan(params).any():
-            raise QuickMeasureError(f"DLT2D file contains NaN parameters: {dlt2d_file}")
-        return cls(dlt_params=params, unit_label=unit_label, source=dlt2d_file)
+        return cls.from_dlt2d_sequence(dlt2d_file, unit_label=unit_label)[0]
+
+    @classmethod
+    def from_dlt2d_sequence(
+        cls, dlt2d_file: str, *, total_frames: int | None = None, unit_label: str = "m"
+    ) -> list[QuickMeasureCalibration]:
+        """Read frame + eight coefficients; rows map to video frames by position.
+
+        With a video frame count, accept only one fixed row or exactly one row
+        per video frame. Validate the entire file before returning any calibration.
+        Column labels and source frame identifiers do not affect row association.
+        """
+        try:
+            df = pd.read_csv(dlt2d_file)
+            if df.empty:
+                raise QuickMeasureError("DLT2D file has no rows.")
+            if df.shape[1] != 9:
+                raise QuickMeasureError("Expected a frame column and 8 DLT2D parameters.")
+            if total_frames is not None and len(df) != 1 and len(df) != total_frames:
+                raise QuickMeasureError(
+                    f"DLT2D has {len(df)} rows; video has {total_frames} frames. "
+                    "Expected one fixed row or one row per video frame."
+                )
+            params = df.iloc[:, 1:].to_numpy(dtype=float)
+            if not np.isfinite(params).all():
+                raise QuickMeasureError("DLT2D parameters must be finite (no NaN or infinity).")
+        except (OSError, ValueError, pd.errors.ParserError) as exc:
+            raise QuickMeasureError(f"Cannot load DLT2D file: {exc}") from exc
+        return [
+            cls(dlt_params=row.copy(), unit_label=unit_label, source=dlt2d_file) for row in params
+        ]
 
     @classmethod
     def from_calibration_points(
@@ -2631,7 +2648,9 @@ def _ask_drop_axis_via_dialog(parent=None) -> str | None:
 
 def _ask_calibration_via_dialog(
     video_path: str | None = None,
-) -> tuple[QuickMeasureCalibration | None, str]:
+    *,
+    total_frames: int | None = None,
+) -> tuple[QuickMeasureCalibration | list[QuickMeasureCalibration] | None, str]:
     """Tkinter file-picker flow for DLT2D / REF2D / REF3D calibration."""
     import tkinter as tk
     from tkinter import filedialog, messagebox
@@ -2654,8 +2673,12 @@ def _ask_calibration_via_dialog(
             )
             if not dlt2d_file:
                 return None, "Calibration cancelled."
-            calib = QuickMeasureCalibration.from_dlt2d_file(dlt2d_file)
-            return calib, f"Calibration loaded: {os.path.basename(dlt2d_file)}"
+            calibrations = QuickMeasureCalibration.from_dlt2d_sequence(
+                dlt2d_file, total_frames=total_frames
+            )
+            if len(calibrations) > 1:
+                return calibrations, f"Loaded {len(calibrations)} frame calibrations (row order)."
+            return calibrations[0], f"Calibration loaded: {os.path.basename(dlt2d_file)}"
 
         pixel_file = filedialog.askopenfilename(
             title="Select PIXEL calibration CSV (getpixelvideo markers)",

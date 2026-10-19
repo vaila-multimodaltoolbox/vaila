@@ -9,9 +9,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.5
+Version: 0.4.7
 Created: 04 August 2026
-Last Updated: 25 September 2026
+Last Updated: 18 October 2026
 
 Description:
     Maintenance/dev tool that regenerates all standard skeleton-connection
@@ -19,7 +19,8 @@ Description:
 
       - mediapipe_pose33.json    <- MediaPipe BlazePose (33 keypoints)
       - yolo_coco17.json         <- YOLO / COCO-17 (17 keypoints)
-      - sam3dinov3_mhr70.json    <- SAM3+DINOv3 (SAM 3D Body) MHR70 (70 keypoints)
+      - sam3dinov3_mhr70.json    <- SAM3+DINOv3 MHR70 full body+hands (70 kp, 88 edges)
+      - sam3dinov3_mhr70_body.json <- SAM3+DINOv3 MHR70 body-only (70 kp, 48 edges)
       - sapiens2_goliath308.json <- Sapiens2 Sociopticon/Goliath (308 keypoints)
       - fifa_body15.json         <- FIFA Skeletal Challenge Body-15 (15 keypoints)
       - openpose_body25.json     <- OpenPose Body-25 (25 keypoints)
@@ -53,7 +54,7 @@ SKEL_DIR = Path(__file__).resolve().parent
 TEST_SKEL_DIR = REPO_ROOT / "tests" / "skeleton_templates"
 MODELS_SKEL_DIR = REPO_ROOT / "vaila" / "models" / "skeleton_templates"
 TEST_REC3D_DIR = REPO_ROOT / "tests" / "rec3d_one_dlt3d"
-MKVIS3D_SKEL_DIR = Path("/home/preto/data/mkvis3d/skeleton_templates")
+MKVIS3D_SKEL_DIR = Path("/home/preto/Preto/mkvis3d/skeleton_templates")
 
 _P_TOKEN_RE = re.compile(r"^p(\d+)$", re.IGNORECASE)
 
@@ -233,43 +234,132 @@ def _generate_yolo_coco17() -> dict:
     }
 
 
-def _generate_dinov3_mhr70() -> dict:
-    src = (REPO_ROOT / "vaila" / "sam3dinov3.py").read_text(encoding="utf-8")
+#: Full MHR70 bone list (body/anatomy + both-hand finger chains). Names match
+#: ``MHR70_NAMES`` in ``vaila/sam3dinov3.py``. Used by mkvis3d full preset.
+_MHR70_FULL_EDGE_NAMES: tuple[tuple[str, str], ...] = (
+    ("neck", "nose"),
+    ("nose", "left-eye"),
+    ("nose", "right-eye"),
+    ("left-eye", "left-ear"),
+    ("right-eye", "right-ear"),
+    ("neck", "left-acromion"),
+    ("neck", "right-acromion"),
+    ("left-acromion", "right-acromion"),
+    ("left-acromion", "left-shoulder"),
+    ("left-shoulder", "right-shoulder"),
+    ("right-shoulder", "right-acromion"),
+    ("left-shoulder", "left-elbow"),
+    ("right-shoulder", "right-elbow"),
+    ("left-acromion", "left-elbow"),
+    ("left-elbow", "left-olecranon"),
+    ("left-elbow", "left-cubital-fossa"),
+    ("left-olecranon", "left-cubital-fossa"),
+    ("left-acromion", "left-olecranon"),
+    ("left-acromion", "left-cubital-fossa"),
+    ("left-olecranon", "left-wrist"),
+    ("left-cubital-fossa", "left-wrist"),
+    ("right-acromion", "right-elbow"),
+    ("right-elbow", "right-olecranon"),
+    ("right-elbow", "right-cubital-fossa"),
+    ("right-olecranon", "right-cubital-fossa"),
+    ("right-acromion", "right-olecranon"),
+    ("right-acromion", "right-cubital-fossa"),
+    ("right-olecranon", "right-wrist"),
+    ("right-cubital-fossa", "right-wrist"),
+    ("left-shoulder", "left-hip"),
+    ("right-shoulder", "right-hip"),
+    ("left-hip", "right-hip"),
+    ("left-hip", "left-knee"),
+    ("left-knee", "left-ankle"),
+    ("left-ankle", "left-heel"),
+    ("left-ankle", "left-big-toe-tip"),
+    ("left-ankle", "left-small-toe-tip"),
+    ("left-heel", "left-big-toe-tip"),
+    ("left-heel", "left-small-toe-tip"),
+    ("left-big-toe-tip", "left-small-toe-tip"),
+    ("right-hip", "right-knee"),
+    ("right-knee", "right-ankle"),
+    ("right-ankle", "right-heel"),
+    ("right-ankle", "right-big-toe-tip"),
+    ("right-ankle", "right-small-toe-tip"),
+    ("right-heel", "right-big-toe-tip"),
+    ("right-heel", "right-small-toe-tip"),
+    ("right-big-toe-tip", "right-small-toe-tip"),
+    ("left-wrist", "left-thumb-third-joint"),
+    ("left-thumb-third-joint", "left-thumb-second-joint"),
+    ("left-thumb-second-joint", "left-thumb-first-joint"),
+    ("left-thumb-first-joint", "left-thumb-tip"),
+    ("left-wrist", "left-index-third-joint"),
+    ("left-index-third-joint", "left-index-second-joint"),
+    ("left-index-second-joint", "left-index-first-joint"),
+    ("left-index-first-joint", "left-index-tip"),
+    ("left-wrist", "left-middle-third-joint"),
+    ("left-middle-third-joint", "left-middle-second-joint"),
+    ("left-middle-second-joint", "left-middle-first-joint"),
+    ("left-middle-first-joint", "left-middle-tip"),
+    ("left-wrist", "left-ring-third-joint"),
+    ("left-ring-third-joint", "left-ring-second-joint"),
+    ("left-ring-second-joint", "left-ring-first-joint"),
+    ("left-ring-first-joint", "left-ring-tip"),
+    ("left-wrist", "left-pinky-third-joint"),
+    ("left-pinky-third-joint", "left-pinky-second-joint"),
+    ("left-pinky-second-joint", "left-pinky-first-joint"),
+    ("left-pinky-first-joint", "left-pinky-tip"),
+    ("right-wrist", "right-thumb-third-joint"),
+    ("right-thumb-third-joint", "right-thumb-second-joint"),
+    ("right-thumb-second-joint", "right-thumb-first-joint"),
+    ("right-thumb-first-joint", "right-thumb-tip"),
+    ("right-wrist", "right-index-third-joint"),
+    ("right-index-third-joint", "right-index-second-joint"),
+    ("right-index-second-joint", "right-index-first-joint"),
+    ("right-index-first-joint", "right-index-tip"),
+    ("right-wrist", "right-middle-third-joint"),
+    ("right-middle-third-joint", "right-middle-second-joint"),
+    ("right-middle-second-joint", "right-middle-first-joint"),
+    ("right-middle-first-joint", "right-middle-tip"),
+    ("right-wrist", "right-ring-third-joint"),
+    ("right-ring-third-joint", "right-ring-second-joint"),
+    ("right-ring-second-joint", "right-ring-first-joint"),
+    ("right-ring-first-joint", "right-ring-tip"),
+    ("right-wrist", "right-pinky-third-joint"),
+    ("right-pinky-third-joint", "right-pinky-second-joint"),
+    ("right-pinky-second-joint", "right-pinky-first-joint"),
+    ("right-pinky-first-joint", "right-pinky-tip"),
+)
 
+_MHR70_FINGER_SUBSTRINGS = ("thumb", "index", "middle", "ring", "pinky")
+
+
+def _load_mhr70_names() -> list[str]:
+    src = (REPO_ROOT / "vaila" / "sam3dinov3.py").read_text(encoding="utf-8")
     names_match = re.search(r"MHR70_NAMES: tuple\[str, \.\.\.\] = \((.*?)\)\n", src, re.S)
     if not names_match:
         raise RuntimeError("MHR70_NAMES not found in sam3dinov3.py")
     names = re.findall(r'"([^"]+)"', names_match.group(1))
     if len(names) != 70:
         raise RuntimeError(f"expected 70 MHR70 names, found {len(names)}")
+    return names
 
-    edges_match = re.search(
-        r"SKELETON_EDGE_NAMES: tuple\[tuple\[str, str\], \.\.\.\] = \((.*?)\n\)\n", src, re.S
-    )
-    if not edges_match:
-        raise RuntimeError("SKELETON_EDGE_NAMES not found in sam3dinov3.py")
-    edge_pairs = re.findall(r'\("([^"]+)",\s*"([^"]+)"\)', edges_match.group(1))
 
+def _mhr70_connections_from_edges(
+    names: list[str], edge_pairs: tuple[tuple[str, str], ...]
+) -> list[list[str]]:
+    """Build legacy 1-based ``pN`` connection list (``_emit_zero_based`` rebases)."""
     name_to_pidx = {n: i + 1 for i, n in enumerate(names)}
-    connections = []
+    connections: list[list[str]] = []
     for a, b in edge_pairs:
         if a not in name_to_pidx or b not in name_to_pidx:
             raise RuntimeError(f"skeleton edge references unknown MHR70 name: {a!r}/{b!r}")
         connections.append([f"p{name_to_pidx[a]}", f"p{name_to_pidx[b]}"])
+    return connections
 
-    # Foot triangle extra stabilization
-    extra_foot_pairs = [
-        ["p18", "p16"],  # left_heel - left_big_toe
-        ["p18", "p17"],  # left_heel - left_small_toe
-        ["p16", "p17"],  # left_big_toe - left_small_toe
-        ["p21", "p19"],  # right_heel - right_big_toe
-        ["p21", "p20"],  # right_heel - right_small_toe
-        ["p19", "p20"],  # right_big_toe - right_small_toe
-    ]
-    for pair in extra_foot_pairs:
-        if pair not in connections and [pair[1], pair[0]] not in connections:
-            connections.append(pair)
 
+def _generate_dinov3_mhr70() -> dict:
+    """Full MHR70 skeleton: body/anatomy + finger chains (88 edges)."""
+    names = _load_mhr70_names()
+    connections = _mhr70_connections_from_edges(names, _MHR70_FULL_EDGE_NAMES)
+    if len(connections) != 88:
+        raise RuntimeError(f"expected 88 full MHR70 edges, found {len(connections)}")
     return {
         "schema": "sam3dinov3_mhr70",
         "num_keypoints": 70,
@@ -277,7 +367,36 @@ def _generate_dinov3_mhr70() -> dict:
             "pN is 1-based index into the 70-keypoint MHR order used by "
             "sam3dinov3.py/sam3dinov3_visualize.py (p1=nose, p6=left-shoulder, "
             "p7=right-shoulder, p10=left-hip, p11=right-hip, ..., p70=neck). "
-            "Derived programmatically from vaila/sam3dinov3.py."
+            "Full skeleton (88 bones): body/anatomy + both-hand finger chains. "
+            "For body-only (no fingers) use sam3dinov3_mhr70_body.json. "
+            "Derived from vaila/sam3dinov3.py MHR70_NAMES + mkvis3d hand extensions."
+        ),
+        "keypoints": names,
+        "connections": connections,
+    }
+
+
+def _generate_dinov3_mhr70_body() -> dict:
+    """Body-only MHR70 skeleton: same 70 slots, no finger bones (48 edges)."""
+    names = _load_mhr70_names()
+    body_edges = tuple(
+        (a, b)
+        for a, b in _MHR70_FULL_EDGE_NAMES
+        if not any(s in a or s in b for s in _MHR70_FINGER_SUBSTRINGS)
+    )
+    connections = _mhr70_connections_from_edges(names, body_edges)
+    if len(connections) != 48:
+        raise RuntimeError(f"expected 48 body MHR70 edges, found {len(connections)}")
+    return {
+        "schema": "sam3dinov3_mhr70_body",
+        "num_keypoints": 70,
+        "note": (
+            "pN is 1-based index into the 70-keypoint MHR order used by "
+            "sam3dinov3.py/sam3dinov3_visualize.py (p1=nose, p6=left-shoulder, "
+            "p7=right-shoulder, p10=left-hip, p11=right-hip, ..., p70=neck). "
+            "Body-only bones (48): same MHR70 slot layout as full, without finger "
+            "chains — preferred for inference_type=body / mkvis3d body visualization. "
+            "Derived from sam3dinov3_mhr70.json minus thumb/index/middle/ring/pinky edges."
         ),
         "keypoints": names,
         "connections": connections,
@@ -1106,6 +1225,7 @@ def generate_all_presets() -> dict[str, dict]:
         "mediapipe_pose33.json": _generate_mediapipe_pose33(),
         "yolo_coco17.json": _generate_yolo_coco17(),
         "sam3dinov3_mhr70.json": _generate_dinov3_mhr70(),
+        "sam3dinov3_mhr70_body.json": _generate_dinov3_mhr70_body(),
         "fifa_body15.json": _generate_fifa_body15(),
         "openpose_body25.json": _generate_openpose_body25(),
         "mediapipe_hand21.json": _generate_mediapipe_hand21(),
@@ -1178,6 +1298,13 @@ def write_all(presets: dict[str, dict]) -> None:
         if target in presets:
             out_path = TEST_REC3D_DIR / fname
             _write_compact(presets[target], out_path)
+
+    # 6. Optional mirror into sibling mkvis3d checkout (when present).
+    if MKVIS3D_SKEL_DIR.is_dir():
+        for filename, data in presets.items():
+            out_path = MKVIS3D_SKEL_DIR / filename
+            _write_compact(data, out_path)
+            print(f"wrote {out_path} ({len(data['connections'])} connections)")
 
 
 def main() -> None:

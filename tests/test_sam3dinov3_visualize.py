@@ -1,7 +1,7 @@
 """Tests for the selected-ID SAM3+DINOv3 3D rerenderer.
 
-Update Date: 25 September 2026
-Version: 0.4.5
+Update Date: 19 October 2026
+Version: 0.4.10
 """
 
 from __future__ import annotations
@@ -149,12 +149,18 @@ def test_prompt_selected_id_reprompts_until_valid(monkeypatch: pytest.MonkeyPatc
     assert viz.prompt_selected_id([2, 9]) == 2
 
 
+def test_prompt_selected_ids_accepts_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    answers = iter(["2,9"])
+    monkeypatch.setattr("builtins.input", lambda _prompt="": next(answers))
+    assert viz.prompt_selected_ids([2, 9]) == [2, 9]
+
+
 def test_cli_prompts_for_id_when_flag_omitted(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     run, video = _fixture_run(tmp_path)
     output = tmp_path / "out_id_prompt"
-    monkeypatch.setattr(viz, "prompt_selected_id", lambda _ids: 2)
+    monkeypatch.setattr(viz, "prompt_selected_ids", lambda _ids: [2])
     code = viz.main(
         [
             "--sam3d-results",
@@ -168,6 +174,60 @@ def test_cli_prompts_for_id_when_flag_omitted(
     )
     assert code == 0
     assert output.exists() is False
+
+
+def test_normalize_selected_ids_space_and_comma() -> None:
+    assert viz.normalize_selected_ids(["2", "9"]) == [2, 9]
+    assert viz.normalize_selected_ids(["2,9"]) == [2, 9]
+    assert viz.normalize_selected_ids(["0", "1,2", "2"]) == [0, 1, 2]
+    assert viz.normalize_selected_ids("1 3 7") == [1, 3, 7]
+
+
+def test_visualize_selected_ids_filters_both(tmp_path: Path) -> None:
+    run, video = _fixture_run(tmp_path)
+    output = tmp_path / "selected_multi"
+    result = viz.visualize_selected_ids(run, video, [2, 9], output)
+    assert result["selected_ids"] == [2, 9]
+    assert "selected_id" not in result
+    assert "ids_02_09" in Path(result["overlay"]).name
+
+    rows = list(csv.DictReader((output / "sam_tracks.csv").open(encoding="utf-8")))
+    assert {int(row["obj_id"]) for row in rows} == {2, 9}
+
+    kp3d_rows = list(
+        csv.DictReader((output / "clip_sam3dinov3_keypoints3d.csv").open(encoding="utf-8"))
+    )
+    assert {int(row["person_id"]) for row in kp3d_rows} == {2, 9}
+
+    selected = json.loads((output / "sam_contours.json").read_text(encoding="utf-8"))
+    assert selected["object_ids"] == [2, 9]
+
+    with gzip.open(output / "clip_sam3dinov3_predictions.json.gz", "rt", encoding="utf-8") as fh:
+        pred = json.load(fh)
+    ids = {inst["person_id"] for fr in pred["frames"] for inst in fr["instances"]}
+    assert ids == {2, 9}
+
+    assert (output / "clip_id_02_mhr70_3d.csv").exists()
+    assert (output / "clip_id_09_mhr70_3d.csv").exists()
+
+    with np.load(output / "meshes" / "frame_000000.npz") as mesh:
+        assert sorted(int(x) for x in mesh["obj_ids"]) == [2, 9]
+        assert mesh["vertices"].shape[0] == 2
+
+
+def test_cli_multi_id_dry_run_space_and_comma(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run, video = _fixture_run(tmp_path)
+    for argv in (
+        ["--sam3d-results", str(run), "--video", str(video), "--id", "2", "9", "--dry-run"],
+        ["--sam3d-results", str(run), "--video", str(video), "--id", "2,9", "--dry-run"],
+    ):
+        code = viz.main(argv)
+        assert code == 0
+        out = capsys.readouterr().out
+        assert "Dry-run OK" in out
+        assert "ids=[2, 9]" in out
 
 
 def test_discovers_recorded_source_video_and_validates_alignment(tmp_path: Path) -> None:
@@ -199,6 +259,8 @@ def test_gui_output_is_new_child_of_selected_parent(tmp_path: Path) -> None:
     assert first.name == "clip_sam3dinov3_visualized_id_04"
     first.mkdir()
     assert viz._unique_gui_output_dir(tmp_path, video, 4).name.endswith("_2")
+    multi = viz._unique_output_dir_for_ids(tmp_path, video, [0, 1, 2])
+    assert multi.name == "clip_sam3dinov3_visualized_ids_00_01_02"
 
 
 def test_selected_artifacts_filter_json_csv_and_mesh(tmp_path: Path) -> None:

@@ -4,7 +4,7 @@ Loads canonical JSON presets from ``vaila/skeletons/`` (excluding soccer-field
 layouts, which use the dedicated Soccer-Kiki pitch-guide path). FreeKiki
 (kiki49 review) is a special non-JSON mode listed next to Soccer-Kiki.
 
-Update Date: 02 October 2026
+Update Date: 18 October 2026
 Version: 0.4.7
 """
 
@@ -26,7 +26,13 @@ _POSE_TEMPLATE_ORDER: tuple[tuple[str, str, str, str], ...] = (
     ("openpose_body25.json", "openpose25", "OpenPose25", "OpenPose Body-25 (25)"),
     ("halpe26.json", "halpe26", "Halpe26", "Halpe 26 (26)"),
     ("fifa_body15.json", "fifa15", "FIFA15", "FIFA Body-15 (15)"),
-    ("sam3dinov3_mhr70.json", "sam3d70", "SAM3D70", "SAM3+DINOv3 MHR-70 (70)"),
+    ("sam3dinov3_mhr70.json", "sam3d70", "SAM3D70", "SAM3+DINOv3 MHR-70 full (70)"),
+    (
+        "sam3dinov3_mhr70_body.json",
+        "sam3d70body",
+        "SAM3D70body",
+        "SAM3+DINOv3 MHR-70 body (70)",
+    ),
     ("sapiens2_goliath308.json", "sapiens308", "Sapiens308", "Sapiens2 Goliath (308)"),
     ("mediapipe_hand21.json", "hand21", "Hand21", "MediaPipe Hand (21)"),
     ("mediapipe_hands42.json", "hands42", "Hands42", "MediaPipe Hands (42)"),

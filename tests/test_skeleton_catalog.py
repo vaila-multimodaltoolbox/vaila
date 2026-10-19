@@ -1,6 +1,6 @@
 """Tests for vaila.skeleton_catalog (Tpl: pose presets).
 
-Update Date: 02 October 2026
+Update Date: 18 October 2026
 Version: 0.4.7
 """
 
@@ -19,6 +19,7 @@ EXPECTED_POSE_IDS = [
     "halpe26",
     "fifa15",
     "sam3d70",
+    "sam3d70body",
     "sapiens308",
     "hand21",
     "hands42",
@@ -33,6 +34,7 @@ EXPECTED_COUNTS = {
     "halpe26": 26,
     "fifa15": 15,
     "sam3d70": 70,
+    "sam3d70body": 70,
     "sapiens308": 308,
     "hand21": 21,
     "hands42": 42,
@@ -84,6 +86,7 @@ def test_template_labels_include_specials_and_pose() -> None:
     assert labels["fifa"] == "Soccer-Kiki"
     assert labels["freekiki"] == "FreeKiki49"
     assert labels["sam3d70"] == "SAM3D70"
+    assert labels["sam3d70body"] == "SAM3D70body"
     assert labels["sapiens308"] == "Sapiens308"
     assert labels["mediapipe"] == "MediaPipe33"
 
@@ -115,8 +118,10 @@ def test_resolve_dialog_choice_numeric_and_id() -> None:
     for answer in ("L", "l", "load"):
         assert skeleton_catalog.resolve_dialog_choice(answer) == skeleton_catalog.FREEKIKI_LOAD_ID
     assert skeleton_catalog.resolve_dialog_choice("8") == "sam3d70"
-    assert skeleton_catalog.resolve_dialog_choice("9") == "sapiens308"
+    assert skeleton_catalog.resolve_dialog_choice("9") == "sam3d70body"
+    assert skeleton_catalog.resolve_dialog_choice("10") == "sapiens308"
     assert skeleton_catalog.resolve_dialog_choice("sam3d70") == "sam3d70"
+    assert skeleton_catalog.resolve_dialog_choice("sam3d70body") == "sam3d70body"
     assert skeleton_catalog.resolve_dialog_choice("freekiki") == "freekiki"
     assert skeleton_catalog.resolve_dialog_choice("kiki49") == "freekiki"
     assert skeleton_catalog.resolve_dialog_choice("99") is None
@@ -127,6 +132,12 @@ def test_get_template_sam3_and_sapiens() -> None:
     assert sam is not None
     assert sam.keypoints[0] == "nose"
     assert sam.num_keypoints == 70
+    assert len(sam.connections) == 88
+    body = skeleton_catalog.get_template("sam3d70body")
+    assert body is not None
+    assert body.num_keypoints == 70
+    assert len(body.connections) == 48
+    assert body.schema == "sam3dinov3_mhr70_body"
     sapiens = skeleton_catalog.get_template("sapiens308")
     assert sapiens is not None
     assert sapiens.num_keypoints == 308

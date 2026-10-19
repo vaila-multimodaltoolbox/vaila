@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.9
+**Version:** 0.4.10
 **Date:** 22 July 2025  
-**Updated:** 17 October 2026
+**Updated:** 19 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -719,7 +719,7 @@ Built-in backup system for data safety:
 
 ## Version History
 
-### Version 0.4.9 (17 October 2026) — MEASURE Level+Tape, Clear, Undo/Redo
+### Version 0.4.10 (19 October 2026) — MEASURE Level+Tape, Clear, Undo/Redo
 
 - Digit **6** Level: green image-space H+V laser guide at the origin click; second click snaps to the nearer axis and reports calibrated length (tape).
 - Toolbar **Clear** / Backspace wipe MEASURE draft, points, and drawn results (calibration kept).
@@ -958,3 +958,16 @@ Built-in backup system for data safety:
 
 
 FreeKiki correction: Delete marks only the selected keypoint in the current frame as not visible (Undo supported). Save the session with F4 or close normally. Reopen the original video and Load the original detect CSV/folder, or the corrected dataset/session.json: saved corrections, hidden points, review states and the last frame/keypoint are restored automatically. F9 exports reviewed frames; F4 also preserves unfinished drafts.
+
+### Moving-camera DLT2D calibration
+
+In **CALIB → L**, a DLT2D file with one data row per video frame automatically
+loads per-frame calibration. Rows map by position: the first data row calibrates
+the first video frame, regardless of the identifiers in the `frame` column.
+The file must contain a frame column and eight finite numeric coefficients
+(`L1…L8` or the usual vailá parameter headers). A single row keeps the fixed
+calibration scope dialog. Other row counts are rejected without replacing the
+current calibration. Cursor coordinates and measurements use each frame's
+calibration; the sequence is saved once after loading. Exported DLT2D frame
+identifiers retain the existing convention (1-based per-frame, 0 for default).
+Video and calibration must already be synchronized and describe the same plane.

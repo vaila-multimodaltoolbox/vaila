@@ -15,7 +15,8 @@ The same body/hand JSON files (excluding `soccerfield_*`) are listed by
 |------|-------------|--------|--------|-------|
 | `mediapipe_pose33.json` | MediaPipe BlazePose | MediaPipe pose specification | 33 | 32 |
 | `yolo_coco17.json` | YOLO / COCO-17 | Ultralytics / COCO standard | 17 | 16 |
-| `sam3dinov3_mhr70.json` | SAM3+DINOv3 (SAM 3D Body) MHR70 | `vaila/sam3dinov3.py`'s `MHR70_NAMES`/`SKELETON_EDGE_NAMES` | 70 | 30 |
+| `sam3dinov3_mhr70.json` | SAM3+DINOv3 MHR70 full (body+hands) | `MHR70_NAMES` + mkvis3d hand extensions | 70 | 88 |
+| `sam3dinov3_mhr70_body.json` | SAM3+DINOv3 MHR70 body-only | full minus finger chains; for `inference_type=body` | 70 | 48 |
 | `sapiens2_goliath308.json` | Sapiens2 Sociopticon/Goliath | vendored `sapiens2/sapiens/pose/configs/_base_/keypoints308.py` | 308 | 71 |
 | `fifa_body15.json` | FIFA Skeletal Challenge 2026 | `vaila/fifa_skeletal_pipeline.py` / Body-15 | 15 | 16 |
 | `openpose_body25.json` | OpenPose Body-25 | OpenPose standard / SAM3D body25 | 25 | 24 |
