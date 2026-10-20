@@ -17,7 +17,7 @@
 set -euo pipefail
 
 # A bare `uv run` re-resolves the project with the default dependency groups
-# (dev + cpu), which on a CUDA machine silently replaces the cu128 wheels with
+# (dev + cpu), which on a CUDA machine silently replaces the cu129 wheels with
 # the CPU ones. Use the environment exactly as the installer left it.
 export UV_NO_SYNC="${UV_NO_SYNC:-1}"
 

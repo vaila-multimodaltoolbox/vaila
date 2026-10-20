@@ -37,7 +37,7 @@ Continue from a known-good baseline and execute the improvement path:
 
 ## Known-good baseline (validated 2026-04-25)
 
-- `pyproject.toml` (portable, one file for every OS) synced with the `cuda` dependency group (PyTorch cu128).
+- `pyproject.toml` (portable, one file for every OS) synced with the `cuda` dependency group (PyTorch cu129).
 - `uv sync --no-group cpu --group cuda --extra sam` succeeded.
 - `vaila/models/sam3/sam3.pt` and `sam3.1_multiplex.pt` present.
 - `cv2.VideoCapture` is back after `uv pip install --reinstall opencv-python==4.10.0.84`.

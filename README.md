@@ -329,7 +329,7 @@ _vailá_ uses **[uv](https://github.com/astral-sh/uv)**, an extremely fast Pytho
 - **Reliability:** Uses a strictly locked dependency file (`uv.lock`) ensuring that what runs on our machine runs on yours.
 - **Modern:** Built with Rust, following Python packaging standards (`pyproject.toml`).
 - **Dynamic Hardware Optimization:** Automatically detects hardware (NVIDIA GPU, Apple Silicon) and installs the matching PyTorch build — from the **same** `pyproject.toml` / `uv.lock` on every machine.
-- **Cross-Platform:** **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.8 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](vaila/help/vaila_sam.md) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
+- **Cross-Platform:** **Windows** (CUDA 12.1 + TensorRT where applicable), **Linux** (CUDA 12.9 + TensorRT), and **macOS** (Metal/MPS for the general PyTorch stack). **Exception:** [SAM 3 video](vaila/help/vaila_sam.md) (`vaila_sam.py`) requires **NVIDIA CUDA** at runtime — it does not use MPS and has no CPU-only path.
 
 #### 🎯 Smart Configuration System
 
@@ -337,12 +337,12 @@ _vailá_ ships **one portable `pyproject.toml` and one `uv.lock` for every compu
 
 | Hardware | Command | What you get |
 |----------|---------|--------------|
-| Linux / Windows + NVIDIA | `uv sync --no-group cpu --group cuda` | PyTorch CUDA 12.8 wheels + TensorRT + `nvidia-ml-py` |
+| Linux / Windows + NVIDIA | `uv sync --no-group cpu --group cuda` | PyTorch CUDA 12.9 wheels + TensorRT + `nvidia-ml-py` |
 | CPU-only laptop | `uv sync` | PyTorch CPU wheels |
 | macOS Apple Silicon | `uv sync` | PyTorch PyPI wheel = Metal/MPS build |
 
 > **On a CUDA machine, never run a bare `uv run` or `uv sync --upgrade`.** Both
-> select the default groups (`dev` + `cpu`) and replace cu128 wheels with CPU ones
+> select the default groups (`dev` + `cpu`) and replace cu129 wheels with CPU ones
 > (`torch.cuda.is_available()` becomes `False`). Use `uv run --no-sync ...`,
 > `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`. Explicit `uv sync --no-group cpu
 > --group cuda` is unaffected; the installers and `bin/setup_*` scripts already export
@@ -370,9 +370,9 @@ Flags: `--target=auto|cpu|cuda`, `--full`, `--extras=a,b,c`, `--non-interactive`
    - **macOS**: Detects architecture via `uname -m` (Apple Silicon `arm64` vs Intel `x86_64`)
 2. **User Prompt**: If GPU/accelerator is detected, it asks if you want GPU support:
    - Windows: "NVIDIA GPU detected. Install with GPU support (CUDA 12.1)? [Y/n]"
-   - Linux: "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
+   - Linux: "NVIDIA GPU detected. Install with GPU support (CUDA 12.9)? [Y/n]"
    - macOS: "Apple Silicon detected. Use Metal/MPS acceleration? [Y/n]"
-3. **Backend Selection**: Based on your choice, it picks the PyTorch dependency group — `cuda` (NVIDIA, CUDA 12.8 + TensorRT) or `cpu` (CPU wheels; on macOS the PyPI wheel, which is the Metal/MPS build). **No file is copied or modified.**
+3. **Backend Selection**: Based on your choice, it picks the PyTorch dependency group — `cuda` (NVIDIA, CUDA 12.9 + TensorRT) or `cpu` (CPU wheels; on macOS the PyPI wheel, which is the Metal/MPS build). **No file is copied or modified.**
 4. **Environment Creation**: `uv` creates the `.venv` (`uv python pin` + `uv venv`)
 5. **Dependency Installation**: Runs `uv sync` (or `uv sync --no-group cpu --group cuda` for NVIDIA), using the committed `uv.lock` — no relock needed, because that lock already contains every hardware variant
 6. **Automatic Fallback**: If the CUDA install fails, you can install the CPU stack with a plain `uv sync`
@@ -448,7 +448,7 @@ The script will:
 1.  Detect if you have an **NVIDIA GPU**.
 2.  Ask if you want to install with GPU support (optimizes for CUDA 12.1).
 3.  Automatically select the PyTorch dependency group (no file is modified):
-    - **GPU detected + user chooses GPU**: `cuda` group (CUDA 12.8 wheels, TensorRT)
+    - **GPU detected + user chooses GPU**: `cuda` group (CUDA 12.9 wheels, TensorRT)
     - **No GPU or user chooses CPU**: `cpu` group (CPU-only wheels)
 4.  Install **uv** and all dependencies with the selected configuration.
 
@@ -576,9 +576,9 @@ Without a clone, fetch and run it directly — `curl` or `wget`, same command sh
 The script will:
 
 1. Detect if you have an **NVIDIA GPU**.
-2. Ask if you want to install with GPU support (optimizes for CUDA 12.8).
+2. Ask if you want to install with GPU support (optimizes for CUDA 12.9).
 3. Automatically select the PyTorch dependency group (no file is modified):
-   - **GPU detected + user chooses GPU**: `cuda` group (CUDA 12.8 wheels, TensorRT)
+   - **GPU detected + user chooses GPU**: `cuda` group (CUDA 12.9 wheels, TensorRT)
    - **No GPU or user chooses CPU**: `cpu` group (CPU-only wheels)
 4. Install **uv** and all dependencies with the selected configuration.
 
@@ -628,7 +628,7 @@ uv venv --python 3.12.15
 
 # Install dependencies (committed uv.lock already covers CPU, CUDA and macOS)
 uv sync
-# Or, on an NVIDIA GPU (CUDA 12.8 + TensorRT):
+# Or, on an NVIDIA GPU (CUDA 12.9 + TensorRT):
 # uv sync --no-group cpu --group cuda
 
 # Run vailá
@@ -805,7 +805,7 @@ During installation, the scripts automatically:
 - **Detect NVIDIA GPUs** (Windows/Linux) or **Apple Silicon** (macOS)
 - **Prompt you** to choose GPU or CPU-only installation
 - **Select the PyTorch dependency group**:
-  - Windows / Linux + NVIDIA: `cuda` (CUDA 12.8 + TensorRT)
+  - Windows / Linux + NVIDIA: `cuda` (CUDA 12.9 + TensorRT)
   - macOS: `cpu` (the PyPI wheel provides Metal/MPS)
   - Fallback: `cpu` (CPU-only, always available)
 

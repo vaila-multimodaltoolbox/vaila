@@ -764,7 +764,7 @@ if [[ "${USE_GPU:-false}" == true ]]; then
     fi
 fi
 echo ""
-echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
+echo "PyTorch, torchvision, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
 
 if [[ "$USE_SAM_EXTRA" == true ]]; then
     echo ""

@@ -210,22 +210,18 @@ url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu129"
+url = "https://download.pytorch.org/whl/cu129"
 explicit = true
 
 [tool.uv.sources]
 torch = [
     { index = "pytorch-cpu", group = "cpu", marker = "sys_platform != 'darwin'" },
-    { index = "pytorch-cu128", group = "cuda", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu129", group = "cuda", marker = "sys_platform != 'darwin'" },
 ]
 torchvision = [
     { index = "pytorch-cpu", group = "cpu", marker = "sys_platform != 'darwin'" },
-    { index = "pytorch-cu128", group = "cuda", marker = "sys_platform != 'darwin'" },
-]
-torchaudio = [
-    { index = "pytorch-cpu", group = "cpu", marker = "sys_platform != 'darwin'" },
-    { index = "pytorch-cu128", group = "cuda", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cu129", group = "cuda", marker = "sys_platform != 'darwin'" },
 ]
 
 [tool.ruff]
@@ -296,21 +292,19 @@ dev = [
 # CPU-only laptop, an NVIDIA workstation, Windows and Apple Silicon:
 #
 #   uv sync                                # default: dev + cpu wheels
-#   uv sync --no-group cpu --group cuda    # NVIDIA (CUDA 12.8 wheels + TensorRT)
+#   uv sync --no-group cpu --group cuda    # NVIDIA (CUDA 12.9 wheels + TensorRT)
 #
 # macOS never uses the download.pytorch.org indexes (no wheels published there);
 # the sources below are marked `sys_platform != 'darwin'`, so Apple Silicon always
 # resolves the PyPI wheel, which is the Metal/MPS build.
 # ---------------------------------------------------------------------------
 cpu = [
-    "torch==2.11.0",
-    "torchvision==0.26.0",
-    "torchaudio==2.11.0",
+    "torch==2.13.0",
+    "torchvision==0.28.0",
 ]
 cuda = [
-    "torch==2.11.0",
-    "torchvision==0.26.0",
-    "torchaudio==2.11.0",
+    "torch==2.13.0",
+    "torchvision==0.28.0",
     "tensorrt; sys_platform != 'darwin'",
     "nvidia-ml-py; sys_platform != 'darwin'",
 ]

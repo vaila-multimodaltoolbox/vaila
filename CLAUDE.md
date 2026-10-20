@@ -39,7 +39,7 @@ uv run vaila.py
 
 # Sync dependencies (reads uv.lock + pyproject.toml)
 uv sync                        # CPU wheels / macOS Metal (default groups: dev + cpu)
-uv sync --no-group cpu --group cuda            # NVIDIA CUDA 12.8 wheels + tensorrt + nvidia-ml-py
+uv sync --no-group cpu --group cuda            # NVIDIA CUDA 12.9 wheels + tensorrt + nvidia-ml-py
 uv sync --extra sam            # SAM 3 optional stack; video still needs NVIDIA CUDA at runtime
 uv sync --extra sapiens        # Sapiens2 Pose (308 kp); bash bin/setup_sapiens2.sh after
 uv sync --extra fifa           # FIFA Skeletal Tracking Light (SAM 3D Body + PyTorch Lightning)
@@ -254,7 +254,7 @@ Full ASCII map + descriptions: `README.md` § *vailá Structure and Interface*; 
 
 | Hardware                        | Command                                | Wheels                              |
 | ------------------------------- | -------------------------------------- | ----------------------------------- |
-| Windows/Linux + NVIDIA          | `uv sync --no-group cpu --group cuda`   | `whl/cu128` + tensorrt, nvidia-ml-py |
+| Windows/Linux + NVIDIA          | `uv sync --no-group cpu --group cuda`   | `whl/cu129` + tensorrt, nvidia-ml-py |
 | CPU-only laptop                 | `uv sync`                              | `whl/cpu`                           |
 | macOS Apple Silicon (Metal/MPS) | `uv sync`                              | PyPI wheel (MPS build)              |
 
@@ -267,11 +267,11 @@ Which backend is installed here?
 
 ```bash
 uv run --no-sync python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
-# 2.11.0+cu128 True  -> cuda group   |   2.11.0+cpu False -> cpu group
+# 2.13.0+cu129 True  -> cuda group   |   2.13.0+cpu False -> cpu group
 ```
 
 > **CUDA machines: never use a bare `uv run`.** `uv run` auto-syncs with the
-> *default* groups (`dev` + `cpu`), so it silently uninstalls the cu128 wheels and
+> *default* groups (`dev` + `cpu`), so it silently uninstalls the cu129 wheels and
 > reinstalls the CPU ones — `torch.cuda.is_available()` then returns `False`.
 > Use `uv run --no-sync ...` (or `export UV_NO_SYNC=1`, or `bash bin/run_vaila.sh`).
 > uv has no env var to *add* a group and `default-groups` is rejected in `uv.toml`,

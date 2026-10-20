@@ -10,9 +10,9 @@
     OS: the hardware choice is a uv dependency group, not a file swap, so this
     script only updates the shared uv.lock when -Upgrade is requested.
 
-      cpu   -> torch trio from https://download.pytorch.org/whl/cpu
+      cpu   -> torch pair from https://download.pytorch.org/whl/cpu
                (on macOS: the PyPI wheel, i.e. the Metal/MPS build)
-      cuda  -> torch trio from https://download.pytorch.org/whl/cu128,
+      cuda  -> torch pair from https://download.pytorch.org/whl/cu129,
                plus tensorrt + nvidia-ml-py
 
     Linux / macOS / WSL / Git Bash: use bin/setup_pyproject.sh instead.
@@ -68,7 +68,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 # A bare `uv run` re-resolves the project with the default dependency groups
-# (dev + cpu), which on a CUDA machine silently replaces the cu128 wheels with
+# (dev + cpu), which on a CUDA machine silently replaces the cu129 wheels with
 # the CPU ones. Use the environment exactly as the installer left it.
 If (-not $env:UV_NO_SYNC) { $env:UV_NO_SYNC = "1" }
 
@@ -190,7 +190,7 @@ function Confirm-Default($msg, [bool]$default) {
 
 if (-not $NonInteractive -and -not $Yes) {
     if (-not (Confirm-Default "Use target '$Target'?" $true)) {
-        Write-Host 'Available targets: cpu (CPU wheels / macOS Metal), cuda (NVIDIA CUDA 12.8)'
+        Write-Host 'Available targets: cpu (CPU wheels / macOS Metal), cuda (NVIDIA CUDA 12.9)'
         $new = Read-Host 'Pick target'
         if ($new) {
             $Target = Normalize-Target $new

@@ -489,7 +489,7 @@ else
     echo ""
     echo "Select Installation Profile:"
     if [[ "$HAS_NVIDIA_GPU" == true ]]; then
-        echo "  [1] Full Multimodal AI Workstation (CUDA 12.8 + SAM 3 + Sapiens2 + SAM 3D Body + HuggingFace) [RECOMMENDED]"
+        echo "  [1] Full Multimodal AI Workstation (CUDA 12.9 + SAM 3 + Sapiens2 + SAM 3D Body + HuggingFace) [RECOMMENDED]"
         echo "  [2] Standard Biomechanics & Motion Analysis (CUDA GPU + YOLO + IMU + MoCap + Force Plates)"
         echo "  [3] Custom / Interactive Component Selection"
         printf "Choose an option [1-3] (default: 1): "
@@ -549,7 +549,7 @@ case "$PROFILE_CHOICE" in
     custom)
         echo ">> Profile: Custom Component Selection"
         if [[ "$HAS_NVIDIA_GPU" == true ]]; then
-            echo "NVIDIA GPU detected. Install with GPU support (CUDA 12.8)? [Y/n]"
+            echo "NVIDIA GPU detected. Install with GPU support (CUDA 12.9)? [Y/n]"
             read -r gpu_choice
             if [[ "$gpu_choice" != "n" && "$gpu_choice" != "N" ]]; then
                 USE_GPU=true
@@ -576,7 +576,7 @@ esac
 GROUP_ARGS=()
 if [[ "$USE_GPU" == true ]]; then
     GROUP_ARGS=(--no-group cpu --group cuda)
-    echo "Using CUDA 12.8 wheels (uv group: cuda)."
+    echo "Using CUDA 12.9 wheels (uv group: cuda)."
 else
     echo "Using CPU-only wheels (uv group: cpu)."
 fi
@@ -693,7 +693,7 @@ if [[ "$USE_GPU" == true ]]; then
     fi
 fi
 echo ""
-echo "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
+echo "PyTorch, torchvision, ultralytics, and boxmot are installed via uv sync from pyproject.toml."
 
 # Verify + repair CUDA wheel integrity (GPU template only).
 # Real bug hit in production: uv sync can report "nothing to do" for an

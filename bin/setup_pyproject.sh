@@ -10,9 +10,9 @@
 # repository is modified during a normal setup. --upgrade intentionally updates
 # the shared uv.lock, never a machine-specific manifest.
 #
-#   cpu   -> torch/torchvision/torchaudio from https://download.pytorch.org/whl/cpu
+#   cpu   -> torch/torchvision from https://download.pytorch.org/whl/cpu
 #            (on macOS: the PyPI wheel, which is the Metal/MPS build)
-#   cuda  -> the same trio from https://download.pytorch.org/whl/cu128 + tensorrt
+#   cuda  -> the same pair from https://download.pytorch.org/whl/cu129 + tensorrt
 #            + nvidia-ml-py (NVIDIA only; not available on macOS)
 #
 # Cross-platform (bash): Linux, macOS, WSL, Git Bash / MSYS2 on Windows.
@@ -228,7 +228,7 @@ ask() {
 
 if [[ "$NON_INTERACTIVE" != 1 && "$ACCEPT_DEFAULTS" != 1 ]]; then
     if ! ask "Use target '$TARGET'?" "Y"; then
-        echo "Available targets: cpu (CPU wheels / macOS Metal), cuda (NVIDIA CUDA 12.8)"
+        echo "Available targets: cpu (CPU wheels / macOS Metal), cuda (NVIDIA CUDA 12.9)"
         read -r -p "Pick target: " new_target
         TARGET="$(normalize_target "${new_target:-$TARGET}")"
         SUGGESTED_EXTRAS="$(suggested_extras_for_target "$TARGET")"

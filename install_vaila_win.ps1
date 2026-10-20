@@ -834,7 +834,7 @@ switch ($profileChoice) {
 $torchGroupArgs = @()
 If ($useGPU) {
     $torchGroupArgs = @("--no-group", "cpu", "--group", "cuda")
-    Write-Host "Using CUDA 12.8 wheels (uv group: cuda)." -ForegroundColor Green
+    Write-Host "Using CUDA 12.9 wheels (uv group: cuda)." -ForegroundColor Green
 } Else {
     Write-Host "Using CPU-only wheels (uv group: cpu)." -ForegroundColor Green
 }
@@ -1091,7 +1091,7 @@ Try {
 }
 
 Write-Host ""
-Write-Host "PyTorch, torchvision, torchaudio, ultralytics, and boxmot are installed via uv sync from pyproject.toml." -ForegroundColor Green
+Write-Host "PyTorch, torchvision, ultralytics, and boxmot are installed via uv sync from pyproject.toml." -ForegroundColor Green
 
 # Install pycairo
 Write-Host ""
