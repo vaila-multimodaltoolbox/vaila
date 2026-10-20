@@ -1,7 +1,7 @@
 """Fixed-scene video stabilization from getpixelvideo marker coordinates.
 
-Version: 0.4.5
-Update Date: 24 September 2026
+Version: 0.4.10
+Update Date: 19 October 2026
 Author: Paulo R. P. Santiago
 License: AGPL-3.0-or-later
 
@@ -82,10 +82,15 @@ try:
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
 
-try:
-    from .dialogsuser import ask_output_directory
-except ImportError:
-    from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
+def _ask_output_directory(*args, **kwargs):
+    """Folder chooser, imported lazily: dialogsuser imports tkinter at module level."""
+    try:
+        from .dialogsuser import ask_output_directory
+    except ImportError:
+        from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
+
+    return ask_output_directory(*args, **kwargs)
 
 
 VERSION = "0.4.3"
@@ -1813,7 +1818,7 @@ class StabilizerGUI:
 
             def browse(k=key, v=var):
                 value = (
-                    ask_output_directory(
+                    _ask_output_directory(
                         self.vars["video"].get(), title="Output base directory", parent=self.root
                     )
                     if k == "output-dir"

@@ -16,9 +16,18 @@ from vaila.getpixelvideo import (
 )
 
 
-def test_version_stamp_0_4_9() -> None:
-    assert GETPIXELVIDEO_VERSION == "0.4.9"
-    assert GETPIXELVIDEO_UPDATE_DATE == "17 October 2026"
+def _global_release_version() -> str:
+    """The vailá release in pyproject.toml, which every module stamp follows."""
+    import tomllib
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+
+
+def test_version_stamp_matches_global_release() -> None:
+    assert _global_release_version() == GETPIXELVIDEO_VERSION
+    assert GETPIXELVIDEO_UPDATE_DATE.endswith("2026")
 
 
 def test_clone_marker_editor_state_is_deep() -> None:

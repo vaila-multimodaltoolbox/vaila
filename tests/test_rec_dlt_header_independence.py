@@ -99,17 +99,17 @@ def test_rec3d_one_dlt3d_header_independent(tmp_path):
 
     subfolders = [f for f in out_dir.iterdir() if f.is_dir() and "vaila_rec3d" in f.name]
     assert len(subfolders) == 1
-    csv_files = list(subfolders[0].glob("*.csv"))
+    csv_files = [f for f in subfolders[0].glob("*.csv") if not f.name.endswith("_labels.csv")]
     assert len(csv_files) == 1
 
     rows = _read_csv_by_row(csv_files[0])
     by_frame = {int(float(r["frame"])): r for r in rows}
-    assert pytest.approx(float(by_frame[0]["p1_x"]), abs=1e-4) == 5
-    assert pytest.approx(float(by_frame[0]["p1_y"]), abs=1e-4) == 10
-    assert pytest.approx(float(by_frame[0]["p1_z"]), abs=1e-4) == 15
-    assert pytest.approx(float(by_frame[1]["p1_x"]), abs=1e-4) == 2
-    assert pytest.approx(float(by_frame[1]["p1_y"]), abs=1e-4) == 4
-    assert pytest.approx(float(by_frame[1]["p1_z"]), abs=1e-4) == 6
+    assert pytest.approx(float(by_frame[0]["p0_x"]), abs=1e-4) == 5
+    assert pytest.approx(float(by_frame[0]["p0_y"]), abs=1e-4) == 10
+    assert pytest.approx(float(by_frame[0]["p0_z"]), abs=1e-4) == 15
+    assert pytest.approx(float(by_frame[1]["p0_x"]), abs=1e-4) == 2
+    assert pytest.approx(float(by_frame[1]["p0_y"]), abs=1e-4) == 4
+    assert pytest.approx(float(by_frame[1]["p0_z"]), abs=1e-4) == 6
 
 
 # --------------------------------------------------------------------------- #
@@ -197,15 +197,15 @@ def test_rec3d_multicam_correlation_with_per_frame_dlt(tmp_path):
 
     subfolders = [f for f in out_dir.iterdir() if f.is_dir() and "vaila_rec" in f.name]
     assert len(subfolders) == 1
-    csv_files = list(subfolders[0].glob("*.csv"))
+    csv_files = [f for f in subfolders[0].glob("*.csv") if not f.name.endswith("_labels.csv")]
     assert len(csv_files) == 1
 
     rows = _read_csv_by_row(csv_files[0])
     by_frame = {int(float(r["frame"])): r for r in rows}
 
     expected = {
-        0: {"p1": (5, 10, 15), "p2": (1, 2, 3)},
-        1: {"p1": (2, 4, 6), "p2": (7, 8, 9)},
+        0: {"p0": (5, 10, 15), "p1": (1, 2, 3)},
+        1: {"p0": (2, 4, 6), "p1": (7, 8, 9)},
     }
     for frame, markers in expected.items():
         row = by_frame[frame]
@@ -357,7 +357,7 @@ def test_rec2d_header_independent_per_frame(tmp_path):
 
 
 # --------------------------------------------------------------------------- #
-# dlt2d.py — mismatched frame counts must fail gracefully
+# dlt2d.py — mismatched frame counts are matched by frame number (no crash)
 # --------------------------------------------------------------------------- #
 def test_dlt2d_frame_count_mismatch_no_crash(tmp_path):
     work = tmp_path / "work"
@@ -383,7 +383,14 @@ def test_dlt2d_frame_count_mismatch_no_crash(tmp_path):
         ]
     )
     assert result.returncode == 0, result.stderr
-    assert not (work / "pixels.dlt2d").exists()
+    assert "Traceback" not in result.stderr
+    # Frames are matched by number; one point per frame cannot define a DLT2D
+    # (4 are needed), so every frame comes out as NaN instead of crashing.
+    dlt_file = work / "pixels.dlt2d"
+    assert dlt_file.exists()
+    rows = _read_csv_by_row(dlt_file)
+    assert rows
+    assert all(v.lower() == "nan" for r in rows for k, v in r.items() if k != "frame")
 
 
 # --------------------------------------------------------------------------- #

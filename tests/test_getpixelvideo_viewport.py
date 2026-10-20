@@ -19,10 +19,15 @@ from vaila.getpixelvideo import (
 
 
 def test_build_stamp_matches_global_release() -> None:
-    assert GETPIXELVIDEO_VERSION == "0.4.9"
-    assert GETPIXELVIDEO_UPDATE_DATE == "17 October 2026"
-    assert "0.4.9" in GETPIXELVIDEO_WINDOW_TITLE
-    assert "17 October 2026" in GETPIXELVIDEO_WINDOW_TITLE
+    import tomllib
+    from pathlib import Path
+
+    pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+    release = tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["version"]
+    assert release == GETPIXELVIDEO_VERSION
+    assert GETPIXELVIDEO_UPDATE_DATE.endswith("2026")
+    assert release in GETPIXELVIDEO_WINDOW_TITLE
+    assert GETPIXELVIDEO_UPDATE_DATE in GETPIXELVIDEO_WINDOW_TITLE
     assert GETPIXELVIDEO_WINDOW_TITLE.startswith("vailá getpixelvideo")
 
 

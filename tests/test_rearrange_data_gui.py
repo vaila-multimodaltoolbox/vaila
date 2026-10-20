@@ -18,7 +18,7 @@ EXPECTED_SECTIONS = ("Columns", "Combine Files", "Import to vailá", "Advanced")
 EXPECTED_BUTTONS = (
     "Convert Units",
     "Modify Lab Ref System",
-    "Reset Index Col 0",
+    "Reset Frame Index (Col 0)",
     "Merge CSV",
     "Stack/Append CSV",
     "Save 2nd Half CSV",
