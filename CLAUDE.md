@@ -363,6 +363,8 @@ Step-by-step workflows, specialized agent roles in `.claude/` dir. For any AI as
 
 Per-change notes (what/why/gotchas/validation) for every recent module addition, GUI reorg — Crop Face, Smart Load Tracking CSV, SAM3/Sapiens2/DINOv3 pipelines, DLT/REC family, Markerless 2D/3D chooser reorgs, Geometric ReID v2, GUI→CLI mirror, rec3d Blender export fixes, joint-angle extraction, monocular↔DLT alignment, Sapiens2 3D Pose — moved to **[docs/claude-session-notes-archive.md](docs/claude-session-notes-archive.md)**, keeps this file under char budget. Skim before touching those modules; append new entries there, not here.
 
+Code structure (who calls what) for large questions: `graphify` skill + `graphify-out/` (generated, git-ignored); see [docs/graphify.md](docs/graphify.md).
+
 ### Specialized Agents (`.claude/agents/`)
 
 Role cards, domain experts. Use when task fits their domain:

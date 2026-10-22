@@ -281,3 +281,6 @@ tests/viewc3d/**/_staging/
 .ai-memory/*.db
 .ai-memory/*.db-wal
 .ai-memory/*.db-shm
+
+# graphify knowledge graph (generated; regenerate with graphify update / cluster-only)
+graphify-out/
