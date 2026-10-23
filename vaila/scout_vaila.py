@@ -6,14 +6,19 @@ Author: Paulo Roberto Pereira Santiago and Rafael Luiz Martins Montero
 Email: paulosantiago@usp.br and rafaell_mmonteiro@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 12 August 2025
-Update Date: 24 September 2026
-Version: 0.4.5
+Update Date: 22 October 2026
+Version: 0.4.10
 
 Description:
     Integrated GUI to annotate sports events on a virtual soccer field and generate
     quick analyses (e.g., heatmaps). Inspired by manual scouting tools and designed
     to fit the vailá project style. No external field image is required; the field is
-    drawn to scale using standard FIFA dimensions (105m x 68m).
+    drawn to scale using standard FIFA dimensions (105m x 68m). Video viewing is done
+    in *getpixelvideo* (Space play/pause); Scout follows that media time via
+    ``~/.vaila/scout_getpixel_sync.json`` so you watch in one window and mark
+    fundamentos in the other. Field clicks freeze the followed clock and stamp the
+    event. CSV exports bottom-left, centre, and top-left metre frames (plus optional
+    pixels) for interchange with drawsportsfields / FreeKiki.
 
 Usage:
     GUI mode: click "Scout" inside the "Soccer Tools" launcher in the vailá
@@ -72,8 +77,12 @@ from rich import print
 
 try:
     from .cli_highlight import print_gui_cli_mirror  # package import
+    from .field_coord_frames import enrich_metre_frames
+    from .scout_getpixel_sync import read_sync_state
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # standalone fallback
+    from field_coord_frames import enrich_metre_frames
+    from scout_getpixel_sync import read_sync_state
 
 # --- Config I/O helpers (TOML) -------------------------------------------------
 try:  # Python 3.11+
@@ -241,7 +250,8 @@ def write_toml_config(path: Path, cfg: dict) -> bool:
 # --- Data structures ------------------------------------------------------------
 @dataclass
 class ScoutEvent:
-    # CSV order: timestamp_s, team, player_name, player, action, action_code, result, pos_x_m, pos_y_m
+    # Legacy scout metres are bottom-left (Y up). Extra frames enable interchange
+    # with FIFA/FreeKiki (centre) and Skout-style top-left (Y down).
     timestamp_s: float
     team: str
     player_name: str
@@ -251,6 +261,13 @@ class ScoutEvent:
     result: str
     pos_x_m: float
     pos_y_m: float
+    pos_x_center_m: float = 0.0
+    pos_y_center_m: float = 0.0
+    pos_x_topleft_m: float = 0.0
+    pos_y_topleft_m: float = 0.0
+    video_frame: int | None = None
+    pos_x_px: float | None = None
+    pos_y_px: float | None = None
 
     def to_row(self) -> dict[str, object]:
         return asdict(self)
@@ -551,7 +568,7 @@ def draw_soccer_field(ax: plt.Axes, field_w: float, field_h: float) -> None:
 class ScoutApp(tk.Tk):
     def __init__(self, cfg: dict):
         super().__init__()
-        self.title("vailá - Scout - v0.1.5")
+        self.title("vailá - Scout - v0.4.10")
 
         # Get screen dimensions for responsive sizing
         screen_width = self.winfo_screenwidth()
@@ -578,6 +595,8 @@ class ScoutApp(tk.Tk):
         # --- Menu bar
         menubar = tk.Menu(self)
         file_menu = tk.Menu(menubar, tearoff=0)
+        file_menu.add_command(label="Launch GetPixelVideo…", command=self.launch_getpixelvideo)
+        file_menu.add_separator()
         file_menu.add_command(label="Save CSV	Ctrl+S", command=self.save_csv)
         file_menu.add_command(label="Load CSV	Ctrl+O", command=self.load_csv)
         file_menu.add_separator()
@@ -612,15 +631,15 @@ class ScoutApp(tk.Tk):
         container = ttk.Frame(self)
         container.pack(fill=tk.BOTH, expand=True)
 
-        # Left frame (field) - Much smaller size
-        left_frame = ttk.Frame(container, width=600)  # Reduced from 800 to 600
+        # Left: field diagram (video is GetPixelVideo; clock synced via file)
+        left_frame = ttk.Frame(container, width=700)
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=4, pady=4)
-        left_frame.pack_propagate(False)  # Prevent shrinking
+        left_frame.pack_propagate(False)
 
-        # Right frame (controls) - Much larger size
-        right_frame = ttk.Frame(container, width=500)  # Increased from 400 to 500
+        # Right frame (controls)
+        right_frame = ttk.Frame(container, width=500)
         right_frame.pack(side=tk.LEFT, fill=tk.Y, expand=False, padx=4, pady=4)
-        right_frame.pack_propagate(False)  # Prevent shrinking
+        right_frame.pack_propagate(False)
 
         # --- Controls (top-right)
         controls = ttk.Frame(right_frame)
@@ -696,12 +715,30 @@ class ScoutApp(tk.Tk):
         ttk.Button(manual_frame, text="Set", command=self._set_manual_time_now).pack(
             side=tk.LEFT, padx=2
         )
+        ttk.Label(manual_frame, text="(applies entry → clock)").pack(side=tk.LEFT, padx=4)
+
+        # GetPixelVideo clock follow (watch there, mark here)
+        sync_frame = ttk.Frame(controls)
+        sync_frame.grid(row=4, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 4))
+        self.follow_getpixel_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(
+            sync_frame,
+            text="Follow GetPixelVideo time",
+            variable=self.follow_getpixel_var,
+        ).pack(side=tk.LEFT, padx=1)
+        ttk.Button(sync_frame, text="Launch GetPixelVideo", command=self.launch_getpixelvideo).pack(
+            side=tk.LEFT, padx=6
+        )
+        ttk.Label(sync_frame, text="Offset s:").pack(side=tk.LEFT, padx=(8, 2))
+        self.video_offset_entry = ttk.Entry(sync_frame, width=8)
+        self.video_offset_entry.insert(0, "0.0")
+        self.video_offset_entry.pack(side=tk.LEFT, padx=2)
+        self.sync_status_var = tk.StringVar(value="Sync: waiting for GetPixelVideo…")
+        ttk.Label(sync_frame, textvariable=self.sync_status_var).pack(side=tk.LEFT, padx=8)
 
         # Buttons
         btns = ttk.Frame(controls)
-        btns.grid(
-            row=4, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(6, 4)
-        )  # Updated columnspan to 4
+        btns.grid(row=5, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(6, 4))
         ttk.Button(btns, text="Save CSV", command=self.save_csv).pack(side=tk.LEFT, padx=1)
         ttk.Button(btns, text="Load CSV", command=self.load_csv).pack(side=tk.LEFT, padx=1)
         ttk.Button(btns, text="Clear Events", command=self.clear_events).pack(side=tk.LEFT, padx=1)
@@ -710,9 +747,7 @@ class ScoutApp(tk.Tk):
 
         # Config buttons
         cfg_btns = ttk.Frame(controls)
-        cfg_btns.grid(
-            row=5, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6)
-        )  # Updated columnspan to 4
+        cfg_btns.grid(row=6, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 6))
         ttk.Button(cfg_btns, text="Load Config", command=self.load_config).pack(
             side=tk.LEFT, padx=4
         )
@@ -729,12 +764,16 @@ class ScoutApp(tk.Tk):
         # ttk.Button(layout_btns, text="Reset Layout", command=self._reset_layout).pack(side=tk.LEFT, padx=4)
         # ttk.Label(layout_btns, text="Tip: Drag separator to resize columns").pack(side=tk.LEFT, padx=8)
 
-        # --- Field figure (left) - Much smaller fixed size
-        self.field_fig, self.field_ax = plt.subplots(
-            figsize=(5.5, 3.5)
-        )  # Reduced from (7.0, 4.5) to (5.5, 3.5)
+        # --- Field figure (left)
+        self.field_fig, self.field_ax = plt.subplots(figsize=(5.5, 3.5))
         self.field_canvas = FigureCanvasTkAgg(self.field_fig, master=left_frame)
         self.field_canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+
+        # GetPixelVideo sync state
+        self._video_offset_s = 0.0
+        self._pending_pixel: tuple[float, float] | None = None
+        self._last_sync_updated_at: float | None = None
+        self._getpixel_proc = None
 
         # Remove resize binding to avoid errors
         # self.field_canvas.get_tk_widget().bind("<Configure>", self._on_field_resize)
@@ -794,7 +833,7 @@ class ScoutApp(tk.Tk):
         # Quick action code buffer (digits map to action codes)
         self.quick_action_buffer = ""
         self.quick_label = ttk.Label(controls, text="Quick action code: (none)")
-        self.quick_label.grid(row=7, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2))
+        self.quick_label.grid(row=8, column=0, columnspan=4, sticky=tk.W, padx=2, pady=(2, 2))
         for _d in list("0123456789"):
             self.bind_all(_d, self._on_digit_action)
         self.bind_all("<BackSpace>", self._on_backspace_action)
@@ -908,55 +947,64 @@ class ScoutApp(tk.Tk):
         return f"{m:02d}:{s:04.1f}"
 
     def _tick_timer(self):
-        # Update clock label periodically
+        # Prefer GetPixelVideo media time when Follow is on; else local wall clock
+        self._poll_getpixel_sync()
         if hasattr(self, "clock_var"):
             self.clock_var.set(self._format_time(self._get_current_time_s()))
         with contextlib.suppress(Exception):
-            self._tick_after_id = self.after(200, self._tick_timer)
+            self._tick_after_id = self.after(100, self._tick_timer)
 
     def _get_current_time_s(self) -> float:
-        if getattr(self, "manual_time_var", None) and self.manual_time_var.get():
-            try:
-                return float(self.manual_time_entry.get())
-            except Exception:
-                return 0.0
         if not getattr(self, "_timer_running", False):
             return float(getattr(self, "_timer_paused_elapsed", 0.0))
         return float(self._timer_paused_elapsed + (time.time() - self._timer_start_epoch))
 
     def _get_live_time_s(self) -> float:
-        # Live timer ignoring manual mode
-        if not getattr(self, "_timer_running", False):
-            return float(getattr(self, "_timer_paused_elapsed", 0.0))
-        return float(self._timer_paused_elapsed + (time.time() - self._timer_start_epoch))
+        return self._get_current_time_s()
+
+    def _following_getpixel(self) -> bool:
+        return bool(hasattr(self, "follow_getpixel_var") and self.follow_getpixel_var.get())
 
     def start_timer(self):
+        # When following GetPixelVideo, play is owned by that window (Space there).
+        if self._following_getpixel():
+            if hasattr(self, "sync_status_var"):
+                self.sync_status_var.set("Sync: use Space in GetPixelVideo (Follow is ON)")
+            return
         if not getattr(self, "_timer_running", False):
             self._timer_start_epoch = time.time()
             self._timer_running = True
 
     def pause_timer(self):
+        if self._following_getpixel():
+            return
         if getattr(self, "_timer_running", False):
             self._timer_paused_elapsed = self._get_current_time_s()
             self._timer_running = False
 
     def _toggle_timer(self):
-        """Toggle timer between running and paused states."""
-        # If manual mode is on, disable it so the live clock is visible
-        if getattr(self, "manual_time_var", None) and self.manual_time_var.get():
-            self.manual_time_var.set(False)
+        """Toggle local clock; no-op while Following GetPixelVideo."""
+        if self._following_getpixel():
+            if hasattr(self, "sync_status_var"):
+                self.sync_status_var.set("Sync: Space here ignored — press Space in GetPixelVideo")
+            return
         if getattr(self, "_timer_running", False):
             self.pause_timer()
         else:
             self.start_timer()
 
     def _set_manual_time_now(self) -> None:
+        """Apply Manual time entry → paused clock (temporarily stops follow)."""
         try:
-            current = self._get_live_time_s()
+            val = float(str(self.manual_time_entry.get()).strip())
         except Exception:
-            current = 0.0
-        self.manual_time_entry.delete(0, tk.END)
-        self.manual_time_entry.insert(0, f"{float(current):.1f}")
+            val = self._get_live_time_s()
+        val = max(0.0, float(val))
+        if hasattr(self, "follow_getpixel_var"):
+            self.follow_getpixel_var.set(False)
+        self._timer_running = False
+        self._timer_paused_elapsed = val
+        self.clock_var.set(self._format_time(val))
 
     def _init_next_player_numbers(self) -> dict[str, int]:
         def next_from_list(players: list[str]) -> int:
@@ -1053,8 +1101,33 @@ class ScoutApp(tk.Tk):
         _act = next((a for a in self.actions_cfg if a["name"] == self.action_var.get()), None)
         _act_code = int(_act.get("code", -1)) if _act else -1
 
+        # Stamp from latest GetPixel sync (one-shot) so the mark matches the video
+        # even if Follow was briefly off; keep Follow as-is so play/seek continue.
+        if getattr(self, "_timer_running", False):
+            self.pause_timer()
+        sync_now = read_sync_state()
+        if sync_now is not None:
+            try:
+                stamp_s = round(float(sync_now["time_s"]) + self._read_sync_offset(), 2)
+                self._timer_running = False
+                self._timer_paused_elapsed = max(0.0, stamp_s)
+                self._last_sync_frame = int(sync_now.get("frame") or 0)
+            except Exception:
+                stamp_s = round(self._get_current_time_s(), 2)
+        else:
+            stamp_s = round(self._get_current_time_s(), 2)
+        self.manual_time_entry.delete(0, tk.END)
+        self.manual_time_entry.insert(0, f"{stamp_s:.1f}")
+
+        metres = enrich_metre_frames(x_m, y_m, self.field_w, self.field_h)
+        px = py = None
+        if self._pending_pixel is not None:
+            px, py = self._pending_pixel
+            self._pending_pixel = None
+        frame_idx = getattr(self, "_last_sync_frame", None)
+
         ev = ScoutEvent(
-            timestamp_s=round(self._get_current_time_s(), 2),
+            timestamp_s=stamp_s,
             team=team_name,
             player_name=self._get_player_name(
                 self._team_key_from_name(team_name),
@@ -1064,8 +1137,15 @@ class ScoutApp(tk.Tk):
             action=self.action_var.get(),
             action_code=_act_code,
             result=self.result_var.get(),
-            pos_x_m=round(x_m, 2),
-            pos_y_m=round(y_m, 2),
+            pos_x_m=round(metres["pos_x_m"], 2),
+            pos_y_m=round(metres["pos_y_m"], 2),
+            pos_x_center_m=round(metres["pos_x_center_m"], 2),
+            pos_y_center_m=round(metres["pos_y_center_m"], 2),
+            pos_x_topleft_m=round(metres["pos_x_topleft_m"], 2),
+            pos_y_topleft_m=round(metres["pos_y_topleft_m"], 2),
+            video_frame=frame_idx,
+            pos_x_px=px,
+            pos_y_px=py,
         )
         self.events.append(ev)
 
@@ -1073,12 +1153,73 @@ class ScoutApp(tk.Tk):
         self._draw_player_marker_with_action(x_m, y_m, ev)
         self.field_canvas.draw()
 
+    # --- GetPixelVideo clock sync ----------------------------------------------
+    def _read_sync_offset(self) -> float:
+        try:
+            return float(self.video_offset_entry.get().strip())
+        except Exception:
+            return 0.0
+
+    def _poll_getpixel_sync(self) -> None:
+        """Mirror GetPixelVideo media time onto the scout clock when Follow is on."""
+        if not hasattr(self, "follow_getpixel_var") or not self.follow_getpixel_var.get():
+            return
+        state = read_sync_state()
+        if state is None:
+            if hasattr(self, "sync_status_var"):
+                self.sync_status_var.set("Sync: waiting for GetPixelVideo…")
+            return
+        updated = float(state.get("updated_at") or 0.0)
+        # Always apply while following (file updates ~10 Hz while playing)
+        try:
+            t_s = float(state["time_s"]) + self._read_sync_offset()
+        except Exception:
+            return
+        t_s = max(0.0, t_s)
+        self._timer_running = False
+        self._timer_paused_elapsed = t_s
+        self._last_sync_updated_at = updated
+        self._last_sync_frame = int(state.get("frame") or 0)
+        playing = bool(state.get("playing", not state.get("paused", True)))
+        stem = Path(str(state.get("video_path") or "")).name or "?"
+        if hasattr(self, "sync_status_var"):
+            mode = "PLAY" if playing else "PAUSE"
+            self.sync_status_var.set(f"Sync: {mode} {t_s:.2f}s · {stem}")
+
+    def launch_getpixelvideo(self) -> None:
+        """Spawn GetPixelVideo in a separate process (preferred video viewer)."""
+        import os
+        import subprocess
+        import sys
+
+        script = Path(__file__).resolve().parent / "getpixelvideo.py"
+        if not script.is_file():
+            messagebox.showerror("Error", f"getpixelvideo.py not found:\n{script}")
+            return
+        repo = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env["UV_NO_SYNC"] = "1"
+        cmd = ["uv", "run", "--no-sync", str(script)]
+        try:
+            self._getpixel_proc = subprocess.Popen(cmd, cwd=str(repo), env=env)  # noqa: S603
+        except Exception:
+            self._getpixel_proc = subprocess.Popen(  # noqa: S603
+                [sys.executable, str(script)], cwd=str(repo), env=env
+            )
+        self.follow_getpixel_var.set(True)
+        self.sync_status_var.set("Sync: GetPixelVideo launched — open a video & press Space")
+
     # --- Actions
     def reset_timer(self):
+        if hasattr(self, "follow_getpixel_var"):
+            self.follow_getpixel_var.set(False)
         self._timer_running = False
         self._timer_paused_elapsed = 0.0
         self._timer_start_epoch = time.time()
         self.clock_var.set(self._format_time(0.0))
+        if hasattr(self, "manual_time_entry"):
+            self.manual_time_entry.delete(0, tk.END)
+            self.manual_time_entry.insert(0, "0.0")
 
     def clear_events(self):
         if not self.events:
@@ -1104,6 +1245,13 @@ class ScoutApp(tk.Tk):
             "result",
             "pos_x_m",
             "pos_y_m",
+            "pos_x_center_m",
+            "pos_y_center_m",
+            "pos_x_topleft_m",
+            "pos_y_topleft_m",
+            "video_frame",
+            "pos_x_px",
+            "pos_y_px",
         ]
         ordered = [c for c in desired_cols if c in df.columns] + [
             c for c in df.columns if c not in desired_cols
@@ -1146,28 +1294,55 @@ class ScoutApp(tk.Tk):
                 return
             has_name = "player_name" in df.columns
             has_action_code = "action_code" in df.columns
-            self.events = [
-                ScoutEvent(
-                    timestamp_s=float(row["timestamp_s"]),
-                    team=str(row["team"]),
-                    player_name=(
-                        str(row["player_name"])
-                        if has_name and not pd.isna(row["player_name"])
-                        else ""
-                    ),
-                    player=str(row["player"]),
-                    action=str(row["action"]),
-                    action_code=(
-                        int(row["action_code"])
-                        if has_action_code and not pd.isna(row["action_code"])
-                        else -1
-                    ),
-                    result=str(row["result"]),
-                    pos_x_m=float(row["pos_x_m"]),
-                    pos_y_m=float(row["pos_y_m"]),
+
+            def _opt_float(row, key: str) -> float | None:
+                if key not in df.columns or pd.isna(row[key]):
+                    return None
+                return float(row[key])
+
+            def _opt_int(row, key: str) -> int | None:
+                if key not in df.columns or pd.isna(row[key]):
+                    return None
+                return int(row[key])
+
+            loaded: list[ScoutEvent] = []
+            for _, row in df.iterrows():
+                x_bl = float(row["pos_x_m"])
+                y_bl = float(row["pos_y_m"])
+                metres = enrich_metre_frames(x_bl, y_bl, self.field_w, self.field_h)
+                xc = _opt_float(row, "pos_x_center_m")
+                yc = _opt_float(row, "pos_y_center_m")
+                xtl = _opt_float(row, "pos_x_topleft_m")
+                ytl = _opt_float(row, "pos_y_topleft_m")
+                loaded.append(
+                    ScoutEvent(
+                        timestamp_s=float(row["timestamp_s"]),
+                        team=str(row["team"]),
+                        player_name=(
+                            str(row["player_name"])
+                            if has_name and not pd.isna(row["player_name"])
+                            else ""
+                        ),
+                        player=str(row["player"]),
+                        action=str(row["action"]),
+                        action_code=(
+                            int(row["action_code"])
+                            if has_action_code and not pd.isna(row["action_code"])
+                            else -1
+                        ),
+                        result=str(row["result"]),
+                        pos_x_m=x_bl,
+                        pos_y_m=y_bl,
+                        pos_x_center_m=xc if xc is not None else metres["pos_x_center_m"],
+                        pos_y_center_m=yc if yc is not None else metres["pos_y_center_m"],
+                        pos_x_topleft_m=xtl if xtl is not None else metres["pos_x_topleft_m"],
+                        pos_y_topleft_m=ytl if ytl is not None else metres["pos_y_topleft_m"],
+                        video_frame=_opt_int(row, "video_frame"),
+                        pos_x_px=_opt_float(row, "pos_x_px"),
+                        pos_y_px=_opt_float(row, "pos_y_px"),
+                    )
                 )
-                for _, row in df.iterrows()
-            ]
+            self.events = loaded
             # Update names mapping from CSV if present
             if has_name:
                 for e in self.events:
@@ -1791,19 +1966,21 @@ class ScoutApp(tk.Tk):
             ("Ctrl+K", "Clear events"),
             ("H", "Show heatmap"),
             ("V", "Scout visualization"),
-            ("R", "Reset timer"),
-            ("Space", "Start/Pause clock"),
+            ("R", "Reset local timer (turns Follow off)"),
+            ("Space", "Local clock only when Follow is OFF; with Follow ON use GetPixel Space"),
             ("?", "Open help"),
             ("T", "Toggle current team (home/away)"),
             ("Ctrl+L", "Load config"),
             ("Ctrl+Shift+S", "Save config"),
             ("Ctrl+T", "Rename teams"),
             ("Digits 0–9", "Enter action code; Enter apply; Backspace edit; Esc clear"),
-            ("Mouse", "Left=success, Right=fail, Middle=neutral"),
+            ("Mouse field", "Left=success, Right=fail, Middle=neutral; freezes followed time"),
             (
                 "Ctrl+Right Click",
                 "Remove events near clicked position (hold Ctrl, right click)",
             ),
+            ("GetPixelVideo Space", "Play/Pause video → Scout clock follows"),
+            ("Follow GetPixelVideo", "Checkbox: mirror media time from getpixelvideo"),
         ]
 
         for i, (keys, desc) in enumerate(shortcuts, start=1):

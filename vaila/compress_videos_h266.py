@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 06 September 2025
-Update: 06 March 2026
-Version: 0.1.2
+Update: 22 October 2026
+Version: 0.4.10
 Python Version: 3.12
 
 Description:
@@ -399,8 +399,15 @@ def get_compression_parameters():
         root = tk.Tk()
         root.withdraw()
 
-    dialog = tk.Toplevel()
+    dialog = tk.Toplevel(root)
     dialog.title("VVC/H.266 Compression Settings")
+    if root is not None:
+        dialog.transient(root)
+    dialog.lift()
+    dialog.attributes("-topmost", True)
+    dialog.update_idletasks()
+    dialog.attributes("-topmost", False)
+    dialog.focus_force()
     dialog.grab_set()
 
     main_frame = tk.Frame(dialog, padx=20, pady=15)
@@ -431,11 +438,11 @@ def get_compression_parameters():
     tk.Label(main_frame, text="QP Value (0-51):", font=("Arial", 10, "bold")).grid(
         row=3, column=0, sticky="w", pady=5
     )
-    qp_var = tk.StringVar(value="23")
+    qp_var = tk.StringVar(value="22")
     tk.Entry(main_frame, textvariable=qp_var, width=5).grid(row=3, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
-        text="Lower = better quality. 32 is a good default.",
+        text="Lower = better quality. Default 22 = analysis / kinematics",
         font=("Arial", 8, "italic"),
     ).grid(row=4, column=0, columnspan=2, sticky="w", padx=20)
 
@@ -534,10 +541,10 @@ def get_compression_parameters():
             if params["allow_larger_output"]:
                 confirm_msg += "Output may be larger than input. Files will be kept.\n\n"
             confirm_msg += "Continue?"
-            if messagebox.askyesno("Confirm Settings", confirm_msg):
+            if messagebox.askyesno("Confirm Settings", confirm_msg, parent=dialog):
                 dialog.destroy()
         except ValueError as e:
-            messagebox.showerror("Input Error", str(e))
+            messagebox.showerror("Input Error", str(e), parent=dialog)
 
     def on_cancel():
         dialog.destroy()
@@ -554,12 +561,14 @@ def compress_videos_h266_gui():
     print("Starting compress_videos_h266_gui...")
 
     # Check encoder availability BEFORE showing any dialogs
+    _parent = tk._default_root
     if not check_libvvenc_available():
         messagebox.showerror(
             "Encoder Not Available",
             "Your FFmpeg installation does not include the libvvenc encoder.\n\n"
             "H.266/VVC compression requires a special FFmpeg build with libvvenc.\n"
             "See the script documentation for instructions on getting a compatible build.",
+            parent=_parent,
         )
         return
 
@@ -569,10 +578,11 @@ def compress_videos_h266_gui():
         return
 
     video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos to compress"
+        title="Select the directory containing videos to compress",
+        parent=_parent,
     )
     if not video_directory:
-        messagebox.showerror("Error", "No directory selected.")
+        messagebox.showerror("Error", "No directory selected.", parent=_parent)
         return
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -608,7 +618,7 @@ def compress_videos_h266_gui():
         ]
 
     if not video_list:
-        messagebox.showerror("Error", "No video files found.")
+        messagebox.showerror("Error", "No video files found.", parent=_parent)
         return
 
     success_count, failure_count = run_compress_videos_h266(
@@ -622,6 +632,7 @@ def compress_videos_h266_gui():
     messagebox.showinfo(
         "Success",
         f"Video compression completed.\n\n{success_count} succeeded, {failure_count} failed.",
+        parent=_parent,
     )
 
 
@@ -682,8 +693,8 @@ Note: H.266/VVC encoding requires FFmpeg compiled with libvvenc.
     parser.add_argument(
         "--qp",
         type=int,
-        default=23,
-        help="Quantization Parameter 0-51 (default: 23). Lower = better quality.",
+        default=22,
+        help="Quantization Parameter 0-51 (default: 22, analysis quality). Lower = better quality.",
     )
     parser.add_argument(
         "--resolution",

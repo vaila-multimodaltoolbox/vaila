@@ -20,8 +20,20 @@ python -m vaila.scout_vaila
 
 CSV format
 ```text
-timestamp_s,team,player,action,result,pos_x_m,pos_y_m
+timestamp_s,team,player,action,result,pos_x_m,pos_y_m,pos_x_center_m,pos_y_center_m,pos_x_topleft_m,pos_y_topleft_m,video_frame,pos_x_px,pos_y_px
 ```
+
+Coordinate frames (interchangeable via `vaila/field_coord_frames.py`)
+- `pos_x_m` / `pos_y_m` — bottom-left, Y up (legacy scout)
+- `pos_x_center_m` / `pos_y_center_m` — FIFA/FreeKiki/drawsportsfields centre origin
+- `pos_x_topleft_m` / `pos_y_topleft_m` — top-left, Y down (Skout-style metres)
+- `pos_x_px` / `pos_y_px` — optional video pixels (click video, then field)
+
+Video (via GetPixelVideo)
+- Prefer *getpixelvideo* as the player (Launch GetPixelVideo button / File menu)
+- GetPixelVideo writes media time to `~/.vaila/scout_getpixel_sync.json`
+- Scout checkbox **Follow GetPixelVideo time** mirrors that clock (Space play/pause in getpixel → scout clock)
+- Field click freezes follow and stamps the event at that time; re-check Follow to resume
 
 Players summary CSV (auto-created on save)
 ```text

@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 05 March 2026
-Update: 06 March 2026
-Version: 0.1.2
+Update: 22 October 2026
+Version: 0.4.10
 Python Version: 3.12
 
 Description:
@@ -20,7 +20,7 @@ Supports recursive directory search with configurable subdirectory depth (GUI an
 How to use:
 ------------
 - GUI: Run the script without arguments to open the GUI.
-- CLI: python compress_videos_h265.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --crf 28
+- CLI: python compress_videos_h265.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --crf 18
 
 Requirements:
 ------------
@@ -302,6 +302,8 @@ def compress_video_worker_h265(video_info):
 
         # Add encoding settings based on GPU availability
         if use_gpu:
+            # Match H.264 NVENC: quality-driven VBR/CQ (CRF field). Fixed 5M ignored CRF
+            # and often produced larger files than libx264/h264_nvenc at the same GUI CRF.
             nvenc_preset = NVENC_PRESET_MAP.get(preset, "p5")
             cmd.extend(
                 [
@@ -309,12 +311,12 @@ def compress_video_worker_h265(video_info):
                     "hevc_nvenc",
                     "-preset",
                     nvenc_preset,
-                    "-b:v",
-                    "5M",
-                    "-maxrate",
-                    "5M",
-                    "-bufsize",
-                    "10M",
+                    "-tune",
+                    "hq",
+                    "-rc",
+                    "vbr",
+                    "-cq",
+                    str(crf),
                 ]
             )
         else:
@@ -485,8 +487,15 @@ def get_compression_parameters():
         root = tk.Tk()
         root.withdraw()
 
-    dialog = tk.Toplevel()
+    dialog = tk.Toplevel(root)
     dialog.title("Video Compression Settings")
+    if root is not None:
+        dialog.transient(root)
+    dialog.lift()
+    dialog.attributes("-topmost", True)
+    dialog.update_idletasks()
+    dialog.attributes("-topmost", False)
+    dialog.focus_force()
     dialog.grab_set()
 
     main_frame = tk.Frame(dialog, padx=20, pady=15)
@@ -519,11 +528,12 @@ def get_compression_parameters():
     tk.Label(main_frame, text="CRF Value (0-51):", font=("Arial", 10, "bold")).grid(
         row=3, column=0, sticky="w", pady=5
     )
-    crf_var = tk.StringVar(value="23")  # Same default as H.264 for fair comparison
+    # Match H.264 analysis default (CRF 18): detail for kinematics / markerless.
+    crf_var = tk.StringVar(value="18")
     tk.Entry(main_frame, textvariable=crf_var, width=5).grid(row=3, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
-        text="Lower = better quality. 28 is default for H.265",
+        text="Lower = better quality. Default 18 = analysis / kinematics (same as H.264)",
         font=("Arial", 8, "italic"),
     ).grid(row=4, column=0, columnspan=2, sticky="w", padx=20)
 
@@ -600,14 +610,18 @@ def get_compression_parameters():
             preset_idx = int(preset_var.get().strip())
             if not (1 <= preset_idx <= len(PRESET_OPTIONS)):
                 messagebox.showerror(
-                    "Error", f"Preset number must be between 1 and {len(PRESET_OPTIONS)}"
+                    "Error",
+                    f"Preset number must be between 1 and {len(PRESET_OPTIONS)}",
+                    parent=dialog,
                 )
                 return
             preset = PRESET_OPTIONS[preset_idx - 1]
 
             crf = int(crf_var.get().strip())
             if not (0 <= crf <= 51):
-                messagebox.showerror("Error", "CRF value must be between 0 and 51")
+                messagebox.showerror(
+                    "Error", "CRF value must be between 0 and 51", parent=dialog
+                )
                 return
 
             resolution_idx = int(resolution_var.get().strip())
@@ -615,13 +629,16 @@ def get_compression_parameters():
                 messagebox.showerror(
                     "Error",
                     f"Resolution number must be between 1 and {len(RESOLUTION_OPTIONS)}",
+                    parent=dialog,
                 )
                 return
             resolution = RESOLUTION_OPTIONS[resolution_idx - 1]
 
             gpu_choice = int(gpu_var.get().strip())
             if gpu_choice not in [1, 2]:
-                messagebox.showerror("Error", "GPU option must be 1 (Yes) or 2 (No)")
+                messagebox.showerror(
+                    "Error", "GPU option must be 1 (Yes) or 2 (No)", parent=dialog
+                )
                 return
             use_gpu = gpu_choice == 1
 
@@ -631,6 +648,7 @@ def get_compression_parameters():
                 messagebox.showerror(
                     "Error",
                     "Subdir depth must be -1 (unlimited), 0 (only selected folder), or 1–99.",
+                    parent=dialog,
                 )
                 return
 
@@ -657,13 +675,15 @@ def get_compression_parameters():
                 confirm_msg += "Output may be larger than input. Files will be kept.\n\n"
             confirm_msg += "Continue with these settings?"
 
-            if messagebox.askyesno("Confirm Settings", confirm_msg):
+            if messagebox.askyesno("Confirm Settings", confirm_msg, parent=dialog):
                 dialog.destroy()
 
         except ValueError:
-            messagebox.showerror("Error", "Please enter valid numbers for all fields.")
+            messagebox.showerror(
+                "Error", "Please enter valid numbers for all fields.", parent=dialog
+            )
         except Exception as e:
-            messagebox.showerror("Error", f"Error saving parameters: {e}")
+            messagebox.showerror("Error", f"Error saving parameters: {e}", parent=dialog)
 
     def on_cancel():
         dialog.destroy()
@@ -690,9 +710,10 @@ CRF VALUE (0-51): (quality setting)
 - Lower values = better quality, larger files
 - Higher values = lower quality, smaller files
 - 0 = lossless (largest files)
-- 28 = default value for H.265 (good balance)
+- 18 = default (kinematic / markerless analysis; same as H.264 GUI)
+- 28 = smaller files at similar viewing quality to H.264 CRF ~23
 - 51 = worst quality (smallest files)
-- Note: For same quality, H.265 typically needs ~6 higher CRF than H.264
+- Note: for archival size (not analysis), H.265 can use ~6 higher CRF than H.264
 
 RESOLUTION: (output size)
 1 = original: Keep the original video resolution
@@ -713,6 +734,8 @@ at the same quality level. Expect longer encoding times, especially with CPU enc
         help_dialog = tk.Toplevel(dialog)
         help_dialog.title("Compression Settings Help")
         help_dialog.transient(dialog)
+        help_dialog.lift()
+        help_dialog.focus_force()
         help_dialog.grab_set()
 
         text_widget = tk.Text(help_dialog, wrap="word", width=70, height=30)
@@ -749,11 +772,13 @@ def compress_videos_h265_gui():
         print("User canceled the operation")
         return
 
+    _parent = tk._default_root
     video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos to compress"
+        title="Select the directory containing videos to compress",
+        parent=_parent,
     )
     if not video_directory:
-        messagebox.showerror("Error", "No directory selected.")
+        messagebox.showerror("Error", "No directory selected.", parent=_parent)
         return
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -770,6 +795,7 @@ def compress_videos_h265_gui():
             "• Your FFmpeg was not compiled with NVENC support\n"
             "• NVIDIA drivers are outdated\n\n"
             "Compression will proceed using CPU (libx265) instead.",
+            parent=_parent,
         )
 
     max_depth = compression_config.get("max_depth", 0)
@@ -802,7 +828,7 @@ def compress_videos_h265_gui():
         ]
 
     if not video_list:
-        messagebox.showerror("Error", "No video files found.")
+        messagebox.showerror("Error", "No video files found.", parent=_parent)
         return
 
     success_count, failure_count = run_compress_videos_h265(
@@ -817,6 +843,7 @@ def compress_videos_h265_gui():
     messagebox.showinfo(
         "Success",
         f"Video compression completed.\n\n{success_count} succeeded, {failure_count} failed.",
+        parent=_parent,
     )
 
 
@@ -832,7 +859,7 @@ def build_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Compress with default settings (medium preset, CRF 28, original resolution, CPU)
+  # Compress with default settings (medium preset, CRF 18, original resolution, CPU)
   python -m vaila.compress_videos_h265 --dir /path/to/videos
 
   # Compress all videos in directory and subdirectories with GPU
@@ -877,8 +904,8 @@ Examples:
     parser.add_argument(
         "--crf",
         type=int,
-        default=23,
-        help="Constant Rate Factor 0-51 (default: 23). Lower = better quality.",
+        default=18,
+        help="Constant Rate Factor 0-51 (default: 18, analysis quality). Lower = better quality.",
     )
     parser.add_argument(
         "--resolution",

@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 19 October 2026
+Update: 22 October 2026
 Version: 0.4.10
 Python Version: 3.12.15
 
@@ -265,6 +265,14 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+
+try:
+    from .scout_getpixel_sync import write_sync_state as _write_scout_sync
+except ImportError:
+    try:
+        from scout_getpixel_sync import write_sync_state as _write_scout_sync
+    except ImportError:
+        _write_scout_sync = None  # type: ignore[assignment]
 
 # Optional import for TOML support (Python 3.11+)
 try:
@@ -2419,6 +2427,39 @@ def play_video_with_controls(
     dragging_slider = False
     dragging_marker_timeline = False
     timeline_drag_mf_snapshot: list[int] | None = None
+    # Scout clock mirror (~10 Hz + on play/pause / seek)
+    _scout_sync_last_t = 0.0
+    _scout_sync_last_frame = -1
+    _scout_sync_last_paused: bool | None = None
+
+    def _publish_scout_clock(*, force: bool = False) -> None:
+        """Push current media time to Scout via ~/.vaila/scout_getpixel_sync.json."""
+        nonlocal _scout_sync_last_t, _scout_sync_last_frame, _scout_sync_last_paused
+        if _write_scout_sync is None:
+            return
+        now = time.time()
+        same_pos = (
+            frame_count == _scout_sync_last_frame and paused == _scout_sync_last_paused
+        )
+        # Idle pause: do not rewrite. Playing: throttle ~10 Hz. Seek/play toggle: force.
+        if not force and same_pos and paused:
+            return
+        if not force and same_pos and (now - _scout_sync_last_t) < 0.1:
+            return
+        t_s = (frame_count / fps) if fps and fps > 0 else 0.0
+        try:
+            _write_scout_sync(
+                time_s=float(t_s),
+                frame=int(frame_count),
+                fps=float(fps) if fps else 0.0,
+                paused=bool(paused),
+                video_path=str(video_path) if video_path else None,
+            )
+            _scout_sync_last_t = now
+            _scout_sync_last_frame = int(frame_count)
+            _scout_sync_last_paused = bool(paused)
+        except Exception:
+            pass
 
     # Output formatting for screen pixel coordinates (applied on Save/export).
     # - "int": store integer pixels (smaller files, default)
@@ -6150,6 +6191,7 @@ def play_video_with_controls(
         )
         time_seconds = (frame_count / fps) if fps and fps > 0 else 0.0
         time_total = (display_total / fps) if fps and fps > 0 else 0.0
+        _publish_scout_clock()
         frame_info = font.render(
             f"Frame: {frame_count + 1}/{display_total} ({time_seconds:.6f}s/{time_total:.6f}s)",
             True,
@@ -13215,6 +13257,7 @@ def play_video_with_controls(
                     running = False
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
+                    _publish_scout_clock(force=True)
                 elif event.key == pygame.K_g and (pygame.key.get_mods() & pygame.KMOD_CTRL):
                     ok_go, msg_go = _goto_marker_dialog()
                     save_message_text = msg_go

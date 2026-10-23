@@ -6,8 +6,8 @@ vailá - Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago, Guilherme Cesar, Ligia Mochida, Bruno Bedo
 https://github.com/paulopreto/vaila-multimodaltoolbox
 Date: 05 March 2026
-Update: 06 March 2026
-Version: 0.1.2
+Update: 22 October 2026
+Version: 0.4.10
 Python Version: 3.12
 
 Description:
@@ -20,7 +20,7 @@ Supports recursive directory search with configurable subdirectory depth (GUI an
 How to use:
 ------------
 - GUI: Run the script without arguments to open the GUI.
-- CLI: python compress_videos_h264.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --crf 23
+- CLI: python compress_videos_h264.py --dir /path/to/videos [--recursive] [--depth N] --preset medium --crf 18
 
 Requirements:
 ------------
@@ -518,8 +518,15 @@ def get_compression_parameters():
         root.withdraw()
 
     # Create dialog window
-    dialog = tk.Toplevel()
+    dialog = tk.Toplevel(root)
     dialog.title("Video Compression Settings")
+    if root is not None:
+        dialog.transient(root)
+    dialog.lift()
+    dialog.attributes("-topmost", True)
+    dialog.update_idletasks()
+    dialog.attributes("-topmost", False)
+    dialog.focus_force()
     dialog.grab_set()
 
     # Main frame with padding
@@ -554,11 +561,12 @@ def get_compression_parameters():
     tk.Label(main_frame, text="CRF Value (0-51):", font=("Arial", 10, "bold")).grid(
         row=3, column=0, sticky="w", pady=5
     )
-    crf_var = tk.StringVar(value="23")
+    # Low CRF for kinematic / markerless analysis (detail over file size).
+    crf_var = tk.StringVar(value="18")
     tk.Entry(main_frame, textvariable=crf_var, width=5).grid(row=3, column=1, sticky="w", pady=5)
     tk.Label(
         main_frame,
-        text="Lower = better quality (0-51), 23 is default",
+        text="Lower = better quality (0-51). Default 18 = analysis / kinematics",
         font=("Arial", 8, "italic"),
     ).grid(row=4, column=0, columnspan=2, sticky="w", padx=20)
 
@@ -638,7 +646,9 @@ def get_compression_parameters():
             preset_idx = int(preset_var.get().strip())
             if not (1 <= preset_idx <= len(PRESET_OPTIONS)):
                 messagebox.showerror(
-                    "Error", f"Preset number must be between 1 and {len(PRESET_OPTIONS)}"
+                    "Error",
+                    f"Preset number must be between 1 and {len(PRESET_OPTIONS)}",
+                    parent=dialog,
                 )
                 return
             preset = PRESET_OPTIONS[preset_idx - 1]
@@ -646,7 +656,9 @@ def get_compression_parameters():
             # Validate CRF
             crf = int(crf_var.get().strip())
             if not (0 <= crf <= 51):
-                messagebox.showerror("Error", "CRF value must be between 0 and 51")
+                messagebox.showerror(
+                    "Error", "CRF value must be between 0 and 51", parent=dialog
+                )
                 return
 
             # Validate resolution
@@ -655,6 +667,7 @@ def get_compression_parameters():
                 messagebox.showerror(
                     "Error",
                     f"Resolution number must be between 1 and {len(RESOLUTION_OPTIONS)}",
+                    parent=dialog,
                 )
                 return
             resolution = RESOLUTION_OPTIONS[resolution_idx - 1]
@@ -662,7 +675,9 @@ def get_compression_parameters():
             # Validate GPU choice
             gpu_choice = int(gpu_var.get().strip())
             if gpu_choice not in [1, 2]:
-                messagebox.showerror("Error", "GPU option must be 1 (Yes) or 2 (No)")
+                messagebox.showerror(
+                    "Error", "GPU option must be 1 (Yes) or 2 (No)", parent=dialog
+                )
                 return
             use_gpu = gpu_choice == 1
 
@@ -672,6 +687,7 @@ def get_compression_parameters():
                 messagebox.showerror(
                     "Error",
                     "Subdir depth must be -1 (unlimited), 0 (only selected folder), or 1–99.",
+                    parent=dialog,
                 )
                 return
 
@@ -699,13 +715,15 @@ def get_compression_parameters():
                 )
             confirm_msg += "Continue with these settings?"
 
-            if messagebox.askyesno("Confirm Settings", confirm_msg):
+            if messagebox.askyesno("Confirm Settings", confirm_msg, parent=dialog):
                 dialog.destroy()
 
         except ValueError:
-            messagebox.showerror("Error", "Please enter valid numbers for all fields.")
+            messagebox.showerror(
+                "Error", "Please enter valid numbers for all fields.", parent=dialog
+            )
         except Exception as e:
-            messagebox.showerror("Error", f"Error saving parameters: {e}")
+            messagebox.showerror("Error", f"Error saving parameters: {e}", parent=dialog)
 
     def on_cancel():
         dialog.destroy()
@@ -733,7 +751,8 @@ CRF VALUE (0-51): (quality setting)
 - Lower values = better quality, larger files
 - Higher values = lower quality, smaller files
 - 0 = lossless (largest files)
-- 23 = default value (good balance)
+- 18 = default (kinematic / markerless analysis)
+- 23 = smaller files, still decent viewing quality
 - 51 = worst quality (smallest files)
 
 RESOLUTION: (output size)
@@ -757,6 +776,8 @@ them (useful for compatibility on PCs that don't support HEVC).
         help_dialog = tk.Toplevel(dialog)
         help_dialog.title("Compression Settings Help")
         help_dialog.transient(dialog)
+        help_dialog.lift()
+        help_dialog.focus_force()
         help_dialog.grab_set()
 
         text_widget = tk.Text(help_dialog, wrap="word", width=70, height=25)
@@ -766,8 +787,9 @@ them (useful for compatibility on PCs that don't support HEVC).
 
         tk.Button(help_dialog, text="Close", command=help_dialog.destroy).pack(pady=10)
 
+    # Help below OK/Cancel (row 13 was shared with separator — layout bug)
     tk.Button(main_frame, text="Help", command=show_help).grid(
-        row=13, column=0, columnspan=2, pady=5
+        row=15, column=0, columnspan=2, pady=5
     )
 
     # Center the dialog on screen
@@ -796,11 +818,13 @@ def compress_videos_h264_gui():
         return
 
     # Select video directory
+    _parent = tk._default_root
     video_directory = filedialog.askdirectory(
-        title="Select the directory containing videos to compress"
+        title="Select the directory containing videos to compress",
+        parent=_parent,
     )
     if not video_directory:
-        messagebox.showerror("Error", "No directory selected.")
+        messagebox.showerror("Error", "No directory selected.", parent=_parent)
         return
 
     # Create output directory with timestamp
@@ -819,6 +843,7 @@ def compress_videos_h264_gui():
             "• Your FFmpeg was not compiled with NVENC support\n"
             "• NVIDIA drivers are outdated\n\n"
             "Compression will proceed using CPU (libx264) instead.",
+            parent=_parent,
         )
 
     # Find video files (GUI: optional recursion up to max_depth)
@@ -852,7 +877,7 @@ def compress_videos_h264_gui():
         ]
 
     if not video_list:
-        messagebox.showerror("Error", "No video files found.")
+        messagebox.showerror("Error", "No video files found.", parent=_parent)
         return
 
     success_count, failure_count = run_compress_videos_h264(
@@ -867,6 +892,7 @@ def compress_videos_h264_gui():
     messagebox.showinfo(
         "Success",
         f"Video compression completed.\n\n{success_count} succeeded, {failure_count} failed.",
+        parent=_parent,
     )
 
 
@@ -882,7 +908,7 @@ def build_parser():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Compress with default settings (medium preset, CRF 23, original resolution, CPU)
+  # Compress with default settings (medium preset, CRF 18, original resolution, CPU)
   python -m vaila.compress_videos_h264 --dir /path/to/videos
 
   # Compress all videos in directory and subdirectories with GPU
@@ -931,8 +957,8 @@ Examples:
     parser.add_argument(
         "--crf",
         type=int,
-        default=23,
-        help="Constant Rate Factor 0-51 (default: 23). Lower = better quality.",
+        default=18,
+        help="Constant Rate Factor 0-51 (default: 18, analysis quality). Lower = better quality.",
     )
     parser.add_argument(
         "--resolution",
