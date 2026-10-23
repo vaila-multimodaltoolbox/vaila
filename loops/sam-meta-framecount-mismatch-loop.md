@@ -144,7 +144,6 @@ Errors, missing evidence, and budget exhaustion are never success.
   callers.
 - `$sam3sapiens2-pose` — pipeline stage order and CLI/GPU context.
 - `$verify-and-stop` — stop when governing check proves done; do not expand scope.
-- `$caveman-commit` — only if the human asks for a commit.
 
 ## Sub-Loops
 None. Do not nest `sam3-batch-auto-resume-loop.md` here; resume logic is out of
