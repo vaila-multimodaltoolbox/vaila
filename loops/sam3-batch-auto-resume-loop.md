@@ -121,7 +121,7 @@ and continues rather than restarting step 0.
       `vaila/help/sam3sapiens2.md`/`.html` and `vaila/help/sam3dinov3.md`/`.html`
       if the new `--fresh` flag or default behavior needs documenting; update
       root `README.md` `Last updated:` line.
-4. Invoke `caveman:surgical-patch` for each of steps 3.1–3.2 (narrowest
+4. Invoke `surgical-patch` for each of steps 3.1–3.2 (narrowest
    responsible layer, existing tests as regression guard) and the
    `test-writer` agent (`.claude/agents/test-writer.md`) for step 3.3, one
    target per iteration — never both scripts' behavior changes and the tests
@@ -192,7 +192,7 @@ Errors, missing evidence, and budget exhaustion are never success.
   an uncommitted diff without re-running the check).
 
 ## Skills
-- `caveman:surgical-patch` — narrow behavior change to `main()` in each script,
+- `surgical-patch` — narrow behavior change to `main()` in each script,
   one file per invocation, existing tests as the regression guard.
 - `test-writer` (agent, `.claude/agents/test-writer.md`) — red-before/green-after
   tests for auto-resume, `--fresh` opt-out, and interrupted-run recovery.
