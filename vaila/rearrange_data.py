@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 24 September 2026
-Version: 0.4.5
+Update Date: 23 October 2026
+Version: 0.4.11
 
 Description:
     This script provides tools for rearranging and processing CSV data files.
@@ -109,6 +109,38 @@ from vaila import modifylabref
 from vaila.dlc2vaila import batch_convert_dlc
 from vaila.mergestack import merge_csv_files, select_file, stack_csv_files
 from vaila.standardize_header import standardize_header
+
+# Builtins an expression may use; everything else (open, __import__, exec, ...) is absent.
+_EXPRESSION_BUILTINS = {
+    "abs": abs,
+    "float": float,
+    "int": int,
+    "len": len,
+    "max": max,
+    "min": min,
+    "pow": pow,
+    "round": round,
+    "sum": sum,
+}
+
+
+def evaluate_column_expression(expression: str, x):
+    """Evaluate a Custom Math Operation expression for one column value ``x``.
+
+    The expression sees ``x``, ``np``, ``pd``, ``math`` and, when named, ``scipy``,
+    plus a few numeric builtins. This keeps the documented examples working and
+    removes file, import and exec access; it is not a sandbox for untrusted input.
+    """
+    import math
+
+    namespace = {"__builtins__": _EXPRESSION_BUILTINS, "x": x, "np": np, "pd": pd, "math": math}
+    if "scipy" in expression:
+        import scipy
+        import scipy.signal  # noqa: F401  (documented example: scipy.signal.medfilt)
+
+        namespace["scipy"] = scipy
+    return eval(expression, namespace)  # noqa: S307  (restricted namespace above)
+
 
 # Dictionary for metric unit conversions with abbreviations
 CONVERSIONS = {
@@ -2064,7 +2096,7 @@ class ColumnReorderGUI(tk.Tk):
             result_values = []
             for val in sample_values:
                 try:
-                    result = eval(expression)
+                    result = evaluate_column_expression(expression, val)
                     # Handle pandas Series results (e.g., from rolling operations)
                     if isinstance(result, pd.Series):
                         result = result.iloc[0] if len(result) > 0 else np.nan
@@ -2151,7 +2183,7 @@ class ColumnReorderGUI(tk.Tk):
 
                         for val in original_values:
                             try:
-                                result = eval(expression)
+                                result = evaluate_column_expression(expression, val)
                                 # Handle pandas Series results
                                 if isinstance(result, pd.Series):
                                     result = result.iloc[0] if len(result) > 0 else np.nan

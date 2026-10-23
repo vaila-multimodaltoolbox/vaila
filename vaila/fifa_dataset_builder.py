@@ -1,7 +1,7 @@
 """FIFA Dataset Builder — unified 32-pt soccer-pitch keypoint dataset.
 
-Update Date: 06 October 2026
-Version: 0.4.7
+Update Date: 23 October 2026
+Version: 0.4.11
 
 Goal
 ----
@@ -617,7 +617,9 @@ def _download_url_archive(url: str, dst: Path) -> None:
             zf.extractall(dst)
     elif lower.endswith(".tar") or lower.endswith(".tar.gz") or lower.endswith(".tgz"):
         with tarfile.open(archive_path, "r:*") as tf:
-            tf.extractall(dst)
+            tf.extractall(
+                dst, filter="data"
+            )  # blocks paths outside dst, unsafe links and special files
     else:
         raise RuntimeError(f"Unsupported archive extension for URL source: {archive_name}")
     extracted_marker.write_text("ok\n", encoding="utf-8")

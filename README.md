@@ -976,6 +976,8 @@ The **installable package version** is defined in **`pyproject.toml`** (`[projec
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 
+**Ready-made installers:** the newest GitHub release ships `vaila_installer.exe` (Windows) and `vaila_installer.dmg` (macOS), built automatically from the release tag — download them from **[Releases → Latest](https://github.com/vaila-multimodaltoolbox/vaila/releases/latest)**. Linux uses `install_vaila_linux.sh` (above).
+
 Maintainership policy, tag commands, and automated multi-OS installer builds (Windows `.exe` and macOS `.dmg` via GitHub Actions) are documented in **[docs/github_release_guide.md](docs/github_release_guide.md)** and **[CONTRIBUTING.md — Versioning and GitHub releases](CONTRIBUTING.md#versioning-and-github-releases)**.
 
 ## License

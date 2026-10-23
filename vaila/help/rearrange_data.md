@@ -6,8 +6,8 @@
 - **File:** `vaila\rearrange_data.py`
 - **Lines:** 1772
 - **Size:** 68536 characters
-- **Version:** 0.4.5
-- **Updated:** 24 September 2026
+- **Version:** 0.4.11
+- **Updated:** 23 October 2026
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -21,8 +21,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 08 Oct 2024
-Update Date: 24 August 2026
-Version: 0.3.111
+Update Date: 23 October 2026
+Version: 0.4.11
 
 > **Edit CSV/C3D:** the Frame C `C_A_r1_c1` button no longer calls this
 > module directly — it now runs [`edit_csv_c3d`](edit_csv_c3d.html)
@@ -55,6 +55,14 @@ Requirements:
 
 License:
     This project is licensed under the terms of GNU General Public ...
+
+## Custom Math Operation
+
+Type an expression using `x` for each column value, for example `x * 2.5`, `x / 1000`, `np.sqrt(x)`,
+`np.deg2rad(x)` or `scipy.signal.medfilt(x, 5)`. Since v0.4.11 the expression runs with only `x`,
+`np`, `pd`, `math`, `scipy` and a few numeric builtins (`abs`, `min`, `max`, `round`, `float`, `int`,
+`len`, `sum`, `pow`): file access, imports and `exec` are not available. This also fixes the
+documented `x` examples, which earlier returned NaN for every value.
 
 ## 🔧 Main Functions
 

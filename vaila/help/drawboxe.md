@@ -5,7 +5,7 @@
 - **Category:** Tools
 - **File:** `vaila/drawboxe.py`
 - **Lines:** 2051
-- **Version:** 0.3.83
+- **Version:** 0.4.11
 - **Author:** Paulo Roberto Pereira Santiago
 - **GUI Interface:** ✅ Yes
 - **Email:** paulosantiago@usp.br

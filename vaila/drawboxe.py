@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 28 October 2024
-Update Date: 15 July 2026
-Version: 0.3.83
+Update Date: 23 October 2026
+Version: 0.4.11
 Description:
     Draw boxes on videos.
     This script is a modified version of the original drawboxe.py script.
@@ -289,10 +289,9 @@ def extract_frames(video_path, frames_dir):
             os.path.join(frames_dir, "frame_%09d.png"),
         ]
 
-        if os.name == "nt":
-            subprocess.run(command, check=True, capture_output=False, text=True, shell=True)
-        else:
-            subprocess.run(command, check=True, capture_output=False, text=True)
+        # No shell on any OS: the argument list reaches ffmpeg as-is, so file names
+        # with &, |, % or quotes cannot be read as shell syntax on Windows.
+        subprocess.run(command, check=True, capture_output=False, text=True)
 
         # Count extracted frames
         frame_files = [
