@@ -7612,7 +7612,7 @@ wheels = [
 
 [[package]]
 name = "vaila"
-version = "0.4.11"
+version = "0.4.12"
 source = { editable = "." }
 default-groups = ["cpu", "dev"]
 dependencies = [
