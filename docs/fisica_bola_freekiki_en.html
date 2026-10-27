@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ball physics in FreeKiki</title>
+<style>
+  :root { --ink:#1d1d1f; --muted:#5b5b63; --rule:#d8d8de; --accent:#0b5cad; --warn:#9a3412; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --ink:#e8e8ee; --muted:#a6a6b0; --rule:#3a3a44; --accent:#7fb6ff; --warn:#ffb08a; }
+  }
+  :root[data-theme="dark"] { --ink:#e8e8ee; --muted:#a6a6b0; --rule:#3a3a44; --accent:#7fb6ff; --warn:#ffb08a; }
+  body { background:#fff; color:var(--ink); font:15px/1.55 "Georgia", serif; max-width:760px; margin:0 auto; padding:24px 16px 60px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body { background:#16161c; } }
+  :root[data-theme="dark"] body { background:#16161c; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:34px 0 8px; border-bottom:1px solid var(--rule); padding-bottom:4px; }
+  h3 { font-size:16px; margin:22px 0 6px; }
+  p, li { margin:8px 0; }
+  .sub { color:var(--muted); margin-top:0; }
+  .lang { font-size:13px; color:var(--muted); margin:0 0 16px; }
+  .lang a { color:var(--accent); }
+  .eq { font-family:"DejaVu Sans Mono", monospace; font-size:13.5px; background:rgba(127,127,140,.12); padding:10px 12px; border-radius:6px; overflow-x:auto; white-space:pre-wrap; word-break:break-all; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { border-bottom:1px solid var(--rule); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:normal; }
+  figure { margin:16px 0; }
+  figure img { width:100%; border:1px solid var(--rule); border-radius:4px; }
+  figcaption { color:var(--muted); font-size:13px; margin-top:4px; }
+  .note { border-left:3px solid var(--accent); padding:4px 12px; color:var(--muted); }
+  .warn { border-left:3px solid var(--warn); padding:4px 12px; }
+  code { font-family:"DejaVu Sans Mono", monospace; font-size:13px; }
+  @media print { .lang { display:none; } }
+</style>
+</head>
+<body>
+
+<p class="lang"><a href="fisica_bola_freekiki_pt.html">Português</a> · English · <a href="fisica_bola_freekiki_en.pdf">PDF</a></p>
+
+<h1>Ball physics in FreeKiki</h1>
+<p class="sub">Drag, the Magnus effect, and the trajectory of a hand-corrected ball, with spin inferred from pixels.
+<i>vailá</i>, version 0.4.11, 26 October 2026.</p>
+
+<h2>1. Summary</h2>
+<p>3D reconstruction of a hand-corrected ball needs a physically plausible trajectory. A soccer ball is not a
+particle on the ground: it leaves the foot, rises, loses speed to the air, and curves because of spin. This document
+explains the model FreeKiki uses, where the numbers come from, how it is fitted to the markings, and what still does
+not match.</p>
+<p>In short, the model:</p>
+<ul>
+  <li>computes drag with a Cd that depends on Reynolds number (the drag crisis);</li>
+  <li>computes the Magnus effect that curves the ball, with a lift coefficient that depends on spin;</li>
+  <li>fits initial velocity, spin, and kick time to the ball pixels, using each frame’s DLT3D calibration;</li>
+  <li>uses three physical points (kick foot, barrier passage, and arrival at the goalkeeper’s hands) as anchors.</li>
+</ul>
+<p class="warn">Honest result: on the c1 clip the model reproduces the ball markings with 1.6 px mean error, but the
+three physical anchors are only met with 0.6 to 1.0 m error. Validation against the published Pelé kick case also
+failed (about 10 to 12 m error). Details in section 8.</p>
+
+<h2>2. Forces on the ball</h2>
+<p>A ball moves through air under three forces: weight, drag (opposite to the motion), and the Magnus force
+(perpendicular to the motion, caused by rotation).</p>
+
+<h3>2.1 Drag</h3>
+<p>Drag is the force the air exerts against the motion. For a sphere (the ball) it is:</p>
+<div class="eq">F_D = ½ · ρ · A · Cd · v²</div>
+<p>where <i>ρ</i> is air density (1.2 kg/m³), <i>A</i> is the cross-sectional area (πr², with r = 0.11 m), and
+<i>Cd</i> is the drag coefficient, which is not constant: it depends on speed and ball roughness.</p>
+<p>The <b>Reynolds number</b> measures the ratio of inertia to air viscosity:</p>
+<div class="eq">Re = v · D / ν        ν = μ / ρ = 1.8·10⁻⁵ / 1.2 = 1.5·10⁻⁵ m²/s        D = 0.22 m</div>
+<p>For a soccer ball, Re lies between 10⁵ and 5·10⁵ in play: the range where drag changes regime.</p>
+
+<h3>2.2 The drag crisis</h3>
+<p>Below a critical Reynolds number (about 2 to 3 · 10⁵ for a soccer ball, after Asai &amp; Seo, 2013), the air
+boundary layer is laminar and separates early from the ball, leaving a wide wake: Cd ≈ 0.47. Above the critical value
+the boundary layer becomes turbulent, separates later, and the wake shrinks: Cd falls to 0.12–0.15. That drop is the
+<b>drag crisis</b>. Seams and panels bring the transition forward, so Brazuca and other panelled balls have crises at
+different speeds.</p>
+<figure>
+  <img src="images/fisica_cd_vs_velocidade.png" alt="Cd versus speed">
+  <figcaption>Brazuca drag coefficient (fit to Table 1 of Kiratidis &amp; Leinweber, 2018), from
+  <code>freekiki_physics.drag_coefficient</code>. The orange band marks the crisis.</figcaption>
+</figure>
+
+<h3>2.3 Magnus effect</h3>
+<p>A spinning ball drags air on one side and slows it on the other. The pressure difference yields a force perpendicular
+to velocity and to the spin axis:</p>
+<div class="eq">F_M = ½ · ρ · A · C_L · v² · (ω̂ × v̂)</div>
+<p>The coefficient <i>C_L</i> grows with the <b>spin parameter</b> <i>Sp = r · |ω| / v</i> (ω in rad/s). We use the
+Kiratidis &amp; Leinweber (2018, Eq. 8) fit: <i>C_L = 1.15 · Sp<sup>0.83</sup></i>, without the drag factor of Eq. 9
+(documented simplification). For a kick at 6 revolutions per second and 30 m/s, Sp ≈ 0.14 and C_L ≈ 0.22.</p>
+<p>Spin also increases drag: <i>Cd += b · Sp</i> with b = 0.514 (Kiratidis Eq. 6, measured on Teamgeist; Brazuca has no
+own value in that paper).</p>
+
+<h2>3. Equation of motion</h2>
+<p>With z upward, the ball acceleration is:</p>
+<div class="eq">a = −g·ẑ − (ρA / 2m) · Cd(v, Sp) · |v| · v + (ρA / 2m) · C_L(Sp) · |v|² · (ω̂ × v̂)</div>
+<p>with g = 9.81 m/s², m = 0.43 kg (Kiratidis) and D = 0.22 m. Integration is numerical (RK45,
+<code>scipy.integrate.solve_ivp</code>). Before the kick the ball rests on the ground. From kick time
+<i>t<sub>k</sub></i> it flies under the equation above.</p>
+
+<h3>3.1 Constants and sources</h3>
+<table>
+<tr><th>quantity</th><th>value</th><th>source</th></tr>
+<tr><td>air density ρ</td><td>1.2 kg/m³</td><td>Aguiar (UFRJ); Kiratidis</td></tr>
+<tr><td>viscosity μ</td><td>1.8·10⁻⁵ Pa·s</td><td>Aguiar (UFRJ)</td></tr>
+<tr><td>diameter D, radius r</td><td>0.22 m, 0.11 m</td><td>Aguiar; Kiratidis</td></tr>
+<tr><td>mass m</td><td>0.43 kg</td><td>Kiratidis (Asai &amp; Seo give 0.428–0.438 kg)</td></tr>
+<tr><td>Cd(v), Brazuca</td><td>a = 0.4740; v<sub>c</sub> = 12.92; v<sub>s</sub> = 1.000; b<sub>min</sub> = 0.1657; b<sub>max</sub> = 0.2112; v<sub>min</sub> = 14.61; v<sub>max</sub> = 35.00 m/s</td><td>Kiratidis, Table 1 and Eq. 5</td></tr>
+<tr><td>spin term in Cd</td><td>b = 0.514</td><td>Kiratidis, Eq. 6 (Teamgeist value)</td></tr>
+<tr><td>C_L(Sp)</td><td>1.15 · Sp<sup>0.83</sup></td><td>Kiratidis, Eq. 8 (without drag factor)</td></tr>
+</table>
+<p class="note">The Cd table goes up to 35 m/s. Above that, the code holds the 35 m/s value and flags the segment in
+the report (<code>above_fit_range</code>).</p>
+
+<h2>4. How the code fits the trajectory</h2>
+<p><code>getpixelvideo</code> markings give, for each frame, the ball position in the image (u, v). Each frame has a
+DLT3D calibration, a 3×4 matrix P that maps a field point (X, Y, Z) in metres to the image. The fit seeks the physical
+trajectory that, projected by P each frame, reproduces the markings.</p>
+<p>Fitted parameters (9):</p>
+<ul>
+  <li>initial ground position (x<sub>0</sub>, y<sub>0</sub>);</li>
+  <li>initial velocity (v<sub>x</sub>, v<sub>y</sub>, v<sub>z</sub>);</li>
+  <li>kick time t<sub>k</sub>;</li>
+  <li>spin vector ω = (ω<sub>x</sub>, ω<sub>y</sub>, ω<sub>z</sub>). Direction and magnitude are inferred: curvature in
+  X,Y points to the vertical spin component, curvature in Z to the horizontal components.</li>
+</ul>
+<p>Residuals minimized (<code>scipy.optimize.least_squares</code>):</p>
+<ul>
+  <li><b>pixels</b>: per-frame reprojection error, 2 px sigma;</li>
+  <li><b>kick foot</b> (frame 0): the ball starts at the player’s foot (left ankle), 0.3 m sigma;</li>
+  <li><b>barrier</b> (frame 9): the ball is 1.8 m high and 0.3 m horizontally from the barrier player’s shoulder;
+  0.1 m sigmas;</li>
+  <li><b>goalkeeper</b> (last frame): the ball reaches the midpoint of the keeper’s hands, 0.2 m sigma.</li>
+</ul>
+<p>The fit is repeated with three kick times and three spin starts (zero, and ±6 rps about the vertical axis) to avoid
+a local minimum. The lowest-cost run wins.</p>
+<p>Usage in FreeKiki:</p>
+<div class="eq">uv run --no-sync vaila/freekiki.py ball-rebuild -w WS --out &lt;3D folder&gt; --ball-csv &lt;markers.csv&gt; \
+  --ball-anchors '{"kicker_id": 30, "barrier_id": 15, "keeper_id": 21}'</div>
+<p>IDs are the players in the clip (<code>person_id</code> in the pose files). Output includes
+<code>ball_flight.json</code> with parameters, speeds, and residuals; the ball C3D then carries true height.</p>
+
+<h2>5. Results on clip c1 (Paquetá)</h2>
+<p>Data: 31 frames at 29.97 fps, valid DLT3D on every frame; hand-corrected ball markings.</p>
+<table>
+<tr><th>quantity</th><th>result</th></tr>
+<tr><td>reprojection error (rms / max)</td><td>1.58 px / 6.08 px (the earlier ballistic fit, no Magnus, with anchors, had 8.7 px)</td></tr>
+<tr><td>kick time</td><td>0.00 s (lower bound of the interval: the ball leaves the foot at frame 0)</td></tr>
+<tr><td>inferred spin</td><td>4.9 rps, axis (0.08; −0.04; −1.00): nearly vertical, hence the lateral curve</td></tr>
+<tr><td>peak speed</td><td>32.8 m/s (inside the Brazuca Cd range)</td></tr>
+<tr><td>speed at end (frame 30)</td><td>22.8 m/s: 30% drop from drag</td></tr>
+<tr><td>height at frame 9</td><td>1.58 m (the barrier asks for 1.8 m)</td></tr>
+<tr><td>maximum height</td><td>2.07 m</td></tr>
+<tr><td>anchor errors</td><td>foot: 0.63 m; barrier: 0.70 m horizontal and 0.22 m height; keeper: 1.02 m</td></tr>
+</table>
+<figure>
+  <img src="images/fisica_altura_velocidade.png" alt="Height and speed over time">
+  <figcaption>Height (top) and speed (bottom) of the fitted ball. Speed falls continuously under drag.</figcaption>
+</figure>
+<figure>
+  <img src="images/fisica_trajetoria_topo.png" alt="Top-view trajectory">
+  <figcaption>Top view. Grey points are the ground projection of each pixel, which assumes the ball on the ground and
+  therefore errs in flight. The blue curve is the fitted track, which matches the pixels within 1.6 px.</figcaption>
+</figure>
+<figure>
+  <img src="images/fisica_residuos_pixels.png" alt="Reprojection error per frame">
+  <figcaption>Reprojection error per frame, in px. Error stays low through the whole flight.</figcaption>
+</figure>
+
+<h2>6. Validation</h2>
+<h3>6.1 The integrator</h3>
+<p>With no drag and no Magnus, the simulation matches the analytic oblique-projectile solution (x = v<sub>x</sub>t,
+z = v<sub>z</sub>t − g t²/2) to a maximum error of 6·10⁻¹⁴ m. The integrator is correct.</p>
+<h3>6.2 Recovery of a known trajectory</h3>
+<p>A trajectory with 5 rps spin was projected through a known camera with 0.5 px noise. The fit recovered every frame’s
+position within 0.25 m and the spin within 10%. That test lives in the repository
+(<code>tests/test_freekiki_physics.py</code>).</p>
+<h3>6.3 Pelé’s kick (Aguiar, UFRJ)</h3>
+<p>Aguiar’s notes publish the start and end of a kick: from (−5.2; −2.9; 0) m with v = (27.8; −0.4; 8.8) m/s to
+(54.3; 3.7; 0) m at t = 3.20 s, with spin −6.11 Hz. Simulating with our model:</p>
+<table>
+<tr><th>setup</th><th>error to the published point</th></tr>
+<tr><td>Brazuca, most favourable spin axis</td><td>12.0 m</td></tr>
+<tr><td>Aguiar’s own coefficients (Cd = 0.15; C<sub>S</sub> = 1.25 · Sp)</td><td>9.7 m</td></tr>
+<tr><td>Brazuca with C<sub>S</sub> = 1.25 · Sp</td><td>9.9 m</td></tr>
+</table>
+<p class="warn">This validation <b>did not pass</b> (target was 2 m). The integrator is correct (6.1), so the gap
+comes from elsewhere: axis and spin-sign conventions in Aguiar’s text, how the end point is reported, or a fit
+specific to the published kick. With the available data those causes could not be separated.</p>
+
+<h2>7. What was simplified</h2>
+<ul>
+  <li><b>Lift</b>: C<sub>L</sub> = 1.15·Sp<sup>0.83</sup>, without the drag factor (Kiratidis Eq. 9).</li>
+  <li><b>Spin in drag</b>: b = 0.514 is the Teamgeist measurement; Brazuca has no own value in the paper.</li>
+  <li><b>Speed range</b>: the Cd table goes to 35 m/s. Above that we keep the 35 m/s value.</li>
+  <li><b>Bounce and contact</b>: flight is a single segment. Ground bounces and barrier contact are not modelled.</li>
+  <li><b>Single camera</b>: depth is weak. Physical anchors fix that depth, so their quality weighs on the result.</li>
+</ul>
+
+<h2>8. Limitations of the c1 result</h2>
+<p>Pixels are reproduced within 1.6 px, and speed and spin are of a plausible order. But the three anchors are not
+satisfied together: the foot is 0.63 m off, the barrier 0.70 m (horizontal), and the keeper 1.02 m. Because the fit
+weights the 31 pixel frames more than the three anchors, it chooses the trajectory that matches the markings. That
+points to at least one of three problems: this clip’s DLT3D (scale or camera pose, about 1 m), the frames chosen for
+the anchors (frame 9 and the last frame), or the players’ field positions. To decide, the clip still needs a visual
+check with the trajectory overlaid.</p>
+<p>Kick time also sits on the bound (0.00 s). At one-frame resolution that is consistent with a kick at frame 0.</p>
+
+<h2>9. References</h2>
+<ol>
+  <li>Kiratidis, A. L.; Leinweber, D. B. <i>An Aerodynamic Analysis of Recent FIFA World Cup Balls</i>. arXiv:1710.02784v2, 2018.</li>
+  <li>Asai, T.; Seo, K. <i>Aerodynamic drag of modern soccer balls</i>. SpringerPlus 2:171, 2013.</li>
+  <li>Asai, T.; Seo, K.; Kobayashi, O.; Sakashita, R. <i>Fundamental aerodynamics of the soccer ball</i>. Sports Engineering 10, 101, 2007 (cited by Aguiar).</li>
+  <li>Aguiar, C. E. <i>Aerodinâmica da bola de futebol: da Copa de 70 à Jabulani</i>. UFRJ (lecture notes, futebol2.pdf).</li>
+  <li>NASA, Glenn Research Center. <i>Drag</i> (student aerodynamics page, drag equation and Reynolds).</li>
+  <li>Goff, J. E.; Carré, M. J. <i>Trajectory analysis of a soccer ball</i>. American Journal of Physics 77, 1020, 2009.</li>
+</ol>
+
+<p class="note">Figures come from <code>docs/fisica_bola_figuras.py</code>, which reads the reconstructed folder and does not re-fit.</p>
+
+</body>
+</html>

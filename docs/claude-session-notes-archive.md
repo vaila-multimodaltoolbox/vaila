@@ -73,3 +73,121 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
   `rec_dlt` tests), so they are unrelated.
 - **Gotcha:** run `uv sync --no-group cpu --group cuda` once to move a CUDA workstation to the new wheels (~4 GB);
   TensorRT engines are rebuilt on first use.
+
+### FreeKiki soccer 3D chain: `detect-soccer-3d`, Vitruvian re-fit, focal forwarding (25 October 2026)
+
+- **What:** `detect_soccer_3d` in `freekiki.py` chains `detect_videos` (field keypoints, per-frame DLT2D/DLT3D,
+  snap, stabilisation) and `detect_3d` (SAM 3D Body, ball, pitch filter). CLI `detect-soccer-3d`, GUI section 6.
+  `freekiki_detect3d.vitruvian_refit` re-fits the frames whose camera is not a DLT3D (`field_kps_geom_status.csv`)
+  from the people's boxes, after SAM 3D Body; writes `vitruvian.dlt3d` and `vitruvian_diagnostics.csv` in `detect3d/`.
+- **Bug fixed:** `sam3dinov3.build_worker_command` did not forward `--cam-int-npy`, so the isolated batch (the default,
+  also for a single video) dropped the per-frame DLT3D focal silently. Regression test in `tests/test_sam3dinov3.py`.
+- **Already there, not rebuilt:** the field tracking/stabilisation (`freekiki_snap.stabilize`, `regularize_camera_sequence`)
+  and the per-frame pitch outline (`pitch_outline_px` on each frame's homography). `freekiki_tracking.track_sequence` is not
+  used by the pipeline; it only has its test.
+- **Gotcha:** the Vitruvian re-fit cannot feed SAM 3D Body. Its boxes come from SAM 3D Body, which needs the focal first;
+  so those frames keep the default focal. Refit frames carry a residual in `vitruvian_diagnostics.csv`; read it first.
+
+### FreeKiki 3D outputs in pitch metres, C3D, separate ball detector (26 October 2026)
+
+- **What:** `detect-3d` / `detect-soccer-3d` now write, in `<run>/detect3d/`: `field_kps_3d.csv` (49 points per frame,
+  reprojection error), `poses_3d.csv` or `poses_3d_on_field.csv` (keypoints of each kept person), `ball_3d.csv` and
+  `ball_3d_on_field.csv`, and `c3d/` (`field_ball.c3d`, one `person_<id>.c3d` each). New modules: `freekiki_field3d.py` (projection, pixel -> plane, pose to
+  pitch, pure), `freekiki_export.py` (C3D via `ezc3d`), `freekiki_ball_train.py` (ball dataset, metrics, training).
+  Ball mode is `off | net | sam3` (`--ball`, bare `--ball` = sam3); `net` reads `<workspace>/models/ball.pt`.
+  GUI sections 5 and 6 are one section now ("Soccer field: keypoints, then 3D") with a Ball combobox.
+- **Coordinates (checked numerically on the test clip):** `sam3dinov3` returns `x_m, y_m, z_m` as the camera frame shifted
+  by the camera translation, not the pitch frame. Its `xcam_m` projects through the DLT intrinsics onto the person's box,
+  so the camera frame is the DLT's. The pitch pose is `X_w = R^T xcam + C` with `R, C` from `decompose_dlt3d`.
+  The pose is then anchored: the feet mean is moved onto the ground point under the box base (`pixel_to_plane` at z = 0).
+- **Gotcha, open:** after anchoring, the nose sits about 1.37 m above the feet (p10 1.20, p90 1.45), not ~1.8 m, and its
+  projection is ~30 px below the box top (box ~86 px). Horizontal placement agrees (~2 px). The body model's vertical scale
+  is smaller than the box. Not corrected: per-person height normalisation is a method choice to decide.
+- **Gotcha:** `kiki49` has no ball label at all (49 pitch points, class `football_pitch`). The ball net needs its own
+  reviewed labels (SAM 3 candidates, then person review: `video,frame,status,x1,y1,x2,y2`, status `ball` or `none`).
+  The review tool is not built yet; training is not run.
+- **Gotcha:** the C3D labels are `FKP_<name>`, `P<id>_<keypoint>`, `BALL`; a missing sample is zeros with residual -1
+  (ezc3d reads it back as NaN). Field markers are written for every frame that has a DLT3D.
+- **Gotcha:** `vitruvian.dlt3d` is a diagnostic only. The 3D outputs use the run's `.dlt3d`, the camera SAM 3D Body used,
+  so poses and field share one camera per frame. Weak frames therefore keep the less precise camera; `err_px` shows it.
+- **Gotcha, fixed:** the SAM 3 ball path used `ultralytics` `SAM3SemanticPredictor`, which fails with `'SimpleTokenizer'
+  object is not callable`: the installed `clip` is `openai-clip`, not the Ultralytics fork. `detect_ball_video` now uses the
+  `sam3` package (`build_sam3_image_model` + `Sam3Processor`) with `vaila_sam._resolve_bpe_path()`, as `vaila_sam` does.
+- **Gotcha, fixed:** `Sam3Processor.set_image` reads the size from `shape[-2:]`, so an HWC numpy frame gives width 3 and
+  boxes with x1 == x2 and y past the frame. Pass CHW (`torch.from_numpy(rgb).permute(2, 0, 1)`).
+- **Gotcha, fixed:** a C3D file holds at most 255 marker names (`ezc3d` has no `LABELS2`). One file with 1730 markers read
+  back with only 255 labels. Now one file for the field and ball, and one per person (70 markers each).
+
+### FreeKiki 3D output as one flat folder, with a full overlay video (26 October 2026)
+
+- **What changed:** `detect-soccer-3d` (and the GUI's Detect + 3D) writes one folder `<output dir>/<video>_3d_<time>/`.
+  Its top level holds `<video>_3d_overlay.mp4`, the CSVs, `field_ball.c3d`, `person_<id>.c3d` and `README.txt`. The detect
+  run and the SAM 3D Body output sit under `work/`. A folder of videos gets one such folder per video under a batch folder.
+  The separate `detect-3d` command on an existing run still writes to `<run>/detect3d/`.
+- **Overlay:** `write_3d_overlay` in `freekiki_detect3d.py` draws, per frame, the accepted field points and their bones
+  (from `field_kps_getpixelvideo.csv`), the kept people's 2D skeletons (sam3dinov3 `*_id_NN_markers.csv`, pixels, MHR70 edges
+  from `sam3dinov3`), the ID label, and the ball from `ball.csv` (green when score >= 0.5). It stops at the last frame with data.
+- **Gotcha:** the 2D poses come from the sam3dinov3 markers (the model's own projection), not from the 3D points projected
+  through the camera. They agree with the image on the test clip; a 3D reprojection overlay would be a separate check.
+- **Gotcha:** the sam3dinov3 output is about 90 MB per clip, so the folder is large; the copy into `work/` is what keeps the
+  folder self-contained. The Paqueta folder was rebuilt from the existing SAM 3D Body output (no new pose run); its ball was rerun.
+- **Gotcha, fixed (GUI run):** `freekiki.py` runs as a script, so `freekiki_detect3d` is a top-level module there and a bare
+  `from .sam3dinov3 import ...` inside a helper raised `ImportError: attempted relative import with no known parent package`
+  after the SAM 3D Body, ball and 3D stages had finished. The overlay now resolves its names once in `write_3d_overlay`, with
+  the same try/except fallback as the rest of the module. The test loads the module both as a package and as a top-level file.
+
+### FreeKiki ball: on-pitch track, NaN gaps in C3D, ball-only C3D (26 October 2026)
+
+- **Problem:** the ball was the highest-score SAM 3 box of each frame, often a box off the pitch (stands, a spare ball),
+  so 55 of 80 frames pointed off the field. The C3D wrote missing samples as zeros with residual -1, and the mkvis3d
+  viewer draws any finite point, so the ball was drawn as a line to the origin.
+- **Fix, ball selection:** `ball_candidates_video` / `ball_candidates_net` keep every box per frame. `pitch_ball_candidates`
+  drops boxes whose ground point (box centre lifted to the ball radius through the DLT3D) is outside the pitch rectangle.
+  `track_ball` picks at most one box per frame as one chain (gain = score - 0.2; links within 150 px/frame + 40 px, otherwise
+  a jump cost of 0.6). The per-box decisions go to `work/ball_candidates.csv`.
+- **Fix, C3D:** a missing sample is NaN on all three axes, residual -1 (`write_c3d`). mkvis3d's `viewer.js` skips a point unless
+  all three coordinates are finite, and its C3D reader returns NaN for these samples.
+- **Outputs:** `field_ball.c3d` keeps the field points with the ball (the poses are placed inside the pitch with them);
+  `ball.c3d` holds the ball alone.
+
+### FreeKiki poses on the pitch: smoothed ground track, top view, ground marker (26 October 2026)
+
+- **Problem:** in the C3D the poses slid, jumped and seemed to vanish between frames, while the video looked steady. The
+  cause is the box base: the SAM 3 box changes height by 50 to 130 px from frame to frame, so its bottom centre, projected
+  through the per-frame DLT3D, jumped 3 to 6 m in one frame (the 2D overlay looked steady because it draws the keypoints).
+  Every frame had a pose; the jumps made them look missing.
+- **Fix:** `smooth_ground_track` (`freekiki_field3d.py`): a running median of 31 frames is the reference; a raw point farther
+  than 2 m from it is rejected; the accepted points are median-7 and Gaussian (sigma 2 frames) smoothed, rate-limited to 10 m/s,
+  and interpolated to every frame. `_pose_rows` anchors each pose on its person's smoothed point, keeping the pose shape.
+- **Outputs:** `ground_tracks.csv` (raw and smoothed point per person and frame); each person C3D has a `P<id>_ground` marker;
+  `<video>_topview.mp4` and `.png` draw the field and each person's path in metres, as in the report of v3_piquerez
+  (`report_tv/fig_campo.png`).
+- **Result on the Paqueta clip:** the largest raw step was 5.77 m per frame; the smoothed largest step is 0.33 m per frame.
+
+### FreeKiki 3D with physics: Kalman/RTS tracks for the ball and the players (26 October 2026)
+
+- **Problem (measured on the Paqueta clip):** the ball had 20 steps above 35 m/s, up to 137 m/s, and the players had
+  accelerations up to 188 m/s^2 (median 48). A box base jumps with the box height, and a ball in the air is projected
+  to the ground plane at the wrong place, so both raw tracks are physically impossible.
+- **Fix:** `freekiki_physics.smooth_track`: a constant-velocity Kalman filter with random acceleration, a Rauch-Tung-Striebel
+  smoother, a Mahalanobis gate (restart after repeated rejections), and a frame stays empty when it is far from any accepted
+  measurement. `BALL_MODEL` (accel 40 m/s^2, speed ceiling 40 m/s, gap 6 frames) and `PLAYER_MODEL` (accel 5 m/s^2, gap 15).
+  Used for the ball in `physical_ball_rows` (raw ball in `ball_3d.csv`, physical one in `ball_3d_on_field.csv` and the C3D)
+  and for every person's ground point in `_pose_rows`.
+- **Result on the Paqueta clip:** players max speed 7.3 m/s, median per-ID max acceleration 3.2 m/s^2 (one spike of 28 m/s^2 at
+  frame 57 of ID 36, left in place); ball continuous, speed capped at 40 m/s on the kick frames.
+- **Limit, not solved:** with one camera and the ball in the air, the ground projection of the kick is biased by the ball height,
+  so the kick speed is capped rather than measured. A ballistic fit to the pixels failed here (the pixel track of the kick has
+  wrong candidates and the height is not observable from one view). The manual route is `getpixelvideo` with the track CSV.
+
+### FreeKiki manual fallback: getpixelvideo with the ball track, and the return loop (26 October 2026)
+
+- **Button:** section 5 of the GUI has **Ball track in getpixelvideo**. It writes `ball_for_correction.csv` (frame, p0_x, p0_y, raw
+  ball pixels) in the newest `<video>_3d_*` folder and opens `getpixelvideo.py -f <video> --track-csv <csv>`.
+- **getpixelvideo:** new start-up option `--track-csv PATH`. It runs the same loader as "Load Track CSV" without the file dialog,
+  once (the preset applies to the first video only; an F8 switch of video does not reload it). Verified on display :10: 70 markers
+  loaded, `sam_points` format.
+- **Return:** `detect-3d --ball-csv markers.csv` (`detect_3d_run(ball_csv=...)`): the corrected pixels replace the detector, the
+  physical smoothing still applies, and the ball rows are scored 1.0. Verified with the reused SAM 3D Body output: mode `corrected`, 70 frames found.
+- **Player model:** `PLAYER_MODEL` accel 2.0 m/s^2, measurement 0.6 m (grid on the Paqueta run): max 9.5 m/s^2 (was 28), median per-ID
+  peak 0.9 m/s^2; the trade-off is a flatter response to fast runs (max speed 4 m/s on that clip).

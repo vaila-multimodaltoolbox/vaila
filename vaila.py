@@ -3069,10 +3069,13 @@ class Vaila(tk.Tk):
 
     # C_B_r2_c3
     def sync_videos(self):
-        """Open the fast Pygame multi-camera synchronization player."""
-        from vaila import syncvid
+        """Open the fast Pygame multi-camera synchronization player.
 
-        syncvid.sync_videos(parent=self)
+        Launched out-of-process like getpixelvideo/cutvideo. Running syncvid
+        in-process with ``parent=self`` left Tk file dialogs under the SDL
+        window (pointer grab, mouse frozen, keyboard still worked).
+        """
+        run_vaila_module("vaila.syncvid", "vaila/syncvid.py")
 
     # C_B_r3_c1
     def getpixelvideo(self):

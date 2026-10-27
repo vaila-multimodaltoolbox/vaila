@@ -770,6 +770,157 @@ def test_common_reference_bounds_is_time_based(tmp_path: Path) -> None:
     )
 
 
+def test_apply_fps_overrides_and_fill_range_texts(tmp_path: Path) -> None:
+    """Matching overrides apply; mismatched ones are ignored (keep file fps)."""
+    infos = [
+        _rate_info(tmp_path / "ref.mp4", 300, 60.0),
+        _rate_info(tmp_path / "phone.mp4", 300, 30.0),
+        _rate_info(tmp_path / "norepeat.mp4", 100, 13.91),
+    ]
+    overridden, warnings = syncvid.apply_fps_overrides(
+        infos, {"phone.mp4": 30.0, "norepeat.mp4": 29.97}
+    )
+    assert overridden[0].fps == 60.0
+    assert overridden[1].fps == 30.0
+    assert overridden[2].fps == 13.91  # 29.97 mismatch ignored
+    assert any("norepeat.mp4" in text for text in warnings)
+
+    _reference, plan = syncvid.build_sync_plan_from_fields(
+        overridden[:2],
+        {"ref.mp4": "101", "phone.mp4": "51"},
+        "ref",
+        "81",
+        "201",
+        range_texts={"ref.mp4": ("", ""), "phone.mp4": ("", "")},
+    )
+    ranges = {entry.video_file: (entry.start_frame, entry.end_frame) for entry in plan}
+    assert ranges["ref.mp4"] == (80, 200)
+    assert ranges["phone.mp4"] == (40, 100)
+    filled = syncvid.fill_range_texts_from_plan(plan, reference_video="ref.mp4")
+    assert filled == {"phone.mp4": ("41", "101")}
+
+
+def test_flamengo_mismatch_override_keeps_time_not_equal_frames(tmp_path: Path) -> None:
+    """29.97 typed on a 13.91 norepeat file must not force 19 frames (duration would drift)."""
+    infos = [
+        _rate_info(tmp_path / "c1.mp4", 81, 29.970030),
+        _rate_info(tmp_path / "c2_norepeat.mp4", 71, 13.907661),
+    ]
+    effective, warnings = syncvid.apply_fps_overrides(
+        infos, {"c2_norepeat.mp4": 29.97}
+    )
+    assert effective[1].fps == 13.907661
+    assert warnings
+    plan = syncvid.build_sync_plan(
+        effective, {"c1.mp4": 70, "c2_norepeat.mp4": 57}, "c1.mp4", 62, 80
+    )
+    ref_n = plan[0].end_frame - plan[0].start_frame + 1
+    c2_n = plan[1].end_frame - plan[1].start_frame + 1
+    assert ref_n == 19
+    assert c2_n != ref_n
+    ref_s = (plan[0].end_frame - plan[0].start_frame) / effective[0].fps
+    c2_s = (plan[1].end_frame - plan[1].start_frame) / effective[1].fps
+    assert abs(ref_s - c2_s) <= 0.5 / effective[1].fps
+
+
+def test_equal_fps_forces_identical_frame_count_even_with_noise(tmp_path: Path) -> None:
+    """Cameras at ~same fps share the reference frame count (time-aligned start)."""
+    infos = [
+        _rate_info(tmp_path / "ref.mp4", 200, 29.970030),
+        _rate_info(tmp_path / "cam.mp4", 200, 29.97),
+    ]
+    plan = syncvid.build_sync_plan(
+        infos, {"ref.mp4": 70, "cam.mp4": 70}, "ref.mp4", 62, 80
+    )
+    ref_entry, cam_entry = plan
+    assert ref_entry.end_frame - ref_entry.start_frame == cam_entry.end_frame - cam_entry.start_frame
+    assert (ref_entry.end_frame - ref_entry.start_frame + 1) == 19
+    # Hand-typed End that disagrees is snapped when fps matches.
+    plan2 = syncvid.build_sync_plan(
+        infos,
+        {"ref.mp4": 70, "cam.mp4": 70},
+        "ref.mp4",
+        62,
+        80,
+        ranges={"cam.mp4": (50, 99)},  # wrong length on purpose
+    )
+    assert plan2[1].start_frame == 50
+    assert plan2[1].end_frame == 50 + (80 - 62)
+    assert plan2[1].end_frame - plan2[1].start_frame == plan2[0].end_frame - plan2[0].start_frame
+
+
+def test_different_fps_keeps_time_align_with_different_frame_counts(tmp_path: Path) -> None:
+    infos = [
+        _rate_info(tmp_path / "ref.mp4", 200, 29.970030),
+        _rate_info(tmp_path / "slow.mp4", 100, 13.907661),
+    ]
+    plan = syncvid.build_sync_plan(
+        infos, {"ref.mp4": 70, "slow.mp4": 57}, "ref.mp4", 62, 80
+    )
+    ref_n = plan[0].end_frame - plan[0].start_frame + 1
+    slow_n = plan[1].end_frame - plan[1].start_frame + 1
+    assert ref_n != slow_n
+    ref_s = (plan[0].end_frame - plan[0].start_frame) / infos[0].fps
+    slow_s = (plan[1].end_frame - plan[1].start_frame) / infos[1].fps
+    assert abs(ref_s - slow_s) <= 0.5 / infos[1].fps
+
+
+def test_parse_fps_field_rejects_bad_values() -> None:
+    assert syncvid.parse_fps_field("29.97") == pytest.approx(29.97)
+    assert syncvid.parse_fps_field("13,91") == pytest.approx(13.91)
+    with pytest.raises(syncvid.SyncWorkflowError, match="Enter a"):
+        syncvid.parse_fps_field("  ")
+    with pytest.raises(syncvid.SyncWorkflowError, match="Invalid"):
+        syncvid.parse_fps_field("fast")
+
+
+def test_checkpoint_round_trips_fps_overrides(tmp_path: Path) -> None:
+    state = syncvid.build_checkpoint_state(
+        reference="a.mp4",
+        start="1",
+        end="9",
+        sync_frames={"a.mp4": "1", "b.mp4": "2"},
+        current_video="a.mp4",
+        current_frame=0,
+        output_file=None,
+        completed=False,
+        fps_overrides={"a.mp4": 29.97, "b.mp4": 13.91},
+    )
+    path = syncvid.write_checkpoint_file(state, tmp_path / "c.json")
+    loaded = syncvid.read_checkpoint_file(path)
+    assert loaded["fps_overrides"] == {"a.mp4": 29.97, "b.mp4": 13.91}
+
+    state["fps_overrides"] = {"a.mp4": -1.0}
+    syncvid.write_checkpoint_file(state, path)
+    with pytest.raises(syncvid.SyncFileError, match="fps_overrides"):
+        syncvid.read_checkpoint_file(path)
+
+
+def test_flamengo_style_norepeat_mix_fill_aligns_durations(tmp_path: Path) -> None:
+    """Mixed container/norepeat fps: Fill Start/End keeps one shared time window."""
+    # Mirrors the flamengo_estudiantes/bruno_henrique/new mix (c1@29.97 + c2@13.91).
+    infos = [
+        _rate_info(tmp_path / "c1_main.mp4", 81, 29.970030),
+        _rate_info(tmp_path / "c2_norepeat.mp4", 71, 13.907661),
+    ]
+    _reference, plan = syncvid.build_sync_plan_from_fields(
+        infos,
+        {"c1_main.mp4": "71", "c2_norepeat.mp4": "58"},
+        "c1_main",
+        "63",
+        "81",
+    )
+    ref_entry, other = plan
+    ref_s = (ref_entry.end_frame - ref_entry.start_frame) / infos[0].fps
+    other_s = (other.end_frame - other.start_frame) / infos[1].fps
+    assert abs(ref_s - other_s) <= 0.5 / infos[1].fps
+    filled = syncvid.fill_range_texts_from_plan(plan, reference_video="c1_main.mp4")
+    assert filled["c2_norepeat.mp4"] == (
+        str(other.start_frame + 1),
+        str(other.end_frame + 1),
+    )
+
+
 def test_checkpoint_round_trips_per_camera_ranges(tmp_path: Path) -> None:
     state = syncvid.build_checkpoint_state(
         reference="a.mp4",
@@ -873,3 +1024,82 @@ def test_find_repeated_frames_compensates_field_shift_but_not_pans(tmp_path: Pat
     pan = [texture[40:220, 40 + index : 360 + index].copy() for index in range(18)]
     write(tmp_path / "pan.avi", pan)
     assert syncvid.find_repeated_frames(tmp_path / "pan.avi").repeated_frames == ()
+
+
+def test_choose_output_file_uses_portable_dialog_and_releases_sdl(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Save/Load must release SDL and use the portable desktop chooser.
+
+    In-process Tk filedialog under pygame left the mouse frozen on GNOME/X11.
+    Load/Save now quit the SDL display, open zenity (or isolated Tk), then
+    rebuild ``self.screen``.
+    """
+    import cv2
+    import numpy as np
+
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    import pygame
+
+    for name in ("camera_one.avi", "camera_two.avi"):
+        writer = cv2.VideoWriter(
+            str(tmp_path / name), cv2.VideoWriter_fourcc(*"MJPG"), 30.0, (64, 48)
+        )
+        for _ in range(5):
+            writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+        writer.release()
+
+    player = syncvid.PygameSyncPlayer(syncvid.probe_video_directory(tmp_path))
+    events: list[str] = []
+    old_screen = player.screen
+    old_size = old_screen.get_size()
+
+    def fake_portable(kind: str, **kwargs: object) -> str:
+        events.append(f"portable:{kind}")
+        assert not pygame.display.get_init()
+        assert kwargs.get("title")
+        return str(tmp_path / "chosen.txt")
+
+    monkeypatch.setattr(syncvid, "_portable_path_dialog", fake_portable)
+
+    try:
+        result = player._choose_output_file()
+        assert result == (tmp_path / "chosen.txt").resolve()
+        assert events == ["portable:save"]
+        assert pygame.display.get_init()
+        assert player.screen is not old_screen
+        assert player.screen.get_size() == old_size
+
+        events.clear()
+
+        def fake_cancel(kind: str, **_kwargs: object) -> str:
+            events.append(f"portable:{kind}")
+            return ""
+
+        monkeypatch.setattr(syncvid, "_portable_path_dialog", fake_cancel)
+        assert player._choose_output_file() is None
+        assert events == ["portable:save"]
+    finally:
+        player._release_capture()
+        pygame.display.quit()
+        pygame.font.quit()
+
+
+def test_portable_path_dialog_prefers_zenity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """zenity is preferred over the Tk subprocess when available."""
+    monkeypatch.setattr(
+        syncvid,
+        "_zenity_path_dialog",
+        lambda kind, **_kwargs: f"/tmp/zenity-{kind}.txt",
+    )
+    called: list[str] = []
+    monkeypatch.setattr(
+        syncvid,
+        "_isolated_tk_path_dialog",
+        lambda kind, **_kwargs: called.append(kind) or "/tmp/tk.txt",
+    )
+    assert syncvid._portable_path_dialog("open", title="Pick") == "/tmp/zenity-open.txt"
+    assert called == []

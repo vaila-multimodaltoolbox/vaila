@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 23 October 2026
+Update: 26 October 2026
 Version: 0.4.11
 Python Version: 3.12.15
 
@@ -30,6 +30,9 @@ AI Track & JIT Online Learning (toolbar AI Track button / T key):
     embedding via PyTorch/CUDA. Weights live under ``vaila/models/ai_tracker/``
     (browse or download clean official ImageNet checkpoints when missing); also
     optionally concatenated into the retrained online discriminator's feature vector.
+  - Track CSV at start-up: ``--track-csv PATH`` loads a tracking CSV without the dialog (the
+    FreeKiki "Ball track in getpixelvideo" button passes the ball pixel track this way); save the
+    corrections with Save and run ``freekiki.py detect-3d --ball-csv <markers.csv>``.
   - Shape & Batch: point/circle/box region features, Shift+T batch RTS smoothing.
   - Ground Truth Preservation: existing manual coordinates are never overwritten.
 
@@ -2275,6 +2278,7 @@ def play_video_with_controls(
     initial_fifa_mode=False,
     initial_frame: int = 0,
     freekiki_options: dict | None = None,
+    initial_track_csv: str | None = None,
 ):
     if frame_source is not None:
         cap = frame_source
@@ -3815,8 +3819,10 @@ def play_video_with_controls(
                 with suppress(BaseException):
                     os.remove(temp_video)
 
-    def load_tracking_csv():
+    def load_tracking_csv(preset_path=None):
         """Load any tracking CSV — auto-detects SAM3 / YOLO / generic formats.
+
+        ``preset_path`` skips the file dialog (``--track-csv`` at start-up).
 
         Recognised formats:
           * SAM3 ``sam_tracks.csv``       (frame, obj_id, x_px, y_px, w_px, h_px)
@@ -3852,7 +3858,9 @@ def play_video_with_controls(
 
         initial_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
 
-        if platform.system() == "Linux":
+        if preset_path:
+            csv_path = preset_path
+        elif platform.system() == "Linux":
             # Use pygame native dialog on Linux to avoid conflicts
             csv_path = pygame_file_dialog(
                 initial_dir=initial_dir,
@@ -12157,6 +12165,9 @@ def play_video_with_controls(
             return "accepted"
         return source
 
+    if initial_track_csv:
+        load_tracking_csv(preset_path=initial_track_csv)
+
     if freekiki_session is not None:
         if (
             freekiki_options
@@ -18376,6 +18387,7 @@ def run_getpixelvideo(
     initial_fifa_mode: bool = False,
     initial_start_frame: int = 0,
     freekiki_options: dict | None = None,
+    initial_track_csv: str | None = None,
 ):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
@@ -18454,7 +18466,9 @@ def run_getpixelvideo(
             initial_fifa_mode=initial_fifa_mode,
             initial_frame=start_frame,
             freekiki_options=freekiki_options,
+            initial_track_csv=initial_track_csv,
         )
+        initial_track_csv = None  # the preset track is for the first video only
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
             if len(result) > 4 and result[4]:
@@ -18523,6 +18537,8 @@ if __name__ == "__main__":
             "  --freekiki-export-mode MODE  Default export mode: full (all frames) or only_correct\n"
             "  --freekiki-videos DIR  Review videos in a folder\n"
             "  --freekiki-run DIR  FreeKiki Load: open a freekiki detect run/batch folder (finds the video)\n"
+            "  --track-csv PATH  Load a tracking CSV at start-up (no dialog), e.g. a FreeKiki ball track\n"
+            "  --track-csv PATH  Load a tracking CSV at start-up (no dialog), e.g. a FreeKiki ball track\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
             "Run without arguments to open one file picker (type auto-detected).\n"
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
@@ -18707,6 +18723,15 @@ if __name__ == "__main__":
             )
         raise SystemExit(0)
 
+    initial_track_csv = None
+    if "--track-csv" in sys.argv:
+        pos = sys.argv.index("--track-csv")
+        if pos + 1 >= len(sys.argv) or sys.argv[pos + 1].startswith("-"):
+            raise SystemExit("--track-csv requires a path")
+        initial_track_csv = sys.argv[pos + 1]
+        if not os.path.isfile(initial_track_csv):
+            raise SystemExit(f"--track-csv file not found: {initial_track_csv}")
+
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,
         initial_media_path=initial_media_path,
@@ -18714,4 +18739,5 @@ if __name__ == "__main__":
         initial_fifa_mode=initial_fifa_mode,
         initial_start_frame=initial_start_frame,
         freekiki_options=freekiki_options,
+        initial_track_csv=initial_track_csv,
     )

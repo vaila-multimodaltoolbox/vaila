@@ -4,8 +4,8 @@
 
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
-- **Version:** 0.4.10
-- **Updated:** 2026-10-18
+- **Version:** 0.4.11
+- **Updated:** 2026-10-26
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 
@@ -165,6 +165,34 @@ Estimated real fps = fps x unique frames / total frames. Example: `lateral.mp4`,
 are not evenly spaced in the source (here every 2nd to 4th frame), so the new video spaces them evenly
 at the average rate; `<name>_norepeat_frames.csv` keeps the original times. Videos without repeats are
 listed in the summary but not rewritten.
+
+### Real FPS + Fill Start/End (after norepeat)
+
+After **Save w/o repeats**, open the `*_norepeat_*.mp4` folder (or a mix of norepeat + original
+cameras). Container fps may still be wrong for some files, or you may want one shared rate:
+
+| control | action |
+|---|---|
+| **Real FPS** field | type e.g. `13.91` or `29.97` |
+| **FPS this** / Enter | apply that rate to the **current** camera only (`*` next to fps in the row) |
+| **FPS all** | apply that rate to **every** camera |
+| clear the field + Enter | drop the override on the current camera (back to container fps) |
+| **Fill Start/End from FPS** | recompute every non-reference Start/End so Start/End are the **same temporal events** as the reference window (from Sync + real fps) |
+
+Rules after Fill / Save:
+
+- **Same temporal window** — every camera’s Start/End map to the reference event start/end in time.
+- **Equal fps** (file playback rate within ~0.05 fps) → **identical frame counts**.
+- **Different fps** → frame counts may differ; durations still match in time.
+- Real FPS must **match the file** (e.g. `13.91` on `*_norepeat_13.91fps.mp4`). Typing `29.97` on a
+  13.91 file is rejected/ignored: Cut Video still plays at 13.91, so equal frame counts would
+  **not** be the same events in time.
+
+Workflow tip: after norepeat, use each camera’s real rate (from the filename) → Sync marks →
+Reference start/end → **Fill Start/End from FPS** → **Save + Cut Video**. Only cameras that
+truly share a playback rate get equal frame counts (e.g. c1 and c4 both ~29.97).
+
+Overrides are stored in the Load/Resume `.json` checkpoint (`fps_overrides`).
 
 A shot where nothing moves at all scores like codec noise. Check `<name>_motion_scores.csv` before
 using a copy of such a video.

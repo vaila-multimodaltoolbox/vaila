@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 18 October 2026
-Version: 0.4.10
+Update Date: 26 October 2026
+Version: 0.4.11
 
 Description:
 Create a frame-accurate synchronization plan with a fast Pygame player. Every
@@ -62,7 +62,7 @@ import webbrowser
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from tkinter import filedialog, messagebox
+from tkinter import messagebox
 from typing import Any, cast
 
 import cv2
@@ -92,6 +92,149 @@ def _scrub_cv2_qt_plugin_env() -> None:
 
 
 _scrub_cv2_qt_plugin_env()
+
+
+# Child-process Tk chooser body (no vailá/pygame imports — keeps the child light).
+_ISOLATED_TK_DIALOG_SCRIPT = r"""
+import json
+import sys
+from tkinter import Tk, filedialog
+
+spec = json.load(open(sys.argv[1], encoding="utf-8"))
+root = Tk()
+root.withdraw()
+try:
+    root.attributes("-topmost", True)
+except Exception:
+    pass
+root.lift()
+root.update_idletasks()
+kwargs = {"title": spec["title"], "parent": root}
+if spec.get("initialdir"):
+    kwargs["initialdir"] = spec["initialdir"]
+if spec.get("initialfile"):
+    kwargs["initialfile"] = spec["initialfile"]
+if spec.get("defaultextension"):
+    kwargs["defaultextension"] = spec["defaultextension"]
+if spec.get("filetypes"):
+    kwargs["filetypes"] = [tuple(item) for item in spec["filetypes"]]
+kind = spec["kind"]
+if kind == "save":
+    result = filedialog.asksaveasfilename(**kwargs)
+elif kind == "open":
+    result = filedialog.askopenfilename(**kwargs)
+elif kind == "dir":
+    result = filedialog.askdirectory(**kwargs)
+else:
+    raise SystemExit(f"unknown dialog kind {kind!r}")
+sys.stdout.write(result or "")
+"""
+
+
+def _zenity_path_dialog(
+    kind: str,
+    *,
+    title: str,
+    initialdir: str | Path | None = None,
+    initialfile: str | None = None,
+) -> str | None:
+    """GNOME/GTK file chooser via zenity, or None if zenity is unavailable."""
+    zenity = shutil.which("zenity")
+    if not zenity:
+        return None
+    cmd = [zenity, "--file-selection", f"--title={title}"]
+    if kind == "save":
+        cmd.append("--save")
+        cmd.append("--confirm-overwrite")
+    elif kind == "dir":
+        cmd.append("--directory")
+    elif kind != "open":
+        raise ValueError(f"unsupported dialog kind: {kind!r}")
+    hint: Path | None = None
+    if initialdir is not None:
+        hint = Path(initialdir)
+        if initialfile and kind == "save":
+            hint = hint / initialfile
+        elif kind != "dir" and hint.is_dir():
+            hint = hint / "."
+        cmd.append(f"--filename={hint}")
+    proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    selected = (proc.stdout or "").strip()
+    # Zenity: 0 = ok, 1 = cancel, anything else = error/unavailable.
+    if proc.returncode == 1:
+        return ""
+    if proc.returncode != 0:
+        return None
+    return selected
+
+
+def _isolated_tk_path_dialog(
+    kind: str,
+    *,
+    title: str,
+    initialdir: str | Path | None = None,
+    initialfile: str | None = None,
+    defaultextension: str | None = None,
+    filetypes: Sequence[tuple[str, str]] | None = None,
+) -> str:
+    """Run a Tk path chooser in a child process (no shared grab with pygame)."""
+    if kind not in {"open", "save", "dir"}:
+        raise ValueError(f"unsupported dialog kind: {kind!r}")
+    spec = {
+        "kind": kind,
+        "title": title,
+        "initialdir": str(initialdir) if initialdir is not None else None,
+        "initialfile": initialfile,
+        "defaultextension": defaultextension,
+        "filetypes": [list(item) for item in filetypes] if filetypes else None,
+    }
+    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8") as handle:
+        json.dump(spec, handle)
+        spec_path = handle.name
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", _ISOLATED_TK_DIALOG_SCRIPT, spec_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        selected = (proc.stdout or "").strip()
+        if proc.returncode != 0:
+            err = (proc.stderr or "").strip() or f"exit {proc.returncode}"
+            raise OSError(f"File dialog failed: {err}")
+        return selected
+    finally:
+        Path(spec_path).unlink(missing_ok=True)
+
+
+def _portable_path_dialog(
+    kind: str,
+    *,
+    title: str,
+    initialdir: str | Path | None = None,
+    initialfile: str | None = None,
+    defaultextension: str | None = None,
+    filetypes: Sequence[tuple[str, str]] | None = None,
+) -> str:
+    """Desktop-native path chooser (zenity) with isolated-Tk fallback.
+
+    Prefer zenity on Linux so the chooser is a real GTK dialog the window
+    manager stacks above SDL. Fall back to an out-of-process Tk chooser when
+    zenity is missing (macOS/Windows CI, minimal containers).
+    """
+    zenity_result = _zenity_path_dialog(
+        kind, title=title, initialdir=initialdir, initialfile=initialfile
+    )
+    if zenity_result is not None:
+        return zenity_result
+    return _isolated_tk_path_dialog(
+        kind,
+        title=title,
+        initialdir=initialdir,
+        initialfile=initialfile,
+        defaultextension=defaultextension,
+        filetypes=filetypes,
+    )
 
 
 def _resilient_open_local_html(path: Path) -> None:
@@ -214,6 +357,92 @@ class VideoInfo:
     @property
     def name(self) -> str:
         return self.path.name
+
+    def with_fps(self, fps: float) -> VideoInfo:
+        """Return a copy that uses ``fps`` for time-based sync math."""
+        rate = float(fps)
+        if not 0.0 < rate < 10_000.0:
+            raise SyncWorkflowError(f"Real FPS must be between 0 and 10000 (got {fps})")
+        if rate == self.fps:
+            return self
+        return VideoInfo(
+            path=self.path,
+            frame_count=self.frame_count,
+            fps=rate,
+            width=self.width,
+            height=self.height,
+        )
+
+
+def parse_fps_field(text: str, *, field: str = "real FPS") -> float:
+    """Parse a positive FPS typed in the UI."""
+    raw = text.strip().replace(",", ".")
+    if not raw:
+        raise SyncWorkflowError(f"Enter a {field} value (e.g. 29.97 or 13.91)")
+    try:
+        rate = float(raw)
+    except ValueError as exc:
+        raise SyncWorkflowError(f"Invalid {field}: {text!r}") from exc
+    if not 0.0 < rate < 10_000.0:
+        raise SyncWorkflowError(f"{field} must be between 0 and 10000 (got {rate})")
+    return rate
+
+
+def fps_rates_match(a: float, b: float) -> bool:
+    """True when two rates should share the same frame count in a sync cut.
+
+    Tolerates tiny container vs typed differences (e.g. 29.970030 vs 29.97).
+    """
+    return math.isclose(float(a), float(b), rel_tol=1e-3, abs_tol=0.05)
+
+
+def apply_fps_overrides(
+    video_infos: Sequence[VideoInfo], overrides: Mapping[str, float] | None
+) -> tuple[list[VideoInfo], list[str]]:
+    """Apply real-FPS overrides that agree with each file's playback rate.
+
+    Cut Video always seeks/writes using the **container** fps. An override that
+    disagrees (e.g. typing 29.97 on a ``*_norepeat_13.91fps.mp4``) would force
+    equal frame counts while the cut still plays at 13.91 fps — durations drift
+    and the temporal window is wrong. Those overrides are ignored and listed in
+    the returned warning strings.
+    """
+    if not overrides:
+        return list(video_infos), []
+    resolved: list[VideoInfo] = []
+    warnings: list[str] = []
+    for info in video_infos:
+        if info.name not in overrides:
+            resolved.append(info)
+            continue
+        rate = float(overrides[info.name])
+        if fps_rates_match(rate, info.fps):
+            resolved.append(info.with_fps(rate))
+            continue
+        warnings.append(
+            f"{info.name}: ignored real FPS {rate:g} (file is {info.fps:.3f} fps); "
+            "sync math keeps the file rate so Start/End stay the same events in time"
+        )
+        resolved.append(info)
+    return resolved, warnings
+
+
+def equal_fps_frame_span(reference_start: int, reference_end: int) -> int:
+    """``end - start`` (0-based inclusive span) forced for equal-fps cameras."""
+    return int(reference_end) - int(reference_start)
+
+
+def fill_range_texts_from_plan(
+    entries: Sequence[SyncPlanEntry],
+    *,
+    reference_video: str,
+) -> dict[str, tuple[str, str]]:
+    """1-based Start/End texts for every non-reference camera in ``entries``."""
+    return {
+        entry.video_file: (str(entry.start_frame + 1), str(entry.end_frame + 1))
+        for entry in entries
+        if entry.video_file != reference_video
+    }
 
 
 @dataclass(frozen=True)
@@ -423,18 +652,19 @@ def build_sync_plan(
     """Build synchronized ranges (0-based, inclusive) covering the same time for all videos.
 
     The reference is cut at ``reference_start``..``reference_end``. A camera
-    listed in ``ranges`` is cut at its own (start, end), e.g. the same event
-    start and end marked by hand; its sync frame is optional. Every other
-    camera follows the reference in time from its sync (key) frame, at its own
-    fps::
+    listed in ``ranges`` keeps its Start as the same temporal event start; its
+    End is forced to the reference frame span when fps matches the reference,
+    otherwise the typed End is kept (different fps → different frame counts).
+    Every other camera follows the reference in time from its sync (key) frame::
 
         start = sync + round((reference_start - reference_sync) / reference_fps * fps)
-        end   = start + round((reference_end - reference_start) / reference_fps * fps)
+        end   = start + (reference_end - reference_start)   # same fps as reference
+        end   = start + round((reference_end - reference_start) / reference_fps * fps)  # else
 
-    Rounding the length keeps each cut within half a frame of the reference
-    duration; with equal fps this is the same frame offset for every camera.
-    ``removed_frames`` maps a video name to source frames (0-based) marked as
-    repeated; those inside the range are kept on its entry.
+    Equal fps (within tolerance) always share the reference frame count so the
+    cuts stay frame-locked; different fps stay time-aligned with different
+    counts. ``removed_frames`` maps a video name to source frames (0-based)
+    marked as repeated; those inside the range are kept on its entry.
     """
     if reference_start > reference_end:
         raise SyncWorkflowError("Reference start frame must not be after the end frame")
@@ -453,6 +683,8 @@ def build_sync_plan(
         )
 
     reference = info_by_name[reference_video]
+    ref_span = equal_fps_frame_span(reference_start, reference_end)
+    span_s = ref_span / reference.fps
     entries: list[SyncPlanEntry] = []
     for info in video_infos:
         sync_frame = sync_frames.get(info.name)
@@ -462,12 +694,17 @@ def build_sync_plan(
             start_frame, end_frame = (int(value) for value in ranges[info.name])
             if start_frame > end_frame:
                 raise SyncWorkflowError(f"Start must not be after End for {info.name}")
+            # Same temporal event start; if fps matches reference, lock frame count.
+            if fps_rates_match(info.fps, reference.fps):
+                end_frame = start_frame + ref_span
         else:
             reference_sync = int(sync_frames[reference_video])
             offset_s = (int(reference_start) - reference_sync) / reference.fps
-            span_s = (int(reference_end) - int(reference_start)) / reference.fps
             start_frame = int(sync_frames[info.name]) + round(offset_s * info.fps)
-            end_frame = start_frame + round(span_s * info.fps)
+            if fps_rates_match(info.fps, reference.fps):
+                end_frame = start_frame + ref_span
+            else:
+                end_frame = start_frame + round(span_s * info.fps)
         if not 0 <= start_frame <= end_frame < info.frame_count:
             raise SyncWorkflowError(
                 f"Computed range {start_frame + 1}–{end_frame + 1} is outside "
@@ -826,11 +1063,13 @@ def build_checkpoint_state(
     completed: bool,
     removed_frames: Mapping[str, Collection[int]] | None = None,
     ranges: Mapping[str, tuple[str, str]] | None = None,
+    fps_overrides: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     """Build the JSON-serializable "Load / Resume" checkpoint for the current UI state.
 
     ``removed_frames`` (0-based) is stored 1-based, like every frame the user sees.
     ``ranges`` keeps each camera's optional Start/End texts (only non-empty ones).
+    ``fps_overrides`` stores per-camera real FPS used for time-based sync math.
     """
     return {
         "ranges": {
@@ -842,6 +1081,9 @@ def build_checkpoint_state(
             name: sorted(int(frame) + 1 for frame in frames)
             for name, frames in (removed_frames or {}).items()
             if frames
+        },
+        "fps_overrides": {
+            name: float(rate) for name, rate in (fps_overrides or {}).items() if float(rate) > 0.0
         },
         "vaila_checkpoint": CHECKPOINT_SCHEMA_VERSION,
         "reference": reference,
@@ -960,6 +1202,18 @@ def read_checkpoint_file(checkpoint_file: str | Path) -> dict[str, Any]:
         raise SyncFileError(
             f"Checkpoint 'ranges' must map video names to [start, end] texts: {path}"
         )
+    fps_overrides = data.get("fps_overrides", {})
+    if not isinstance(fps_overrides, dict) or not all(
+        isinstance(name, str)
+        and isinstance(rate, (int, float))
+        and not isinstance(rate, bool)
+        and 0.0 < float(rate) < 10_000.0
+        for name, rate in fps_overrides.items()
+    ):
+        raise SyncFileError(
+            f"Checkpoint 'fps_overrides' must map video names to positive FPS rates: {path}"
+        )
+    data["fps_overrides"] = {name: float(rate) for name, rate in fps_overrides.items()}
     return data
 
 
@@ -1581,8 +1835,8 @@ class PygameSyncPlayer:
     CONTROL_HEIGHT = 180
     ROW_HEIGHT = 40
     # Reserved height (px) at the bottom of the side panel for the status
-    # line, the four action-button rows, and the footer hint.
-    ACTIONS_AREA_HEIGHT = 222
+    # line, the action-button rows (incl. real-FPS controls), and the footer.
+    ACTIONS_AREA_HEIGHT = 268
 
     def __init__(
         self,
@@ -1618,6 +1872,10 @@ class PygameSyncPlayer:
             for info in self.video_infos
         }
         self.goto_field = PygameTextField("goto", "", max_length=16)
+        # Typed real FPS applied to the current camera or every camera; empty
+        # means "use the container fps" until Set FPS is clicked.
+        self.real_fps_field = PygameTextField("real_fps", "", max_length=12)
+        self.fps_overrides: dict[str, float] = {}
         self.active_field: PygameTextField | None = None
 
         self.current_index = 0
@@ -1710,6 +1968,9 @@ class PygameSyncPlayer:
         wanted = self.positions[info.name] if target_frame is None else target_frame
         if not self._decode_at(wanted):
             raise SyncWorkflowError(f"OpenCV could not decode video: {info.path}")
+        if self.active_field is not self.real_fps_field:
+            override = self.fps_overrides.get(info.name)
+            self.real_fps_field.text = f"{override:.6g}" if override is not None else ""
         self._set_status(f"Camera {self.current_index + 1}/{len(self.video_infos)}: {info.name}")
 
     def _decode_at(self, frame_index: int) -> bool:
@@ -1868,13 +2129,14 @@ class PygameSyncPlayer:
             return None
 
     def _all_fields(self) -> list[PygameTextField]:
-        """Tab order: reference fields, then each camera's Sync, Start, End."""
+        """Tab order: reference fields, each camera's Sync/Start/End, then real FPS."""
         reference_name = self._reference_name_or_none()
         fields = [self.reference_field, self.start_field, self.end_field]
         for info in self.video_infos:
             fields.append(self.sync_fields[info.name])
             if info.name != reference_name:
                 fields += [self.range_start_fields[info.name], self.range_end_fields[info.name]]
+        fields.append(self.real_fps_field)
         return fields
 
     def _range_texts(self) -> dict[str, tuple[str, str]]:
@@ -1886,11 +2148,22 @@ class PygameSyncPlayer:
             for info in self.video_infos
         }
 
+    def _effective_video_infos(self) -> tuple[list[VideoInfo], list[str]]:
+        """Video metadata with container-consistent real-FPS overrides applied."""
+        return apply_fps_overrides(self.video_infos, self.fps_overrides)
+
+    def _effective_fps(self, info: VideoInfo) -> float:
+        rate = self.fps_overrides.get(info.name)
+        if rate is not None and fps_rates_match(rate, info.fps):
+            return float(rate)
+        return float(info.fps)
+
     def _plan_preview(self) -> dict[str, tuple[int, int]]:
         """Ranges (0-based) the current fields would save, or {} while incomplete."""
         try:
+            infos, _warnings = self._effective_video_infos()
             _reference, entries = build_sync_plan_from_fields(
-                self.video_infos,
+                infos,
                 {name: field.text for name, field in self.sync_fields.items()},
                 self.reference_field.text,
                 self.start_field.text,
@@ -1901,12 +2174,132 @@ class PygameSyncPlayer:
             return {}
         return {entry.video_file: (entry.start_frame, entry.end_frame) for entry in entries}
 
+    def _set_fps_override(self, *, all_cameras: bool) -> None:
+        """Store typed real FPS only when it matches each file's playback rate.
+
+        Cut Video uses container fps. Locking equal frame counts on a mismatched
+        override (29.97 on a 13.91 norepeat file) makes cuts share frame counts
+        but not duration — Start/End stop being the same temporal events.
+        """
+        try:
+            rate = parse_fps_field(self.real_fps_field.text)
+        except SyncWorkflowError as exc:
+            self._set_status(str(exc), error=True)
+            return
+        targets = list(self.video_infos) if all_cameras else [self.current_info]
+        applied: list[str] = []
+        skipped: list[str] = []
+        for info in targets:
+            if fps_rates_match(rate, info.fps):
+                self.fps_overrides[info.name] = rate
+                applied.append(info.name)
+            else:
+                self.fps_overrides.pop(info.name, None)
+                skipped.append(f"{info.name} ({info.fps:.3f} fps)")
+        if applied and not skipped:
+            self._set_status(
+                f"Real FPS {rate:.6g} on {len(applied)} camera(s) — Fill Start/End: "
+                "equal fps → equal frames; same temporal window"
+            )
+            return
+        if applied and skipped:
+            self._set_status(
+                f"Real FPS {rate:.6g} on {len(applied)}; skipped mismatch: "
+                + ", ".join(skipped)
+                + " (use each file's real rate for time sync)",
+                error=True,
+            )
+            return
+        self._set_status(
+            f"No camera plays at {rate:g} fps. Typed rate must match the file "
+            f"(current {self.current_info.name} is {self.current_info.fps:.3f}). "
+            "Norepeat cams keep the rate in the filename.",
+            error=True,
+        )
+
+    def _clear_fps_override_current(self) -> None:
+        """Drop the real-FPS override for the current camera (back to container fps)."""
+        removed = self.fps_overrides.pop(self.current_info.name, None)
+        if removed is None:
+            self._set_status(f"{self.current_info.name} already uses container fps")
+            return
+        self.real_fps_field.text = ""
+        self._set_status(
+            f"Cleared real FPS for {self.current_info.name} (now {self.current_info.fps:.3f} fps)"
+        )
+
+    def _fill_ranges_from_fps(self) -> None:
+        """Write each camera's Start/End from sync + real FPS so cuts share one time window.
+
+        Clears empty-optional behaviour by materialising the computed ranges.
+        Cameras that cannot cover the reference window report an error instead
+        of writing a partial/wrong cut.
+        """
+        infos, override_warnings = self._effective_video_infos()
+        try:
+            reference, entries = build_sync_plan_from_fields(
+                infos,
+                {name: field.text for name, field in self.sync_fields.items()},
+                self.reference_field.text,
+                self.start_field.text,
+                self.end_field.text,
+                # Ignore prior typed Start/End so every camera is recomputed
+                # from Sync + effective fps against the reference window.
+                range_texts={info.name: ("", "") for info in self.video_infos},
+            )
+        except SyncWorkflowError as exc:
+            self._set_status(str(exc), error=True)
+            return
+        filled = fill_range_texts_from_plan(entries, reference_video=reference)
+        for name, (start_text, end_text) in filled.items():
+            self.range_start_fields[name].text = start_text
+            self.range_end_fields[name].text = end_text
+        lines = describe_sync_plan(entries, infos, reference)
+        print(">> vaila/syncvid: Fill Start/End (same temporal window)\n  " + "\n  ".join(lines))
+        for warning in override_warnings:
+            print(f">> vaila/syncvid: {warning}")
+        info_by_name = {info.name: info for info in infos}
+        ref_info = info_by_name[reference]
+        ref_entry = next(entry for entry in entries if entry.video_file == reference)
+        ref_count = ref_entry.end_frame - ref_entry.start_frame + 1
+        equal_fps_names = [
+            entry.video_file
+            for entry in entries
+            if entry.video_file != reference
+            and fps_rates_match(info_by_name[entry.video_file].fps, ref_info.fps)
+        ]
+        other_counts = sorted(
+            {
+                entry.end_frame - entry.start_frame + 1
+                for entry in entries
+                if entry.video_file != reference and entry.video_file not in equal_fps_names
+            }
+        )
+        if equal_fps_names and not other_counts:
+            self._set_status(
+                f"Filled Start/End: same temporal window; all {len(entries)} cuts have "
+                f"{ref_count} frames (equal fps → locked count)"
+            )
+        elif equal_fps_names:
+            self._set_status(
+                f"Filled Start/End: same temporal window; {len(equal_fps_names)} equal-fps "
+                f"cam(s) locked to {ref_count} frames; other fps keep time align "
+                f"({min(other_counts)}–{max(other_counts)} frames)"
+            )
+        else:
+            self._set_status(
+                f"Filled Start/End: same temporal window; fps differ so frame counts "
+                f"differ ({min(other_counts + [ref_count])}–{max(other_counts + [ref_count])}) "
+                "while durations match"
+            )
+
     def _set_active_field(self, field: PygameTextField | None) -> None:
         for candidate in (
             self.reference_field,
             self.start_field,
             self.end_field,
             self.goto_field,
+            self.real_fps_field,
             *self.sync_fields.values(),
             *self.range_start_fields.values(),
             *self.range_end_fields.values(),
@@ -1918,6 +2311,8 @@ class PygameSyncPlayer:
         self.playing = False
         if field is self.goto_field:
             field.text = str(self.current_frame + 1)
+        if field is self.real_fps_field and not field.text.strip():
+            field.text = f"{self._effective_fps(self.current_info):.6g}"
         field.activate()
         prefix, _sep, video_name = field.key.partition(":")
         if prefix in ("sync", "start", "end"):
@@ -1982,6 +2377,13 @@ class PygameSyncPlayer:
             elif field is self.goto_field:
                 self._set_active_field(None)
                 self._goto_frame(field.text)
+                return
+            elif field is self.real_fps_field:
+                if not field.text.strip():
+                    self._clear_fps_override_current()
+                else:
+                    self._set_fps_override(all_cameras=False)
+                self._set_active_field(None)
                 return
             elif field.key.partition(":")[0] in ("sync", "start", "end"):
                 prefix, _sep, video_name = field.key.partition(":")
@@ -2380,10 +2782,12 @@ class PygameSyncPlayer:
                 self.tiny_font.render(label, True, (235, 239, 243)),
                 (row_rect.x + 6, row_rect.y + 3),
             )
+            effective_fps = self._effective_fps(info)
+            fps_overridden = info.name in self.fps_overrides
+            fps_color = (250, 210, 120) if fps_overridden else (168, 182, 196)
+            fps_label = f"{effective_fps:.3f} fps*" if fps_overridden else f"{info.fps:.3f} fps"
             self.screen.blit(
-                self.tiny_font.render(
-                    f"{info.fps:.3f} fps · {info.frame_count:,} fr", True, (168, 182, 196)
-                ),
+                self.tiny_font.render(f"{fps_label} · {info.frame_count:,} fr", True, fps_color),
                 (row_rect.x + 6, row_rect.y + 19),
             )
             row_fields = [self.sync_fields[info.name]]
@@ -2427,13 +2831,31 @@ class PygameSyncPlayer:
             32,
         )
         load_rect = pygame.Rect(x, actions_top + 86, content_width, 32)
-        detect_rect = pygame.Rect(x, actions_top + 129, first_width, 32)
-        write_rect = pygame.Rect(x + first_width + gap, actions_top + 129, first_width, 32)
+        self.screen.blit(
+            self.tiny_font.render(
+                "Real FPS (norepeat / all cams) — Enter sets current; * = overridden",
+                True,
+                (168, 182, 196),
+            ),
+            (x, actions_top + 122),
+        )
+        third = max(70, (content_width - 2 * gap) // 3)
+        self.real_fps_field.set_rect(pygame.Rect(x, actions_top + 138, third, 28))
+        self.real_fps_field.draw(self.screen, self.small_font)
+        self.visible_fields.append(self.real_fps_field)
+        fps_this_rect = pygame.Rect(x + third + gap, actions_top + 138, third, 28)
+        fps_all_rect = pygame.Rect(x + 2 * (third + gap), actions_top + 138, third, 28)
+        fill_rect = pygame.Rect(x, actions_top + 172, content_width, 28)
+        detect_rect = pygame.Rect(x, actions_top + 206, first_width, 28)
+        write_rect = pygame.Rect(x + first_width + gap, actions_top + 206, first_width, 28)
         self.button_rects["side:save"] = save_rect
         self.button_rects["side:save_cutvideo"] = save_cut_rect
         self.button_rects["side:help"] = help_rect
         self.button_rects["side:cancel"] = cancel_rect
         self.button_rects["side:load"] = load_rect
+        self.button_rects["side:fps_this"] = fps_this_rect
+        self.button_rects["side:fps_all"] = fps_all_rect
+        self.button_rects["side:fill_ranges"] = fill_rect
         self.button_rects["side:detect_repeats"] = detect_rect
         self.button_rects["side:save_without_repeats"] = write_rect
         self._draw_button(save_rect, "Save sync", accent=True)
@@ -2441,6 +2863,9 @@ class PygameSyncPlayer:
         self._draw_button(help_rect, "Help")
         self._draw_button(cancel_rect, "Cancel")
         self._draw_button(load_rect, "Load / Resume")
+        self._draw_button(fps_this_rect, "FPS this")
+        self._draw_button(fps_all_rect, "FPS all")
+        self._draw_button(fill_rect, "Fill Start/End from FPS", accent=True)
         self._draw_button(detect_rect, "Detect repeats")
         self._draw_button(write_rect, "Save w/o repeats")
 
@@ -2449,7 +2874,7 @@ class PygameSyncPlayer:
             True,
             (164, 177, 190),
         )
-        self.screen.blit(footer, (x, actions_top + 170))
+        self.screen.blit(footer, (x, actions_top + 240))
 
     def _draw(self) -> None:
         self.screen.fill((18, 21, 25))
@@ -2485,6 +2910,12 @@ class PygameSyncPlayer:
             self._open_help()
         elif action == "side:load":
             self._load_checkpoint()
+        elif action == "side:fps_this":
+            self._set_fps_override(all_cameras=False)
+        elif action == "side:fps_all":
+            self._set_fps_override(all_cameras=True)
+        elif action == "side:fill_ranges":
+            self._fill_ranges_from_fps()
         elif action == "side:detect_repeats":
             self._detect_repeated_frames()
         elif action == "side:save_without_repeats":
@@ -2625,39 +3056,34 @@ class PygameSyncPlayer:
                 self._zoom_at(mouse_pos, factor)
 
     @contextlib.contextmanager
-    def _sdl_window_minimized_for_dialog(self) -> Iterator[None]:
-        """Iconify the SDL window for the duration of a native Tk dialog.
+    def _sdl_released_for_dialog(self) -> Iterator[None]:
+        """Tear down the SDL window while a desktop file chooser owns the pointer.
 
-        Save and Load/Resume are the only places syncvid opens a native Tk
-        dialog while its own SDL window is still alive (Help and the Cut
-        Video handoff both fire-and-forget after the pygame loop has already
-        exited). Tk's ask*filename() blocks inside its own nested event
-        loop, so this process stops pumping the SDL window's queue for as
-        long as the dialog is open. On X11, a window that stops answering
-        the window manager while a second toolkit's top-level dialog grabs
-        focus is a known trigger for the whole desktop appearing to hang,
-        especially across multiple monitors. Iconifying the SDL window
-        before the dialog opens -- and restoring it via the same set_mode()
-        call already used for resize handling -- keeps only one top-level
-        window fighting for the window manager's attention at a time.
+        Iconify/topmost are ignored on several Linux WMs, so the only reliable
+        way to keep the chooser clickable is to quit the display, then rebuild
+        it (and refresh ``self.screen``) when the chooser returns.
         """
-        with contextlib.suppress(pygame.error):
-            pygame.display.iconify()
+        size = self.screen.get_size()
+        flags = self.screen.get_flags()
+        caption = pygame.display.get_caption()
+        pygame.display.quit()
         try:
             yield
         finally:
-            with contextlib.suppress(pygame.error):
-                self.screen = pygame.display.set_mode(
-                    (self.window_width, self.window_height), pygame.RESIZABLE
-                )
+            pygame.display.init()
+            self.screen = pygame.display.set_mode(size, flags)
+            if caption and caption[0]:
+                pygame.display.set_caption(*caption[:2])
+            pygame.event.clear()
+            pygame.event.pump()
 
     def _choose_output_file(self) -> Path | None:
         if self.output_file is not None:
             return self.output_file
         timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-        with self._sdl_window_minimized_for_dialog():
-            selected = filedialog.asksaveasfilename(
-                parent=self.dialog_parent,
+        with self._sdl_released_for_dialog():
+            selected = _portable_path_dialog(
+                "save",
                 title="Save vailá synchronization file",
                 initialdir=self.current_info.path.parent,
                 initialfile=f"vaila_sync_{timestamp}.txt",
@@ -2684,6 +3110,7 @@ class PygameSyncPlayer:
             completed=completed,
             removed_frames=self.removed_frames,
             ranges=self._range_texts(),
+            fps_overrides=self.fps_overrides,
         )
 
     def _apply_checkpoint(self, data: Mapping[str, Any]) -> None:
@@ -2714,6 +3141,21 @@ class PygameSyncPlayer:
         self.reference_field.text = cast(str, data["reference"])
         self.start_field.text = cast(str, data["start"])
         self.end_field.text = cast(str, data["end"])
+        overrides = cast(dict[str, float], data.get("fps_overrides", {}))
+        info_by_name = {info.name: info for info in self.video_infos}
+        self.fps_overrides = {}
+        dropped_overrides: list[str] = []
+        for name, rate in overrides.items():
+            if name not in known:
+                continue
+            if fps_rates_match(float(rate), info_by_name[name].fps):
+                self.fps_overrides[name] = float(rate)
+            else:
+                dropped_overrides.append(f"{name} ({rate:g}≠{info_by_name[name].fps:.3f})")
+        if self.current_info.name in self.fps_overrides:
+            self.real_fps_field.text = f"{self.fps_overrides[self.current_info.name]:.6g}"
+        else:
+            self.real_fps_field.text = ""
 
         output_file = data.get("output_file")
         self.output_file = Path(output_file).expanduser().resolve() if output_file else None
@@ -2730,12 +3172,20 @@ class PygameSyncPlayer:
         message = f"Resumed {state_label} from checkpoint"
         if skipped:
             message += f" (skipped unknown camera(s): {', '.join(skipped)})"
-        self._set_status(message)
+        if self.fps_overrides:
+            message += f" ({len(self.fps_overrides)} real-FPS override(s))"
+        if dropped_overrides:
+            message += f" — dropped mismatched FPS: {', '.join(dropped_overrides)}"
+            print(
+                ">> vaila/syncvid: Dropped checkpoint FPS overrides that disagree "
+                "with file playback rate:\n  " + "\n  ".join(dropped_overrides)
+            )
+        self._set_status(message, error=bool(dropped_overrides))
 
     def _load_checkpoint(self) -> None:
-        with self._sdl_window_minimized_for_dialog():
-            selected = filedialog.askopenfilename(
-                parent=self.dialog_parent,
+        with self._sdl_released_for_dialog():
+            selected = _portable_path_dialog(
+                "open",
                 title="Load / Resume vailá synchronization checkpoint",
                 initialdir=self.current_info.path.parent,
                 filetypes=[("vailá checkpoint", "*.json"), ("All files", "*.*")],
@@ -2750,9 +3200,12 @@ class PygameSyncPlayer:
             self._set_status(f"Could not load checkpoint: {exc}", error=True)
 
     def _save(self, open_cutvideo: bool) -> None:
+        effective_infos, override_warnings = self._effective_video_infos()
+        for warning in override_warnings:
+            print(f">> vaila/syncvid: {warning}")
         try:
             reference_video, entries = build_sync_plan_from_fields(
-                self.video_infos,
+                effective_infos,
                 {name: field.text for name, field in self.sync_fields.items()},
                 self.reference_field.text,
                 self.start_field.text,
@@ -2789,8 +3242,15 @@ class PygameSyncPlayer:
 
         print(
             ">> vaila/syncvid: Synchronized ranges (same time window in every camera)\n  "
-            + "\n  ".join(describe_sync_plan(entries, self.video_infos, reference_video))
+            + "\n  ".join(describe_sync_plan(entries, effective_infos, reference_video))
         )
+        if self.fps_overrides:
+            print(
+                ">> vaila/syncvid: Real-FPS overrides used for time math\n  "
+                + "\n  ".join(
+                    f"{name}: {rate:.6g} fps" for name, rate in sorted(self.fps_overrides.items())
+                )
+            )
         reference_path = next(
             info.path for info in self.video_infos if info.name == reference_video
         )
@@ -2944,8 +3404,9 @@ def sync_videos(
 
     try:
         if input_directory is None:
-            selected = filedialog.askdirectory(
-                parent=root, title="Select target directory containing synchronized videos"
+            selected = _portable_path_dialog(
+                "dir",
+                title="Select target directory containing synchronized videos",
             )
             if not selected:
                 print("No video directory selected.")
