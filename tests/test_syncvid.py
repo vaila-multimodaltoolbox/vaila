@@ -1,11 +1,12 @@
 """Unit tests for interactive multi-video synchronization.
 
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 27 October 2026
+Version: 0.4.12
 """
 
 from __future__ import annotations
 
+import csv
 import json
 import os
 from pathlib import Path
@@ -806,9 +807,7 @@ def test_flamengo_mismatch_override_keeps_time_not_equal_frames(tmp_path: Path) 
         _rate_info(tmp_path / "c1.mp4", 81, 29.970030),
         _rate_info(tmp_path / "c2_norepeat.mp4", 71, 13.907661),
     ]
-    effective, warnings = syncvid.apply_fps_overrides(
-        infos, {"c2_norepeat.mp4": 29.97}
-    )
+    effective, warnings = syncvid.apply_fps_overrides(infos, {"c2_norepeat.mp4": 29.97})
     assert effective[1].fps == 13.907661
     assert warnings
     plan = syncvid.build_sync_plan(
@@ -829,11 +828,11 @@ def test_equal_fps_forces_identical_frame_count_even_with_noise(tmp_path: Path) 
         _rate_info(tmp_path / "ref.mp4", 200, 29.970030),
         _rate_info(tmp_path / "cam.mp4", 200, 29.97),
     ]
-    plan = syncvid.build_sync_plan(
-        infos, {"ref.mp4": 70, "cam.mp4": 70}, "ref.mp4", 62, 80
-    )
+    plan = syncvid.build_sync_plan(infos, {"ref.mp4": 70, "cam.mp4": 70}, "ref.mp4", 62, 80)
     ref_entry, cam_entry = plan
-    assert ref_entry.end_frame - ref_entry.start_frame == cam_entry.end_frame - cam_entry.start_frame
+    assert (
+        ref_entry.end_frame - ref_entry.start_frame == cam_entry.end_frame - cam_entry.start_frame
+    )
     assert (ref_entry.end_frame - ref_entry.start_frame + 1) == 19
     # Hand-typed End that disagrees is snapped when fps matches.
     plan2 = syncvid.build_sync_plan(
@@ -854,9 +853,7 @@ def test_different_fps_keeps_time_align_with_different_frame_counts(tmp_path: Pa
         _rate_info(tmp_path / "ref.mp4", 200, 29.970030),
         _rate_info(tmp_path / "slow.mp4", 100, 13.907661),
     ]
-    plan = syncvid.build_sync_plan(
-        infos, {"ref.mp4": 70, "slow.mp4": 57}, "ref.mp4", 62, 80
-    )
+    plan = syncvid.build_sync_plan(infos, {"ref.mp4": 70, "slow.mp4": 57}, "ref.mp4", 62, 80)
     ref_n = plan[0].end_frame - plan[0].start_frame + 1
     slow_n = plan[1].end_frame - plan[1].start_frame + 1
     assert ref_n != slow_n
@@ -958,6 +955,7 @@ def test_pygame_player_g_focuses_go_to_and_enter_seeks(tmp_path: Path) -> None:
     player.range_start_fields = {"a.mp4": syncvid.PygameTextField("start:a.mp4")}
     player.range_end_fields = {"a.mp4": syncvid.PygameTextField("end:a.mp4")}
     player.goto_field = syncvid.PygameTextField("goto")
+    player.real_fps_field = syncvid.PygameTextField("real_fps", "", max_length=12)
     player.active_field = None
     decoded = []
 
@@ -1024,6 +1022,225 @@ def test_find_repeated_frames_compensates_field_shift_but_not_pans(tmp_path: Pat
     pan = [texture[40:220, 40 + index : 360 + index].copy() for index in range(18)]
     write(tmp_path / "pan.avi", pan)
     assert syncvid.find_repeated_frames(tmp_path / "pan.avi").repeated_frames == ()
+
+
+def _write_alternating_fields(path: Path, copies: set[int]) -> None:
+    """MJPEG copies with edge flicker, mixed into a real horizontal pan.
+
+    The periodic central texture avoids artificial correlation crop boundaries;
+    peripheral flicker makes the copies' scores overlap those of real motion.
+    """
+    import cv2
+    import numpy as np
+
+    rng = np.random.default_rng(49)
+    tile = cv2.resize(
+        rng.integers(0, 256, (22, 40), dtype=np.uint8),
+        (320, 180),
+        interpolation=cv2.INTER_CUBIC,
+    )
+    texture = np.tile(tile, (2, 2))
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter.fourcc(*"MJPG"), 60, (640, 360))
+    assert writer.isOpened()
+    sign, real = 1, 0
+    previous = texture
+    try:
+        for index in range(23):
+            if index in copies:
+                frame = np.roll(previous, sign, axis=0)
+                frame[:18] = np.clip(frame[:18].astype(int) + 40, 0, 255).astype(np.uint8)
+                sign *= -1
+            else:
+                real += 1
+                frame = np.roll(texture, real * 2, axis=1)
+            writer.write(cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR))
+            previous = frame
+    finally:
+        writer.release()
+
+
+@pytest.mark.parametrize("copies", [{2, 6, 9, 14, 18}, {2}, {2, 6}])
+def test_field_alternation_with_codec_noise_and_variable_intervals(
+    tmp_path: Path, copies: set[int]
+) -> None:
+    path = tmp_path / "fields.avi"
+    _write_alternating_fields(path, copies)
+    report = syncvid.find_repeated_frames(path)
+    assert report.threshold == syncvid.REPEAT_INVISIBLE_SCORE
+    assert all(score > report.threshold for score in report.motion_scores)
+    expected = copies if len(copies) >= 3 else set()
+    assert set(report.repeated_frames) == expected
+    assert report.repeat_reasons.count("field_alternation") == len(expected)
+    assert len(report.phase_responses) == report.total_frames - 1
+
+
+@pytest.mark.parametrize("axis,step", [(0, 1), (0, 3), (1, 1), (1, 3)])
+def test_legitimate_camera_motion_is_not_field_alternation(
+    tmp_path: Path, axis: int, step: int
+) -> None:
+    import cv2
+    import numpy as np
+
+    rng = np.random.default_rng(17)
+    texture = np.tile(rng.integers(0, 256, (180, 320), dtype=np.uint8), (2, 2))
+    path = tmp_path / "pan.avi"
+    writer = cv2.VideoWriter(str(path), cv2.VideoWriter.fourcc(*"FFV1"), 60, (640, 360))
+    assert writer.isOpened()
+    try:
+        for index in range(12):
+            frame = np.roll(texture, index * step, axis=axis)
+            # A foreground region moves independently of the camera, so the
+            # compensated legacy motion score also sees real motion.
+            frame[:18] = 255 if index % 2 else 0
+            writer.write(cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR))
+    finally:
+        writer.release()
+    report = syncvid.find_repeated_frames(path)
+    assert report.repeated_frames == ()
+
+
+def test_field_candidate_gates_and_same_direction_breaks() -> None:
+    # Valid runs on either side of a direction break, a trailing pair,
+    # and out-of-gate evidence interspersed among the valid candidates.
+    shifts = [
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (0.0, 1.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (0.0, 1.0),
+        (0.0, 1.0),
+        (0.0, -1.0),
+        (0.11, 1.0),
+        (0.0, 0.74),
+        (0.0, 1.76),
+        (0.0, 1.0),
+    ]
+    responses = [1.0] * 11 + [0.89]
+    assert syncvid.field_alternation_frames(shifts, responses) == {1, 2, 3, 4, 5, 6}
+    assert syncvid.field_alternation_frames(
+        [(0.1, 0.75), (-0.1, -1.75), (0.0, 1.3)], [0.9] * 3
+    ) == {1, 2, 3}
+
+
+def test_repeat_report_legacy_fallback_and_review_audit(tmp_path: Path) -> None:
+    from dataclasses import replace
+
+    video = tmp_path / "audit.avi"
+    _write_video_with_repeats(video, 4, set())
+    legacy = syncvid.RepeatedFrameReport(
+        video=video,
+        fps=60,
+        width=160,
+        height=120,
+        motion_scores=(0.5, 10.0, 12.0),
+        threshold=1.0,
+        gap_ratio=1.0,
+    )
+    assert legacy.repeated_frames == (1,)
+    assert replace(legacy, automatic_reasons=("none", "none", "none")).repeated_frames == ()
+    report = replace(
+        legacy,
+        phase_responses=(1.0, 0.95, 0.3),
+        automatic_reasons=("motion_threshold", "field_alternation", "none"),
+    )
+    assert report.repeated_frames == (1, 2)
+    assert report.kept_frames == (0, 3)
+    # Review keeps auto-marked frame 1 and adds frame 0; frame 2 stays removed.
+    out = syncvid.save_videos_without_frames([(report.info, {0, 2}, report)], tmp_path / "out")
+    with (out / "audit_motion_scores.csv").open() as handle:
+        rows = list(csv.DictReader(handle))
+    assert [(r["auto_repeated"], r["repeated"]) for r in rows] == [
+        ("0", "1"),
+        ("1", "0"),
+        ("1", "1"),
+        ("0", "0"),
+    ]
+    assert rows[0]["auto_reason"] == "none"
+    assert rows[1]["auto_reason"] == "motion_threshold"
+    assert rows[2]["auto_reason"] == "field_alternation"
+    assert rows[2]["phase_response"] == "0.950000"
+    with (out / "norepeat_summary.csv").open() as handle:
+        summary = next(csv.DictReader(handle))
+    assert summary["auto_detected_repeats"] == "2"
+    assert summary["motion_threshold_repeats"] == "1"
+    assert summary["field_alternation_repeats"] == "1"
+    assert summary["manual_added_repeats"] == "1"
+    assert summary["manual_kept_frames"] == "1"
+    with (out / "audit_norepeat_frames.csv").open() as handle:
+        assert [r["original_frame"] for r in csv.DictReader(handle)] == ["2", "4"]
+
+
+def test_gui_field_marks_remain_reviewable_and_checkpointed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pygame
+
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    copies = {2, 6, 9, 14, 18}
+    _write_alternating_fields(tmp_path / "fields.avi", copies)
+    _write_alternating_fields(tmp_path / "clean.avi", set())
+    player = syncvid.PygameSyncPlayer(syncvid.probe_video_directory(tmp_path))
+    try:
+        player._detect_repeated_frames()
+        assert player.removed_frames == {"fields.avi": copies, "clean.avi": set()}
+        player._open_video(1, target_frame=2)
+        player._handle_event(pygame.event.Event(pygame.KEYDOWN, key=pygame.K_d, mod=0))
+        assert player.removed_frames["fields.avi"] == copies - {2}
+        state = player._checkpoint_state(completed=False)
+        path = syncvid.write_checkpoint_file(state, tmp_path / "review.json")
+        assert syncvid.read_checkpoint_file(path)["removed_frames"]["fields.avi"] == [7, 10, 15, 19]
+        assert set(player.repeat_reports["fields.avi"].repeated_frames) == copies
+    finally:
+        player._release_capture()
+        pygame.display.quit()
+        pygame.font.quit()
+
+
+def test_save_sync_keeps_gui_open_save_cut_closes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Save sync must write files without ending the player loop; Save + Cut closes."""
+    import cv2
+    import numpy as np
+    import pygame
+
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    for name in ("camera_one.avi", "camera_two.avi"):
+        writer = cv2.VideoWriter(
+            str(tmp_path / name), cv2.VideoWriter_fourcc(*"MJPG"), 30.0, (64, 48)
+        )
+        for _ in range(30):
+            writer.write(np.zeros((48, 64, 3), dtype=np.uint8))
+        writer.release()
+
+    player = syncvid.PygameSyncPlayer(syncvid.probe_video_directory(tmp_path))
+    try:
+        for field in player.sync_fields.values():
+            field.text = "5"
+        player.reference_field.text = "camera_one.avi"
+        player.start_field.text = "1"
+        player.end_field.text = "20"
+
+        sync_path = tmp_path / "session_sync.txt"
+        monkeypatch.setattr(player, "_choose_output_file", lambda: sync_path)
+        player._save(False)
+        assert player.running is True
+        assert player.result is not None
+        assert player.result.open_cutvideo is False
+        assert sync_path.is_file()
+        assert "Saved sync" in player.status_text
+
+        player._save(True)
+        assert player.running is False
+        assert player.result is not None
+        assert player.result.open_cutvideo is True
+    finally:
+        player._release_capture()
+        pygame.display.quit()
+        pygame.font.quit()
 
 
 def test_choose_output_file_uses_portable_dialog_and_releases_sdl(
@@ -1103,3 +1320,37 @@ def test_portable_path_dialog_prefers_zenity(
     )
     assert syncvid._portable_path_dialog("open", title="Pick") == "/tmp/zenity-open.txt"
     assert called == []
+
+
+def test_dialog_wrapper_asks_the_recreated_window_to_resize(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a file dialog the SDL window is recreated. It must receive a resize event, the one a
+    user resize sends, otherwise it can stay blank until the user resizes it."""
+    import cv2
+    import numpy as np
+    import pygame
+
+    monkeypatch.setenv("SDL_VIDEODRIVER", "dummy")
+    monkeypatch.setenv("SDL_AUDIODRIVER", "dummy")
+    for name in ("cam_a.mp4", "cam_b.mp4"):
+        writer = cv2.VideoWriter(
+            str(tmp_path / name), cv2.VideoWriter_fourcc(*"mp4v"), 30, (160, 90)
+        )
+        for _ in range(10):
+            writer.write(np.zeros((90, 160, 3), np.uint8))
+        writer.release()
+    infos = syncvid.probe_video_directory(tmp_path)
+    player = syncvid.PygameSyncPlayer(infos)
+    try:
+        pygame.event.clear()
+        with player._sdl_released_for_dialog():
+            pass
+        resize_events = pygame.event.get(pygame.VIDEORESIZE)
+        assert resize_events, "the recreated window must be asked to resize"
+        last = resize_events[-1]
+        assert (last.w, last.h) == player.screen.get_size()
+    finally:
+        player._release_capture()
+        pygame.display.quit()
+        pygame.font.quit()

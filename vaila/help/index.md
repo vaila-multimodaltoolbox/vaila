@@ -177,7 +177,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](compress_videos_h266.html) · [Markdown](compress_videos_h266.md)
 - **cop_calculate** — This script allows users to select six (6) headers for force plate data analysis.
   - [HTML](cop_calculate.html) · [Markdown](cop_calculate.md)
-- **cutvideo** — Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with in...
+- **cutvideo** — Interactive cuts, legacy sync and event-manifest export with exact rational FPS, temporal-error maps and retained observations.
   - [HTML](cutvideo.html) · [Markdown](cutvideo.md)
 - **drawboxe** — drawboxe is a tool for drawing boxes and polygons on videos. It allows you to create rectangular, trapezoidal, and free-form polygons to process videos, fill...
   - [HTML](drawboxe.html) · [Markdown](drawboxe.md)
@@ -209,7 +209,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](mergestack.html) · [Markdown](mergestack.md)
 - **mkvis3d** — Location: /home/preto/data/mkvis3d/mkvis3d.py
   - [HTML](mkvis3d.html) · [Markdown](mkvis3d.md)
-- **numberframes** — This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected dire...
+- **numberframes** — Metadata extraction plus Adjust real FPS (retag container rate before Cut/Sync). Frame C → Metadata info.
   - [HTML](numberframes.html) · [Markdown](numberframes.md)
 - **numstepsmp** — Opens a dialog to select a CSV file of foot coordinates and calculates the number of steps based on foot position using MediaPipe data. Includes Butterworth...
   - [HTML](numstepsmp.html) · [Markdown](numstepsmp.md)
@@ -229,7 +229,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](skout_bundle.html) · [Markdown](skout_bundle.md)
 - **standardize_header** — This script is designed to standardize headers across multiple CSV files in a selected directory. It allows users to select a specific line to use as the hea...
   - [HTML](standardize_header.html) · [Markdown](standardize_header.md)
-- **syncvid** — syncvid opens every supported video from one target directory in a fast Pygame player. Playback and frame navigation follow the same conventions as cutvideo....
+- **syncvid** — Synchronize by editable events and physical time; review repeats and export exact rational grids, temporal-error maps and retained samples.
   - [HTML](syncvid.html) · [Markdown](syncvid.md)
 - **transcribe_pdfs** — transcribe_pdfs.py converts PDF exams or handwritten/scanned documents into text files. It supports:
   - [HTML](transcribe_pdfs.html) · [Markdown](transcribe_pdfs.md)

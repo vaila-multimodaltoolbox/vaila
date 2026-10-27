@@ -4,6 +4,14 @@
 
 **Last updated:** 2026-10-27
 
+Syncvid **Sync by events** calibrates physical time after repeat review, using editable event pairs
+and exact rational clocks. Cut Video exports a shared time grid, temporal-error maps and retained
+PNG observations with their physical times. See the [event workflow](vaila/help/syncvid.md#sync-by-events-physical-time-calibration).
+
+Syncvid repeat detection combines motion thresholds with alternating vertical field shifts, sharing
+decisions between GUI and CLI. CSV audits separate automatic reasons from reviewed export marks.
+See [Syncvid help](vaila/help/syncvid.md#remove-repeated-frames).
+
 FreeKiki Kiki49 review: `uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS` opens a 49-point review session. After **Mark Reviewed** and **Export Reviewed**, preview with `uv run --no-sync vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH_ID`; add `--commit` to append validated frames to train. GetPixelCoord also opens a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp for CALIB/MEASURE. See [GetPixelVideo help](vaila/help/getpixelvideo.md) and [FreeKiki help](vaila/help/freekiki.md).
 
 Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,

@@ -684,10 +684,11 @@ uv run --no-sync vaila/freekiki.py detect-3d -w $WS --run DETECT_RUN_OR_BATCH \
   Check the residual before trusting a refit frame.
 - **Ball track in getpixelvideo (manual correction).** Section 5 has a button, **Ball track in getpixelvideo**: it
   writes `ball_for_correction.csv` in the newest 3D folder (the raw ball pixels, one row per frame) and opens
-  getpixelvideo on the video with that track loaded (`--track-csv`). Correct the ball there and Save; the file
-  `<video>_markers.csv` appears next to the video. Then run the 3D chain again on that corrected track:
-  `freekiki.py detect-3d --run <detect run> --ball-csv <markers.csv>`. A corrected point is accepted as it is (score 1.0)
-  and the physical smoothing still applies.
+  getpixelvideo on the video with that track loaded (`--track-csv`). After a **folder / batch** Detect + 3D it lists
+  every video that has a `ball.csv` and asks which one to open. Correct the ball there and Save; the file
+  `<video>_markers.csv` appears next to the video. Then use **Rebuild ball (after correction)** (or
+  `freekiki.py ball-rebuild --out <3d folder> --ball-csv <markers.csv> --video <video>`). A corrected point is
+  accepted as it is (score 1.0) and the physical smoothing still applies.
 - **Physical tracks.** The ball and each person's ground point are smoothed by a Kalman filter with random
   acceleration and an RTS smoother (`freekiki_physics.py`). Outliers outside the prediction are rejected, a ball speed
   is capped at 40 m/s, and a frame far from any measurement stays empty. The raw ball is kept in `ball_3d.csv`. A kick

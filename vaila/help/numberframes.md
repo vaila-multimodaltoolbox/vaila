@@ -4,48 +4,70 @@
 
 - **Category:** Tools
 - **File:** `vaila/numberframes.py`
-- **Version:** 0.3.114
+- **Version:** 0.4.12
+- **Updated:** 27 October 2026
 - **Author:** Paulo R. P. Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
-- **GUI Interface:** ✅ Yes
+- **GUI Interface:** Yes (*vailá* Frame C → **Metadata info**)
 - **License:** GNU Lesser General Public License v3.0
 
-## 📖 Description
+## Description
 
-This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected directory and extracts comprehensive metadata including frame count, frame rates (display and capture), resolution, codec information, and duration. The script generates both a user-friendly summary and detailed JSON metadata files with precision suitable for scientific research.
+This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected directory and extracts comprehensive metadata including frame count, frame rates (display and capture), resolution, codec information, and duration.
+
+It also **Adjusts real FPS**: retags the container frame rate (stream-copy remux, re-encode fallback) when videos were written with a stamped FPS different from the capture rate (common after joining clips). Cut Video and Make Sync file both read **container** FPS, so fix the files here first.
 
 ### Key Features
 
 - **Scientific Precision**: Frame rates and durations with 9 decimal places for research accuracy
 - **Fast Extraction**: Single `ffprobe` JSON call for efficient metadata extraction
-- **Capture FPS Detection**: Automatically detects Android slow-motion capture FPS tags
 - **Parallel Processing**: Processes multiple videos concurrently for faster analysis
 - **Dual Output**: Basic summary file and full JSON metadata files
-- **GUI Display**: User-friendly table view of all video metadata
+- **Adjust real FPS**: Remux (`setts` + MP4 timescale) keeping every frame; duration becomes `frames / real_fps`
 - **Research Ready**: High-precision values suitable for scientific analysis
 
-## 🔧 Main Functions
+## Main Functions
 
-**Total functions found:** 10+
+### Metadata
 
-### Core Functions
+- `get_precise_video_metadata()` — ffprobe JSON → fps, frames, resolution, codec
+- `get_video_info()` — summary dict used by the batch extractor
+- `count_frames_in_videos()` — GUI/CLI metadata extraction entry point
 
-- `get_video_info()` - Extract comprehensive video metadata using ffprobe
-- `_ffprobe_json()` - Single fast ffprobe call returning complete JSON
-- `_to_float_fps()` - Convert fraction strings to precise float values
-- `_extract_capture_fps()` - Detect Android capture FPS from metadata tags
+### Adjust real FPS
 
-### Display and Output Functions
+- `parse_fps_value()` / `parse_fps_fraction()` — float or `num/den`
+- `adjust_video_fps(src, real_fps, out_path)` — one file (copy, then re-encode fallback)
+- `adjust_videos_fps(...)` — batch → `processed_fpsfix_<timestamp>/` + `fpsfix_summary.csv`
 
-- `display_video_info()` - GUI table displaying all video metadata
-- `save_basic_metadata_to_file()` - Save human-readable summary (9 decimal precision)
-- `save_full_metadata_to_file()` - Save complete JSON metadata for each video
-- `show_save_success_message()` - Confirmation dialog
+## Adjust real FPS
 
-### Main Entry Point
+### When to use
 
-- `count_frames_in_videos()` - Main function with directory selection and processing
+Joined or re-muxed clips often keep a **wrong stamped FPS** while every frame is still at the capture rate. Typing “real FPS” in Cut/Sync only helps math when it **matches** the container; otherwise fix the file here so Cut Video seeks/writes at the capture rate automatically.
+
+### GUI
+
+1. Frame C → Video → **Metadata info**
+2. Choose **Adjust real FPS**
+3. Enter real FPS once for the batch (`29.97` or `30000/1001`)
+4. Select the directory of videos
+
+### CLI
+
+```bash
+uv run vaila/numberframes.py --set-fps 29.97 --dir /path/to/videos --cli
+uv run vaila/numberframes.py --set-fps 30000/1001 video1.mp4 video2.mp4 --cli
+```
+
+### Output
+
+- Directory: `processed_fpsfix_YYYYMMDD_HHMMSS/` next to the sources
+- Remuxed videos (same filenames)
+- `fpsfix_summary.csv` — old/new fps, frames, method (`copy`|`reencode`), errors
+
+Semantics: **keeps every frame**; does not drop/duplicate to stretch playback. Reported duration becomes `nb_frames / real_fps`.
 
 ## 📊 Metadata Extracted
 

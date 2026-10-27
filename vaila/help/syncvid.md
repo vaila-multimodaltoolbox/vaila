@@ -4,8 +4,8 @@
 
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
-- **Version:** 0.4.11
-- **Updated:** 2026-10-26
+- **Version:** 0.4.12
+- **Updated:** 2026-10-27
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 
@@ -15,7 +15,70 @@
 
 The generated versioned TXT maps one inclusive reference-camera interval into equal-duration ranges for every camera. **Save + Cut Video** launches Cut Video with both the reference video and TXT already selected.
 
-## Fast workflow
+## Sync by events: physical-time calibration
+
+For edited cameras with repeated images, click **Load / Resume** to load the existing checkpoint,
+then turn **Sync by events: ON**. This imports each camera's explicit **Start, Sync, End** as three
+events, without shortening a range because container FPS matches. The event list in each row is
+editable: enter comma- or space-separated original frame numbers in the same event order for every
+camera. Additional events are supported. The reference field accepts the usual camera name or row.
+In this mode the top two fields are **Reference clock FPS** (assumed `60000/1001`) and **Output grid
+FPS** (`30000/1001`). These are exact rational rates. Container FPS is informational here.
+
+Review repeats with **Detect repeats** and **D/Delete** before saving. The model numbers only the
+retained frames between the first and last event and assigns physical time by piecewise linear
+interpolation of their retained ordinals. Reference event times come from original reference frame
+offsets divided by the assumed reference clock. Event frames must be strictly increasing, in bounds,
+and retained; errors identify the camera and event to correct. Nothing is extrapolated beyond the
+first or last event. The hypothesis is uniform physical spacing of retained samples within each
+segment. The current camera's inferred segment rates are visible below the camera list;
+**Validate event timing** prints every camera's rates. These rates do not prove acquisition FPS.
+
+**Save sync** writes `<name>.events.json` plus `<name>.checkpoint.json` for Load / Resume. The
+manifest records its checkpoint, imported checkpoint, events, all removal marks (including marks
+outside the event interval), rational clocks, method and assumptions. **Save + Cut Video** launches
+the event export directly. Edit event synchronization in Sync Video; legacy TXT files retain their
+existing behavior.
+
+Reproducible CLI (the output directory must be new):
+
+```bash
+uv run --no-sync python -m vaila.syncvid --events \
+  --input-dir /path/to/cameras --checkpoint /path/to/session.json \
+  --reference-fps 60000/1001 --output-fps 30000/1001 \
+  --output /tmp/session.events.json
+uv run --no-sync python -m vaila.cutvideo --video /path/to/cameras/c1_main.mp4 \
+  --sync-file /tmp/session.events.json --output-dir /tmp/session_event_export
+```
+
+Cut Video exports the closest retained image for each output time, with exact ties choosing the
+earlier image. The grid includes times `k / output_fps` up to and including the physical endpoint
+when it lies on the grid: `floor(sample_span * output_fps) + 1` frames. Events off the output grid
+remain exact calibration anchors, but cannot occupy an exact output timestamp.
+
+Each camera produces:
+
+- `<camera filename>_events.mp4`: lossless RGB H.264 at the exact output FPS, without audio.
+- `<camera filename>_time_map.csv`: `output_frame`, `requested_time_s`, `original_frame`,
+  `physical_time_s`, `temporal_error_s`, `reused`, and exact rational forms of all times/errors.
+  Signed error is **selected physical time minus requested time**; `reused=1` means the same source
+  image was already selected earlier in that output video.
+- `<camera filename>_retained/`: lossless PNG sequence of every retained observation in the interval.
+- `<camera filename>_retained_times.csv`: retained ordinal, original frame, physical time (decimal
+  and rational) and PNG filename. These sequences have no imposed constant playback clock.
+- Shared `event_sync_manifest.json` and `README.txt`: versioned calibration and export audit.
+
+For the confirmed pairs **c1: 1,15,79 / c2: 1,20,109**, with 31 removals in c2's interval,
+c1 retains 79 images and c2 retains 78. Both outputs have **40 frames**, with events at **1,8,40**.
+Physical sample span is **1.301300000 s**; playback duration is **1.334666667 s**. The intermediate
+event is at **0.233566667 s**. Inferred c2 rates are 55.658627 and 59.940060 fps.
+
+**Output correspondence does not imply simultaneous acquisition.** Consult every image's temporal
+error. For 3D, measure 2D coordinates on the retained observations, interpolate those coordinates
+onto shared physical times, then triangulate. Coordinate interpolation creates no new observations.
+This mode exports videos and temporal maps; reconstruction is outside its scope.
+
+## Fast workflow (sync frame + FPS)
 
 1. Select a directory containing at least two videos.
 2. Click a camera name in the right panel, or use **Page Up/Page Down**.
@@ -30,8 +93,8 @@ The generated versioned TXT maps one inclusive reference-camera interval into eq
    - a unique text fragment such as `frontal`.
 7. Type the inclusive **Reference start** and **Reference end** frame numbers.
 8. Choose:
-   - **Save sync** — save and return to vailá;
-   - **Save + Cut Video** — save and open Cut Video immediately without another file chooser.
+   - **Save sync** — write the sync file and stay in the player (edit and re-save as needed; Cancel or the window close ends the session);
+   - **Save + Cut Video** — save, close Sync Video, and open Cut Video immediately without another file chooser.
 
 Clicking a field selects its current contents for quick replacement. **Tab/Shift+Tab** moves through all fields and **Enter** validates the active field. All displayed and saved frames are **1-based and inclusive**; internal Python calculations remain 0-based.
 
@@ -105,7 +168,7 @@ The **Help** button opens this page in a browser. It tries, in order, the `BROWS
 | Mouse click | Select camera, field, or action |
 | Tab / Shift+Tab | Next/previous input field |
 | Enter | Validate the active field and seek to a typed sync frame |
-| Ctrl+S | Save the synchronization TXT |
+| Ctrl+S | Save sync (writes files; GUI stays open) |
 | Escape | Leave a field; when no field is active, cancel |
 
 The visible step buttons use the traditional ASCII labels **-60**, **-1**, **+1**, and **+60**.
@@ -140,11 +203,22 @@ How **Detect repeats** judges each frame, as a viewer would:
   where something moved.
 - The cut is chosen **per video**. Sorted scores show a gap of at least 2x between the noise group
   and the motion group. When several such gaps exist, the one that best separates the two groups is
-  used. Without such a gap the video has no repeats (only changes scoring at most 1 grey level count).
+  used. Without such a gap this rule marks only changes scoring at most 1 grey level.
 - **Interlaced sources** (e.g. 50 fps material on a 59.94 timeline) repeat a frame built from the other
   field: the same image shifted about 1.2 px vertically. A small, purely vertical global shift
   (phase correlation on the centre of the frame) is compensated before scoring again, and the lower
   score is kept. Horizontal or larger shifts are real camera motion and are not compensated.
+- A second rule detects **alternating fields** even when repeat scores overlap real-motion scores.
+  A candidate requires `|dx| <= 0.1 px`, `0.75 <= |dy| <= 1.75 px`, and phase-correlation response
+  `>= 0.9`. Only runs of at least **three candidates with alternating vertical signs** are marked.
+  Real frames may occur between candidates, with variable intervals; there is no fixed cadence.
+  A same-sign candidate ends the run and starts another. Isolated candidates and pairs do not qualify.
+  The automatic decision is the union of both rules. When both apply, the audit reason is
+  `motion_threshold` (counts are exclusive); otherwise it is `field_alternation` or `none`.
+- Validation on the Veiga pair matched all **32 manually marked frames** in `c2_16mm.mp4`, with no
+  extra or missed marks, and found zero in `c1_main.mp4`. The 112-frame clip exports 80 frames at
+  about **42.814 fps**. This is evidence for this pair, not a guarantee for other camera movements;
+  review automatic marks with **D** before saving.
 - On the 1080p examples: `cobrador.mp4` copies scored at most 6.7 and real frames at least 40.2;
   `lateral.mp4` 5.1 against 30.6; `gol.mp4` (field-shifted copies, raw score ~20 like slow real frames)
   8.3 against 22.9, 24 repeats, about 49.88 fps, i.e. 50 fps material. `cabine1.mp4` and the four
@@ -157,8 +231,14 @@ each video with marked frames in `processed_norepeat_<timestamp>/`, next to the 
 |---|---|
 | `<name>_norepeat_<fps>fps.mp4` | H.264, only the distinct frames. The container frame rate is the estimated real rate, so the duration is kept; the rate is also in the file name and in the `comment` metadata. No audio |
 | `<name>_norepeat_frames.csv` | `new_frame`, `original_frame` (both 1-based), `original_time_s` |
-| `<name>_motion_scores.csv` | every video: `frame`, `motion_score`, `repeated` (1 = removed), `shift_x_px`, `shift_y_px` (measured global shift), to check the decision |
-| `norepeat_summary.csv` | every video: frames, unique, repeated (marked), fps, estimated real fps, threshold, gap ratio, automatically detected repeats, repeated frame numbers |
+| `<name>_motion_scores.csv` | every analyzed video: existing `frame`, `motion_score`, `repeated` (1 = actually removed), `shift_x_px`, `shift_y_px`; appended `phase_response`, `auto_repeated`, `auto_reason` (`motion_threshold`, `field_alternation`, `none`). The first frame has no pair score/response and is never auto-marked |
+| `norepeat_summary.csv` | every video: existing counts, rates, threshold, gap, automatic total, marked frame numbers and output; appended `motion_threshold_repeats`, `field_alternation_repeats`, `manual_added_repeats`, `manual_kept_frames` |
+
+Automatic marks remain separate from the effective export selection: **D** can keep an automatic
+mark or add a removal, without changing `auto_repeated` or `auto_reason`. Summary rule counts describe
+the original automatic decision; review counts describe additions and kept automatic marks relative
+to it. When there is no analysis (e.g. a resumed checkpoint), automatic counts are blank and current
+marks count as review additions. Checkpoints and sync files preserve the effective marks.
 
 Estimated real fps = fps x unique frames / total frames. Example: `lateral.mp4`, 141 frames at
 59.94 fps, keeps 54 unique frames, about 22.96 fps (`lateral_norepeat_22.96fps.mp4`). The real frames
@@ -186,7 +266,8 @@ Rules after Fill / Save:
 - **Different fps** → frame counts may differ; durations still match in time.
 - Real FPS must **match the file** (e.g. `13.91` on `*_norepeat_13.91fps.mp4`). Typing `29.97` on a
   13.91 file is rejected/ignored: Cut Video still plays at 13.91, so equal frame counts would
-  **not** be the same events in time.
+  **not** be the same events in time. If the container was stamped wrong at join time, retag with
+  Frame C → **Metadata info** → **Adjust real FPS** before Fill Start/End.
 
 Workflow tip: after norepeat, use each camera’s real rate (from the filename) → Sync marks →
 Reference start/end → **Fill Start/End from FPS** → **Save + Cut Video**. Only cameras that

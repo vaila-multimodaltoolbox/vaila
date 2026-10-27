@@ -25,8 +25,8 @@
         <h3>📋 Module Information</h3>
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
-        <p><strong>Version:</strong> 0.4.10</p>
-        <p><strong>Updated:</strong> 18 October 2026</p>
+        <p><strong>Version:</strong> 0.4.12</p>
+        <p><strong>Updated:</strong> 27 October 2026</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -41,9 +41,24 @@
 
     <div class="card">
         <h2>Key Updates</h2>
+        <p><strong>Event synchronization (v0.4.12):</strong> Sync Video's <strong>Sync by events</strong>
+        saves versioned <code>.events.json</code> manifests. A direct <code>--video</code> plus
+        <code>--sync-file session.events.json</code> handoff exports without a player window.
+        Optional <code>--output-dir /tmp/new_run</code> selects a new output directory; by default a
+        timestamped directory is created beside the manifest. Event JSON also loads with F for batch export.
+        Exact rational output FPS, nearest retained images (ties choose the earlier one), lossless RGB
+        H.264 without audio, per-camera error/reuse maps, retained PNG sequences with physical times,
+        and a shared audit manifest are exported. Edit event lists and removal marks in Sync Video.
+        Calibration is piecewise linear over retained sample ordinals after repeat review, independent
+        of container FPS. Legacy TXT/TOML behavior is preserved.
+        <a href="syncvid.html">Event workflow and file schemas</a>.</p>
+        <p>Output correspondence does not imply simultaneous acquisition. For 3D, measure coordinates
+        on retained observations, interpolate 2D coordinates to shared physical times, then triangulate.
+        Interpolation does not create new physical observations.</p>
         <p><strong>Shift+S:</strong> save the displayed frame as a full-resolution PNG with video orientation applied, without overlays or zoom cropping, while paused or playing. Saved beside the video in <code>&lt;video_stem&gt;_frames/&lt;video_stem&gt;_frame_00000001.png</code> (1-based). Saving the same frame again replaces its PNG. The window confirms the filename and the terminal prints the path or error. <strong>S</strong> still marks a cut start when paused.</p>
         <ul>
-            <li><strong>Frame-exact cuts when the video starts after the audio (v0.4.10):</strong> ffmpeg counts <code>-ss</code> from the container start, and many MP4s start their first video frame later (22 ms on the 59.94 fps examples), so every cut began one frame early. The seek now adds that delay and aims a tenth of a frame early.</li>
+            <li><strong>Inclusive end frame on irregular PTS (v0.4.12):</strong> sync/TOML cuts use decoded-frame <code>select=between(n,start,end)</code> plus PTS rewrite. The previous input <code>-ss</code> + output <code>-r</code> path could duplicate early frames and drop the marked final frame after fpsfix.</li>
+            <li><strong>Frame-exact cuts when the video starts after the audio (v0.4.10):</strong> audio trim still uses the stream start delay so sound lines up with the selected video frames.</li>
             <li><strong>Repeated frames from Make Sync (v0.4.10):</strong> a sync row may carry <code>removed_frames</code>. Sync rendering keeps the synchronized cut and also writes <code>&lt;cut&gt;_norepeat_&lt;fps&gt;fps.mp4</code> without those frames, at the real frame rate, plus <code>&lt;cut&gt;_norepeat_frames.csv</code>.</li>
             <li><strong>Fewer confirmations on the syncvid handoff (v0.3.119):</strong> when <strong>syncvid → Save + Cut Video</strong> launches Cut Video directly, Escape no longer asks "Sync mode detected. Process all videos...?" before rendering &mdash; clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (<code>F</code> key) still asks. The redundant "Sync Processing Complete" dialog was also dropped in favor of the final Success dialog.</li>
             <li><strong>Direct syncvid handoff (v0.3.85):</strong> accepts <code>--video</code> + <code>--sync-file</code>, validates every source, and opens with the synchronized interval preloaded.</li>
@@ -104,7 +119,7 @@
             <li><strong>Window:</strong> <code>0</code> auto-fit; +/- / wheel zoom 0.1×–10×; MMB pan.</li>
             <li><strong>Cuts:</strong> S, E, R, D/Delete, L, C (labels CSV).</li>
             <li><strong>Markers:</strong> Shift+Left/Right, PageUp/PageDown, Home/End.</li>
-            <li><strong>Jump:</strong> G (frame), T (time), I/P (FPS).</li>
+            <li><strong>Jump:</strong> G (frame), T (time), I/P (FPS for on-screen timing). Cuts still use <strong>container</strong> FPS — retag wrong stamps via Metadata info → Adjust real FPS first.</li>
             <li><strong>Files:</strong> F (load TOML/sync), <strong>V</strong> / <strong>N</strong> (per-cut names), <strong>B</strong> (single base), C (labels), ESC (save + optional render).</li>
             <li><strong>Help:</strong> H or Help button.</li>
         </ul>
@@ -147,7 +162,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 18 October 2026 (v0.4.10; frame-exact sync cuts, repeated frames)</p>
+        <p>📅 Last Updated: 27 October 2026 (v0.4.12; inclusive end-frame select + event sync)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>

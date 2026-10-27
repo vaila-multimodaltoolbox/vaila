@@ -1,7 +1,7 @@
 """Focused tests for cutvideo timeline, sync handoff, and render helpers.
 
-Update Date: 28 July 2026
-Version: 0.3.85
+Update Date: 27 October 2026
+Version: 0.4.12
 """
 
 from pathlib import Path
@@ -347,13 +347,86 @@ def test_batch_sync_reports_success_only_after_every_video(monkeypatch, tmp_path
     assert rendered == [first.name, second.name]
 
 
-def test_ffmpeg_seek_time_adds_video_start_delay_and_stays_before_the_frame():
+def test_ffmpeg_seek_time_is_nominal_frame_pts():
     fps = 60000 / 1001
     # Video starting 22 ms after the container (audio first): frame 10 sits at 0.022 + 10/fps.
     seek = cutvideo.ffmpeg_seek_time(10, fps, 0.022)
-    assert 0.022 + 9 / fps < seek < 0.022 + 10 / fps
+    assert seek == pytest.approx(0.022 + 10 / fps)
     assert cutvideo.ffmpeg_seek_time(0, fps) == 0.0
     assert cutvideo.ffmpeg_seek_time(5, 0.0) == 0.0
+
+
+def test_frame_accurate_cut_filters_are_inclusive_and_rewrite_pts():
+    vf, af, count = cutvideo.frame_accurate_cut_filters(1, 78, 60000 / 1001)
+    assert count == 78
+    assert r"between(n\,1\,78)" in vf
+    assert "setpts=N/" in vf
+    assert af.startswith("atrim=start=")
+    assert "duration=" in af
+
+
+def test_ffmpeg_cut_keeps_inclusive_end_on_irregular_pts(tmp_path: Path) -> None:
+    """Sync cuts must keep the marked final frame when source PTS are uneven.
+
+    Input ``-ss`` plus output ``-r`` used to duplicate early frames and drop the
+    inclusive end on fpsfix-style streams. Frame-index select must not.
+    """
+    import subprocess
+
+    import cv2
+    import numpy as np
+
+    fps = 30.0
+    clean = tmp_path / "clean.avi"
+    writer = cv2.VideoWriter(str(clean), cv2.VideoWriter_fourcc(*"MJPG"), fps, (64, 48))
+    source = []
+    for index in range(40):
+        frame = np.full((48, 64, 3), index, dtype=np.uint8)
+        source.append(frame.copy())
+        writer.write(frame)
+    writer.release()
+
+    weird = tmp_path / "irregular_pts.mp4"
+    # Stretch presentation timestamps so N/fps no longer matches decoded order.
+    subprocess.run(
+        [
+            cutvideo.get_ffmpeg_path(),
+            "-y",
+            "-i",
+            str(clean),
+            "-vf",
+            "setpts=N*0.05/TB",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-pix_fmt",
+            "yuv420p",
+            str(weird),
+        ],
+        check=True,
+        capture_output=True,
+    )
+
+    start, end = 2, 20
+    out = tmp_path / "cut.mp4"
+    meta = cutvideo.get_precise_video_metadata(str(weird))
+    assert cutvideo.cut_video_with_ffmpeg(str(weird), str(out), start, end, meta)
+
+    cut_frames = []
+    cap = cv2.VideoCapture(str(out))
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        cut_frames.append(frame)
+    cap.release()
+
+    assert len(cut_frames) == end - start + 1
+    # Unique solid frames survive H.264 as near-constant blocks; compare means.
+    assert float(np.mean(cut_frames[0])) == pytest.approx(float(np.mean(source[start])), abs=3)
+    assert float(np.mean(cut_frames[-1])) == pytest.approx(float(np.mean(source[end])), abs=3)
 
 
 def test_sync_cut_without_repeats_uses_source_frame_numbers(tmp_path: Path):

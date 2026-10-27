@@ -3091,17 +3091,40 @@ class Vaila(tk.Tk):
 
     # C_B_r3_c2
     def count_frames_in_videos(self):
-        """Runs the video frame counting module.
+        """Metadata info chooser: extract metadata or adjust real FPS."""
+        dialog, place_button, _place_section = self._build_grid_chooser_dialog(
+            "Metadata info",
+            width=420,
+            height=220,
+            columns=1,
+        )
 
-        This function runs the video frame counting module, which can be used to
-        count the number of frames in a video file. The module will prompt the
-        user to select the directory containing the video files and input the
-        sample rate and start and end indices for analysis.
+        def _extract():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Metadata info",
+                "Extract metadata",
+                "uv run vaila/numberframes.py --dir /path/to/videos --cli",
+            )
+            from vaila import numberframes
 
-        """
-        from vaila import numberframes
+            numberframes.count_frames_in_videos()
 
-        numberframes.count_frames_in_videos()
+        def _adjust_fps():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Metadata info",
+                "Adjust real FPS",
+                "uv run vaila/numberframes.py --set-fps 29.97 --dir /path/to/videos --cli",
+                note="Use the capture/real FPS (float or num/den). Remux keeps all frames.",
+            )
+            from vaila import numberframes
+
+            numberframes.adjust_videos_fps()
+
+        place_button("Extract metadata", _extract, width=28)
+        place_button("Adjust real FPS", _adjust_fps, width=28)
+        dialog.bind("<Escape>", lambda _e: dialog.destroy())
 
     # C_B_r3_c3
     def process_videos_gui(self):

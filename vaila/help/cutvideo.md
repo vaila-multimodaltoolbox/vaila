@@ -4,7 +4,8 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.4.10
+- **Version:** 0.4.12
+- **Updated:** 2026-10-27
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -15,7 +16,23 @@
 Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with inclusive frame counts and high-resolution timestamps (.6f).
 
 ### Key Updates
-- **Frame-exact cuts when the video starts after the audio (v0.4.10):** ffmpeg counts `-ss` from the container start, and many MP4s start their first video frame later (22 ms on the 59.94 fps examples), so every cut began one frame early. The seek now adds that delay and aims a tenth of a frame early; checked frame by frame on 59.94 fps and 22.96 fps videos.
+- **Inclusive end frame on irregular PTS (v0.4.12):** sync/TOML cuts select by decoded frame
+  index (`select=between(n,start,end)`) and rewrite PTS. The old input `-ss` + output `-r` path
+  could duplicate early frames and drop the marked final frame on fpsfix-style streams.
+- **Event synchronization (v0.4.12):** Sync Video's **Sync by events** exports versioned
+  `.events.json` manifests. Direct `--video` + `--sync-file session.events.json` renders without a
+  player window, using the manifest's exact rational output grid. Optional `--output-dir /tmp/new_run`
+  selects a new destination; otherwise output goes into a timestamped directory beside the manifest.
+  Every output image is the nearest retained observation (ties choose the earlier one). Outputs include
+  lossless RGB H.264 videos without audio, per-camera temporal-error/reuse CSVs, retained PNG sequences
+  with physical times, and a shared audit manifest. Event calibration uses reviewed retained-frame
+  ordinals between ordered events, not container FPS. Edit events and repeats in Sync Video.
+  Event JSON can also be selected with **F** for batch processing. Legacy TXT and TOML behavior is
+  preserved. See [Sync Video event workflow](syncvid.md#sync-by-events-physical-time-calibration).
+  Correspondence on an output grid does not imply simultaneous acquisition; for 3D, interpolate measured
+  2D coordinates from retained observations to shared physical times before triangulation.
+- **Frame-exact cuts when the video starts after the audio (v0.4.10):** audio trim still uses the
+  stream start delay so sound lines up with the selected video frames.
 - **Repeated frames from Make Sync (v0.4.10):** a sync row may carry `removed_frames` (frames marked as repeated in syncvid). Sync rendering keeps the synchronized cut unchanged and also writes `<cut>_norepeat_<fps>fps.mp4` without those frames, at the real frame rate, plus `<cut>_norepeat_frames.csv` (new frame → source frame).
 - **Fewer confirmations on the syncvid handoff (v0.3.119):** when `syncvid`'s **Save + Cut Video** launches Cut Video directly (`--sync-file`), Escape no longer asks *"Sync mode detected. Process all videos...?"* before rendering — clicking Save + Cut Video already is that confirmation. A sync file loaded manually inside Cut Video (**F** key) still asks, since the user may only be reviewing an old file. The follow-up "Sync Processing Complete" dialog was also dropped as redundant with the final Success dialog.
 - **Direct Sync Video handoff (v0.3.85):** `syncvid` launches Cut Video with `--video` and `--sync-file`; the reference and exact sync interval are preloaded without reopening either chooser.
@@ -87,7 +104,7 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Window Controls:** 0 (auto-fit window to screen), +/- or wheel (zoom 0.1×–10×), middle-mouse drag (pan when zoomed), drag window edges (manual resize).
 - **Markers/Cuts:** S (start), E (end), R (reset start), D or Delete (remove last cut), L (list cuts with planned output filenames), C (labels only).
 - **Navigation to markers:** Shift+Left/Right (cycle previous/next marker), PageUp/PageDown (prev/next marker), Home/End (start/end of current or first/last cut).
-- **Jump inputs:** G (go to frame), T (go to time in seconds), I or P (manual FPS input).
+- **Jump inputs:** G (go to frame), T (go to time in seconds), I or P (manual FPS input for on-screen timing). Cuts still encode using **container** FPS — if the stamped rate is wrong, retag first with Frame C → **Metadata info** → **Adjust real FPS** (`numberframes.py --set-fps`).
 - **File ops:** F (load cuts TOML or sync TXT), **V** or **N** (per-cut output names CSV/TXT), B (single base name), C (labels only), ESC (save TOML, optionally render cuts; batch prompt).
 - **Help:** H or click **Help** button (scrollable overlay).
 

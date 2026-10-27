@@ -156,3 +156,42 @@ def test_rebuilt_folder_is_read_from_the_log_line() -> None:
     assert freekiki.rebuilt_folder_from_log(line) == Path("/data/clip_3d_20260102_000000")
     assert freekiki.rebuilt_folder_from_log("[freekiki] finished (exit code 0)\n") is None
     assert freekiki.rebuilt_folder_from_log("[freekiki] batch done: 1/4 videos\n") is None
+
+
+def test_ball_correction_targets_find_batch_nested_3d_folders(tmp_path: Path) -> None:
+    """Detect + 3D on a folder writes <batch>_3d_<ts>/<stem>/ball.csv; Ball track must see them."""
+    videos = tmp_path / "games"
+    videos.mkdir()
+    a = videos / "clip_a.mp4"
+    b = videos / "clip_b.mp4"
+    a.write_bytes(b"x")
+    b.write_bytes(b"x")
+    batch3d = tmp_path / "out" / "games_3d_20261027_120000"
+    for stem, video in (("clip_a", a), ("clip_b", b)):
+        folder = batch3d / stem
+        folder.mkdir(parents=True)
+        (folder / "ball.csv").write_text("frame,cx,cy,score\n0,1,2,0.9\n", encoding="utf-8")
+        (folder / "README.txt").write_text(
+            f"FreeKiki 3D output (vailá)\nvideo: {video}\n", encoding="utf-8"
+        )
+
+    targets = freekiki.ball_correction_targets(videos, tmp_path / "out")
+    assert [(v.name, f.name) for v, f in targets] == [
+        ("clip_a.mp4", "clip_a"),
+        ("clip_b.mp4", "clip_b"),
+    ]
+    one = freekiki.ball_correction_targets(a, tmp_path / "out")
+    assert len(one) == 1 and one[0][0] == a.resolve() and one[0][1].name == "clip_a"
+
+
+def test_ball_correction_targets_single_video_flat_3d(tmp_path: Path) -> None:
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"x")
+    folder = tmp_path / "clip_3d_20261027_120000"
+    folder.mkdir()
+    (folder / "ball.csv").write_text("frame,cx,cy,score\n0,1,2,0.9\n", encoding="utf-8")
+    (folder / "README.txt").write_text(
+        f"FreeKiki 3D output (vailá)\nvideo: {video}\n", encoding="utf-8"
+    )
+    targets = freekiki.ball_correction_targets(video, tmp_path)
+    assert targets == [(video.resolve(), folder)]

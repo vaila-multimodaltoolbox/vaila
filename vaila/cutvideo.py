@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 18 October 2026
-Version: 0.4.10
+Update Date: 27 October 2026
+Version: 0.4.12
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -47,6 +47,8 @@ Features:
   click on syncvid's Save + Cut Video already is the user's consent; a sync
   file loaded manually from inside Cut Video (F key) still confirms.
 - Safe v2 TSV sync parser with legacy TXT compatibility and path/range validation.
+- Event JSON handoff exports exact rational grids, temporal-error maps and retained PNGs
+  without opening the player. Optional --output-dir selects a new destination.
 - Hardware H.264 encode when available (NVENC / VideoToolbox; auto CPU libx264 fallback).
 
 Usage:
@@ -117,6 +119,15 @@ import numpy as np
 import pygame
 from rich import print
 from rich.progress import Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+try:
+    from .sync_events import EventSyncError, export_event_videos, read_event_manifest
+except ImportError:
+    from sync_events import (  # ty: ignore[unresolved-import]
+        EventSyncError,
+        export_event_videos,
+        read_event_manifest,
+    )
 
 try:
     from .ffmpeg_utils import (
@@ -710,17 +721,43 @@ def check_and_rotate_frame(frame, metadata):
 
 
 def ffmpeg_seek_time(start_frame: int, fps: float, video_start_offset: float = 0.0) -> float:
-    """Input ``-ss`` time whose first decoded frame is ``start_frame`` (0-based, as OpenCV).
+    """Nominal presentation time of ``start_frame`` (0-based, as OpenCV).
 
-    ffmpeg counts ``-ss`` from the container start, so the delay of the first
-    video frame (``video_start_offset``) is added. Without the offset, a video
-    starting 22 ms after its audio was cut one frame early.
-    Aiming a tenth of a frame early absorbs timestamp rounding; half a frame
-    made the constant-rate output (``-r``) repeat its first frame.
+    Used for audio trimming and legacy callers. Video cuts no longer seek with
+    input ``-ss`` + output ``-r``: that path re-times irregular PTS streams
+    (e.g. after fpsfix) and can duplicate early frames while dropping the
+    inclusive end. Frame-accurate cuts use :func:`frame_accurate_cut_filters`.
     """
     if fps <= 0:
         return 0.0
-    return max(0.0, float(video_start_offset) + (int(start_frame) - 0.1) / fps)
+    return max(0.0, float(video_start_offset) + int(start_frame) / fps)
+
+
+def frame_accurate_cut_filters(
+    start_frame: int,
+    end_frame: int,
+    fps: float,
+    *,
+    video_start_offset: float = 0.0,
+) -> tuple[str, str, int]:
+    """Build inclusive 0-based ffmpeg video/audio filters for a frame-accurate cut.
+
+    Video is selected by decoded frame index ``n`` (same numbering as OpenCV /
+    syncvid), then PTS is rewritten to a clean CFR timeline so a following
+    ``-r`` only labels the rate and does not resample content.
+    """
+    if fps <= 0:
+        raise ValueError("fps must be positive")
+    start = int(start_frame)
+    end = int(end_frame)
+    if start < 0 or end < start:
+        raise ValueError(f"invalid inclusive frame range {start}–{end}")
+    frame_count = end - start + 1
+    vf = f"select=between(n\\,{start}\\,{end}),setpts=N/{float(fps):.10f}/TB"
+    audio_start = max(0.0, float(video_start_offset) + start / float(fps))
+    duration = frame_count / float(fps)
+    af = f"atrim=start={audio_start:.10f}:duration={duration:.10f},asetpts=PTS-STARTPTS"
+    return vf, af, frame_count
 
 
 def cut_video_with_ffmpeg(
@@ -734,7 +771,8 @@ def cut_video_with_ffmpeg(
     """Cut video with ffmpeg while keeping an optional progress UI responsive.
 
     Prefers verified hardware H.264 (NVENC / VideoToolbox); falls back to CPU
-    ``libx264`` on all OS.
+    ``libx264`` on all OS. Uses frame-index ``select`` (inclusive end) so sync
+    cuts keep the marked final frame even when source PTS are irregular.
     """
     ffmpeg_check = get_ffmpeg_path()
     try:
@@ -757,8 +795,23 @@ def cut_video_with_ffmpeg(
         )
 
     fps = metadata["fps"]
-    frame_count = end_frame - start_frame + 1
-    start_time = ffmpeg_seek_time(start_frame, fps, metadata.get("video_start_offset", 0.0))
+    try:
+        vf, af, frame_count = frame_accurate_cut_filters(
+            start_frame,
+            end_frame,
+            fps,
+            video_start_offset=float(metadata.get("video_start_offset", 0.0) or 0.0),
+        )
+    except ValueError as exc:
+        print(f"Error with ffmpeg cut range: {exc}")
+        return cut_video_with_opencv(
+            video_path,
+            output_path,
+            start_frame,
+            end_frame,
+            metadata,
+            progress_callback=progress_callback,
+        )
 
     for encoder in encoders_with_cpu_fallback():
         device = encoder_device_tag(encoder)
@@ -770,10 +823,12 @@ def cut_video_with_ffmpeg(
         cmd_reencode = [
             ffmpeg,
             "-y",
-            "-ss",
-            f"{start_time:.6f}",
             "-i",
             str(video_path),
+            "-vf",
+            vf,
+            "-af",
+            af,
             "-frames:v",
             str(frame_count),
             *get_ffmpeg_video_encoding_args(encoder),
@@ -801,7 +856,38 @@ def cut_video_with_ffmpeg(
                     return False
                 time.sleep(0.05)
             if process.returncode != 0:
-                raise subprocess.CalledProcessError(process.returncode, cmd_reencode)
+                # Video-only sources reject ``-af``; retry without audio filters.
+                cmd_video_only = [
+                    ffmpeg,
+                    "-y",
+                    "-i",
+                    str(video_path),
+                    "-vf",
+                    vf,
+                    "-frames:v",
+                    str(frame_count),
+                    *get_ffmpeg_video_encoding_args(encoder),
+                    "-an",
+                    "-r",
+                    f"{fps:.6f}",
+                    "-avoid_negative_ts",
+                    "make_zero",
+                    str(output_path),
+                ]
+                process = subprocess.Popen(cmd_video_only)
+                while process.poll() is None:
+                    if not _continue_processing(progress_callback):
+                        print("Video cut cancelled by user")
+                        process.terminate()
+                        try:
+                            process.wait(timeout=2)
+                        except subprocess.TimeoutExpired:
+                            process.kill()
+                            process.wait()
+                        return False
+                    time.sleep(0.05)
+                if process.returncode != 0:
+                    raise subprocess.CalledProcessError(process.returncode, cmd_video_only)
             print(f"  [FFmpeg][{device}] Finished cut encode with {encoder}")
             return _continue_processing(progress_callback)
         except (OSError, subprocess.CalledProcessError) as exc:
@@ -1072,6 +1158,9 @@ def parse_sync_file_content(selected_file, video_path, *, strict=False):
         return [], False, {}
 
     sync_data = sync_entries_to_cutvideo_data(entries)
+    if Path(selected_file).suffix.lower() == ".json":
+        for value in sync_data.values():
+            value["event_manifest"] = str(Path(selected_file).resolve())
     matched = find_sync_entry(entries, video_path)
     cuts = [] if matched is None else [(matched.start_frame, matched.end_frame)]
     if matched is not None:
@@ -1324,7 +1413,7 @@ def load_sync_file_from_dialog(video_path):
     selected_file = filedialog.askopenfilename(
         title="Select Sync File or Cuts TOML File",
         filetypes=[
-            ("Sync files (TXT)", "*.txt *.TXT"),
+            ("Sync files (TXT / event JSON)", "*.txt *.TXT *.events.json"),
             ("TOML cuts files", "*.toml *.TOML"),
             ("All files", "*.*"),
         ],
@@ -1442,6 +1531,16 @@ def batch_process_sync_videos(video_path, sync_data):
     """Process all videos in a sync file with visible, cancellable progress."""
     if not sync_data:
         return False
+
+    event_files = {v.get("event_manifest") for v in sync_data.values()}
+    if event_files != {None}:
+        if len(event_files) != 1 or None in event_files:
+            raise SyncFileError("Cannot mix event and legacy synchronization rows")
+        manifest = read_event_manifest(next(iter(event_files)))
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        destination = Path(next(iter(event_files))).parent / f"vailacut_events_{timestamp}"
+        export_event_videos(manifest, Path(video_path).parent, destination)
+        return True
 
     video_dir = Path(video_path).parent
     video_name = sanitize_output_basename(Path(video_path).stem)
@@ -3490,7 +3589,7 @@ def validate_sync_handoff(video_path, sync_file):
     return video, sync
 
 
-def run_cutvideo(video_path=None, sync_file=None):
+def run_cutvideo(video_path=None, sync_file=None, *, output_dir=None):
     """Open Cut Video, optionally with a preselected video and synchronization file."""
     print(f"Running script: {Path(__file__).name}")
     print(f"Script directory: {Path(__file__).parent}")
@@ -3513,10 +3612,20 @@ def run_cutvideo(video_path=None, sync_file=None):
         if sync_file is not None:
             video_path, sync_file = validate_sync_handoff(video_path, sync_file)
             print(f"Direct sync handoff: {sync_file}")
+            if sync_file.suffix.lower() == ".json":
+                manifest = read_event_manifest(sync_file)
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+                destination = output_dir or sync_file.parent / f"vailacut_events_{timestamp}"
+                exported = export_event_videos(manifest, video_path.parent, destination)
+                print(f">> Event videos and temporal maps saved: {exported}")
+                return True
         elif not Path(video_path).is_file():
             raise FileNotFoundError(f"Video not found: {video_path}")
         play_video_with_cuts(str(video_path), sync_file=sync_file)
         return True
+    except (OSError, EventSyncError, SyncFileError) as e:
+        print(f"Error in cutvideo: {e}")
+        return False
     except Exception as e:
         print(f"Error in cutvideo: {e}")
 
@@ -3539,11 +3648,18 @@ def main(argv=None):
     parser.add_argument(
         "--sync-file",
         type=Path,
-        help="Synchronization TXT to preload; requires --video",
+        help="Synchronization TXT to preload or event JSON to export; requires --video",
+    )
+    parser.add_argument(
+        "--output-dir", type=Path, help="New output directory for event JSON export (no GUI)"
     )
     args = parser.parse_args(argv)
     if args.sync_file is not None and args.video is None:
         parser.error("--sync-file requires --video")
+    if args.output_dir is not None:
+        if args.sync_file is None or args.sync_file.suffix.lower() != ".json":
+            parser.error("--output-dir requires an event JSON --sync-file")
+        return 0 if run_cutvideo(args.video, args.sync_file, output_dir=args.output_dir) else 1
     return 0 if run_cutvideo(args.video, args.sync_file) else 1
 
 

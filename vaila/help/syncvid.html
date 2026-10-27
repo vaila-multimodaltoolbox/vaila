@@ -21,13 +21,59 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.4.11 · <strong>Updated:</strong> 2026-10-26<br>
+<strong>Version:</strong> 0.4.12 · <strong>Updated:</strong> 2026-10-27<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
 <p>Review every camera in a fast Pygame player, type each synchronization frame and the reference interval, then generate equal-duration ranges for Cut Video. <strong>Save + Cut Video</strong> opens Cut Video with the reference video and TXT already selected.</p>
 
 <h2>Fast workflow</h2>
+<div class="card warn">
+<h2>Sync by events: physical time</h2>
+<p>Load the checkpoint with <strong>Load / Resume</strong>, then click <strong>Sync by events: ON</strong>.
+Each row imports the original Start, Sync and End as an editable ordered event list. Add more events
+with commas or spaces, using the same event order in every camera. Set the exact
+<strong>Reference clock FPS</strong> (assumed <code>60000/1001</code>) and
+<strong>Output grid FPS</strong> (<code>30000/1001</code>). Container FPS does not shorten these ranges.</p>
+<p>Review repeats using Detect repeats and D/Delete first. Physical times are assigned by piecewise
+linear interpolation of <em>retained</em> frame ordinals between events. Reference event times use
+original reference offsets divided by the assumed reference clock. Events must be ordered, in bounds
+and retained; errors identify the camera and event. No extrapolation is performed. Uniform physical
+spacing within each segment is an assumption. The current camera's inferred rates appear below the
+camera list; <strong>Validate event timing</strong> prints all rates. They do not establish acquisition FPS.</p>
+<p><strong>Save sync</strong> writes <code>.events.json</code> and a linked <code>.checkpoint.json</code>
+for resuming. <strong>Save + Cut Video</strong> exports directly. Event edits belong in Sync Video.
+The manifest saves events, exact rational clocks, all removal marks, method and assumptions.
+Legacy TXT synchronization keeps its existing behavior.</p>
+<pre>uv run --no-sync python -m vaila.syncvid --events \
+  --input-dir /path/to/cameras --checkpoint /path/to/session.json \
+  --reference-fps 60000/1001 --output-fps 30000/1001 --output /tmp/session.events.json
+uv run --no-sync python -m vaila.cutvideo --video /path/to/cameras/c1_main.mp4 \
+  --sync-file /tmp/session.events.json --output-dir /tmp/session_event_export</pre>
+<p>The output directory must be new. Without <code>--output-dir</code>, event export creates a
+timestamped directory beside the manifest. The nearest retained image is selected for each grid time;
+ties choose the earlier image. There are <code>floor(span * output_fps) + 1</code> frames.
+Off-grid events stay exact calibration anchors but cannot occupy exact output timestamps.</p>
+<ul>
+<li><code>&lt;camera filename&gt;_events.mp4</code>: lossless RGB H.264 on the exact rational grid, no audio.</li>
+<li><code>&lt;camera filename&gt;_time_map.csv</code>: output_frame, requested_time_s, original_frame,
+physical_time_s, temporal_error_s, reused and exact rational times/errors. Error = selected physical
+time minus requested time; reused=1 means this source image was selected earlier in the output.</li>
+<li><code>&lt;camera filename&gt;_retained/</code>: lossless PNG sequence with every retained observation.
+<code>_retained_times.csv</code> associates ordinal, original frame, physical time and filename,
+without imposing a constant playback clock.</li>
+<li><code>event_sync_manifest.json</code> and <code>README.txt</code>: versioned calibration and audit.</li>
+</ul>
+<p>Confirmed c1 events <strong>1,15,79</strong> and c2 events <strong>1,20,109</strong>, with 31 removals
+inside c2, retain 79 and 78 samples. Both outputs have <strong>40 frames</strong>, with events at
+<strong>1,8,40</strong>. The physical span is <strong>1.301300000 s</strong>; playback duration is
+<strong>1.334666667 s</strong>. Intermediate event: 0.233566667 s. Inferred c2 rates: 55.658627 and
+59.940060 fps.</p>
+<p><strong>Output correspondence does not imply simultaneous acquisition.</strong> Use the CSV errors.
+For 3D, measure 2D coordinates on retained observations, interpolate coordinates to shared times,
+then triangulate. Interpolation creates no new physical observations. Reconstruction is outside this mode.</p>
+</div>
+<h2>Fast workflow (sync frame + FPS)</h2>
 <ol>
 <li>Open a target directory containing at least two videos.</li>
 <li>Click a camera name, or use Page Up/Page Down.</li>
@@ -36,7 +82,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <li>Repeat for every camera. <strong>Start/End</strong> of a non-reference camera are optional (see <em>Cameras with different frame rates</em>).</li>
 <li>Type the <strong>Reference video</strong> as a row number, filename, stem or unique fragment such as <code>frontal</code>.</li>
 <li>Type the inclusive <strong>Reference start</strong> and <strong>Reference end</strong>.</li>
-<li>Save the TXT, or save and open Cut Video directly.</li>
+<li><strong>Save sync</strong> writes the TXT and keeps the player open for more edits; <strong>Save + Cut Video</strong> saves, closes Sync Video, and opens Cut Video.</li>
 </ol>
 <p>Clicking a field selects it for replacement. Tab/Shift+Tab navigates fields and Enter validates. Displayed and saved frames are 1-based and inclusive.</p>
 
@@ -84,7 +130,7 @@ end   = start + round((reference_end - reference_start) / reference_fps * fps)</
 <tr><td><code>0</code></td><td>Reset zoom</td></tr>
 <tr><td>Tab / Shift+Tab</td><td>Next/previous field</td></tr>
 <tr><td>Enter</td><td>Validate the active field and seek to a typed sync frame</td></tr>
-<tr><td>Ctrl+S</td><td>Save the synchronization file</td></tr>
+<tr><td>Ctrl+S</td><td>Save sync (writes files; GUI stays open)</td></tr>
 <tr><td>Escape</td><td>Leave a field, then cancel</td></tr>
 </table>
 <p>The player buttons use the traditional ASCII labels <strong>-60</strong>, <strong>-1</strong>, <strong>+1</strong> and <strong>+60</strong>. Consecutive frames are decoded sequentially and paused frames are cached for fluid 120-fps navigation.</p>
@@ -102,8 +148,11 @@ end   = start + round((reference_end - reference_start) / reference_fps * fps)</
 <p><strong>Detect repeats</strong> judges each frame as a viewer would. The frame and the previous one are blurred slightly; the <strong>motion score</strong> is the largest mean grey-level change in a 32 x 18 grid of blocks.</p>
 <ul>
 <li>A copy re-encoded by the editor (H.264/H.265) is never pixel-identical: edges and the image top and bottom flicker a little. That codec noise scores low everywhere; a real new frame scores high where something moved.</li>
-<li>The cut is chosen per video, at a gap of at least 2x between the noise group and the motion group of the sorted scores. When several such gaps exist, the one that best separates the two groups is used. Without such a gap the video has no repeats (only changes of at most 1 grey level count).</li>
+<li>The cut is chosen per video, at a gap of at least 2x between the noise group and the motion group of the sorted scores. When several such gaps exist, the one that best separates the two groups is used. Without such a gap this rule marks only changes of at most 1 grey level.</li>
 <li><strong>Interlaced sources</strong> (e.g. 50 fps material on a 59.94 timeline) repeat a frame built from the other field: the same image shifted about 1.2 px vertically. A small, purely vertical global shift is compensated before scoring again; horizontal or larger shifts are real camera motion.</li>
+<li>A second rule detects <strong>alternating fields</strong> when repeat and real-motion scores overlap. Candidates require <code>|dx| &le; 0.1 px</code>, <code>0.75 &le; |dy| &le; 1.75 px</code>, and phase-correlation response <code>&ge; 0.9</code>. Only runs of at least <strong>three candidates with alternating vertical signs</strong> qualify. Intervals may vary, with real frames between candidates; no fixed cadence is required. A same-sign candidate ends the run and starts another. Isolated candidates and pairs do not qualify.</li>
+<li>Automatic decisions combine both rules. If both apply, the audit reason is <code>motion_threshold</code> (exclusive counts); otherwise it is <code>field_alternation</code> or <code>none</code>.</li>
+<li>Validation on the Veiga pair matched all <strong>32 manual marks</strong> in <code>c2_16mm.mp4</code>, without extra or missed marks, and found zero in <code>c1_main.mp4</code>. The 112-frame clip exports 80 frames at about <strong>42.814 fps</strong>. This validates this pair; other movements still need review with <strong>D</strong>.</li>
 <li>On the 1080p examples: <code>cobrador.mp4</code> copies scored at most 6.7 and real frames at least 40.2; <code>lateral.mp4</code> 5.1 against 30.6; <code>gol.mp4</code> (field-shifted copies) 8.3 against 22.9: 24 repeats, about 49.88 fps (50 fps material). <code>cabine1.mp4</code> and the 30 fps phone videos showed no repeats.</li>
 </ul>
 <p><strong>Save w/o repeats</strong> (or the CLI <code>--remove-repeated</code>, which uses the automatic marks) writes a copy of each video with marked frames in <code>processed_norepeat_&lt;timestamp&gt;/</code>, next to the videos:</p>
@@ -111,9 +160,10 @@ end   = start + round((reference_end - reference_start) / reference_fps * fps)</
 <tr><th>File</th><th>Content</th></tr>
 <tr><td><code>&lt;name&gt;_norepeat_&lt;fps&gt;fps.mp4</code></td><td>H.264, distinct frames only. Container frame rate = estimated real rate, so the duration is kept; the rate is also in the file name and the <code>comment</code> metadata. No audio</td></tr>
 <tr><td><code>&lt;name&gt;_norepeat_frames.csv</code></td><td><code>new_frame</code>, <code>original_frame</code> (1-based), <code>original_time_s</code></td></tr>
-<tr><td><code>&lt;name&gt;_motion_scores.csv</code></td><td>Every video: <code>frame</code>, <code>motion_score</code>, <code>repeated</code> (1 = removed), <code>shift_x_px</code>, <code>shift_y_px</code></td></tr>
-<tr><td><code>norepeat_summary.csv</code></td><td>Every video: frames, unique, repeated, fps, estimated real fps, threshold, gap ratio, repeated frame numbers</td></tr>
+<tr><td><code>&lt;name&gt;_motion_scores.csv</code></td><td>Every analyzed video: existing <code>frame</code>, <code>motion_score</code>, <code>repeated</code> (1 = actually removed), <code>shift_x_px</code>, <code>shift_y_px</code>; appended <code>phase_response</code>, <code>auto_repeated</code>, <code>auto_reason</code> (<code>motion_threshold</code>, <code>field_alternation</code>, <code>none</code>). The first frame has no score/response and is never auto-marked.</td></tr>
+<tr><td><code>norepeat_summary.csv</code></td><td>Every video: existing counts, rates, threshold, gap, automatic total, marked frame numbers and output; appended <code>motion_threshold_repeats</code>, <code>field_alternation_repeats</code>, <code>manual_added_repeats</code>, <code>manual_kept_frames</code>.</td></tr>
 </table>
+<p><strong>D</strong> changes the effective export selection (<code>repeated</code>), while <code>auto_repeated</code> and <code>auto_reason</code> keep the original automatic decision. Rule counts describe automatic decisions; review counts describe added removals and kept automatic marks. Without analysis (e.g. a resumed checkpoint), automatic counts are blank and current marks count as review additions. Checkpoints and sync files preserve effective marks.</p>
 <p>Estimated real fps = fps × unique / total frames (example: <code>lateral.mp4</code>, 141 frames at 59.94 fps, keeps 54 frames, about 22.96 fps). The real frames are not evenly spaced in the source, so the new video spaces them evenly at the average rate; the frame map keeps the original times. Videos without repeats are listed but not rewritten.</p>
 <h3>Real FPS + Fill Start/End (after norepeat)</h3>
 <p>After saving norepeat copies, use the side-panel controls to set the true rate and align cuts:</p>
@@ -124,7 +174,7 @@ end   = start + round((reference_end - reference_start) / reference_fps * fps)</
 <li>Clear the field + Enter — drop the override on the current camera</li>
 <li><strong>Fill Start/End from FPS</strong> — rewrite Start/End as the same temporal events as the reference window</li>
 </ul>
-<p><strong>Equal fps</strong> (file playback rate) → identical frame counts. <strong>Different fps</strong> → frame counts may differ; durations still match. Real FPS must match the file (e.g. <code>13.91</code> on a norepeat 13.91 file); typing <code>29.97</code> on a 13.91 file is ignored so Start/End stay the same events in time. Overrides are stored in the Load/Resume <code>.json</code> checkpoint.</p>
+<p><strong>Equal fps</strong> (file playback rate) → identical frame counts. <strong>Different fps</strong> → frame counts may differ; durations still match. Real FPS must match the file (e.g. <code>13.91</code> on a norepeat 13.91 file); typing <code>29.97</code> on a 13.91 file is ignored so Start/End stay the same events in time. If the container was stamped wrong at join time, retag with Frame C → <strong>Metadata info</strong> → <strong>Adjust real FPS</strong> before Fill Start/End. Overrides are stored in the Load/Resume <code>.json</code> checkpoint.</p>
 <p>A shot where nothing moves at all scores like codec noise: check the motion scores before using such a copy.</p>
 
 <h2>Versioned sync format</h2>

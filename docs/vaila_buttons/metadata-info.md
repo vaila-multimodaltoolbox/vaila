@@ -2,105 +2,46 @@
 
 ## Overview
 
-The **Metadata Info** tool (`numberframes.py`) provides **scientific-grade video metadata extraction** with high precision for research applications. It analyzes video files within a selected directory and extracts comprehensive metadata including frame count, frame rates (display and capture), resolution, codec information, and duration.
+The **Metadata info** tool (`numberframes.py`) provides scientific-grade video metadata extraction and **Adjust real FPS** (retag container FPS before Cut / Sync).
+
+GUI path: *vailá* Frame C → Video → **Metadata info** (chooser: Extract metadata | Adjust real FPS).
 
 ## Key Features
 
-- **Scientific Precision**: Frame rates and durations with 9 decimal places for research accuracy
-- **Fast Extraction**: Single `ffprobe` JSON call for efficient metadata extraction
-- **Capture FPS Detection**: Automatically detects Android slow-motion capture FPS tags
-- **Parallel Processing**: Processes multiple videos concurrently for faster analysis
-- **Dual Output**: Basic summary file and full JSON metadata files
-- **GUI Display**: User-friendly table view of all video metadata
-- **Research Ready**: High-precision values suitable for scientific analysis
+- High-precision ffprobe metadata (frame count, display/avg FPS, resolution, codec, duration)
+- Parallel directory scan; writes `video_metadata_basic_<ts>.txt` + `video_metadata_full_<ts>.json`
+- **Adjust real FPS**: remux (stream copy via `setts` + MP4 timescale) keeping every frame; re-encode fallback; writes `processed_fpsfix_<timestamp>/` + `fpsfix_summary.csv`
 
 ## How to Use
 
-### Accessing the Tool
+### Extract metadata
 
-1. Launch vailá GUI (`vaila.py`)
-2. Navigate to **Tools** section
-3. Click **Metadata Info** button
-4. Select directory containing video files
+1. Launch *vailá* → **Metadata info** → **Extract metadata**
+2. Select directory containing videos
 
-### Output Files
+### Adjust real FPS
 
-#### Basic Metadata File
-**File**: `video_metadata_basic_TIMESTAMP.txt`
+Use when joined clips were stamped with the wrong FPS but frame content is at the capture rate. Cut Video and Make Sync file both use **container** FPS.
 
-Contains human-readable summary with high precision:
-- Frame count
-- Display FPS (9 decimal places)
-- Average FPS (9 decimal places)
-- Capture FPS (9 decimal places) - for slow-motion videos
-- Recommended sampling rate
-- Codec and container information
-- Resolution
-- Duration (9 decimal places)
+1. **Metadata info** → **Adjust real FPS**
+2. Enter real FPS once for the batch (`29.97` or `30000/1001`)
+3. Select the directory
 
-#### Full Metadata Files
-**Directory**: `metadata_full_TIMESTAMP/`
+CLI:
 
-Contains complete JSON metadata for each video:
-- Full ffprobe output
-- All streams, format, chapters
-- Suitable for programmatic analysis
+```bash
+uv run vaila/numberframes.py --set-fps 29.97 --dir /path/to/videos --cli
+uv run vaila/numberframes.py --set-fps 30000/1001 video1.mp4 video2.mp4 --cli
+```
 
-## Scientific Precision
-
-### High-Precision Values
-All frame rates and durations are stored with **9 decimal places**:
-- **Display FPS**: `59.940059940` (instead of rounded `59.940`)
-- **Duration**: `253.620000000` seconds (instead of `253.62`)
-- **Capture FPS**: `240.000000000` for slow-motion videos
-
-### Frame Rate Extraction
-- Extracts frame rates as fraction strings (e.g., "30000/1001")
-- Converts to precise float values
-- Preserves exact frame rates without rounding
-
-## Metadata Extracted
-
-### Frame Information
-- Frame count (from `nb_frames` or calculated)
-- Display FPS (r_frame_rate)
-- Average FPS (avg_frame_rate)
-- Capture FPS (Android tags for slow-motion)
-- Recommended sampling rate
-
-### Video Properties
-- Resolution (width × height)
-- Duration (seconds)
-- Codec name and description
-- Container format and description
-
-### Slow-Motion Detection
-- Automatically detects `com.android.capture.fps` tags
-- Calculates slow-motion factor
-- Provides recommended sampling rate
-
-## Requirements
-
-- **ffprobe**: Required for metadata extraction (part of ffmpeg)
-- **Tkinter**: For GUI interface
-- **rich**: For enhanced console output
-
-## Use Cases
-
-- **Biomechanics**: Accurate frame rates for temporal analysis
-- **Motion Capture**: Frame-accurate synchronization
-- **Video Analysis**: Precise duration and frame count for calculations
-- **Data Validation**: Verify video properties before processing
-- **Slow-Motion Analysis**: Detect and account for slow-motion capture rates
+Semantics: does **not** drop/duplicate frames to stretch playback. Duration becomes `nb_frames / real_fps`.
 
 ## Related Tools
 
-- **Cut Videos** (`cutvideo.py`): Cut videos with scientific precision
-- **Sync Videos** (`syncvid.py`): Synchronize multiple videos
-- **Resize Video** (`resize_video.py`): Resize videos while preserving metadata
+- **Cut Videos** (`cutvideo.py`) — cuts using container FPS
+- **Make Sync file** (`syncvid.py`) — sync math must match file playback rate; retag here if stamped FPS is wrong
 
 ## Documentation
 
-For complete documentation, see:
-- [Full Help Documentation](../../vaila/help/numberframes.html)
-- [Markdown Documentation](../../vaila/help/numberframes.md)
+- [Full Help](../../vaila/help/numberframes.html)
+- [Markdown](../../vaila/help/numberframes.md)

@@ -6,14 +6,19 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 26 October 2026
-Version: 0.4.11
+Update Date: 27 October 2026
+Version: 0.4.12
 
 Description:
 Create a frame-accurate synchronization plan with a fast Pygame player. Every
 video in the target directory can be reviewed with the same playback/navigation
 keys used by ``vaila.cutvideo``. Synchronization frames, reference video, and
 reference start/end are entered directly in editable on-screen fields.
+
+Sync by events calibrates retained-frame ordinals piecewise between ordered
+events, using an assumed rational reference clock and a separate output grid.
+It saves an event JSON manifest and linked checkpoint; Cut Video exports exact
+rational-FPS videos, temporal-error CSVs and retained PNGs with physical times.
 
 The versioned TSV sync file is consumed directly by ``vaila.cutvideo``. The
 ``Save + Open Cut Video`` button launches Cut Video with both the reference
@@ -28,8 +33,8 @@ frame, each at its own fps (shown per camera). A non-reference camera may
 instead be cut at its own typed Start/End.
 
 Repeated frames: an editor that splices several cameras into one timeline
-repeats frames (a re-encoded copy differs from the previous frame only by
-codec noise, far below the video's own motion). ``Detect repeats`` marks them
+repeats frames. Motion thresholds and alternating vertical field shifts detect
+re-encoded copies. ``Detect repeats`` marks them
 in every video; ``D``/Delete marks or keeps the current frame by hand.
 ``Save w/o repeats`` writes repeat-free copies at the estimated real frame
 rate, a frame map and per-frame motion scores to
@@ -59,7 +64,7 @@ import sys
 import tempfile
 import tkinter as tk
 import webbrowser
-from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Generator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from tkinter import messagebox
@@ -69,6 +74,23 @@ import cv2
 import numpy as np
 import pygame
 from rich import print
+
+try:
+    from .sync_events import (
+        EventSyncError,
+        manifest_from_checkpoint,
+        parse_event_frames,
+        read_event_manifest,
+        temporal_maps,
+    )
+except ImportError:
+    from sync_events import (  # ty: ignore[unresolved-import]
+        EventSyncError,
+        manifest_from_checkpoint,
+        parse_event_frames,
+        read_event_manifest,
+        temporal_maps,
+    )
 
 
 def _scrub_cv2_qt_plugin_env() -> None:
@@ -1014,6 +1036,25 @@ def read_sync_file(sync_file: str | Path) -> list[SyncPlanEntry]:
     path = Path(sync_file).expanduser().resolve()
     if not path.is_file():
         raise SyncFileError(f"Sync file not found: {path}")
+    if path.suffix.lower() == ".json":
+        try:
+            manifest = read_event_manifest(path)
+        except EventSyncError as exc:
+            raise SyncFileError(str(exc)) from exc
+        return [
+            SyncPlanEntry(
+                name,
+                f"{name}_events.mp4",
+                camera["events"][0] - 1,
+                camera["events"][-1] - 1,
+                removed_frames=tuple(
+                    f - 1
+                    for f in sorted(camera["removed_frames"])
+                    if camera["events"][0] <= f <= camera["events"][-1]
+                ),
+            )
+            for name, camera in manifest["cameras"].items()
+        ]
     if path.stat().st_size > MAX_SYNC_FILE_BYTES:
         raise SyncFileError(
             f"Sync file is larger than {MAX_SYNC_FILE_BYTES} bytes and was rejected: {path}"
@@ -1214,6 +1255,15 @@ def read_checkpoint_file(checkpoint_file: str | Path) -> dict[str, Any]:
             f"Checkpoint 'fps_overrides' must map video names to positive FPS rates: {path}"
         )
     data["fps_overrides"] = {name: float(rate) for name, rate in fps_overrides.items()}
+    if data.get("sync_mode", "fps") not in ("fps", "events"):
+        raise SyncFileError("Checkpoint sync_mode must be fps or events")
+    event_texts = data.get("event_texts", {})
+    if not isinstance(event_texts, dict) or not all(
+        isinstance(k, str) and isinstance(v, str) for k, v in event_texts.items()
+    ):
+        raise SyncFileError("Checkpoint event_texts must map camera names to text")
+    if not all(isinstance(data.get(k, ""), str) for k in ("reference_fps", "output_fps")):
+        raise SyncFileError("Checkpoint reference_fps and output_fps must be rational text")
     return data
 
 
@@ -1314,6 +1364,11 @@ REPEAT_MIN_GAP_RATIO = 2.0
 REPEAT_FIELD_SHIFT_MAX_X = 0.5
 REPEAT_FIELD_SHIFT_MAX_Y = 2.0
 REPEAT_SHIFT_MARGIN = 8
+REPEAT_ALTERNATION_MAX_X = 0.1
+REPEAT_ALTERNATION_MIN_Y = 0.75
+REPEAT_ALTERNATION_MAX_Y = 1.75
+REPEAT_ALTERNATION_MIN_RESPONSE = 0.9
+REPEAT_ALTERNATION_MIN_LENGTH = 3
 
 ProgressCallback = Callable[[str, int, int], None]
 
@@ -1323,8 +1378,9 @@ class RepeatedFrameReport:
     """Repeated-frame analysis of one video (0-based frame indices).
 
     ``motion_scores[i]`` scores frame ``i + 1`` against frame ``i``; a frame is
-    repeated when its score is at or below ``threshold``. ``shifts[i]`` is the
-    global (x, y) shift in pixels measured for that pair.
+    classified by ``automatic_reasons[i]``. Reports created without explicit
+    decisions retain the original score/threshold behavior. ``shifts[i]`` and
+    ``phase_responses[i]`` describe phase correlation for the same pair.
     """
 
     video: Path
@@ -1335,6 +1391,17 @@ class RepeatedFrameReport:
     threshold: float
     gap_ratio: float
     shifts: tuple[tuple[float, float], ...] = ()
+    phase_responses: tuple[float, ...] = ()
+    automatic_reasons: tuple[str, ...] | None = None
+
+    @property
+    def repeat_reasons(self) -> tuple[str, ...]:
+        if self.automatic_reasons is not None:
+            return self.automatic_reasons
+        return tuple(
+            "motion_threshold" if score <= self.threshold else "none"
+            for score in self.motion_scores
+        )
 
     @property
     def total_frames(self) -> int:
@@ -1354,7 +1421,7 @@ class RepeatedFrameReport:
     @property
     def repeated_frames(self) -> tuple[int, ...]:
         return tuple(
-            index + 1 for index, score in enumerate(self.motion_scores) if score <= self.threshold
+            index + 1 for index, reason in enumerate(self.repeat_reasons) if reason != "none"
         )
 
     @property
@@ -1382,8 +1449,8 @@ def _centre_crop(image: Any) -> Any:
 
 def field_shift_motion_score(
     previous_blurred: Any, blurred: Any
-) -> tuple[float, tuple[float, float]]:
-    """Motion score with a field-like shift compensated, and the measured shift.
+) -> tuple[float, tuple[float, float], float]:
+    """Motion score with field-shift compensation, measured shift and response.
 
     The global shift comes from phase correlation on the centre of the frames.
     When it is small and purely vertical (an interlaced-field copy), the
@@ -1391,7 +1458,7 @@ def field_shift_motion_score(
     the lower of the two scores is returned.
     """
     score = frame_motion_score(previous_blurred, blurred)
-    (dx, dy), _response = cv2.phaseCorrelate(
+    (dx, dy), response = cv2.phaseCorrelate(
         _centre_crop(previous_blurred).astype(np.float32),
         _centre_crop(blurred).astype(np.float32),
     )
@@ -1406,7 +1473,37 @@ def field_shift_motion_score(
         )
         m = REPEAT_SHIFT_MARGIN
         score = min(score, frame_motion_score(shifted[m:-m, m:-m], blurred[m:-m, m:-m]))
-    return score, (float(dx), float(dy))
+    return score, (float(dx), float(dy)), float(response)
+
+
+def field_alternation_frames(
+    shifts: Sequence[tuple[float, float]], responses: Sequence[float]
+) -> set[int]:
+    """Confirm runs of >=3 alternating field candidates (0-based frame indices).
+
+    Runs follow the candidate sequence, allowing arbitrary intervals of real
+    frames between candidates. A same-sign candidate ends a run and starts the
+    next one; isolated candidates and pairs are never confirmed.
+    """
+    confirmed: set[int] = set()
+    run: list[int] = []
+    previous_dy = 0.0
+    for index, ((dx, dy), response) in enumerate(zip(shifts, responses, strict=True), start=1):
+        if not (
+            abs(dx) <= REPEAT_ALTERNATION_MAX_X
+            and REPEAT_ALTERNATION_MIN_Y <= abs(dy) <= REPEAT_ALTERNATION_MAX_Y
+            and response >= REPEAT_ALTERNATION_MIN_RESPONSE
+        ):
+            continue
+        if dy * previous_dy >= 0:
+            if len(run) >= REPEAT_ALTERNATION_MIN_LENGTH:
+                confirmed.update(run)
+            run = []
+        run.append(index)
+        previous_dy = dy
+    if len(run) >= REPEAT_ALTERNATION_MIN_LENGTH:
+        confirmed.update(run)
+    return confirmed
 
 
 def repeat_threshold(scores: Sequence[float]) -> tuple[float, float]:
@@ -1439,11 +1536,12 @@ def repeat_threshold(scores: Sequence[float]) -> tuple[float, float]:
 def find_repeated_frames(
     video_path: str | Path, progress: ProgressCallback | None = None
 ) -> RepeatedFrameReport:
-    """Score every frame against the previous one and mark codec-noise copies."""
+    """Combine motion thresholds and alternating field evidence for every frame."""
     info = probe_video(video_path)
     cap = cv2.VideoCapture(str(info.path))
     scores: list[float] = []
     shifts: list[tuple[float, float]] = []
+    responses: list[float] = []
     previous = None
     index = 0
     try:
@@ -1453,9 +1551,10 @@ def find_repeated_frames(
                 break
             blurred = cv2.GaussianBlur(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (5, 5), 0)
             if previous is not None:
-                score, shift = field_shift_motion_score(previous, blurred)
+                score, shift, response = field_shift_motion_score(previous, blurred)
                 scores.append(score)
                 shifts.append(shift)
+                responses.append(response)
             previous = blurred
             index += 1
             if progress is not None and index % 30 == 0:
@@ -1465,6 +1564,15 @@ def find_repeated_frames(
     if index == 0:
         raise SyncWorkflowError(f"OpenCV could not decode any frame: {info.path}")
     threshold, gap_ratio = repeat_threshold(scores)
+    alternation = field_alternation_frames(shifts, responses)
+    reasons = tuple(
+        "motion_threshold"
+        if score <= threshold
+        else "field_alternation"
+        if index in alternation
+        else "none"
+        for index, score in enumerate(scores, start=1)
+    )
     return RepeatedFrameReport(
         video=info.path,
         fps=info.fps,
@@ -1474,6 +1582,8 @@ def find_repeated_frames(
         threshold=threshold,
         gap_ratio=gap_ratio,
         shifts=tuple(shifts),
+        phase_responses=tuple(responses),
+        automatic_reasons=reasons,
     )
 
 
@@ -1636,16 +1746,36 @@ def save_videos_without_frames(
     rows: list[list[Any]] = []
     for info, removed_frames, report in items:
         removed = sorted({int(frame) for frame in removed_frames if 0 <= frame < info.frame_count})
+        removed_set = set(removed)
+        automatic = set(report.repeated_frames) if report is not None else set()
+        motion_count = report.repeat_reasons.count("motion_threshold") if report else 0
+        field_count = report.repeat_reasons.count("field_alternation") if report else 0
+        added = len(removed_set - automatic)
+        kept_by_review = len(automatic - removed_set)
         if report is not None:
             scores_csv = out_dir / f"{info.path.stem}_motion_scores.csv"
             with open(scores_csv, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow(["frame", "motion_score", "repeated", "shift_x_px", "shift_y_px"])
-                writer.writerow([1, "", int(0 in removed), "", ""])
-                removed_set = set(removed)
+                writer.writerow(
+                    [
+                        "frame",
+                        "motion_score",
+                        "repeated",
+                        "shift_x_px",
+                        "shift_y_px",
+                        "phase_response",
+                        "auto_repeated",
+                        "auto_reason",
+                    ]
+                )
+                writer.writerow([1, "", int(0 in removed_set), "", "", "", 0, "none"])
                 shifts = report.shifts or ((0.0, 0.0),) * len(report.motion_scores)
-                for index, (score, (dx, dy)) in enumerate(
-                    zip(report.motion_scores, shifts, strict=True), start=1
+                responses = report.phase_responses or (None,) * len(report.motion_scores)
+                for index, (score, (dx, dy), response, reason) in enumerate(
+                    zip(
+                        report.motion_scores, shifts, responses, report.repeat_reasons, strict=True
+                    ),
+                    start=1,
                 ):
                     writer.writerow(
                         [
@@ -1654,6 +1784,9 @@ def save_videos_without_frames(
                             int(index in removed_set),
                             f"{dx:.2f}",
                             f"{dy:.2f}",
+                            "" if response is None else f"{response:.6f}",
+                            int(index in automatic),
+                            reason,
                         ]
                     )
         output_name = ""
@@ -1674,11 +1807,22 @@ def save_videos_without_frames(
                 "" if report is None else len(report.repeated_frames),
                 " ".join(str(index + 1) for index in removed),
                 output_name,
+                "" if report is None else motion_count,
+                "" if report is None else field_count,
+                added,
+                kept_by_review,
             ]
         )
         print(
-            f"  {info.name}: {info.frame_count} frames, {len(removed)} repeated, "
-            f"{kept} unique, real fps ~{estimated_fps:.3f}"
+            f"  {info.name}: {info.frame_count} frames, {len(removed)} marked for removal, "
+            f"{kept} kept, real fps ~{estimated_fps:.3f}; "
+            + (
+                f"auto={len(automatic)} (motion_threshold={motion_count}, "
+                f"field_alternation={field_count}), "
+                if report
+                else "auto=not analyzed, "
+            )
+            + f"review added={added}, review kept={kept_by_review}"
             + (f" -> {output_name}" if output_name else " (no repeats, not rewritten)")
         )
 
@@ -1697,6 +1841,10 @@ def save_videos_without_frames(
                 "auto_detected_repeats",
                 "repeated_frame_numbers",
                 "output_video",
+                "motion_threshold_repeats",
+                "field_alternation_repeats",
+                "manual_added_repeats",
+                "manual_kept_frames",
             ]
         )
         writer.writerows(rows)
@@ -1876,6 +2024,14 @@ class PygameSyncPlayer:
         # means "use the container fps" until Set FPS is clicked.
         self.real_fps_field = PygameTextField("real_fps", "", max_length=12)
         self.fps_overrides: dict[str, float] = {}
+        self.event_mode = False
+        self.event_fields = {
+            info.name: PygameTextField(f"events:{info.name}", "", max_length=260)
+            for info in self.video_infos
+        }
+        self.reference_clock_field = PygameTextField("reference_clock", "60000/1001")
+        self.output_rate_field = PygameTextField("output_rate", "30000/1001")
+        self.loaded_checkpoint: Path | None = None
         self.active_field: PygameTextField | None = None
 
         self.current_index = 0
@@ -2130,6 +2286,13 @@ class PygameSyncPlayer:
 
     def _all_fields(self) -> list[PygameTextField]:
         """Tab order: reference fields, each camera's Sync/Start/End, then real FPS."""
+        if getattr(self, "event_mode", False):
+            return [
+                self.reference_field,
+                self.reference_clock_field,
+                self.output_rate_field,
+                *self.event_fields.values(),
+            ]
         reference_name = self._reference_name_or_none()
         fields = [self.reference_field, self.start_field, self.end_field]
         for info in self.video_infos:
@@ -2160,6 +2323,8 @@ class PygameSyncPlayer:
 
     def _plan_preview(self) -> dict[str, tuple[int, int]]:
         """Ranges (0-based) the current fields would save, or {} while incomplete."""
+        if self.event_mode:
+            return {}
         try:
             infos, _warnings = self._effective_video_infos()
             _reference, entries = build_sync_plan_from_fields(
@@ -2303,6 +2468,12 @@ class PygameSyncPlayer:
             *self.sync_fields.values(),
             *self.range_start_fields.values(),
             *self.range_end_fields.values(),
+            *getattr(self, "event_fields", {}).values(),
+            *(
+                [self.reference_clock_field, self.output_rate_field]
+                if hasattr(self, "reference_clock_field")
+                else []
+            ),
         ):
             candidate.deactivate()
         self.active_field = field
@@ -2315,7 +2486,7 @@ class PygameSyncPlayer:
             field.text = f"{self._effective_fps(self.current_info):.6g}"
         field.activate()
         prefix, _sep, video_name = field.key.partition(":")
-        if prefix in ("sync", "start", "end"):
+        if prefix in ("sync", "start", "end", "events"):
             index = next(i for i, info in enumerate(self.video_infos) if info.name == video_name)
             if index != self.current_index:
                 self._open_video(index)
@@ -2385,6 +2556,15 @@ class PygameSyncPlayer:
                     self._set_fps_override(all_cameras=False)
                 self._set_active_field(None)
                 return
+            elif self.event_mode and field in [
+                self.reference_clock_field,
+                self.output_rate_field,
+                *self.event_fields.values(),
+            ]:
+                manifest = self._event_manifest()
+                self._set_status(
+                    f"Event timing valid: {manifest['output_frame_count']} output frames"
+                )
             elif field.key.partition(":")[0] in ("sync", "start", "end"):
                 prefix, _sep, video_name = field.key.partition(":")
                 label = {"sync": "Sync frame", "start": "Start", "end": "End"}[prefix]
@@ -2405,7 +2585,7 @@ class PygameSyncPlayer:
                     self._decode_at(value)
                 self._set_status(f"{label} for {video_name}: {value + 1}")
             self._set_active_field(None)
-        except SyncWorkflowError as exc:
+        except (SyncWorkflowError, EventSyncError) as exc:
             self._set_status(str(exc), error=True)
 
     def _panel_width(self) -> int:
@@ -2546,9 +2726,29 @@ class PygameSyncPlayer:
             else:
                 new_index = self.current_frame - sum(1 for f in marks if f < self.current_frame)
                 recount = f"  (new {new_index + 1:,}/{kept_total:,})"
-        frame_text = self.font.render(
+        frame_label = (
             f"Frame {self.current_frame + 1:,}/{self.current_info.frame_count:,}{recount}"
-            f"    {seconds:.6f}s / {duration:.6f}s",
+            f"    {seconds:.6f}s / {duration:.6f}s"
+        )
+        if self.event_mode:
+            try:
+                timeline, _rows = temporal_maps(self._event_manifest(), info.name)
+                original = self.current_frame + 1
+                if original in timeline.frames:
+                    ordinal = timeline.frames.index(original)
+                    frame_label = (
+                        f"Frame {original} | kept {ordinal + 1}/{len(timeline.frames)} | "
+                        f"physical {float(timeline.times[ordinal]):.6f}s"
+                    )
+                else:
+                    reason = "removed" if self.current_frame in marks else "outside event interval"
+                    frame_label = f"Frame {original} | {reason}: no assigned physical time"
+            except EventSyncError:
+                frame_label = (
+                    f"Frame {self.current_frame + 1} | correct events to assign physical time"
+                )
+        frame_text = self.font.render(
+            self._fit_label(frame_label, self.font, controls.width - 24),
             True,
             (238, 242, 247),
         )
@@ -2693,17 +2893,25 @@ class PygameSyncPlayer:
 
         half = (content_width - 10) // 2
         self.screen.blit(
-            self.small_font.render("Reference start", True, (198, 208, 218)),
+            self.small_font.render(
+                "Reference clock FPS" if self.event_mode else "Reference start",
+                True,
+                (198, 208, 218),
+            ),
             (x, 109),
         )
         self.screen.blit(
-            self.small_font.render("Reference end", True, (198, 208, 218)),
+            self.small_font.render(
+                "Output grid FPS" if self.event_mode else "Reference end", True, (198, 208, 218)
+            ),
             (x + half + 10, 109),
         )
-        self.start_field.set_rect(pygame.Rect(x, 130, half, 31))
-        self.end_field.set_rect(pygame.Rect(x + half + 10, 130, half, 31))
-        self.start_field.draw(self.screen, self.small_font)
-        self.end_field.draw(self.screen, self.small_font)
+        top_start = self.reference_clock_field if self.event_mode else self.start_field
+        top_end = self.output_rate_field if self.event_mode else self.end_field
+        top_start.set_rect(pygame.Rect(x, 130, half, 31))
+        top_end.set_rect(pygame.Rect(x + half + 10, 130, half, 31))
+        top_start.draw(self.screen, self.small_font)
+        top_end.draw(self.screen, self.small_font)
 
         pygame.draw.line(
             self.screen,
@@ -2712,17 +2920,20 @@ class PygameSyncPlayer:
             (panel.right - 14, 178),
             1,
         )
-        self.screen.blit(
-            self.font.render("Frames per video (1-based)", True, (238, 242, 247)),
-            (x, 188),
+        mode_rect = pygame.Rect(x, 184, content_width, 26)
+        self.button_rects["side:event_mode"] = mode_rect
+        self._draw_button(
+            mode_rect, "Sync by events: ON" if self.event_mode else "Sync by events: OFF"
         )
         self.screen.blit(
             self.tiny_font.render(
-                "Empty Start/End = from sync frame + fps (grey preview)",
+                "Ordered events: start, intermediate(s), end (1-based)"
+                if self.event_mode
+                else "Empty Start/End = from sync frame + fps (grey preview)",
                 True,
                 (168, 182, 196),
             ),
-            (x, 210),
+            (x, 214),
         )
         field_width = 60
         field_gap = 4
@@ -2730,7 +2941,9 @@ class PygameSyncPlayer:
             panel.right - 14 - 4 - (3 - column) * field_width - (2 - column) * field_gap
             for column in range(3)
         ]
-        for column, title in enumerate(("Sync", "Start", "End")):
+        for column, title in enumerate(
+            ("Events",) if self.event_mode else ("Sync", "Start", "End")
+        ):
             rendered = self.tiny_font.render(title, True, (198, 208, 218))
             self.screen.blit(
                 rendered, (column_x[column] + (field_width - rendered.get_width()) // 2, 229)
@@ -2743,14 +2956,15 @@ class PygameSyncPlayer:
         self.video_row_rects.clear()
         self.visible_fields = [
             self.reference_field,
-            self.start_field,
-            self.end_field,
+            top_start,
+            top_end,
             self.goto_field,
         ]
         for field in (
             *self.sync_fields.values(),
             *self.range_start_fields.values(),
             *self.range_end_fields.values(),
+            *self.event_fields.values(),
         ):
             field.set_rect(pygame.Rect(-1, -1, 0, 0))
 
@@ -2790,8 +3004,10 @@ class PygameSyncPlayer:
                 self.tiny_font.render(f"{fps_label} · {info.frame_count:,} fr", True, fps_color),
                 (row_rect.x + 6, row_rect.y + 19),
             )
-            row_fields = [self.sync_fields[info.name]]
-            if info.name != reference_name:
+            row_fields = (
+                [self.event_fields[info.name]] if self.event_mode else [self.sync_fields[info.name]]
+            )
+            if not self.event_mode and info.name != reference_name:
                 row_fields += [self.range_start_fields[info.name], self.range_end_fields[info.name]]
                 planned = preview.get(info.name)
                 self.range_start_fields[info.name].placeholder = (
@@ -2802,11 +3018,16 @@ class PygameSyncPlayer:
                 )
             for column, field in enumerate(row_fields):
                 field.set_rect(
-                    pygame.Rect(column_x[column], row_rect.y + 4, field_width, row_rect.height - 8)
+                    pygame.Rect(
+                        column_x[column],
+                        row_rect.y + 4,
+                        panel.right - 18 - column_x[0] if self.event_mode else field_width,
+                        row_rect.height - 8,
+                    )
                 )
                 field.draw(self.screen, self.small_font)
                 self.visible_fields.append(field)
-            if info.name == reference_name:
+            if info.name == reference_name and not self.event_mode:
                 for column in (1, 2):
                     cell = pygame.Rect(
                         column_x[column], row_rect.y + 4, field_width, row_rect.height - 8
@@ -2833,16 +3054,23 @@ class PygameSyncPlayer:
         load_rect = pygame.Rect(x, actions_top + 86, content_width, 32)
         self.screen.blit(
             self.tiny_font.render(
-                "Real FPS (norepeat / all cams) — Enter sets current; * = overridden",
+                "Calibrate AFTER repeat review; inferred rates per segment:"
+                if self.event_mode
+                else "Real FPS (norepeat / all cams) — Enter sets current; * = overridden",
                 True,
                 (168, 182, 196),
             ),
             (x, actions_top + 122),
         )
         third = max(70, (content_width - 2 * gap) // 3)
-        self.real_fps_field.set_rect(pygame.Rect(x, actions_top + 138, third, 28))
-        self.real_fps_field.draw(self.screen, self.small_font)
-        self.visible_fields.append(self.real_fps_field)
+        self.real_fps_field.set_rect(
+            pygame.Rect(-1, -1, 0, 0)
+            if self.event_mode
+            else pygame.Rect(x, actions_top + 138, third, 28)
+        )
+        if not self.event_mode:
+            self.real_fps_field.draw(self.screen, self.small_font)
+            self.visible_fields.append(self.real_fps_field)
         fps_this_rect = pygame.Rect(x + third + gap, actions_top + 138, third, 28)
         fps_all_rect = pygame.Rect(x + 2 * (third + gap), actions_top + 138, third, 28)
         fill_rect = pygame.Rect(x, actions_top + 172, content_width, 28)
@@ -2853,8 +3081,9 @@ class PygameSyncPlayer:
         self.button_rects["side:help"] = help_rect
         self.button_rects["side:cancel"] = cancel_rect
         self.button_rects["side:load"] = load_rect
-        self.button_rects["side:fps_this"] = fps_this_rect
-        self.button_rects["side:fps_all"] = fps_all_rect
+        if not self.event_mode:
+            self.button_rects["side:fps_this"] = fps_this_rect
+            self.button_rects["side:fps_all"] = fps_all_rect
         self.button_rects["side:fill_ranges"] = fill_rect
         self.button_rects["side:detect_repeats"] = detect_rect
         self.button_rects["side:save_without_repeats"] = write_rect
@@ -2863,9 +3092,32 @@ class PygameSyncPlayer:
         self._draw_button(help_rect, "Help")
         self._draw_button(cancel_rect, "Cancel")
         self._draw_button(load_rect, "Load / Resume")
-        self._draw_button(fps_this_rect, "FPS this")
-        self._draw_button(fps_all_rect, "FPS all")
-        self._draw_button(fill_rect, "Fill Start/End from FPS", accent=True)
+        if self.event_mode:
+            try:
+                manifest = self._event_manifest()
+                segments = manifest["cameras"][self.current_info.name]["segments"]
+                rates = " / ".join(f"{s['effective_fps_decimal']:.3f}" for s in segments)
+                label = self._fit_label(
+                    f"Current: {rates} fps (model)", self.small_font, content_width
+                )
+                self.screen.blit(
+                    self.small_font.render(label, True, (250, 210, 120)), (x, actions_top + 144)
+                )
+            except EventSyncError:
+                self.screen.blit(
+                    self.tiny_font.render(
+                        "Enter valid events in every camera.", True, (250, 210, 120)
+                    ),
+                    (x, actions_top + 144),
+                )
+        else:
+            self._draw_button(fps_this_rect, "FPS this")
+            self._draw_button(fps_all_rect, "FPS all")
+        self._draw_button(
+            fill_rect,
+            "Validate event timing" if self.event_mode else "Fill Start/End from FPS",
+            accent=True,
+        )
         self._draw_button(detect_rect, "Detect repeats")
         self._draw_button(write_rect, "Save w/o repeats")
 
@@ -2890,7 +3142,28 @@ class PygameSyncPlayer:
         return round(fraction * (self.current_info.frame_count - 1))
 
     def _handle_button(self, action: str) -> None:
-        if action == "goto":
+        if action == "side:event_mode":
+            self._set_active_field(None)
+            self.event_mode = not self.event_mode
+            if self.event_mode:
+                reference = self._reference_name_or_none()
+                for info in self.video_infos:
+                    if self.event_fields[info.name].text.strip():
+                        continue
+                    start, end = (
+                        (self.start_field.text, self.end_field.text)
+                        if info.name == reference
+                        else self._range_texts()[info.name]
+                    )
+                    self.event_fields[
+                        info.name
+                    ].text = f"{start}, {self.sync_fields[info.name].text}, {end}"
+            self._set_status(
+                "Event times use retained samples; review repeats before saving."
+                if self.event_mode
+                else "Sync frame + FPS mode"
+            )
+        elif action == "goto":
             self._goto_frame(self.goto_field.text or str(self.current_frame + 1))
         elif action.startswith("step:"):
             self._seek_relative(int(action.removeprefix("step:")))
@@ -2915,7 +3188,17 @@ class PygameSyncPlayer:
         elif action == "side:fps_all":
             self._set_fps_override(all_cameras=True)
         elif action == "side:fill_ranges":
-            self._fill_ranges_from_fps()
+            if self.event_mode:
+                try:
+                    manifest = self._event_manifest()
+                    print(">> vaila/syncvid: Event calibration\n" + json.dumps(manifest, indent=2))
+                    self._set_status(
+                        f"Valid: {manifest['output_frame_count']} output frames; span {manifest['sample_span_seconds']:.6f} s"
+                    )
+                except (EventSyncError, SyncWorkflowError) as exc:
+                    self._set_status(str(exc), error=True)
+            else:
+                self._fill_ranges_from_fps()
         elif action == "side:detect_repeats":
             self._detect_repeated_frames()
         elif action == "side:save_without_repeats":
@@ -3056,7 +3339,7 @@ class PygameSyncPlayer:
                 self._zoom_at(mouse_pos, factor)
 
     @contextlib.contextmanager
-    def _sdl_released_for_dialog(self) -> Iterator[None]:
+    def _sdl_released_for_dialog(self) -> Generator[None, None, None]:
         """Tear down the SDL window while a desktop file chooser owns the pointer.
 
         Iconify/topmost are ignored on several Linux WMs, so the only reliable
@@ -3065,17 +3348,23 @@ class PygameSyncPlayer:
         """
         size = self.screen.get_size()
         flags = self.screen.get_flags()
-        caption = pygame.display.get_caption()
+        title, icon = pygame.display.get_caption()
         pygame.display.quit()
         try:
             yield
         finally:
             pygame.display.init()
             self.screen = pygame.display.set_mode(size, flags)
-            if caption and caption[0]:
-                pygame.display.set_caption(*caption[:2])
+            self._cached_video_surface = None
+            self._cached_video_key = None
+            if title:
+                pygame.display.set_caption(title, icon)
             pygame.event.clear()
             pygame.event.pump()
+            # A window recreated here can stay blank (the old content shows through) until
+            # its size changes. Post the same event a user resize produces, so the normal
+            # resize handler sets the mode again inside the event loop.
+            pygame.event.post(pygame.event.Event(pygame.VIDEORESIZE, w=size[0], h=size[1]))
 
     def _choose_output_file(self) -> Path | None:
         if self.output_file is not None:
@@ -3099,7 +3388,7 @@ class PygameSyncPlayer:
         Video" (the session is handed off downstream) or plain "Save sync"
         (saved, but still open to being resumed/re-saved elsewhere).
         """
-        return build_checkpoint_state(
+        state = build_checkpoint_state(
             reference=self.reference_field.text,
             start=self.start_field.text,
             end=self.end_field.text,
@@ -3112,6 +3401,89 @@ class PygameSyncPlayer:
             ranges=self._range_texts(),
             fps_overrides=self.fps_overrides,
         )
+        state.update(
+            sync_mode="events" if self.event_mode else "fps",
+            event_texts={name: field.text for name, field in self.event_fields.items()},
+            reference_fps=self.reference_clock_field.text,
+            output_fps=self.output_rate_field.text,
+        )
+        return state
+
+    def _event_manifest(self) -> dict[str, Any]:
+        state = self._checkpoint_state(completed=False)
+        try:
+            state["reference"] = resolve_reference_video(
+                self.reference_field.text, self.video_infos
+            )
+        except SyncWorkflowError as exc:
+            raise EventSyncError(str(exc)) from exc
+        state["events"] = {
+            name: parse_event_frames(field.text, name) for name, field in self.event_fields.items()
+        }
+        return manifest_from_checkpoint(
+            state,
+            self.video_infos,
+            reference_fps=self.reference_clock_field.text,
+            output_fps=self.output_rate_field.text,
+            checkpoint_file=self.loaded_checkpoint,
+        )
+
+    def _save_events(self, open_cutvideo: bool) -> None:
+        try:
+            manifest = self._event_manifest()
+        except EventSyncError as exc:
+            self._set_status(str(exc), error=True)
+            return
+        selected = self._choose_output_file()
+        if selected is None:
+            self._set_status("Save cancelled")
+            return
+        output = (
+            selected
+            if selected.name.endswith(".events.json")
+            else selected.with_suffix(".events.json")
+        )
+        checkpoint = output.with_name(output.name.removesuffix(".events.json") + ".checkpoint.json")
+        self.output_file = output
+        manifest["checkpoint"] = str(checkpoint)
+        manifest["imported_checkpoint"] = (
+            str(self.loaded_checkpoint) if self.loaded_checkpoint else None
+        )
+        try:
+            write_checkpoint_file(self._checkpoint_state(completed=open_cutvideo), checkpoint)
+            write_checkpoint_file(manifest, output)
+        except OSError as exc:
+            self._set_status(str(exc), error=True)
+            return
+        entries = tuple(
+            SyncPlanEntry(
+                name,
+                f"{name}_events.mp4",
+                camera["events"][0] - 1,
+                camera["events"][-1] - 1,
+                removed_frames=tuple(
+                    f - 1
+                    for f in camera["removed_frames"]
+                    if camera["events"][0] <= f <= camera["events"][-1]
+                ),
+            )
+            for name, camera in manifest["cameras"].items()
+        )
+        reference_path = next(
+            info.path for info in self.video_infos if info.name == manifest["reference"]
+        )
+        command = build_cutvideo_command(reference_path, output)
+        print(">> vaila/syncvid: Equivalent event export CLI\n" + shlex.join(command))
+        print(
+            f">> Event sample span {manifest['sample_span_seconds']:.9f} s; "
+            f"{manifest['output_frame_count']} frames at {manifest['output_fps']} fps; "
+            f"playback {manifest['playback_duration_seconds']:.9f} s"
+        )
+        self.result = SyncRunResult(output, reference_path, entries, open_cutvideo)
+        if open_cutvideo:
+            self.running = False
+        else:
+            self._set_status(f"Saved events: {output.name} (GUI stays open)")
 
     def _apply_checkpoint(self, data: Mapping[str, Any]) -> None:
         """Restore session state (fields, position, UI) from a validated checkpoint.
@@ -3141,6 +3513,11 @@ class PygameSyncPlayer:
         self.reference_field.text = cast(str, data["reference"])
         self.start_field.text = cast(str, data["start"])
         self.end_field.text = cast(str, data["end"])
+        self.event_mode = data.get("sync_mode") == "events"
+        for name, field in self.event_fields.items():
+            field.text = data.get("event_texts", {}).get(name, "")
+        self.reference_clock_field.text = data.get("reference_fps", "60000/1001")
+        self.output_rate_field.text = data.get("output_fps", "30000/1001")
         overrides = cast(dict[str, float], data.get("fps_overrides", {}))
         info_by_name = {info.name: info for info in self.video_infos}
         self.fps_overrides = {}
@@ -3196,10 +3573,14 @@ class PygameSyncPlayer:
         try:
             data = read_checkpoint_file(Path(selected))
             self._apply_checkpoint(data)
+            self.loaded_checkpoint = Path(selected).resolve()
         except (SyncWorkflowError, OSError) as exc:
             self._set_status(f"Could not load checkpoint: {exc}", error=True)
 
     def _save(self, open_cutvideo: bool) -> None:
+        if self.event_mode:
+            self._save_events(open_cutvideo)
+            return
         effective_infos, override_warnings = self._effective_video_infos()
         for warning in override_warnings:
             print(f">> vaila/syncvid: {warning}")
@@ -3274,7 +3655,10 @@ class PygameSyncPlayer:
             entries=tuple(entries),
             open_cutvideo=open_cutvideo,
         )
-        self.running = False
+        if open_cutvideo:
+            self.running = False
+        else:
+            self._set_status(f"Saved sync: {sync_file.name} (GUI stays open)")
 
     def _repeat_progress(self, phase: str, done: int, total: int) -> None:
         label = "Analyzing" if phase == "analyze" else "Writing"
@@ -3306,6 +3690,12 @@ class PygameSyncPlayer:
                 report = find_repeated_frames(info.path, self._repeat_progress)
                 self.repeat_reports[info.name] = report
                 self.removed_frames[info.name] |= set(report.repeated_frames)
+                print(
+                    f"  {info.name}: auto={len(report.repeated_frames)} "
+                    f"(motion_threshold={report.repeat_reasons.count('motion_threshold')}, "
+                    f"field_alternation={report.repeat_reasons.count('field_alternation')}); "
+                    f"current marks={len(self.removed_frames[info.name])}"
+                )
                 if report.repeated_frames:
                     parts.append(f"{info.name} {len(report.repeated_frames)}")
         except (OSError, SyncWorkflowError) as exc:
@@ -3351,7 +3741,10 @@ class PygameSyncPlayer:
             _resilient_open_local_html(help_path)
 
     def run(self) -> SyncRunResult | None:
-        """Run the player until Save or Cancel."""
+        """Run the player until Save + Cut Video, Cancel, or window close.
+
+        Plain Save sync writes files and keeps the window open for more edits.
+        """
         try:
             while self.running:
                 for event in pygame.event.get():
@@ -3465,6 +3858,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("-i", "--input-dir", type=Path, help="Target directory containing videos")
     parser.add_argument("-o", "--output", type=Path, help="Destination sync TXT file")
     parser.add_argument(
+        "--events",
+        action="store_true",
+        help="Build an event manifest from --checkpoint without opening a window",
+    )
+    parser.add_argument("--checkpoint", type=Path, help="Existing checkpoint for --events")
+    parser.add_argument(
+        "--reference-fps", default=None, help="Assumed reference clock, default 60000/1001"
+    )
+    parser.add_argument("--output-fps", default=None, help="Output grid, default 30000/1001")
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Probe/decode all target videos and exit without opening the GUI",
@@ -3479,6 +3882,41 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+
+    if args.events:
+        if args.checkpoint is None or args.input_dir is None or args.output is None:
+            parser.error("--events requires --checkpoint, --input-dir and --output")
+        try:
+            state = read_checkpoint_file(args.checkpoint)
+            infos = probe_video_directory(args.input_dir)
+            state["reference"] = resolve_reference_video(state["reference"], infos)
+            if state.get("sync_mode") == "events":
+                state["events"] = {
+                    name: parse_event_frames(text, name)
+                    for name, text in state.get("event_texts", {}).items()
+                }
+            manifest = manifest_from_checkpoint(
+                state,
+                infos,
+                reference_fps=args.reference_fps or state.get("reference_fps", "60000/1001"),
+                output_fps=args.output_fps or state.get("output_fps", "30000/1001"),
+                checkpoint_file=args.checkpoint.resolve(),
+            )
+            if args.output.resolve() == args.checkpoint.resolve():
+                raise EventSyncError("Choose a manifest output separate from the checkpoint")
+            write_checkpoint_file(manifest, args.output)
+            print(">> vaila/syncvid: Event manifest saved: " + str(args.output))
+            for name, camera in manifest["cameras"].items():
+                print(
+                    f">> {name}: events={camera['events']}; retained={camera['retained_count']}; "
+                    + " / ".join(
+                        f"{s['effective_fps_decimal']:.6f} fps (inferred)"
+                        for s in camera["segments"]
+                    )
+                )
+        except (OSError, SyncWorkflowError, EventSyncError) as exc:
+            parser.error(str(exc))
+        return 0
 
     if args.remove_repeated:
         if args.input_dir is None:

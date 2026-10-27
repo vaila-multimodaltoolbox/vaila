@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 25 September 2026
 Update Date: 27 October 2026
 
@@ -6946,6 +6946,136 @@ def latest_3d_folder(video, out=None) -> Path | None:
     return folders[0] if folders else None
 
 
+def video_for_3d_folder(folder) -> Path | None:
+    """Original video of a 3D result folder (README ``video:``, else by stem nearby)."""
+    folder = Path(folder)
+    try:
+        from .freekiki_detect3d import _video_from_readme
+    except ImportError:
+        from freekiki_detect3d import _video_from_readme  # ty: ignore[unresolved-import]
+
+    named = _video_from_readme(folder)
+    if named is not None:
+        if named.is_file():
+            return named.resolve()
+        for base in (folder.parent, folder.parent.parent, folder):
+            cand = base / named.name
+            if cand.is_file():
+                return cand.resolve()
+    for base in (folder.parent, folder.parent.parent):
+        for ext in sorted(VIDEO_EXTS):
+            cand = base / f"{folder.name}{ext}"
+            if cand.is_file():
+                return cand.resolve()
+    return None
+
+
+def list_ball_3d_folders(*roots) -> list[Path]:
+    """Folders that hold ``ball.csv`` under each root (flat ``*_3d_*`` or batch subdirs).
+
+    Newest folders first. Batch Detect + 3D writes ``<folder>_3d_<ts>/<stem>/ball.csv``;
+    a single-video run writes ``<stem>_3d_<ts>/ball.csv``.
+    """
+    found: list[Path] = []
+    seen: set[Path] = set()
+    for root in roots:
+        if not root:
+            continue
+        root = Path(root).expanduser()
+        if not root.is_dir():
+            continue
+        candidates: list[Path] = []
+        if (root / "ball.csv").is_file():
+            candidates.append(root)
+        try:
+            children = list(root.iterdir())
+        except OSError:
+            continue
+        for child in children:
+            if not child.is_dir():
+                continue
+            if (child / "ball.csv").is_file():
+                candidates.append(child)
+                continue
+            if "_3d_" not in child.name:
+                continue
+            try:
+                subs = list(child.iterdir())
+            except OSError:
+                continue
+            for sub in subs:
+                if sub.is_dir() and (sub / "ball.csv").is_file():
+                    candidates.append(sub)
+        for folder in sorted(candidates, key=lambda p: p.stat().st_mtime, reverse=True):
+            key = folder.resolve()
+            if key not in seen:
+                seen.add(key)
+                found.append(folder)
+    return found
+
+
+def ball_correction_targets(video, out=None, *, loaded=None) -> list[tuple[Path, Path]]:
+    """``(video, 3d_folder)`` pairs ready for ball correction in getpixelvideo.
+
+    ``video`` may be one file or a folder of videos (batch Detect + 3D). A loaded
+    GUI result that points at a 3D folder is preferred when it matches.
+    """
+    video_path = Path(video).expanduser() if video else None
+    out_path = Path(out).expanduser() if out else None
+    loaded = loaded or {}
+
+    def pair_for(folder: Path) -> tuple[Path, Path] | None:
+        if not (folder / "ball.csv").is_file():
+            return None
+        vid = video_for_3d_folder(folder)
+        if vid is None and video_path is not None and video_path.is_dir():
+            for ext in sorted(VIDEO_EXTS):
+                cand = video_path / f"{folder.name}{ext}"
+                if cand.is_file():
+                    vid = cand.resolve()
+                    break
+        if (
+            vid is None
+            and video_path is not None
+            and video_path.is_file()
+            and folder.name == video_path.stem
+        ):
+            vid = video_path.resolve()
+        return (vid, folder) if vid is not None else None
+
+    if video_path is not None and video_path.is_file():
+        preferred: Path | None = None
+        if loaded.get("folder3d") and _same_file(loaded.get("video"), video_path):
+            preferred = Path(loaded["folder3d"])
+        if preferred is None or not (preferred / "ball.csv").is_file():
+            preferred = latest_3d_folder(video_path, out_path)
+        if preferred is not None and (preferred / "ball.csv").is_file():
+            got = pair_for(preferred)
+            return [got] if got else []
+        for folder in list_ball_3d_folders(out_path, video_path.parent):
+            got = pair_for(folder)
+            if got is not None and _same_file(got[0], video_path):
+                return [got]
+        return []
+
+    roots: list[Path] = []
+    if loaded.get("folder3d"):
+        roots.append(Path(loaded["folder3d"]))
+    if out_path is not None:
+        roots.append(out_path)
+    if video_path is not None and video_path.is_dir():
+        roots.append(video_path)
+    newest: dict[Path, Path] = {}
+    for folder in list_ball_3d_folders(*roots):
+        got = pair_for(folder)
+        if got is None:
+            continue
+        key = got[0].resolve()
+        if key not in newest:
+            newest[key] = got[1]
+    return sorted(((vid, folder) for vid, folder in newest.items()), key=lambda item: item[0].name)
+
+
 def _report_players(args) -> dict | None:
     """The people given on the command line of report-tv (None when none was given)."""
     wall = None
@@ -8345,6 +8475,59 @@ def run_freekiki() -> None:
             return
         run_cli(["report-tv", "--run", str(folder)])
 
+    def _pick_ball_target() -> tuple[Path, Path] | None:
+        """Choose ``(video, 3d_folder)`` for ball correction / rebuild (file or batch folder)."""
+        video, out = v["video"].get().strip(), v["out"].get().strip()
+        if not video or not Path(video).exists():
+            messagebox.showerror(
+                "FreeKiki",
+                "Choose the video or folder (section 5), then run Detect + 3D first.",
+                parent=root,
+            )
+            return None
+        targets = ball_correction_targets(video, out or None, loaded=state.get("loaded"))
+        if not targets:
+            messagebox.showerror(
+                "FreeKiki",
+                "No 3D folder with ball.csv for this video/folder yet.\n"
+                "Run Detect + 3D with Ball = sam3 or net first.",
+                parent=root,
+            )
+            return None
+        if len(targets) == 1:
+            return targets[0]
+        pick = tk.Toplevel(root)
+        pick.title("Which video for the ball track?")
+        pick.transient(root)
+        pick.grab_set()
+        ttk.Label(
+            pick,
+            text="Batch Detect + 3D found several ball tracks. Choose one:",
+            wraplength=420,
+            justify="left",
+        ).pack(fill="x", padx=10, pady=(10, 4))
+        chosen: list[tuple[Path, Path] | None] = [None]
+        box = tk.Listbox(pick, height=min(12, len(targets)), width=56)
+        for vid, folder in targets:
+            box.insert("end", f"{vid.name}  →  {folder.name}")
+        box.selection_set(0)
+        box.pack(fill="both", expand=True, padx=10, pady=4)
+
+        def accept(_event=None):
+            sel = box.curselection()
+            if not sel:
+                return
+            chosen[0] = targets[int(sel[0])]
+            pick.destroy()
+
+        box.bind("<Double-Button-1>", accept)
+        bar = ttk.Frame(pick)
+        bar.pack(fill="x", padx=10, pady=8)
+        ttk.Button(bar, text="Open", command=accept).pack(side="left")
+        ttk.Button(bar, text="Cancel", command=pick.destroy).pack(side="right")
+        pick.wait_window()
+        return chosen[0]
+
     def do_anchor_dialog():
         """A window to build the ball anchors from a finished 3D run (at least three points)."""
         import numpy as np
@@ -8366,18 +8549,11 @@ def run_freekiki() -> None:
                 source_point,
             )
 
-        video, out = v["video"].get().strip(), v["out"].get().strip()
-        if not video or not Path(video).is_file():
-            messagebox.showerror("FreeKiki", "Choose the video (section 5) first.", parent=root)
+        picked = _pick_ball_target()
+        if picked is None:
             return
-        folder = _chosen_3d_folder(video, out)
-        if folder is None:
-            messagebox.showerror(
-                "FreeKiki",
-                "Run Detect + 3D on this video first: the anchors use its ball and its players.",
-                parent=root,
-            )
-            return
+        video_path, folder = picked
+        video = str(video_path)
         markers = Path(video).parent / f"{Path(video).stem}_markers.csv"
         try:
             sources = anchor_sources(folder, video=video, markers_csv=markers)
@@ -8665,22 +8841,15 @@ def run_freekiki() -> None:
         ttk.Button(bar_win, text="Cancel", command=win.destroy).pack(side="right")
 
     def do_rebuild_ball():
-        video, out = v["video"].get().strip(), v["out"].get().strip()
-        if not video or not Path(video).is_file():
-            messagebox.showerror("FreeKiki", "Choose the video (section 5) first.", parent=root)
-            return
         ws = v["ws"].get().strip()
         if not ws:
             messagebox.showerror("FreeKiki", "Choose a workspace folder first.", parent=root)
             return
-        folder = _chosen_3d_folder(video, out)
-        if folder is None:
-            messagebox.showerror(
-                "FreeKiki",
-                "No 3D folder for this video yet: run Detect + 3D first.",
-                parent=root,
-            )
+        picked = _pick_ball_target()
+        if picked is None:
             return
+        video_path, folder = picked
+        video = str(video_path)
         default_csv = Path(video).parent / f"{Path(video).stem}_markers.csv"
         if default_csv.is_file():
             csv_path = str(default_csv)
@@ -8709,34 +8878,23 @@ def run_freekiki() -> None:
         run_cli(cmd)
 
     def do_trajectories():
-        video, out = v["video"].get().strip(), v["out"].get().strip()
-        if not video or not Path(video).is_file():
-            messagebox.showerror(
-                "FreeKiki", "Choose the video (section 5), then run Detect + 3D first.", parent=root
-            )
+        picked = _pick_ball_target()
+        if picked is None:
             return
-        chosen = _chosen_3d_folder(video, out)
-        folders = [chosen] if chosen is not None else []
-        if not folders:
-            messagebox.showerror(
-                "FreeKiki",
-                "No 3D folder for this video in the output dir yet: run Detect + 3D first.",
-                parent=root,
-            )
-            return
+        video_path, folder = picked
         try:
             from .freekiki_detect3d import write_ball_correction_csv
         except ImportError:
             from freekiki_detect3d import write_ball_correction_csv  # ty: ignore[unresolved-import]
-        csv_path = write_ball_correction_csv(folders[0])
+        csv_path = write_ball_correction_csv(folder)
         gpv = Path(__file__).resolve().parent / "getpixelvideo.py"
-        argv = ["-f", video, "--track-csv", str(csv_path)]
+        argv = ["-f", str(video_path), "--track-csv", str(csv_path)]
         print_gui_cli_mirror("vaila/getpixelvideo", ["uv", "run", "--no-sync", str(gpv), *argv])
         log.insert(
             "end",
             f"\n>> getpixelvideo {' '.join(argv)}\n"
             "   Correct the ball in the window, then Save: getpixelvideo writes <video>_markers.csv\n"
-            "   next to the video. Then: freekiki.py detect-3d --run <detect run> --ball-csv <that csv>\n",
+            "   next to the video. Then use Rebuild ball (after correction).\n",
         )
         subprocess.Popen([sys.executable, str(gpv), *argv])  # own window, runs alongside
 
@@ -8899,13 +9057,13 @@ def run_freekiki() -> None:
     ):
         ttk.Label(grid, text=label).grid(row=0, column=2 * i, padx=(4, 2))
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
-    ttk.Label(grid, text="Backend").grid(row=0, column=12, padx=(4, 2))
-    ttk.Combobox(
-        grid, textvariable=v["backend"], values=("yolo", "heatmap"), width=8, state="readonly"
-    ).grid(row=0, column=13)
     hm_row = ttk.Frame(box)
-    hm_row.grid(row=8, column=0, columnspan=3, sticky="w", pady=2)
-    ttk.Label(hm_row, text="Heatmap backbone").pack(side="left", padx=(4, 2))
+    hm_row.grid(row=2, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(hm_row, text="Backend").pack(side="left", padx=(4, 2))
+    ttk.Combobox(
+        hm_row, textvariable=v["backend"], values=("yolo", "heatmap"), width=8, state="readonly"
+    ).pack(side="left")
+    ttk.Label(hm_row, text="Heatmap backbone").pack(side="left", padx=(8, 2))
     ttk.Combobox(
         hm_row, textvariable=v["backbone"], values=HEATMAP_BACKBONES, width=10, state="readonly"
     ).pack(side="left")
@@ -8916,7 +9074,7 @@ def run_freekiki() -> None:
     ttk.Label(hm_row, text="Distill λ").pack(side="left", padx=(8, 2))
     ttk.Entry(hm_row, textvariable=v["distill"], width=5).pack(side="left")
     bar = ttk.Frame(box)
-    bar.grid(row=2, column=1, sticky="w", pady=2)
+    bar.grid(row=3, column=0, columnspan=3, sticky="w", pady=2)
     ttk.Button(bar, text="Train", command=do_train).pack(side="left")
     ttk.Button(bar, text="Smoke preset (~5 min)", command=smoke_preset).pack(side="left", padx=6)
     ttk.Button(bar, text="Full preset (hours)", command=full_preset).pack(side="left")
@@ -8927,7 +9085,7 @@ def run_freekiki() -> None:
         command=lambda: run_cli(["bench"] + opt("--imgsz", "imgsz") + opt("--device", "device")),
     ).pack(side="left", padx=6)
     bar = ttk.Frame(box)
-    bar.grid(row=3, column=1, sticky="w", pady=2)
+    bar.grid(row=4, column=0, columnspan=3, sticky="w", pady=2)
     ttk.Button(bar, text="Runs status", command=lambda: run_cli(["status"])).pack(side="left")
     ttk.Button(
         bar,
@@ -8940,23 +9098,29 @@ def run_freekiki() -> None:
     corr = ttk.Frame(box)
     corr.grid(row=5, column=0, columnspan=3, sticky="we", pady=2)
     ttk.Label(corr, text="Corrections").pack(side="left", padx=(4, 2))
-    ttk.Entry(corr, textvariable=v["corrections"], width=52).pack(
+    ttk.Entry(corr, textvariable=v["corrections"], width=36).pack(
         side="left", fill="x", expand=True
     )
     ttk.Button(corr, text="Add folder...", command=add_corrections_folder).pack(side="left", padx=4)
     ttk.Label(corr, text="Match id").pack(side="left", padx=(8, 2))
     ttk.Entry(corr, textvariable=v["match_id"], width=16).pack(side="left")
     sel = ttk.Frame(box)
-    sel.grid(row=7, column=0, columnspan=3, sticky="we", pady=2)
+    sel.grid(row=6, column=0, columnspan=3, sticky="we", pady=2)
     ttk.Label(sel, text="Select frames in video").pack(side="left", padx=(4, 2))
-    ttk.Entry(sel, textvariable=v["sel_src"], width=26).pack(side="left")
+    ttk.Entry(sel, textvariable=v["sel_src"], width=22).pack(side="left")
     ttk.Button(
         sel, text="Games...", command=lambda: pick_select_folder("sel_src", "Folder of games")
     ).pack(side="left", padx=2)
-    ttk.Entry(sel, textvariable=v["sel_out"], width=26).pack(side="left", padx=(6, 0))
+    sel_out_row = ttk.Frame(box)
+    sel_out_row.grid(row=7, column=0, columnspan=3, sticky="we", pady=2)
+    ttk.Label(sel_out_row, text="Clips folder").pack(side="left", padx=(4, 2))
+    ttk.Entry(sel_out_row, textvariable=v["sel_out"], width=22).pack(side="left")
     ttk.Button(
-        sel, text="Clips...", command=lambda: pick_select_folder("sel_out", "Folder for the clips")
+        sel_out_row,
+        text="Clips...",
+        command=lambda: pick_select_folder("sel_out", "Folder for the clips"),
     ).pack(side="left", padx=2)
+    sel = sel_out_row
     ttk.Label(sel, text="KP conf").pack(side="left", padx=(6, 2))
     ttk.Entry(sel, textvariable=v["sel_conf"], width=5).pack(side="left")
     ttk.Label(sel, text="Max pose").pack(side="left", padx=(6, 2))
@@ -8967,28 +9131,38 @@ def run_freekiki() -> None:
     ttk.Button(sel, text="Plan", command=lambda: do_select(True)).pack(side="left", padx=(6, 2))
     ttk.Button(sel, text="Select + cut", command=lambda: do_select(False)).pack(side="left")
     ext = ttk.Frame(box)
-    ext.grid(row=6, column=0, columnspan=3, sticky="we", pady=2)
+    ext.grid(row=8, column=0, columnspan=3, sticky="we", pady=2)
     ttk.Label(ext, text="External data").pack(side="left", padx=(4, 2))
     ttk.Combobox(
         ext, textvariable=v["ext_source"], values=EXTERNAL_SOURCES, width=16, state="readonly"
     ).pack(side="left")
-    ttk.Entry(ext, textvariable=v["ext_query"], width=28).pack(side="left", padx=4)
+    ttk.Entry(ext, textvariable=v["ext_query"], width=22).pack(side="left", padx=4)
     ttk.Button(ext, text="Stage", command=do_extend_stage).pack(side="left")
-    ttk.Entry(ext, textvariable=v["ext_src"], width=28).pack(side="left", padx=(8, 2))
-    ttk.Button(ext, text="Preview", command=lambda: do_extend_commit(False)).pack(side="left")
-    ttk.Button(ext, text="Commit", command=lambda: do_extend_commit(True)).pack(side="left", padx=4)
-    ttk.Label(
-        box,
-        text="Retrain = Base model 'active' (default slot), a slot (m, l) or any trained .pt: "
-        "AdamW lr0=1e-4, 1 warmup epoch, cosine, mosaic off, backbone unfrozen.\n"
+    ext_src_row = ttk.Frame(box)
+    ext_src_row.grid(row=9, column=0, columnspan=3, sticky="we", pady=2)
+    ttk.Label(ext_src_row, text="Source folder").pack(side="left", padx=(4, 2))
+    ttk.Entry(ext_src_row, textvariable=v["ext_src"], width=22).pack(side="left", padx=(0, 2))
+    ttk.Button(ext_src_row, text="Preview", command=lambda: do_extend_commit(False)).pack(
+        side="left", padx=2
+    )
+    ttk.Button(ext_src_row, text="Commit", command=lambda: do_extend_commit(True)).pack(
+        side="left", padx=4
+    )
+    retrain_lines = (
+        "Retrain = Base model 'active' (default slot), a slot (m, l) or any trained .pt: "
+        "AdamW lr0=1e-4, 1 warmup epoch, cosine, mosaic off, backbone unfrozen.",
         "Manifest = e.g. v001 from 'Build oversampling manifest' (rare points repeated; "
-        "empty = plain train split).\n"
-        "Stopped / crash / power loss? Every finished epoch is saved: press Resume interrupted.\n"
+        "empty = plain train split).",
+        "Stopped / crash / power loss? Every finished epoch is saved: press Resume interrupted.",
         "Backend heatmap = vailá ResNet/HRNet heatmap net (torch only, no Ultralytics); "
-        "never auto-promoted: Evaluate + Compare on val first.\n"
+        "never auto-promoted: Evaluate + Compare on val first.",
         "Heatmap preset = HRNet-W32 distilled from the Teacher (active): "
         "L = L_gt + λ·L_distill (λ 0.5; YOLO weights are not copied).",
-    ).grid(row=4, column=0, columnspan=3, sticky="w", padx=4)
+    )
+    for r, line in enumerate(retrain_lines, start=10):
+        ttk.Label(box, text=line, wraplength=560, justify="left").grid(
+            row=r, column=0, columnspan=3, sticky="w", padx=4, pady=1
+        )
 
     box = ttk.LabelFrame(frm, text="4. Evaluate quality (labelled split)", padding=6)
     box.pack(fill="x", pady=4)
@@ -9019,19 +9193,23 @@ def run_freekiki() -> None:
         "Workspace (freekiki.toml)",
         v["ws"],
         lambda: browse_dir(v["ws"], "FreeKiki workspace (contains freekiki.toml)"),
+        width=36,
     )
     video_types = [("Video", "*.mp4 *.avi *.mov *.mkv *.m4v"), ("All", "*.*")]
-    row(box, 1, "Video", v["video"], lambda: browse_file(v["video"], "Video", video_types))
+    row(
+        box, 1, "Video", v["video"], lambda: browse_file(v["video"], "Video", video_types), width=36
+    )
     ttk.Button(box, text="Folder", command=lambda: browse_dir(v["video"], "Folder of videos")).grid(
         row=1, column=3
     )
-    row(box, 2, "Output dir", v["out"], lambda: browse_dir(v["out"], "Output folder"))
+    row(box, 2, "Output dir", v["out"], lambda: browse_dir(v["out"], "Output folder"), width=36)
     row(
         box,
         3,
         "Model",
         v["model"],
         browse_detection_model,
+        width=36,
     )
     grid = ttk.Frame(box)
     grid.grid(row=4, column=0, columnspan=3, sticky="w", pady=2)
@@ -9046,14 +9224,17 @@ def run_freekiki() -> None:
     ):
         ttk.Label(grid, text=label).grid(row=0, column=2 * i, padx=(4, 2))
         ttk.Entry(grid, textvariable=v[key], width=7).grid(row=0, column=2 * i + 1)
-    ttk.Checkbutton(grid, text="Overlay MP4", variable=overlay).grid(row=0, column=10, padx=6)
-    ttk.Label(grid, text="Geometry").grid(row=0, column=11, padx=(8, 2))
+    # the options that are switches sit on a row of their own, so the box stays narrow
+    switches = ttk.Frame(box)
+    switches.grid(row=5, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Checkbutton(switches, text="Overlay MP4", variable=overlay).grid(row=0, column=0, padx=4)
+    ttk.Label(switches, text="Geometry").grid(row=0, column=1, padx=(8, 2))
     ttk.Combobox(
-        grid, textvariable=v["geom"], values=("fill", "fix", "off"), width=5, state="readonly"
-    ).grid(row=0, column=12)
-    ttk.Checkbutton(grid, text="Snap", variable=snap).grid(row=0, column=13, padx=6)
+        switches, textvariable=v["geom"], values=("fill", "fix", "off"), width=5, state="readonly"
+    ).grid(row=0, column=2)
+    ttk.Checkbutton(switches, text="Snap", variable=snap).grid(row=0, column=3, padx=6)
     grid3d = ttk.Frame(box)
-    grid3d.grid(row=5, column=0, columnspan=3, sticky="w", pady=2)
+    grid3d.grid(row=6, column=0, columnspan=3, sticky="w", pady=2)
     ttk.Label(grid3d, text="Ball").grid(row=0, column=0, padx=(4, 2))
     ttk.Combobox(
         grid3d, textvariable=ball_mode, values=("off", "net", "sam3"), width=6, state="readonly"
@@ -9061,35 +9242,44 @@ def run_freekiki() -> None:
     ttk.Checkbutton(grid3d, text="Players on pitch only", variable=pitch_on).grid(
         row=0, column=2, padx=6
     )
-    ttk.Label(grid3d, text="Ball anchors (JSON, for Rebuild ball)").grid(
-        row=0, column=3, padx=(10, 2)
+    anchors_row = ttk.Frame(box)
+    anchors_row.grid(row=7, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(anchors_row, text="Ball anchors (JSON, for Rebuild ball)").pack(
+        side="left", padx=(4, 6)
     )
-    ttk.Entry(grid3d, textvariable=v["ball_anchors"], width=52).grid(row=0, column=4)
+    ttk.Entry(anchors_row, textvariable=v["ball_anchors"], width=40).pack(side="left")
     bar = ttk.Frame(box)
-    bar.grid(row=6, column=1, sticky="w", pady=2)
+    bar.grid(row=8, column=0, columnspan=3, sticky="w", pady=2)
     ttk.Button(bar, text="Detect", command=do_detect).pack(side="left")
     ttk.Button(bar, text="Detect + 3D", command=do_detect3d).pack(side="left", padx=6)
     ttk.Button(bar, text="Correct in getpixelvideo", command=do_correct).pack(side="left", padx=6)
     ttk.Button(bar, text="Ball track in getpixelvideo", command=do_trajectories).pack(
         side="left", padx=6
     )
-    ttk.Button(bar, text="Ball anchors...", command=do_anchor_dialog).pack(side="left", padx=6)
-    ttk.Button(bar, text="Rebuild ball (after correction)", command=do_rebuild_ball).pack(
+    bar2 = ttk.Frame(box)
+    bar2.grid(row=9, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Button(bar2, text="Ball anchors...", command=do_anchor_dialog).pack(side="left")
+    ttk.Button(bar2, text="Rebuild ball (after correction)", command=do_rebuild_ball).pack(
         side="left", padx=6
     )
-    ttk.Button(bar, text="TV Report", command=do_report_tv).pack(side="left", padx=6)
-    ttk.Button(bar, text="Load previous result...", command=do_load_result).pack(
+    ttk.Button(bar2, text="TV Report", command=do_report_tv).pack(side="left", padx=6)
+    ttk.Button(bar2, text="Load previous result...", command=do_load_result).pack(
         side="left", padx=6
     )
-    ttk.Label(
-        box,
-        text="Detect: field keypoints only. Detect + 3D: keypoints, DLT3D, SAM 3D Body poses, ball "
-        "(net = workspace models/ball.pt, sam3 = sam3.pt) and the C3D + CSV in pitch metres. "
+    help_lines = (
+        "Detect: field keypoints only. Detect + 3D: keypoints, DLT3D, SAM 3D Body poses, ball "
+        "(net = workspace models/ball.pt, sam3 = sam3.pt) and the C3D + CSV in pitch metres.",
         "Output: one folder <video>_3d_<time>/ with the full overlay video, the CSVs and the C3D files "
-        "(detect run and SAM 3D Body under work/).\nCorrect: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
-        "F9 Save dataset (Full or Only Correct mode).\nThen put that folder in section 3 'Corrections' and Train "
-        "(Base 'active' = fine-tune).",
-    ).grid(row=7, column=0, columnspan=3, sticky="w", padx=4)
+        "(detect run and SAM 3D Body under work/).",
+        "Correct: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
+        "F9 Save dataset (Full or Only Correct mode).",
+        "Then put that folder in section 3 'Corrections' and Train (Base 'active' = fine-tune).",
+    )
+    for r, line in enumerate(help_lines, start=10):
+        # wraplength keeps the text in a column of about 620 px: the window does not grow sideways
+        ttk.Label(box, text=line, wraplength=560, justify="left").grid(
+            row=r, column=0, columnspan=3, sticky="w", padx=4, pady=1
+        )
 
     bar = ttk.Frame(frm)
     bar.pack(fill="x", pady=4)
@@ -9097,7 +9287,7 @@ def run_freekiki() -> None:
     ttk.Button(bar, text="Stop task", command=stop).pack(side="left", padx=6)
     ttk.Button(bar, text="Close", command=lambda: (stop(), root.destroy())).pack(side="right")
 
-    log = tk.Text(frm, height=14, width=100)
+    log = tk.Text(frm, height=14, width=80)
     log.pack(fill="both", expand=True)
     log.insert("end", "FreeKiki log - each action runs as a CLI subprocess (>> printed).\n")
 

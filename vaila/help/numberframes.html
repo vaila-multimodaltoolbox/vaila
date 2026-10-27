@@ -45,7 +45,8 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Tools</p>
             <p><strong>File:</strong> vaila/numberframes.py</p>
-            <p><strong>Version:</strong> 0.3.114</p>
+            <p><strong>Version:</strong> 0.4.12</p>
+            <p><strong>Updated:</strong> 27 October 2026</p>
             <p><strong>Author:</strong> Paulo R. P. Santiago</p>
             <p><strong>Email:</strong> paulosantiago@usp.br</p>
             <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -55,20 +56,27 @@
 
         <div class="docstring">
             <h2>📖 Description</h2>
-            <p>This script provides <strong>scientific-grade video metadata extraction</strong> with high precision for research applications. It analyzes video files within a selected directory and extracts comprehensive metadata including frame count, frame rates (display and capture), resolution, codec information, and duration. The script generates both a user-friendly summary and detailed JSON metadata files with precision suitable for scientific research.</p>
+            <p>This script provides <strong>scientific-grade video metadata extraction</strong> with high precision for research applications. It also <strong>Adjusts real FPS</strong>: retags container frame rate (stream-copy remux, re-encode fallback) when videos were written with a stamped FPS different from the capture rate. Cut Video and Make Sync file read <strong>container</strong> FPS — fix files here first.</p>
         </div>
 
         <div class="feature-box">
-            <h2>✨ Key Features</h2>
+            <h2>Key Features</h2>
             <ul>
                 <li><strong>Scientific Precision</strong>: Frame rates and durations with 9 decimal places for research accuracy</li>
                 <li><strong>Fast Extraction</strong>: Single <code>ffprobe</code> JSON call for efficient metadata extraction</li>
-                <li><strong>Capture FPS Detection</strong>: Automatically detects Android slow-motion capture FPS tags</li>
                 <li><strong>Parallel Processing</strong>: Processes multiple videos concurrently for faster analysis</li>
                 <li><strong>Dual Output</strong>: Basic summary file and full JSON metadata files</li>
-                <li><strong>GUI Display</strong>: User-friendly table view of all video metadata</li>
+                <li><strong>Adjust real FPS</strong>: Remux keeps every frame; duration becomes <code>frames / real_fps</code>; writes <code>processed_fpsfix_&lt;timestamp&gt;/</code></li>
                 <li><strong>Research Ready</strong>: High-precision values suitable for scientific analysis</li>
             </ul>
+        </div>
+
+        <div class="functions">
+            <h2>Adjust real FPS</h2>
+            <p>GUI: Frame C → <strong>Metadata info</strong> → <strong>Adjust real FPS</strong>. Enter one real FPS for the batch (<code>29.97</code> or <code>30000/1001</code>), then pick the directory.</p>
+            <pre>uv run vaila/numberframes.py --set-fps 29.97 --dir /path/to/videos --cli
+uv run vaila/numberframes.py --set-fps 30000/1001 video1.mp4 video2.mp4 --cli</pre>
+            <p>Output: <code>processed_fpsfix_YYYYMMDD_HHMMSS/</code> with remuxed videos and <code>fpsfix_summary.csv</code>.</p>
         </div>
 
         <div class="functions">

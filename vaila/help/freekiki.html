@@ -32,7 +32,7 @@
         <strong>Module:</strong> <code>vaila/freekiki.py</code><br />
         <strong>GUI button:</strong> <code>Soccer Tools → FreeKiki (49 field KPs)</code> (Frame B)<br />
         <strong>CLI:</strong> <code>uv run vaila/freekiki.py {init,import-dataset,ingest,check,manifest,train,status,resume,bench,evaluate,sweep,compare,models,sizes,grow,audit,detect} -w WORKSPACE</code><br />
-        <strong>Version:</strong> 0.4.11 · <strong>Updated:</strong> 27 October 2026
+        <strong>Version:</strong> 0.4.12 · <strong>Updated:</strong> 27 October 2026
       </div>
 
       <h2>Correct and retrain (3 steps)</h2>
@@ -181,9 +181,11 @@ uv run --no-sync vaila/freekiki.py evaluate -w WS --split hard --model runs/RUN/
       <h2>Ball track in getpixelvideo (manual correction)</h2>
       <p>Section 5 has a button, <b>Ball track in getpixelvideo</b>: it writes <code>ball_for_correction.csv</code>
         in the newest 3D folder (the raw ball pixels, one row per frame) and opens getpixelvideo on the video with that
-        track loaded. Correct the ball there and Save; <code>&lt;video&gt;_markers.csv</code> appears next to the video.
-        Then run the 3D chain again on that track: <code>freekiki.py detect-3d --run &lt;detect run&gt; --ball-csv
-        &lt;markers.csv&gt;</code>. A corrected point is accepted as it is (score 1.0) and the physical smoothing still applies.</p>
+        track (<code>--track-csv</code>). After a <b>folder / batch</b> Detect + 3D it asks which video to open.
+        Correct the ball there and Save; <code>&lt;video&gt;_markers.csv</code> appears next to the video.
+        Then use <b>Rebuild ball (after correction)</b> (or
+        <code>freekiki.py ball-rebuild --out &lt;3d folder&gt; --ball-csv &lt;markers.csv&gt; --video &lt;video&gt;</code>).
+        A corrected point is accepted as it is (score 1.0) and the physical smoothing still applies.</p>
       <h2 id="gui-s5">GUI step by step: section 5 (keypoints, then 3D)</h2>
       <p>Section 5 runs the field keypoints and, optionally, the 3D chain. Open <strong>Frame B → Soccer Tools →
         FreeKiki</strong>, then scroll down to section 5. The window below shows where it sits (sections 1 to 5):</p>
