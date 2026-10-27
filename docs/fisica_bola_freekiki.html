@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ball physics in FreeKiki / Física da bola no FreeKiki</title>
+<style>
+  :root { --ink:#1d1d1f; --muted:#5b5b63; --rule:#d8d8de; --accent:#0b5cad; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --ink:#e8e8ee; --muted:#a6a6b0; --rule:#3a3a44; --accent:#7fb6ff; }
+  }
+  body { background:#fff; color:var(--ink); font:16px/1.55 "Georgia", serif; max-width:560px; margin:0 auto; padding:48px 16px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body { background:#16161c; } }
+  h1 { font-size:24px; margin:0 0 8px; }
+  .sub { color:var(--muted); margin:0 0 28px; }
+  ul { list-style:none; padding:0; margin:0; }
+  li { margin:0 0 14px; padding:14px 16px; border:1px solid var(--rule); border-radius:6px; }
+  a { color:var(--accent); text-decoration:none; }
+  a:hover { text-decoration:underline; }
+  .meta { color:var(--muted); font-size:13px; margin-top:4px; }
+</style>
+</head>
+<body>
+<h1>Ball physics in FreeKiki</h1>
+<p class="sub">Física da bola no FreeKiki — drag, Magnus, fit, results, and limits.
+<i>vailá</i> 0.4.11 · 26 October 2026.</p>
+<ul>
+  <li>
+    <a href="fisica_bola_freekiki_en.html"><strong>English</strong> — HTML</a>
+    · <a href="fisica_bola_freekiki_en.pdf">PDF</a>
+    <div class="meta">Forces, equations, sources, fit, c1 results, Pelé validation failure.</div>
+  </li>
+  <li>
+    <a href="fisica_bola_freekiki_pt.html"><strong>Português</strong> — HTML</a>
+    · <a href="fisica_bola_freekiki_pt.pdf">PDF</a>
+    <div class="meta">Forças, equações, fontes, ajuste, resultados da c1, falha na validação do Pelé.</div>
+  </li>
+</ul>
+<p class="sub" style="margin-top:28px">Figures: <code>docs/fisica_bola_figuras.py</code> (reads the reconstructed folder; does not re-fit).</p>
+</body>
+</html>

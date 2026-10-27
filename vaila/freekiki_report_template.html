@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<style>
+  :root { --ink:#14213d; --muted:#5b6577; --line:#d9dee7; --soft:#f3f5f9; --ball:#d62246; --wall:#14934b; }
+  @page { size: A4; margin: 13mm 14mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0; color:var(--ink); background:#fff; font-family: Inter, "Segoe UI", Roboto, system-ui, sans-serif; font-size:15px; line-height:1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { border-bottom: 3px solid var(--ink); padding-bottom: 14px; margin-bottom: 22px; }
+  .kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; color: var(--ball); font-weight: 700; }
+  h1 { font-size: 32px; line-height: 1.1; margin: 6px 0 8px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; }
+  h2 { font-size: 21px; margin: 30px 0 8px; break-after: avoid; }
+  h3 { font-size: 16px; margin: 20px 0 6px; break-after: avoid; }
+  p { margin: 0 0 10px; }
+  .lead { font-size: 17px; background: var(--soft); border-left: 5px solid var(--ball); padding: 14px 16px; border-radius: 4px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 6px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; break-inside: avoid; }
+  .card .n { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .card .n small { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .card .l { font-size: 13px; color: var(--muted); }
+  .card.hi { border-color: var(--ball); background: #fff5f7; }
+  figure { margin: 12px 0 6px; break-inside: avoid; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--line); }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .quotes { list-style: none; padding: 0; margin: 8px 0; }
+  .quotes li { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; break-inside: avoid; }
+  .quotes li::before { content: "“"; color: var(--ball); font-weight: 800; font-size: 22px; margin-right: 4px; line-height: 0; }
+  .warn { border: 1px solid #e8c48a; background: #fff8ec; border-radius: 8px; padding: 12px 16px; margin: 14px 0; break-inside: avoid; }
+  .note { border-left: 3px solid var(--wall); padding: 4px 12px; color: var(--muted); font-size: 14px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; vertical-align: 2px; }
+  .tag.solid { background: #e3f4ea; color: #0d6b36; }
+  .tag.est { background: #fdeccf; color: #8a5300; }
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; }
+  dl.gloss dt { font-weight: 700; }
+  dl.gloss dd { margin: 0; }
+  ol.refs { font-size: 13.5px; color: var(--muted); padding-left: 20px; }
+  ol.refs li { margin-bottom: 4px; }
+  footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .pb { break-before: page; }
+  /* the editor: on screen only; the PDF is the report without it */
+  .editor { border-top: 2px solid var(--ink); margin-top: 28px; padding-top: 4px; }
+  .ed-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .ed-table th, .ed-table td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: middle; }
+  .ed-table input { width: 84px; font: inherit; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; }
+  .ed-table td.ed-label { min-width: 200px; }
+  .editor button { font: inherit; padding: 6px 12px; border: 1px solid var(--ink); background: #fff; border-radius: 6px; cursor: pointer; color: var(--ink); }
+  .editor button.primary { background: var(--ink); color: #fff; }
+  .ed-out { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; }
+  .ed-out dt { font-weight: 700; }
+  .ed-out dd { margin: 0; }
+  .ed-plots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .ed-plots figure { margin: 0; }
+  .ed-plots canvas { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
+  #ed-json { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  #ed-status { color: var(--muted); margin-left: 8px; }
+  @media (max-width: 640px) { h1 { font-size: 26px; } .cards { grid-template-columns: repeat(2, 1fr); } .ed-plots { grid-template-columns: 1fr; } }
+  @media print { figure img { max-height: 80mm; width: auto; max-width: 100%; margin: 0 auto; } main { padding: 0; max-width: none; } body { font-size: 13.5px; } .lead { font-size: 15px; } .noprint { display: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="kicker">Biomecânica no futebol · relatório para imprensa</div>
+  <h1>{{title}}</h1>
+  <p class="sub">{{subtitle}}</p>
+  <p class="sub">{{authors}}</p>
+</header>
+
+{{warn_block}}
+
+<p class="lead">A bola percorreu <b>{{dist}} metros</b> em <b>{{flight}} s</b>, a uma velocidade média de
+<b>cerca de {{mean}} km/h</b>. Ela subiu até <b>{{zmax}} metros</b> de altura, passou a <b>{{wall_z}} metro</b> do chão ao cruzar a barreira e chegou ao gol.
+Depois que passou a barreira, a bola levou cerca de <b>{{after_wall}} segundo</b> até a entrada.</p>
+
+<div class="cards">
+  <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l">distância do chute até a entrada no gol <span class="tag solid">medido</span></div></div>
+  <div class="card"><div class="n">{{flight}} <small>s</small></div><div class="l">tempo de voo da bola <span class="tag solid">medido</span></div></div>
+  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l">velocidade média do pé até a entrada <span class="tag solid">medido</span></div></div>
+  <div class="card"><div class="n">{{launch}} <small>km/h</small></div><div class="l">velocidade na saída do pé <span class="tag est">estimativa</span></div></div>
+  <div class="card"><div class="n">{{zmax}} <small>m</small></div><div class="l">altura máxima da bola <span class="tag est">estimativa</span></div></div>
+  <div class="card"><div class="n">{{spin}} <small>rps</small></div><div class="l">rotação da bola, inferida da curva <span class="tag est">estimativa</span></div></div>
+</div>
+<p class="note">“Medido”: vem direto das posições da bola na imagem e das linhas do campo. “Estimativa”: depende do
+modelo físico que ajustamos à trajetória; por isso mostramos a ordem de grandeza.</p>
+
+<h2>1. O caminho da bola</h2>
+<p>A bola saiu {{kicker_phrase}} e foi até a entrada no gol em {{flight}} s. Vista de cima, ela não andou em
+linha reta: a cor mostra a velocidade, do mais rápido (amarelo) ao mais lento (vermelho).</p>
+<figure>
+  <img src="{{img_vista_de_cima}}" alt="Vista de cima da trajetória da bola, colorida pela velocidade">
+  <figcaption>Vista de cima da trajetória reconstruída. Cada ponto é um quadro da transmissão (cerca de 1/30 de segundo). A faixa verde é a barreira, entre os dois jogadores; a laranja é o goleiro, com o caminho dele.<br>{{players_note}}</figcaption>
+</figure>
+
+<h2>2. Por cima da barreira</h2>
+<p>O desafio da falta é geométrico: a bola precisa subir o bastante para passar a barreira, mas descer a tempo de entrar
+abaixo do travessão (2,44 m). Pela reconstrução, a bola chegou a <b>{{zmax}} metros</b> de altura, por volta de
+{{zmax_t}} segundos depois do chute. Ao cruzar a barreira, estava a {{wall_z}} metro do chão: {{wall_clear}} cm
+{{wall_side}} do topo da barreira, que tomamos como 1,8 metro (hipótese).</p>
+<figure>
+  <img src="{{img_perfil}}" alt="Altura da bola em função da distância, com a barreira e o travessão">
+  <figcaption>De lado: altura da bola ao longo da distância percorrida, com a barreira (hipótese de 1,8 m) e o travessão.</figcaption>
+</figure>
+
+<h2>3. Pouco mais de um segundo</h2>
+<p>A bola levou cerca de {{wall_t}} segundos para chegar à barreira. Quando passou por ela, estava a cerca de
+{{wall_kmh}} km/h. Dali até a entrada no gol, a bola ainda andou {{wall_goal}} metros. Ao longo do voo, a velocidade cai
+de forma contínua: a bola perde velocidade para o ar, e a resistência do ar é maior quanto mais rápido a bola anda.</p>
+<figure>
+  <img src="{{img_tempo}}" alt="Velocidade da bola, coeficiente de arrasto e número de Reynolds ao longo do tempo">
+  <figcaption>Em cima: velocidade da bola. Embaixo: o coeficiente de arrasto (linha escura) e o número de Reynolds
+  (linha verde tracejada), que mostra em que regime de ar a bola está.</figcaption>
+</figure>
+
+<h2>4. A física da bola, explicada</h2>
+<h3>4.1 As três forças</h3>
+<p>Depois do chute, a bola está sob três forças. A <b>gravidade</b> puxa para o chão, sempre a 9,81 m/s². O
+<b>arrasto</b> é a força do ar contrária ao movimento: ele freia a bola. O <b>efeito Magnus</b> é a força que curva a bola:
+quando ela gira, o ar é empurrado para um lado e a bola é empurrada para o outro. Na figura, as barras mostram o tamanho de
+cada força em três instantes do lance.</p>
+<figure>
+  <img src="{{img_forcas}}" alt="Barras com gravidade, arrasto e efeito Magnus em três instantes do lance">
+  <figcaption>Aceleração causada por cada força, em m/s², em três instantes. A gravidade é constante; o arrasto e o Magnus
+  mudam com a velocidade e com a rotação.</figcaption>
+</figure>
+
+<h3>4.2 A crise do arrasto</h3>
+<p>O ar reage de forma diferente conforme a velocidade. Para a bola de futebol, o coeficiente de arrasto (Cd) é cerca de 0,47
+em velocidades menores e cai para algo entre 0,12 e 0,20 em velocidades maiores. Essa queda é a <b>crise do arrasto</b>: a
+camada de ar que gruda na bola vira turbulenta, se descola mais atrás e deixa uma esteira menor, e a bola sofre menos
+resistência. Neste lance, o número de Reynolds da bola ficou entre {{re_min}} e {{re_max}} × 10⁵ (veja a figura da seção 3).
+Segundo Asai &amp; Seo (2013), a crise acontece por volta de 2 a 3 × 10⁵: acima disso, a camada de ar já é turbulenta.</p>
+
+<h3>4.3 A rotação que a imagem não mostra diretamente</h3>
+<p>A câmera não enxerga o giro da bola com clareza. Mas a trajetória curva revela a rotação: a bola inteira, ajustada aos
+pixels da imagem, precisa curvar do jeito que curvou. O ajuste inferiu uma rotação de <b>{{spin}} rotações por segundo</b>,
+com o eixo de giro {{spin_axis}}, o que faz a bola curvar para os lados. Isso é uma <b>inferência</b>, não uma medida direta.</p>
+
+<h3>4.4 Como a trajetória foi ajustada à imagem</h3>
+<p>Cada quadro da transmissão tem uma calibração da câmera, obtida pelas linhas pintadas do campo, de medidas conhecidas.
+Com ela, a posição da bola em cada quadro vira uma posição real no campo. A trajetória física (a gravidade, o arrasto e o
+Magnus) é ajustada de modo a reproduzir essas posições com um erro médio de <b>{{rms}} pixel</b> na imagem. Além disso, três
+pontos físicos do lance entram como referência: a bola começa no pé do chutador, passa a 1,8 m de altura a 0,3 m do
+ombro de um jogador da barreira, e chega às mãos do goleiro. Essas posições não são reproduzidas exatamente: a
+diferença está na seção 6.</p>
+<figure>
+  <img src="{{img_residuos}}" alt="Erro de cada quadro entre a trajetória ajustada e as marcações">
+  <figcaption>Quanto a trajetória ajustada se afasta das marcações em cada quadro. Quanto menor, melhor.</figcaption>
+</figure>
+
+<h2>5. A curva</h2>
+<p>Imagine uma corda esticada do pé do chutador até a entrada no gol. A bola saiu um pouco para fora dessa corda e depois
+voltou para dentro. O maior afastamento foi de cerca de <b>{{dev}} m</b>, por volta de {{dev_at}} m depois do chute. Essa é a
+curva que a bola fez no ar, medida pelo afastamento da linha reta.</p>
+<figure>
+  <img src="{{img_curva}}" alt="Afastamento lateral da bola em relação à linha reta do chute até a entrada">
+  <figcaption>Linha tracejada: caminho reto do chute até a entrada. Curva: quanto a bola se afastou para o lado.</figcaption>
+</figure>
+
+<h2>6. O que estes números não dizem</h2>
+<div class="warn">
+<ul>
+  <li><b>É uma reconstrução com uma câmera só.</b> Não há medição com várias câmeras. Valores marcados como “estimativa”
+  podem mudar com um ajuste diferente; por isso mostramos faixas e ordens de grandeza.</li>
+  <li><b>A rotação é inferida, não medida.</b> A câmera não resolve o giro da bola; a rotação vem da curva da trajetória.</li>
+  <li><b>A validação com um caso publicado não passou.</b> Simulamos o chute de Pelé publicado no material didático da
+  UFRJ (Aguiar) e o ponto final ficou cerca de 10 a 12 metros longe do publicado. A física (forças, arrasto e Magnus) está
+  implementada conforme as referências, mas esse teste mostra que ainda há diferenças de convenção ou de parâmetros.</li>
+  <li><b>Os pontos físicos de referência podem diferir.</b> O pé, a barreira e o goleiro são escolhidos a partir dos
+  jogadores reconstruídos, e não medidos diretamente no campo. Nesta reconstrução, a diferença entre o ajuste e os pontos
+  de referência é de {{worst}} m no pior caso.</li>
+  <li><b>A altura da barreira é uma hipótese</b> de 1,8 metro, e a trajetória sobre ela depende dessa escolha.</li>
+  <li><b>O toque do goleiro não foi modelado.</b> A trajetória trata o voo como livre até a entrada.</li>
+</ul>
+</div>
+
+<h2>7. Glossário</h2>
+<dl class="gloss">
+  <dt>Arrasto</dt><dd>a força do ar que se opõe ao movimento da bola.</dd>
+  <dt>Cd</dt><dd>coeficiente de arrasto: quanto a forma da bola e a camada de ar resistem ao movimento.</dd>
+  <dt>Crise do arrasto</dt><dd>queda do Cd quando a camada de ar passa de laminar a turbulenta.</dd>
+  <dt>Efeito Magnus</dt><dd>força perpendicular ao movimento causada pela rotação; é o que curva a bola.</dd>
+  <dt>Número de Reynolds</dt><dd>razão entre a inércia e a viscosidade do ar; indica o regime do escoamento.</dd>
+  <dt>Parâmetro de rotação (Sp)</dt><dd>quanto a bola gira em relação à velocidade com que anda.</dd>
+  <dt>DLT3D</dt><dd>calibração da câmera que liga pontos do campo, em metros, aos pixels da imagem, quadro a quadro.</dd>
+  <dt>Rps</dt><dd>rotações por segundo.</dd>
+</dl>
+
+<h2>8. Referências</h2>
+<ol class="refs">
+  <li>Kiratidis, A. L.; Leinweber, D. B. <i>An Aerodynamic Analysis of Recent FIFA World Cup Balls</i>. arXiv:1710.02784, 2018.</li>
+  <li>Asai, T.; Seo, K. <i>Aerodynamic drag of modern soccer balls</i>. SpringerPlus 2:171, 2013.</li>
+  <li>Asai, T.; Seo, K.; Kobayashi, O.; Sakashita, R. <i>Fundamental aerodynamics of the soccer ball</i>. Sports Engineering 10, 101, 2007.</li>
+  <li>Goff, J. E.; Carré, M. J. <i>Trajectory analysis of a soccer ball</i>. American Journal of Physics 77, 1020, 2009.</li>
+  <li>Aguiar, C. E. <i>Aerodinâmica da bola de futebol: da Copa de 70 à Jabulani</i>. Instituto de Física, UFRJ (material didático).</li>
+  <li>NASA Glenn Research Center. <i>Drag</i>: equação de arrasto e número de Reynolds, para estudantes.</li>
+  <li>Documentação técnica do método: <i>docs/fisica_bola_freekiki.html</i> (vailá, 2026).</li>
+</ol>
+
+<h2>Frases prontas para a reportagem</h2>
+<ul class="quotes">
+{{quotes}}
+</ul>
+
+<section class="editor noprint" id="editor">
+  <h2 id="ed-title-text">Ajustar as âncoras e refazer o cálculo</h2>
+  <p>Mude as posições (metros no campo) ou os quadros dos pontos de referência e clique em Recalcular. O cálculo roda
+  neste navegador, com o mesmo modelo do vailá. Os números do texto acima não mudam: eles vêm do cálculo original.</p>
+  <table class="ed-table">
+    <thead><tr><th>ponto</th><th>quadro</th><th>x (m)</th><th>y (m)</th><th>z (m)</th><th>σ (m)</th><th></th></tr></thead>
+    <tbody id="ed-rows"></tbody>
+  </table>
+  <p style="margin-top:10px">
+    <button type="button" id="ed-add">+ Adicionar âncora</button>
+    <button type="button" id="ed-recalc" class="primary">Recalcular</button>
+    <button type="button" id="ed-reset">Restaurar originais</button>
+    <span id="ed-status" role="status"></span>
+  </p>
+  <dl class="ed-out" id="ed-out"></dl>
+  <div class="ed-plots">
+    <figure><canvas id="ed-top" width="640" height="380"></canvas><figcaption>Vista de cima recalculada</figcaption></figure>
+    <figure><canvas id="ed-side" width="640" height="380"></canvas><figcaption>Perfil recalculado</figcaption></figure>
+  </div>
+  <h3>Âncoras em JSON (para o botão Rebuild ball)</h3>
+  <textarea id="ed-json" rows="9" readonly></textarea>
+  <p><button type="button" id="ed-download">Baixar JSON</button></p>
+  <p class="note">Os pontos antigos (sem σ) entram com σ 0,3 m. A distância usa o quadro inicial do chute e o último quadro com marcação.</p>
+</section>
+<script type="application/json" id="ed-data">{{editor_payload}}</script>
+<script>{{app_js}}</script>
+
+<footer>
+  Software: <i>vailá</i>, Multimodal Toolbox, software livre de biomecânica (github.com/vaila-multimodaltoolbox/vaila).<br>
+  Gerado em {{generated}}. Animação em câmera lenta: {{animation}}.<br>
+  Confiança do ajuste: {{tier}} · erro médio na imagem {{rms}} px · pior desvio nas referências {{worst}} m.
+</footer>
+</main>
+</body>
+</html>

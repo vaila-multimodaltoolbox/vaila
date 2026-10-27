@@ -21,7 +21,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.4.10 · <strong>Updated:</strong> 2026-10-18<br>
+<strong>Version:</strong> 0.4.11 · <strong>Updated:</strong> 2026-10-26<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
@@ -114,7 +114,18 @@ end   = start + round((reference_end - reference_start) / reference_fps * fps)</
 <tr><td><code>&lt;name&gt;_motion_scores.csv</code></td><td>Every video: <code>frame</code>, <code>motion_score</code>, <code>repeated</code> (1 = removed), <code>shift_x_px</code>, <code>shift_y_px</code></td></tr>
 <tr><td><code>norepeat_summary.csv</code></td><td>Every video: frames, unique, repeated, fps, estimated real fps, threshold, gap ratio, repeated frame numbers</td></tr>
 </table>
-<p>Estimated real fps = fps × unique / total frames (example: <code>lateral.mp4</code>, 141 frames at 59.94 fps, keeps 54 frames, about 22.96 fps). The real frames are not evenly spaced in the source, so the new video spaces them evenly at the average rate; the frame map keeps the original times. Videos without repeats are listed but not rewritten. A shot where nothing moves at all scores like codec noise: check the motion scores before using such a copy.</p>
+<p>Estimated real fps = fps × unique / total frames (example: <code>lateral.mp4</code>, 141 frames at 59.94 fps, keeps 54 frames, about 22.96 fps). The real frames are not evenly spaced in the source, so the new video spaces them evenly at the average rate; the frame map keeps the original times. Videos without repeats are listed but not rewritten.</p>
+<h3>Real FPS + Fill Start/End (after norepeat)</h3>
+<p>After saving norepeat copies, use the side-panel controls to set the true rate and align cuts:</p>
+<ul>
+<li><strong>Real FPS</strong> field — type e.g. <code>13.91</code> or <code>29.97</code></li>
+<li><strong>FPS this</strong> / Enter — apply to the current camera only (row shows <code>*</code>)</li>
+<li><strong>FPS all</strong> — apply to every camera</li>
+<li>Clear the field + Enter — drop the override on the current camera</li>
+<li><strong>Fill Start/End from FPS</strong> — rewrite Start/End as the same temporal events as the reference window</li>
+</ul>
+<p><strong>Equal fps</strong> (file playback rate) → identical frame counts. <strong>Different fps</strong> → frame counts may differ; durations still match. Real FPS must match the file (e.g. <code>13.91</code> on a norepeat 13.91 file); typing <code>29.97</code> on a 13.91 file is ignored so Start/End stay the same events in time. Overrides are stored in the Load/Resume <code>.json</code> checkpoint.</p>
+<p>A shot where nothing moves at all scores like codec noise: check the motion scores before using such a copy.</p>
 
 <h2>Versioned sync format</h2>
 <pre># vaila sync file v2
@@ -135,5 +146,5 @@ uv run vaila/syncvid.py -i /path/to/cameras --dry-run
 uv run vaila/syncvid.py -i /path/to/cameras --remove-repeated</pre>
 
 <div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
-<div class="footer">Part of vailá — Multimodal Toolbox · Updated 18 October 2026 (v0.4.10)</div>
+<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 26 October 2026 (v0.4.11)</div>
 </div></body></html>

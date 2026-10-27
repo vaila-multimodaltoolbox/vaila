@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Física da bola no FreeKiki</title>
+<style>
+  :root { --ink:#1d1d1f; --muted:#5b5b63; --rule:#d8d8de; --accent:#0b5cad; --warn:#9a3412; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --ink:#e8e8ee; --muted:#a6a6b0; --rule:#3a3a44; --accent:#7fb6ff; --warn:#ffb08a; }
+  }
+  :root[data-theme="dark"] { --ink:#e8e8ee; --muted:#a6a6b0; --rule:#3a3a44; --accent:#7fb6ff; --warn:#ffb08a; }
+  body { background:#fff; color:var(--ink); font:15px/1.55 "Georgia", serif; max-width:760px; margin:0 auto; padding:24px 16px 60px; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) body { background:#16161c; } }
+  :root[data-theme="dark"] body { background:#16161c; }
+  h1 { font-size:26px; margin:0 0 4px; }
+  h2 { font-size:19px; margin:34px 0 8px; border-bottom:1px solid var(--rule); padding-bottom:4px; }
+  h3 { font-size:16px; margin:22px 0 6px; }
+  p, li { margin:8px 0; }
+  .sub { color:var(--muted); margin-top:0; }
+  .lang { font-size:13px; color:var(--muted); margin:0 0 16px; }
+  .lang a { color:var(--accent); }
+  .eq { font-family:"DejaVu Sans Mono", monospace; font-size:13.5px; background:rgba(127,127,140,.12); padding:10px 12px; border-radius:6px; overflow-x:auto; white-space:pre-wrap; word-break:break-all; }
+  table { border-collapse:collapse; width:100%; margin:10px 0; font-size:14px; }
+  th, td { border-bottom:1px solid var(--rule); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { color:var(--muted); font-weight:normal; }
+  figure { margin:16px 0; }
+  figure img { width:100%; border:1px solid var(--rule); border-radius:4px; }
+  figcaption { color:var(--muted); font-size:13px; margin-top:4px; }
+  .note { border-left:3px solid var(--accent); padding:4px 12px; color:var(--muted); }
+  .warn { border-left:3px solid var(--warn); padding:4px 12px; }
+  code { font-family:"DejaVu Sans Mono", monospace; font-size:13px; }
+  @media print { .lang { display:none; } }
+</style>
+</head>
+<body>
+
+<p class="lang">Português · <a href="fisica_bola_freekiki_en.html">English</a> · <a href="fisica_bola_freekiki_pt.pdf">PDF</a></p>
+
+<h1>Física da bola no FreeKiki</h1>
+<p class="sub">Arrasto, efeito Magnus e a trajetória de uma bola corrigida à mão, com o spin inferido dos pixels.
+<i>vailá</i>, versão 0.4.11, 26 de outubro de 2026.</p>
+
+<h2>1. Resumo</h2>
+<p>A reconstrução 3D de uma bola corrigida à mão precisa de uma trajetória fisicamente possível. Uma bola de futebol
+não é uma partícula no chão: ela sai do pé, sobe, perde velocidade pelo ar e curva por causa da rotação. Este documento
+explica o modelo que o FreeKiki usa, de onde vêm os números, como ele é ajustado às marcações e o que ainda não bate.</p>
+<p>Em resumo, o modelo:</p>
+<ul>
+  <li>calcula o arrasto com o coeficiente Cd que depende do número de Reynolds (a crise do arrasto);</li>
+  <li>calcula o efeito Magnus, que curva a bola, com o coeficiente de sustentação em função do spin;</li>
+  <li>ajusta velocidade inicial, spin e instante do chute aos pixels da bola, usando a calibração DLT3D de cada frame;</li>
+  <li>usa três pontos físicos (pé do chute, passagem pela barreira e chegada às mãos do goleiro) como âncoras.</li>
+</ul>
+<p class="warn">Resultado honesto: no clipe da c1 o modelo reproduz as marcações da bola com 1,6 px de erro médio,
+mas as três âncoras físicas só são satisfeitas com erro de 0,6 a 1,0 m. A validação com o caso publicado do chute de
+Pelé também não passou (erro de cerca de 10 a 12 m). Detalhes na seção 8.</p>
+
+<h2>2. As forças sobre a bola</h2>
+<p>Uma bola se move no ar sob três forças: o peso, o arrasto (oposto ao movimento) e a força de Magnus (perpendicular
+ao movimento, causada pela rotação).</p>
+
+<h3>2.1 Arrasto</h3>
+<p>O arrasto é a força que o ar faz contra o movimento. Para uma esfera (a bola) ele vale:</p>
+<div class="eq">F_D = ½ · ρ · A · Cd · v²</div>
+<p>onde <i>ρ</i> é a densidade do ar (1,2 kg/m³), <i>A</i> a área da seção transversal (πr², com r = 0,11 m) e
+<i>Cd</i> o coeficiente de arrasto, que não é constante: depende da velocidade e da rugosidade da bola.</p>
+<p>O <b>número de Reynolds</b> mede a razão entre a inércia e a viscosidade do ar:</p>
+<div class="eq">Re = v · D / ν        ν = μ / ρ = 1,8·10⁻⁵ / 1,2 = 1,5·10⁻⁵ m²/s        D = 0,22 m</div>
+<p>Para a bola de futebol, Re fica entre 10⁵ e 5·10⁵ no jogo: é a faixa em que o arrasto muda de regime.</p>
+
+<h3>2.2 A crise do arrasto</h3>
+<p>Abaixo de um Reynolds crítico (cerca de 2 a 3 · 10⁵ para a bola de futebol, segundo Asai &amp; Seo, 2013), a camada
+limite do ar é laminar e se descola cedo da bola, deixando uma esteira larga: Cd ≈ 0,47. Acima do crítico a camada
+limite vira turbulenta, se descola mais tarde e a esteira encolhe: Cd cai para 0,12 a 0,15. Essa queda é a
+<b>crise do arrasto</b>. As costuras e os gomos da bola antecipam a transição, por isso a Brazuca e outras bolas
+de gomos têm crises em velocidades diferentes.</p>
+<figure>
+  <img src="images/fisica_cd_vs_velocidade.png" alt="Cd em função da velocidade">
+  <figcaption>Coeficiente de arrasto da Brazuca (ajuste da Tabela 1 de Kiratidis &amp; Leinweber, 2018), gerado pelo
+  código <code>freekiki_physics.drag_coefficient</code>. A região laranja marca a crise.</figcaption>
+</figure>
+
+<h3>2.3 Efeito Magnus</h3>
+<p>Uma bola girando arrasta o ar de um lado e freia o do outro. A diferença de pressão gera uma força perpendicular à
+velocidade e ao eixo de rotação:</p>
+<div class="eq">F_M = ½ · ρ · A · C_L · v² · (ω̂ × v̂)</div>
+<p>O coeficiente <i>C_L</i> cresce com o <b>parâmetro de spin</b> <i>Sp = r · |ω| / v</i> (ω é a rotação em rad/s). Usamos
+o ajuste de Kiratidis &amp; Leinweber (2018, Eq. 8): <i>C_L = 1,15 · Sp<sup>0,83</sup></i>, sem o fator de arrasto
+da Eq. 9 (simplificação registrada). Para um chute com 6 rotações por segundo a 30 m/s, Sp ≈ 0,14 e C_L ≈ 0,22.</p>
+<p>A rotação também aumenta o arrasto: <i>Cd += b · Sp</i> com b = 0,514 (Kiratidis Eq. 6, valor medido para a
+Teamgeist; a Brazuca não tem valor próprio no artigo).</p>
+
+<h2>3. A equação do movimento</h2>
+<p>Tomando o eixo z para cima, a aceleração da bola é:</p>
+<div class="eq">a = −g·ẑ − (ρA / 2m) · Cd(v, Sp) · |v| · v + (ρA / 2m) · C_L(Sp) · |v|² · (ω̂ × v̂)</div>
+<p>com g = 9,81 m/s², m = 0,43 kg (Kiratidis) e D = 0,22 m. A integração é numérica (RK45, <code>scipy.integrate.solve_ivp</code>).
+Antes do chute, a bola fica parada no chão. A partir do instante <i>t<sub>k</sub></i> do chute ela voa segundo a equação acima.</p>
+
+<h3>3.1 Constantes e fontes</h3>
+<table>
+<tr><th>grandeza</th><th>valor</th><th>fonte</th></tr>
+<tr><td>densidade do ar ρ</td><td>1,2 kg/m³</td><td>Aguiar (UFRJ); Kiratidis</td></tr>
+<tr><td>viscosidade μ</td><td>1,8·10⁻⁵ Pa·s</td><td>Aguiar (UFRJ)</td></tr>
+<tr><td>diâmetro D, raio r</td><td>0,22 m, 0,11 m</td><td>Aguiar; Kiratidis</td></tr>
+<tr><td>massa m</td><td>0,43 kg</td><td>Kiratidis (Asai &amp; Seo dão 0,428 a 0,438 kg)</td></tr>
+<tr><td>Cd(v), Brazuca</td><td>a = 0,4740; v<sub>c</sub> = 12,92; v<sub>s</sub> = 1,000; b<sub>min</sub> = 0,1657; b<sub>max</sub> = 0,2112; v<sub>min</sub> = 14,61; v<sub>max</sub> = 35,00 m/s</td><td>Kiratidis, Tabela 1 e Eq. 5</td></tr>
+<tr><td>termo de spin do Cd</td><td>b = 0,514</td><td>Kiratidis, Eq. 6 (valor da Teamgeist)</td></tr>
+<tr><td>C_L(Sp)</td><td>1,15 · Sp<sup>0,83</sup></td><td>Kiratidis, Eq. 8 (sem o fator de arrasto)</td></tr>
+</table>
+<p class="note">A tabela de Cd vai até 35 m/s. Acima disso, o código mantém o valor de 35 m/s e marca o trecho no
+relatório (<code>above_fit_range</code>).</p>
+
+<h2>4. Como o código ajusta a trajetória</h2>
+<p>As marcações de <code>getpixelvideo</code> dão, para cada frame, a posição da bola na imagem (u, v). Cada frame tem
+uma calibração DLT3D, uma matriz 3×4 P que leva um ponto (X, Y, Z) do campo, em metros, para a imagem. O ajuste procura
+a trajetória física que, projetada por P em cada frame, reproduz as marcações.</p>
+<p>Parâmetros ajustados (9):</p>
+<ul>
+  <li>posição inicial (x<sub>0</sub>, y<sub>0</sub>) no chão;</li>
+  <li>velocidade inicial (v<sub>x</sub>, v<sub>y</sub>, v<sub>z</sub>);</li>
+  <li>instante do chute t<sub>k</sub>;</li>
+  <li>vetor de rotação ω = (ω<sub>x</sub>, ω<sub>y</sub>, ω<sub>z</sub>). Sua direção e sua magnitude são inferidas: a curvatura
+  em X,Y aponta para o componente vertical do spin, e a curvatura em Z para os componentes horizontais.</li>
+</ul>
+<p>Resíduos minimizados (<code>scipy.optimize.least_squares</code>):</p>
+<ul>
+  <li><b>pixels</b>: erro de reprojeção de cada frame, com desvio de 2 px;</li>
+  <li><b>pé do chute</b> (frame 0): a bola começa onde está o pé do jogador (tornozelo esquerdo), desvio de 0,3 m;</li>
+  <li><b>barreira</b> (frame 9): a bola está a 1,8 m de altura e a 0,3 m, na horizontal, do ombro do jogador da barreira;
+  desvios de 0,1 m;</li>
+  <li><b>goleiro</b> (último frame): a bola chega ao ponto médio das mãos do goleiro, desvio de 0,2 m.</li>
+</ul>
+<p>O ajuste é repetido com três instantes de chute e três chutes iniciais de rotação (zero, e ±6 rps em torno do
+eixo vertical) para evitar um mínimo local. Vence o de menor custo.</p>
+<p>Uso no FreeKiki:</p>
+<div class="eq">uv run --no-sync vaila/freekiki.py ball-rebuild -w WS --out &lt;pasta 3D&gt; --ball-csv &lt;markers.csv&gt; \
+  --ball-anchors '{"kicker_id": 30, "barrier_id": 15, "keeper_id": 21}'</div>
+<p>Os IDs são os jogadores do clipe (campo <code>person_id</code> dos arquivos de pose). A saída inclui
+<code>ball_flight.json</code> com os parâmetros, as velocidades e os resíduos; o C3D da bola passa a ter a altura
+real.</p>
+
+<h2>5. Resultados no clipe c1 (Paquetá)</h2>
+<p>Dados: 31 frames a 29,97 fps, com DLT3D válida em todos os frames; marcações da bola corrigidas à mão.</p>
+<table>
+<tr><th>grandeza</th><th>resultado</th></tr>
+<tr><td>erro de reprojeção (rms / máximo)</td><td>1,58 px / 6,08 px (o ajuste balístico anterior, sem Magnus e com as âncoras, tinha 8,7 px)</td></tr>
+<tr><td>instante do chute</td><td>0,00 s (no limite inferior do intervalo: a bola sai do pé no frame 0)</td></tr>
+<tr><td>rotação inferida</td><td>4,9 rps, eixo (0,08; −0,04; −1,00): quase vertical, por isso a curva lateral</td></tr>
+<tr><td>velocidade de pico</td><td>32,8 m/s (dentro da faixa do Cd da Brazuca)</td></tr>
+<tr><td>velocidade no fim (frame 30)</td><td>22,8 m/s: queda de 30% pelo arrasto</td></tr>
+<tr><td>altura no frame 9</td><td>1,58 m (a barreira pede 1,8 m)</td></tr>
+<tr><td>altura máxima</td><td>2,07 m</td></tr>
+<tr><td>erro nas âncoras</td><td>pé: 0,63 m; barreira: 0,70 m na distância horizontal e 0,22 m na altura; goleiro: 1,02 m</td></tr>
+</table>
+<figure>
+  <img src="images/fisica_altura_velocidade.png" alt="Altura e velocidade ao longo do tempo">
+  <figcaption>Altura (acima) e velocidade (abaixo) da bola ajustada. A velocidade cai de forma contínua pelo arrasto.</figcaption>
+</figure>
+<figure>
+  <img src="images/fisica_trajetoria_topo.png" alt="Trajetória vista de cima">
+  <figcaption>Vista de cima. Os pontos cinza são a projeção no chão de cada pixel, o que assume a bola no chão e
+  portanto erra em voo. A curva azul é a trajetória ajustada, que reproduz os pixels com 1,6 px.</figcaption>
+</figure>
+<figure>
+  <img src="images/fisica_residuos_pixels.png" alt="Erro de reprojeção por frame">
+  <figcaption>Erro de reprojeção de cada frame, em px. O erro é baixo em todo o voo.</figcaption>
+</figure>
+
+<h2>6. Validação</h2>
+<h3>6.1 O integrador</h3>
+<p>Sem arrasto e sem Magnus, a simulação coincide com a solução analítica do lançamento oblíquo (x = v<sub>x</sub>t,
+z = v<sub>z</sub>t − g t²/2) com erro máximo de 6·10⁻¹⁴ m. O integrador está correto.</p>
+<h3>6.2 Recuperação de uma trajetória conhecida</h3>
+<p>Uma trajetória com spin de 5 rps foi projetada numa câmera conhecida, com ruído de 0,5 px. O ajuste recuperou a posição
+de todos os frames com erro menor que 0,25 m e a rotação com menos de 10% de erro. Esse teste está no repositório
+(<code>tests/test_freekiki_physics.py</code>).</p>
+<h3>6.3 O chute do Pelé (Aguiar, UFRJ)</h3>
+<p>O texto de Aguiar publica o início e o fim de um chute: de (−5,2; −2,9; 0) m com v = (27,8; −0,4; 8,8) m/s até
+(54,3; 3,7; 0) m em t = 3,20 s, com rotação de −6,11 Hz. Simulando com o nosso modelo:</p>
+<table>
+<tr><th>configuração</th><th>erro até o ponto publicado</th></tr>
+<tr><td>Brazuca, eixo de spin mais favorável</td><td>12,0 m</td></tr>
+<tr><td>coeficientes do próprio Aguiar (Cd = 0,15; C<sub>S</sub> = 1,25 · Sp)</td><td>9,7 m</td></tr>
+<tr><td>Brazuca com C<sub>S</sub> = 1,25 · Sp</td><td>9,9 m</td></tr>
+</table>
+<p class="warn">Esta validação <b>não passou</b> (a meta era 2 m). O integrador está correto (6.1), então a diferença
+vem de outra fonte: a convenção dos eixos e do sentido do spin no texto de Aguiar, a forma de reportar o ponto final
+ou um ajuste específico do chute publicado. Não consegui separar essas causas com os dados disponíveis.</p>
+
+<h2>7. O que foi simplificado</h2>
+<ul>
+  <li><b>Sustentação</b>: C<sub>L</sub> = 1,15·Sp<sup>0,83</sup>, sem o fator de arrasto (Kiratidis Eq. 9).</li>
+  <li><b>Spin no arrasto</b>: b = 0,514 é o valor medido na Teamgeist; a Brazuca não tem valor próprio no artigo.</li>
+  <li><b>Faixa de velocidade</b>: a tabela de Cd vai até 35 m/s. Acima disso, mantemos o valor de 35 m/s.</li>
+  <li><b>Quique e contato</b>: o voo é um único segmento. Quiques no chão e o contato com a barreira não são modelados.</li>
+  <li><b>Câmera única</b>: a profundidade é fraca. As âncoras físicas fixam essa profundidade, por isso a qualidade delas
+  pesa no resultado.</li>
+</ul>
+
+<h2>8. Limitações do resultado da c1</h2>
+<p>Os pixels são reproduzidos com 1,6 px, e a velocidade e a rotação têm ordem de grandeza plausível. Mas as três
+âncoras não são satisfeitas ao mesmo tempo: o pé fica 0,63 m longe, a barreira 0,70 m (na horizontal), e o goleiro
+1,02 m. Como o ajuste dá mais peso aos 31 frames de pixels do que às três âncoras, ele escolhe a trajetória que reproduz
+as marcações. Isso indica que pelo menos uma das três coisas está errada: a DLT3D deste clipe (escala ou posição da
+câmera, cerca de 1 m), os frames escolhidos para as âncoras (frame 9 e último frame) ou a posição dos jogadores no
+campo. Para decidir, falta conferir o clipe visualmente com a trajetória sobreposta.</p>
+<p>O instante do chute também fica no limite (0,00 s). Com um frame de resolução, isso é compatível com o chute no frame 0.</p>
+
+<h2>9. Referências</h2>
+<ol>
+  <li>Kiratidis, A. L.; Leinweber, D. B. <i>An Aerodynamic Analysis of Recent FIFA World Cup Balls</i>. arXiv:1710.02784v2, 2018.</li>
+  <li>Asai, T.; Seo, K. <i>Aerodynamic drag of modern soccer balls</i>. SpringerPlus 2:171, 2013.</li>
+  <li>Asai, T.; Seo, K.; Kobayashi, O.; Sakashita, R. <i>Fundamental aerodynamics of the soccer ball</i>. Sports Engineering 10, 101, 2007 (citado por Aguiar).</li>
+  <li>Aguiar, C. E. <i>Aerodinâmica da bola de futebol: da Copa de 70 à Jabulani</i>. UFRJ (material de aula, futebol2.pdf).</li>
+  <li>NASA, Glenn Research Center. <i>Drag</i> (página de aerodinâmica para estudantes, equação de arrasto e Reynolds).</li>
+  <li>Goff, J. E.; Carré, M. J. <i>Trajectory analysis of a soccer ball</i>. American Journal of Physics 77, 1020, 2009.</li>
+</ol>
+
+<p class="note">Figuras geradas por <code>docs/fisica_bola_figuras.py</code>, que lê a pasta reconstruída e não refaz o ajuste.</p>
+
+</body>
+</html>

@@ -28,8 +28,8 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 17 October 2026
-    Version: 0.4.9
+    Updated: 23 October 2026
+    Version: 0.4.11
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:

@@ -22,8 +22,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: 20 November 2025                                                            #
-# Update: 17 October 2026
-# Version: 0.4.9
+# Update: 23 October 2026
+# Version: 0.4.11
 # OS: macOS (Apple Silicon or Intel)                                                    #
 #########################################################################################
 
@@ -78,9 +78,9 @@ create_app_bundle() {
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.4.3</string>
+    <string>0.4.11</string>
     <key>CFBundleVersion</key>
-    <string>0.4.3</string>
+    <string>0.4.11</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.13</string>
     <key>LSApplicationCategoryType</key>

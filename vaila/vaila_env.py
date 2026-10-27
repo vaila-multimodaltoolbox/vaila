@@ -59,9 +59,23 @@ from pathlib import Path
 from tkinter import messagebox, ttk
 from typing import Any
 
-# Global application version and update date (matching vaila.py)
-VAILA_VERSION = "0.4.0"
-VAILA_UPDATE_DATE = "14 September 2026"
+# Release version and update date: read from pyproject.toml so this inspector
+# cannot drift from the package (it was stuck at 0.4.0 for weeks).
+_PYPROJECT = Path(__file__).resolve().parents[1] / "pyproject.toml"
+
+
+def _read_release_version() -> str:
+    import re
+
+    try:
+        m = re.search(r'^version\s*=\s*"([^"]+)"', _PYPROJECT.read_text(encoding="utf-8"), re.M)
+        return m.group(1) if m else "unknown"
+    except OSError:
+        return "unknown"
+
+
+VAILA_VERSION = _read_release_version()
+VAILA_UPDATE_DATE = "23 October 2026"
 
 # Key packages tracked in vailá
 CORE_PACKAGES: list[tuple[str, str]] = [
@@ -82,6 +96,10 @@ CORE_PACKAGES: list[tuple[str, str]] = [
     ("dask", "Parallel data processing for large files"),
     ("rich", "Terminal formatting & highlights"),
     ("tqdm", "Progress bars for batch processing"),
+    ("sam3", "SAM 3 text-prompt video segmentation (optional extra: sam)"),
+    ("sapiens", "Sapiens2 pose (optional extra: sapiens)"),
+    ("mhr", "MHR70 body model for SAM 3D Body (optional extra: fifa)"),
+    ("tensorrt", "TensorRT engines for YOLO inference (CUDA group)"),
 ]
 
 
@@ -267,6 +285,43 @@ def get_models_dir() -> Path:
     return candidate
 
 
+def _freekiki_status() -> dict[str, Any]:
+    """FreeKiki 49-point field networks live in the workspace, not in vaila/models.
+
+    The workspace path comes from FREEKIKI_WORKSPACE (or the default below). Nothing
+    is copied into the repository; a missing workspace is reported, not an error.
+    """
+    import os
+
+    ws = Path(os.environ.get("FREEKIKI_WORKSPACE", "/media/preto/Expansion/freekiki"))
+    items = []
+    for rel, label in (
+        ("models/freekiki_l.pt", "YOLO26-L pose, slot l (default detect)"),
+        ("models/freekiki_hm_hr32.pt", "HRNet-W32 heatmap, slot hm_hr32"),
+        ("models/freekiki_m.pt", "YOLO26-M pose (older)"),
+    ):
+        f = ws / rel
+        exists = f.is_file()
+        size = f.stat().st_size if exists else 0
+        items.append(
+            {
+                "name": label,
+                "rel_path": rel,
+                "abs_path": str(f),
+                "exists": exists,
+                "size": size,
+                "size_str": format_size(size),
+                "status": "Ready" if exists else "Missing",
+            }
+        )
+    return {
+        "workspace": str(ws),
+        "title": "FreeKiki - 49-point soccer-field keypoints (workspace)",
+        "items": items,
+        "has_any": any(it["exists"] for it in items),
+    }
+
+
 def get_ai_models_status() -> dict[str, Any]:
     """Scan and return status of all AI models in vaila/models/."""
     models_dir = get_models_dir()
@@ -417,6 +472,7 @@ def get_ai_models_status() -> dict[str, Any]:
 
     return {
         "models_dir": str(models_dir),
+        "freekiki": _freekiki_status(),
         "sam3": {
             "title": "SAM 3 - Meta Segment Anything Model 3",
             "items": sam3_items,
@@ -788,7 +844,7 @@ class VailaEnvGUI(tk.Toplevel):
         tree.heading("model", text="Model / Checkpoint")
         tree.heading("status", text="Status")
         tree.heading("size", text="Size")
-        tree.heading("rel_path", text="Relative Path (vaila/models/)")
+        tree.heading("rel_path", text="Relative Path (vaila/models/; FreeKiki: its workspace)")
 
         tree.column("category", width=180, anchor="w")
         tree.column("model", width=260, anchor="w")
@@ -798,6 +854,7 @@ class VailaEnvGUI(tk.Toplevel):
 
         models_info = get_ai_models_status()
         families = [
+            ("FreeKiki (workspace)", models_info["freekiki"]),
             ("SAM 3", models_info["sam3"]),
             ("SAM-3D-DINOv3", models_info["sam_3d_dinov3"]),
             ("Sapiens2", models_info["sapiens2"]),

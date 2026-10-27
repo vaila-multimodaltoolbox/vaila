@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<style>
+  :root { --ink:#14213d; --muted:#5b6577; --line:#d9dee7; --soft:#f3f5f9; --ball:#d62246; --wall:#14934b; }
+  @page { size: A4; margin: 13mm 14mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0; color:var(--ink); background:#fff; font-family: Inter, "Segoe UI", Roboto, system-ui, sans-serif; font-size:15px; line-height:1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { border-bottom: 3px solid var(--ink); padding-bottom: 14px; margin-bottom: 22px; }
+  .kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; color: var(--ball); font-weight: 700; }
+  h1 { font-size: 32px; line-height: 1.1; margin: 6px 0 8px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; }
+  h2 { font-size: 21px; margin: 30px 0 8px; break-after: avoid; }
+  h3 { font-size: 16px; margin: 20px 0 6px; break-after: avoid; }
+  p { margin: 0 0 10px; }
+  .lead { font-size: 17px; background: var(--soft); border-left: 5px solid var(--ball); padding: 14px 16px; border-radius: 4px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 6px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; break-inside: avoid; }
+  .card .n { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .card .n small { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .card .l { font-size: 13px; color: var(--muted); }
+  .card.hi { border-color: var(--ball); background: #fff5f7; }
+  figure { margin: 12px 0 6px; break-inside: avoid; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--line); }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .quotes { list-style: none; padding: 0; margin: 8px 0; }
+  .quotes li { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; break-inside: avoid; }
+  .quotes li::before { content: "“"; color: var(--ball); font-weight: 800; font-size: 22px; margin-right: 4px; line-height: 0; }
+  .warn { border: 1px solid #e8c48a; background: #fff8ec; border-radius: 8px; padding: 12px 16px; margin: 14px 0; break-inside: avoid; }
+  .note { border-left: 3px solid var(--wall); padding: 4px 12px; color: var(--muted); font-size: 14px; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; vertical-align: 2px; }
+  .tag.solid { background: #e3f4ea; color: #0d6b36; }
+  .tag.est { background: #fdeccf; color: #8a5300; }
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: 14px; }
+  dl.gloss dt { font-weight: 700; }
+  dl.gloss dd { margin: 0; }
+  ol.refs { font-size: 13.5px; color: var(--muted); padding-left: 20px; }
+  ol.refs li { margin-bottom: 4px; }
+  footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .pb { break-before: page; }
+  /* the editor: on screen only; the PDF is the report without it */
+  .editor { border-top: 2px solid var(--ink); margin-top: 28px; padding-top: 4px; }
+  .ed-table { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+  .ed-table th, .ed-table td { border-bottom: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: middle; }
+  .ed-table input { width: 84px; font: inherit; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; }
+  .ed-table td.ed-label { min-width: 200px; }
+  .editor button { font: inherit; padding: 6px 12px; border: 1px solid var(--ink); background: #fff; border-radius: 6px; cursor: pointer; color: var(--ink); }
+  .editor button.primary { background: var(--ink); color: #fff; }
+  .ed-out { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; }
+  .ed-out dt { font-weight: 700; }
+  .ed-out dd { margin: 0; }
+  .ed-plots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+  .ed-plots figure { margin: 0; }
+  .ed-plots canvas { width: 100%; height: auto; border: 1px solid var(--line); border-radius: 6px; }
+  #ed-json { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
+  #ed-status { color: var(--muted); margin-left: 8px; }
+  @media (max-width: 640px) { h1 { font-size: 26px; } .cards { grid-template-columns: repeat(2, 1fr); } .ed-plots { grid-template-columns: 1fr; } }
+  @media print { figure img { max-height: 80mm; width: auto; max-width: 100%; margin: 0 auto; } main { padding: 0; max-width: none; } body { font-size: 13.5px; } .lead { font-size: 15px; } .noprint { display: none !important; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="kicker">Football biomechanics · press report</div>
+  <h1>{{title}}</h1>
+  <p class="sub">{{subtitle}}</p>
+  <p class="sub">{{authors}}</p>
+</header>
+
+{{warn_block}}
+
+<p class="lead">The ball travelled <b>{{dist}} metres</b> in <b>{{flight}} s</b>, at an average speed of
+<b>about {{mean}} km/h</b>. It rose to <b>{{zmax}} metres</b>, was <b>{{wall_z}} metre</b> above the ground when it crossed the wall and reached the goal.
+After it passed the wall, the ball took about <b>{{after_wall}} seconds</b> to reach the entry.</p>
+
+<div class="cards">
+  <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l">distance from the kick to the entry into the goal <span class="tag solid">measured</span></div></div>
+  <div class="card"><div class="n">{{flight}} <small>s</small></div><div class="l">flight time of the ball <span class="tag solid">measured</span></div></div>
+  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l">average speed from the foot to the entry <span class="tag solid">measured</span></div></div>
+  <div class="card"><div class="n">{{launch}} <small>km/h</small></div><div class="l">speed leaving the foot <span class="tag est">estimate</span></div></div>
+  <div class="card"><div class="n">{{zmax}} <small>m</small></div><div class="l">maximum height of the ball <span class="tag est">estimate</span></div></div>
+  <div class="card"><div class="n">{{spin}} <small>rps</small></div><div class="l">spin of the ball, inferred from the curve <span class="tag est">estimate</span></div></div>
+</div>
+<p class="note">“Measured”: comes directly from the positions of the ball in the image and from the pitch lines. “Estimate”: depends on
+the physical model fitted to the trajectory; that is why we show the order of magnitude.</p>
+
+<h2>1. The path of the ball</h2>
+<p>The ball left {{kicker_phrase}} and reached the entry into the goal in {{flight}} s. Seen from above, it did not travel
+in a straight line: the colour shows the speed, from the fastest (yellow) to the slowest (red).</p>
+<figure>
+  <img src="{{img_vista_de_cima}}" alt="Top view of the trajectory of the ball, coloured by speed">
+  <figcaption>Top view of the reconstructed trajectory. Each dot is one frame of the broadcast (about 1/30 of a second). The green segment is the wall, between the two players; the orange path is the goalkeeper.<br>{{players_note}}</figcaption>
+</figure>
+
+<h2>2. Over the wall</h2>
+<p>The free kick is a geometry problem: the ball must rise enough to pass the wall, but come down in time to enter
+under the crossbar (2.44 m). According to the reconstruction, the ball reached <b>{{zmax}} metres</b> high, at about
+{{zmax_t}} seconds after the kick. When it crossed the wall, it was {{wall_z}} metre above the ground: {{wall_clear}} cm
+{{wall_side}} the top of the wall, which we took as 1.8 metres (a hypothesis).</p>
+<figure>
+  <img src="{{img_perfil}}" alt="Height of the ball against distance, with the wall and the crossbar">
+  <figcaption>Side view: height of the ball along the distance travelled, with the wall (hypothesis of 1.8 m) and the crossbar.</figcaption>
+</figure>
+
+<h2>3. A little more than a second</h2>
+<p>The ball took about {{wall_t}} seconds to reach the wall. When it passed it, it was travelling at about
+{{wall_kmh}} km/h. From there to the entry into the goal, the ball still moved {{wall_goal}} metres. Along the flight, the speed falls
+continuously: the ball loses speed to the air, and the air resistance is greater the faster the ball moves.</p>
+<figure>
+  <img src="{{img_tempo}}" alt="Speed of the ball, drag coefficient and Reynolds number over time">
+  <figcaption>Top: speed of the ball. Bottom: the drag coefficient (dark line) and the Reynolds number
+  (green dashed line), which shows the air regime the ball is in.</figcaption>
+</figure>
+
+<h2>4. The physics of the ball, explained</h2>
+<h3>4.1 The three forces</h3>
+<p>After the kick, the ball is under three forces. <b>Gravity</b> pulls it towards the ground, always at 9.81 m/s². <b>Drag</b>
+is the force of the air opposing the motion: it slows the ball down. The <b>Magnus effect</b> is the force that curves the ball:
+when it spins, the air is pushed to one side and the ball is pushed to the other. In the figure, the bars show the size of
+each force at three moments of the kick.</p>
+<figure>
+  <img src="{{img_forcas}}" alt="Bars with gravity, drag and the Magnus effect at three moments of the kick">
+  <figcaption>Acceleration caused by each force, in m/s², at three moments. Gravity is constant; drag and Magnus
+  change with the speed and with the spin.</figcaption>
+</figure>
+
+<h3>4.2 The drag crisis</h3>
+<p>The air reacts differently depending on the speed. For a football, the drag coefficient (Cd) is about 0.47 at lower
+speeds and drops to something between 0.12 and 0.20 at higher speeds. This drop is the <b>drag crisis</b>: the layer of air
+that clings to the ball becomes turbulent, separates further back and leaves a smaller wake, so the ball meets less
+resistance. In this kick, the Reynolds number of the ball stayed between {{re_min}} and {{re_max}} × 10⁵ (see the figure in section 3).
+According to Asai &amp; Seo (2013), the crisis happens at about 2 to 3 × 10⁵: above that, the air layer is already turbulent.</p>
+
+<h3>4.3 The spin that the image does not show directly</h3>
+<p>The camera does not clearly see the spin of the ball. But the curved trajectory reveals it: the whole ball, fitted to
+the pixels of the image, must curve the way it did. The fit inferred a spin of <b>{{spin}} revolutions per second</b>,
+with the spin axis {{spin_axis}}, which makes the ball curve to the sides. This is an <b>inference</b>, not a direct measurement.</p>
+
+<h3>4.4 How the trajectory was fitted to the image</h3>
+<p>Each frame of the broadcast has a camera calibration, obtained from the painted lines of the pitch, whose measures are
+known. With it, the position of the ball in each frame becomes a real position on the pitch. The physical trajectory (gravity,
+drag and Magnus) is fitted so as to reproduce these positions with a mean error of <b>{{rms}} pixel</b> in the image. In
+addition, three physical points of the kick enter as references: the ball starts on the kicker's foot, passes 1.8 m high
+0.3 m from the shoulder of a player in the wall, and reaches the keeper's hands. These positions are not reproduced exactly:
+the difference is discussed in section 6.</p>
+<figure>
+  <img src="{{img_residuos}}" alt="Error of each frame between the fitted trajectory and the marked points">
+  <figcaption>How far the fitted trajectory is from the marked points in each frame. The lower, the better.</figcaption>
+</figure>
+
+<h2>5. The curve</h2>
+<p>Imagine a taut string from the kicker's foot to the entry into the goal. The ball went a little outside that string and then
+came back inside. The largest offset was about <b>{{dev}} m</b>, at about {{dev_at}} m after the kick. This is the
+curve the ball made in the air, measured by its offset from the straight line.</p>
+<figure>
+  <img src="{{img_curva}}" alt="Sideways offset of the ball from the straight line of the kick to the entry">
+  <figcaption>Dashed line: the straight path from the kick to the entry. Curve: how far the ball moved to the side.</figcaption>
+</figure>
+
+<h2>6. What these numbers do not say</h2>
+<div class="warn">
+<ul>
+  <li><b>It is a reconstruction from a single camera.</b> There is no measurement with several cameras. Values marked as “estimate”
+  may change with a different fit; that is why we show ranges and orders of magnitude.</li>
+  <li><b>The spin is inferred, not measured.</b> The camera does not resolve the spin of the ball; the spin comes from the curve of the trajectory.</li>
+  <li><b>The validation with a published case did not pass.</b> We simulated the kick of Pelé published in the teaching material of
+  UFRJ (Aguiar), and the final point was about 10 to 12 metres away from the published one. The physics (forces, drag and Magnus)
+  follows the references, but this test shows that there are still differences of convention or of parameters.</li>
+  <li><b>The physical reference points may differ.</b> The foot, the wall and the goalkeeper are chosen from the reconstructed
+  players, and were not measured directly on the pitch. In this reconstruction, the difference between the fit and the reference
+  points is {{worst}} m in the worst case.</li>
+  <li><b>The height of the wall is a hypothesis</b> of 1.8 metres, and the trajectory over it depends on that choice.</li>
+  <li><b>The touch of the keeper was not modelled.</b> The trajectory treats the flight as free until the entry.</li>
+</ul>
+</div>
+
+<h2>7. Glossary</h2>
+<dl class="gloss">
+  <dt>Drag</dt><dd>the force of the air that opposes the motion of the ball.</dd>
+  <dt>Cd</dt><dd>drag coefficient: how much the shape of the ball and the air layer resist the motion.</dd>
+  <dt>Drag crisis</dt><dd>the drop of Cd when the air layer changes from laminar to turbulent.</dd>
+  <dt>Magnus effect</dt><dd>a force perpendicular to the motion, caused by the spin; it is what curves the ball.</dd>
+  <dt>Reynolds number</dt><dd>the ratio between the inertia and the viscosity of the air; it shows the flow regime.</dd>
+  <dt>Spin parameter (Sp)</dt><dd>how much the ball spins compared with how fast it moves.</dd>
+  <dt>DLT3D</dt><dd>the camera calibration that links points of the pitch, in metres, to pixels of the image, frame by frame.</dd>
+  <dt>rps</dt><dd>revolutions per second.</dd>
+</dl>
+
+<h2>8. References</h2>
+<ol class="refs">
+  <li>Kiratidis, A. L.; Leinweber, D. B. <i>An Aerodynamic Analysis of Recent FIFA World Cup Balls</i>. arXiv:1710.02784, 2018.</li>
+  <li>Asai, T.; Seo, K. <i>Aerodynamic drag of modern soccer balls</i>. SpringerPlus 2:171, 2013.</li>
+  <li>Asai, T.; Seo, K.; Kobayashi, O.; Sakashita, R. <i>Fundamental aerodynamics of the soccer ball</i>. Sports Engineering 10, 101, 2007.</li>
+  <li>Goff, J. E.; Carré, M. J. <i>Trajectory analysis of a soccer ball</i>. American Journal of Physics 77, 1020, 2009.</li>
+  <li>Aguiar, C. E. <i>Aerodinâmica da bola de futebol: da Copa de 70 à Jabulani</i>. Instituto de Física, UFRJ (teaching material, in Portuguese).</li>
+  <li>NASA Glenn Research Center. <i>Drag</i>: the drag equation and the Reynolds number, for students.</li>
+  <li>Technical documentation of the method: <i>docs/fisica_bola_freekiki.html</i> (vailá, 2026).</li>
+</ol>
+
+<h2>Ready-made quotes for the story</h2>
+<ul class="quotes">
+{{quotes}}
+</ul>
+
+<section class="editor noprint" id="editor">
+  <h2 id="ed-title-text">Adjust the anchors and recompute</h2>
+  <p>Change the positions (metres on the pitch) or the frames of the reference points and click Recompute. The
+  computation runs in this browser, with the same model as vailá. The numbers in the text above do not change: they come
+  from the original computation.</p>
+  <table class="ed-table">
+    <thead><tr><th>point</th><th>frame</th><th>x (m)</th><th>y (m)</th><th>z (m)</th><th>σ (m)</th><th></th></tr></thead>
+    <tbody id="ed-rows"></tbody>
+  </table>
+  <p style="margin-top:10px">
+    <button type="button" id="ed-add">+ Add anchor</button>
+    <button type="button" id="ed-recalc" class="primary">Recompute</button>
+    <button type="button" id="ed-reset">Restore originals</button>
+    <span id="ed-status" role="status"></span>
+  </p>
+  <dl class="ed-out" id="ed-out"></dl>
+  <div class="ed-plots">
+    <figure><canvas id="ed-top" width="640" height="380"></canvas><figcaption>Recomputed top view</figcaption></figure>
+    <figure><canvas id="ed-side" width="640" height="380"></canvas><figcaption>Recomputed side view</figcaption></figure>
+  </div>
+  <h3>Anchors as JSON (for the Rebuild ball button)</h3>
+  <textarea id="ed-json" rows="9" readonly></textarea>
+  <p><button type="button" id="ed-download">Download JSON</button></p>
+  <p class="note">Older points (without σ) use σ 0.3 m. The distance runs from the kick frame to the last frame with a marker.</p>
+</section>
+<script type="application/json" id="ed-data">{{editor_payload}}</script>
+<script>{{app_js}}</script>
+
+<footer>
+  Software: <i>vailá</i>, Multimodal Toolbox, free biomechanics software (github.com/vaila-multimodaltoolbox/vaila).<br>
+  Generated on {{generated}}. Slow-motion animation: {{animation}}.<br>
+  Fit confidence: {{tier}} · mean error in the image {{rms}} px · worst deviation from the references {{worst}} m.
+</footer>
+</main>
+</body>
+</html>

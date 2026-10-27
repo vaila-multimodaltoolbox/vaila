@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Sports Field Calibration
 - **File:** `vaila/freekiki.py`
-- **Version:** 0.4.9
-- **Updated:** 18 October 2026
+- **Version:** 0.4.11
+- **Updated:** 26 October 2026
 - **Author:** Paulo Santiago — paulosantiago@usp.br
 - **GUI Interface:** Yes (Tkinter) — **Frame B → Soccer Tools → FreeKiki (49 field KPs)**
 - **CLI Interface:** Yes
@@ -213,10 +213,98 @@ Browsing to a `.pt` inside a workspace fills that Workspace field automatically.
 **Init workspace**, dataset import, and training are only needed when creating
 a new workspace/model.
 
+## GUI step by step: section 5 (keypoints, then 3D)
+
+Section 5 runs the field keypoints and, optionally, the 3D chain. Open
+**Frame B → Soccer Tools → FreeKiki**, then scroll down to section 5. The window
+below shows where it sits (sections 1 to 5):
+
+![FreeKiki window with sections 1 to 5](../../docs/images/freekiki_gui_window.png)
+
+**Step 1 — choose the video and the output.**
+
+![Section 5: Workspace, Video, Output dir and Model](../../docs/images/freekiki_gui_s5_1_paths.png)
+
+- **Workspace (freekiki.toml)**: the FreeKiki workspace folder (pre-filled in the
+  screenshot).
+- **Video**: one video file, or a folder of videos (a folder runs as a batch).
+- **Output dir**: where the run folder goes. Leave it empty to use the video's folder.
+- **Model**: `active` is the default slot. Use another name only to compare models.
+
+**Step 2 — set the options.**
+
+![Section 5: Stride, Conf, KP conf, Geometry, Snap, Ball and Players on pitch only](../../docs/images/freekiki_gui_s5_2_options.png)
+
+- **Conf 0.25 and KP conf 0.5** are the defaults. Change them only after comparing on
+  the val split (section 4).
+- **Snap** (on): moves accepted keypoints onto the painted lines.
+- **Geometry** (`fill` by default): how the field camera fills or fixes keypoints.
+  See the table below. **It applies to the Detect button only.** Detect + 3D does not
+  read this box; it uses the workspace setting (`fill` by default).
+- **Ball** (`sam3` by default, or `net` / `off`):
+  - `sam3` — default. Needs `vaila/models/sam3/sam3.pt` (found the ball on all
+    421 frames of the test clip).
+  - `net` — the dedicated ball detector. It needs `<workspace>/models/ball.pt`,
+    which is not trained yet; the GUI refuses to run without it.
+  - `off` — no ball, only the field keypoints and the people.
+- **Players on pitch only**: on by default. Keeps only the people whose feet stay on the
+  pitch for at least half of their frames (the test clip kept 24 of 60 tracks). Untick to keep everyone.
+
+**Geometry choices**
+
+| Value | What it does | When to use it |
+|---|---|---|
+| `fill` | Fills missing keypoints from the fitted camera. Accepted points stay as they are. | Default. |
+| `fix` | Fills, and also replaces accepted points that disagree with the camera. | When the overlay shows points off the lines. |
+| `off` | Raw network output, no camera. | Only to compare with the network alone. |
+
+**Step 3 — press a button.**
+
+![Section 5 buttons: Detect, Detect + 3D, Correct in getpixelvideo](../../docs/images/freekiki_gui_s5_3_buttons.png)
+
+- **Detect**: field keypoints only. Writes the keypoint CSVs and, with **Overlay MP4**,
+  a video with the points drawn on it. Check this first.
+- **Detect + 3D**: runs Detect, then the 3D chain (DLT3D, SAM 3D Body, the ball, the
+  pitch filter and the C3D files). It needs CUDA. Expect about 40 minutes per clip for
+  SAM 3D Body, plus a few minutes for the ball.
+- **Correct in getpixelvideo**: opens the points in getpixelvideo to fix or mark them.
+
+**Step 4 — read the log and the outputs.** The log box prints each action as a
+terminal command (`>>`). For **Detect + 3D** the line contains `detect-soccer-3d` and
+the flags you chose, so you can rerun the same thing from the terminal. **Detect + 3D**
+writes one folder per video, `<output dir>/<video>_3d_<time>/`, with everything you
+need at its top level:
+
+| File | Content |
+|---|---|
+| `<video>_3d_overlay.mp4` | the full video: field keypoints (green lines and dots), the kept people's skeletons with their ID, and the ball with its score (green = score ≥ 0.5, yellow below) |
+| `field_kps_3d.csv` | the 49 field points per frame, in metres on the pitch, with the reprojection error |
+| `poses_3d_on_field.csv` | the keypoints of each kept person, in metres on the pitch |
+| `players_on_field.csv` | the pitch-gate verdict of every tracked person |
+| `ball.csv` | the ball in pixels from SAM 3 or the ball detector, one row per frame, with `score` |
+| `ball_3d_on_field.csv` | the ball on the ground plane, inside the pitch |
+| `ground_tracks.csv` | each kept person's ground point: the raw bottom centre of the box, and the smoothed track the poses are anchored on (see below) |
+| `<video>_topview.mp4` | top view animation: the field in metres, each person's path (coloured, with its ID) and the ball's path (yellow); `<video>_topview.png` is the last frame |
+| `field_ball.c3d` | the 49 field points and the ball, for a C3D viewer (metres, rate = video fps) |
+| `ball.c3d` | the ball alone, same rate; a frame without a ball is NaN and draws nothing |
+| `person_<id>.c3d` | one C3D file per kept person (a C3D file holds at most 255 marker names) |
+| each `person_<id>.c3d` also has a `P<id>_ground` marker: the smoothed ground point of that person |
+| `field_ball_c3d.csv`, `ball_c3d.csv`, `person_<id>_c3d.csv` | the same markers as the C3D files, one row per frame (`frame, time_s`, then `<label>_X, _Y, _Z` in metres; a missing sample is an empty cell) |
+| `README.txt` | what each file is, and the run summary |
+| `work/` | the intermediate files: the detect run (`freekiki_predict_*`), the SAM 3D Body output (`sam3dinov3/`), the focal array and the Vitruvian re-fit |
+
+A folder of videos writes one batch folder, `<output dir>/<folder>_3d_<time>/`, with
+one sub-folder per video (`<video>/`, same layout) and the shared intermediates under
+`work/`. The separate `detect-3d` command, run on an existing detect output, still
+writes to `<run>/detect3d/`.
+
+A ball with a low `score` is doubtful: filter it before using `ball_3d_on_field.csv`.
+
 ## GUI button ↔ CLI command
 
 Open the GUI with `uv run vaila.py` → **Frame B → Soccer Tools → FreeKiki**, or
-directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder.
+directly with `uv run vaila/freekiki.py`. `WS` is the workspace folder. The window has vertical and horizontal
+scrollbars (mouse wheel scrolls vertically, Shift + wheel horizontally) when it is taller or wider than the screen.
 
 | GUI section → button | Same thing from the terminal |
 |---|---|
@@ -563,8 +651,121 @@ keypoints, or confident ones that fit no pitch, so its detection and DLT are wor
 camera fitted to them with an `rmse` of at most 5 px and a height of 8-45 m). A video where fewer than 30 % of the
 sampled frames have a valid pitch camera is **skipped** (nothing is deleted) and listed in `skipped_videos.csv` of the
 batch folder with its rates and the reason. A single video that you name is still processed, with a warning.
-`--no-screen` runs everything; `--min-camera-ok 0.3` sets the share. On the five palxscri clips the two usable ones
+`--no-screen` runs everything; `--min-camera-ok 0.3` sets the share. The GUI shows a warning box at the end of a batch that skipped videos. On the five palxscri clips the two usable ones
 have 100 % valid frames and the three discarded ones 0 %; the 20 FIFA videos are all above 57 %.
+
+### 3D chain (`detect-3d`: DLT3D focal, SAM 3D Body, ball, players on the pitch)
+
+Run it on a finished `detect` run or batch folder (it needs that run's `.dlt3d` and `.dlt2d`):
+
+```bash
+uv run --no-sync vaila/freekiki.py detect-3d -w $WS --run DETECT_RUN_OR_BATCH \
+  --weights-dir WEIGHTS --players-on-field --field-min-frac 0.5 --ball net
+```
+
+`--ball` takes `off` (default), `net` (the dedicated ball detector, `<workspace>/models/ball.pt`) or `sam3`
+(the SAM 3 `sports ball` prompt, `vaila/models/sam3/sam3.pt`). Give `--ball-weights` to use other files.
+
+- **Focal per frame.** The focal length of each frame's DLT3D is written as `cam_int.npy` and passed to
+  `sam3dinov3` (`--cam-int-npy`), so SAM 3D Body gets a metric focal. The principal point stays at the image centre:
+  the full decomposition is unstable on broadcast footage (the principal point jumps by hundreds of pixels between
+  frames), so only the focal is trusted. Frames without a DLT3D use the default intrinsics.
+- **People.** `sam3dinov3` runs with the SAM 3 text prompt `--text` (default `person`). With `--players-on-field`,
+  a person is kept when the bottom centre of its box (the feet) lies inside the pitch for at least `--field-min-frac`
+  of its frames. The filter runs on the finished output: `players_on_field.csv` gives each track's verdict,
+  `players_on_field_camera.csv` and `poses_3d_on_field.csv` keep only the kept people.
+- **Ball.** `ball.csv` has one ball per frame (`cx, cy, x1, y1, x2, y2, score`). Frames with no ball have empty
+  fields. Filter by `score` before using it. `ball_3d_on_field.csv` keeps the ball inside the pitch (see below).
+- **Vitruvian re-fit.** Frames whose camera is a homography, a planar fit or nothing (`field_kps_geom_status.csv`,
+  column `camera`) have no off-ground keypoint to fix the height. For them the people's boxes give the vertical
+  scale: bottom centre = ground, top centre = head, height 1.80 m. The result goes to `vitruvian.dlt3d`
+  (`frame, L1..L11`) and `vitruvian_diagnostics.csv` (field residual per frame). The run's own `.dlt3d` is not changed,
+  and the SAM 3D Body focal of those frames is not re-run, so the 3D keypoints of those frames stay less precise.
+  Check the residual before trusting a refit frame.
+- **Ball track in getpixelvideo (manual correction).** Section 5 has a button, **Ball track in getpixelvideo**: it
+  writes `ball_for_correction.csv` in the newest 3D folder (the raw ball pixels, one row per frame) and opens
+  getpixelvideo on the video with that track loaded (`--track-csv`). Correct the ball there and Save; the file
+  `<video>_markers.csv` appears next to the video. Then run the 3D chain again on that corrected track:
+  `freekiki.py detect-3d --run <detect run> --ball-csv <markers.csv>`. A corrected point is accepted as it is (score 1.0)
+  and the physical smoothing still applies.
+- **Physical tracks.** The ball and each person's ground point are smoothed by a Kalman filter with random
+  acceleration and an RTS smoother (`freekiki_physics.py`). Outliers outside the prediction are rejected, a ball speed
+  is capped at 40 m/s, and a frame far from any measurement stays empty. The raw ball is kept in `ball_3d.csv`. A kick
+  in the air is projected to the ground plane, so its speed is capped rather than measured; check that part by eye or
+  correct it in getpixelvideo.
+- **Pitch-frame 3D.** Everything 3D is in metres on the pitch (origin at the centre, +x to the right goal, +y to the
+  far touchline, +z up), the frame of `kiki49`. The camera of every output is the run's `.dlt3d`, the one SAM 3D Body
+  used. Files:
+  - `field_kps_3d.csv`: the 49 field points per frame, with the projected pixel, the detected pixel and the
+    reprojection error `err_px` (empty when not detected).
+  - `poses_3d.csv` (all people) or `poses_3d_on_field.csv` (kept people with `--players-on-field`): one row per frame,
+    person and keypoint, `x_m, y_m, z_m`. `sam3dinov3` returns its points in the camera frame, so they are rotated into
+    the field with the DLT3D, then moved so the feet stand on the ground point under the box base.
+  - `ball_3d.csv` and `ball_3d_on_field.csv`: the ball centre on the ground plane, at the radius height (0.11 m).
+    `on_field` is True when that point is inside the pitch. A ball in the air projects lower than its real place.
+  - `field_ball.c3d` (labels `FKP_<name>` and `BALL`) and `person_<id>.c3d` (labels `P<id>_<keypoint>`, one file
+    per person), flat in the output folder: the same markers for a C3D viewer. One file holds at most 255 marker names (the C3D label limit), hence
+    the split. A missing marker in a frame is invalid (residual -1).
+  - Caveat: the pose height is smaller than the person's box. On the test clip the nose is about 1.4 m above the
+    anchored feet, against 1.8 m expected. The horizontal placement agrees with the box (about 2 px); the vertical
+    scale of the body model does not, so read pose heights with that in mind.
+
+Outputs go to `<run>/detect3d/` (the separate `detect-3d` command) or to the flat folder of **Detect + 3D**, which
+also writes the full overlay video `<video>_3d_overlay.mp4`. Needs CUDA and the SAM 3 / SAM 3D Body weights (see `sam3dinov3`).
+
+**Load previous result.** Section 5 has *Load previous result...*: pick a finished `<video>_3d_<time>` folder (or a
+detect run or batch). It fills the video, the output folder, the model, the detect options, *Players on pitch only*
+and the ball choice from that result, and *Correct in getpixelvideo*, *Ball track* and *Rebuild ball* then use that
+result instead of the newest folder. Nothing is recomputed. A folder rebuilt by *Rebuild ball* reads the detect run of
+its source folder.
+
+**Physics of the corrected ball.** A hand-corrected ball follows a fitted flight: drag with the Brazuca Cd(Re),
+Magnus lift from the spin, and the spin inferred from the pixels. Pass the three physical anchors with
+`--ball-anchors '{"kicker_id": 30, "barrier_id": 15, "keeper_id": 21}'` (the player IDs of the clip). The fit and its
+residuals go to `ball_flight.json`, and `<video>_flight_check.mp4` shows the fitted ball over the video: marked pixels in yellow, the fitted ball in red, the anchors as crosses. The anchors field is in section 5, next to *Players on pitch only*; leave it empty to keep the smoothed track. The full explanation, with the equations, the sources and the limits of this
+result, is in `docs/fisica_bola_freekiki.pdf` (HTML beside it).
+
+**Ball anchors: the dialog (*Ball anchors...*).** Open it after *Detect + 3D* (it reads the run's ball and
+players). It starts with three rows: the ball on the ground at the first frame (the kick), the ball in the air at
+the middle frame (height σ 0.8 m: you know it little), and the last ball position on the goal line. Each row says
+"the ball was at this point, in this frame". The source can be the ball itself (on the ground or with a height z),
+a keypoint of a kept player (choose the ID and the body part, e.g. left-ankle, left-wrist), or a point of the goal
+(centre on the ground or at the crossbar, a post, on the goal line at x = ±52,45 m). σ is how much you trust the
+point in metres: the larger it is, the less the fit obeys it. At least three rows are needed. *Save* writes the
+JSON into the *Ball anchors* field; then *Rebuild ball* uses it. The JSON accepts either these points,
+`{"points": [{"frame": 0, "xyz": [x, y, z], "sigma": 0.2, "label": "start"}, ...]}`, or the player form
+(`kicker_id`, `barrier_id`, `keeper_id`) of the earlier runs.
+
+**Report for the press (`report-tv`).** For a finished 3D run, the section 5 button *TV Report* (or `freekiki.py report-tv --run <3D folder> --names "<player>" --authors "<team>"`) writes `report_tv/` inside the run, with one folder per language: `pt/` (`relatorio_bola.html`, `relatorio_bola.pdf`, `animacao_lance.mp4`) and `en/` (`ball_report.html`, `ball_report.pdf`, `kick_animation.mp4`), each with its figures in `figuras/`. `--lang pt`, `--lang en` or `--lang both` (the default) chooses the languages; `--title` and `--subtitle` replace the default title of both. The report explains the physics in plain words, gives the numbers of the run, the references, the limits of the result and ready quotes. The animation is the broadcast in slow motion, with the fitted ball, the forces on it and the anchors drawn over it. The numbers come from the run's files only. The confidence warning at the top follows the anchor residuals: a *low* result is an estimate, and the text says so.
+
+**Editor in the report (HTML).** At the bottom of each HTML, the anchors are a table (point, frame, x, y, z, σ). Change them and click *Recompute*: the fit runs in the browser, with the same model as the physics module, and the panel shows the error in the image, the deviation at each anchor, the kick time, the spin, the peak speed and the distance. The text of the report does not change (it comes from the original run). *Download JSON* saves the anchors for *Rebuild ball*. Use `--no-animation` for the report alone.
+
+**Top view and people.** The top view of the report shows the goal area, the kicker, the two wall players nearest the ball at the wall frame (the green segment between them) and the goalkeeper with his path. The ids are found by the nearest point, and the report says which ids it used. `--kicker-id`, `--wall-ids 15,2` and `--keeper-id` replace them. The animation draws every point of the flight with the camera of the frame on screen, so the start of the path stays on the kicker's foot while the broadcast camera pans.
+
+**Correcting the ball.** In getpixelvideo, open the ball track (button *Ball track in getpixelvideo* in section 5),
+fix the points or mark the frames without a ball, and save: it writes `<video>_markers.csv` (`frame,p0_x,p0_y`).
+Then *Rebuild ball (after correction)* in section 5, or `freekiki.py ball-rebuild --out <3d folder> --ball-csv
+<markers.csv>`, writes a new `<video>_3d_<time>/` with the ball from your points (score 1.0). It reuses the `work/` of
+the folder, so it needs no GPU and does not run SAM 3D Body again. The physical smoothing still applies: a point it
+rejects leaves `ball_3d_on_field.csv` but stays in `ball.csv`.
+
+You can rebuild again after another correction. The new folder's README has a `work from:` line naming the folder
+that holds the `work/`, and the GUI moves to the new folder once the rebuild ends.
+
+### One command: detect, then the 3D chain (`detect-soccer-3d`)
+
+`detect-soccer-3d` runs section 5 (`detect`, with the tracking and calibration of the field) and then the 3D chain on
+its output, for one video or a folder:
+
+```bash
+uv run --no-sync vaila/freekiki.py detect-soccer-3d -w $WS --video VIDEO_OR_FOLDER \
+  --model active --sam-device cuda --players-on-field --ball net
+```
+
+`--device` is the FreeKiki detection device; `--sam-device` is the SAM 3D Body one. `--no-snap` and `--no-screen` are
+the same as in `detect`. In the GUI this is section 5 ("Soccer field: keypoints, then 3D"): choose the video, the
+model and the **Ball** mode (sam3 by default, or net / off); **Players on pitch only** is on by default, and press **Detect + 3D**.
+**Detect** alone gives only the field keypoints.
 
 ## Detect outputs
 

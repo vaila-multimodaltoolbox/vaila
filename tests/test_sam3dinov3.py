@@ -627,6 +627,19 @@ def test_worker_command_round_trips_flags(tmp_path: Path):
     assert "--save-mesh" not in plain_cmd
     assert "--focal-px" not in plain_cmd
     assert "--worker-sam-dir" not in plain_cmd
+    assert "--cam-int-npy" not in plain_cmd
+
+
+def test_worker_command_forwards_per_frame_intrinsics(tmp_path: Path):
+    # Regression: detect-3d passes --cam-int-npy; the isolated batch must forward it.
+    from vaila.sam3dinov3 import _build_parser, build_worker_command
+
+    npy = tmp_path / "cam_int.npy"
+    args = _build_parser().parse_args(
+        ["-i", "clip.mp4", "-o", str(tmp_path), "--cam-int-npy", str(npy)]
+    )
+    cmd = build_worker_command(Path("clip.mp4"), tmp_path, tmp_path / "clip", args, sam_dir=None)
+    assert cmd[cmd.index("--cam-int-npy") + 1] == str(npy)
 
 
 def test_parser_rejects_invalid_values(tmp_path: Path):

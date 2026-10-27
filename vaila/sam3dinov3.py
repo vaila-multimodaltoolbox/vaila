@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 24 September 2026
-Version: 0.4.5
+Update Date: 26 October 2026
+Version: 0.4.11
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -582,6 +582,28 @@ def load_sam3d_estimator(
     )
     _log("SAM 3D Body ready (detector/segmentor disabled; SAM3 supplies boxes+masks)")
     return estimator
+
+
+def _cam_int_for_frame(cam_seq: Any, frame_idx: int, default: Any) -> Any:
+    """Per-frame ``cam_int`` tensor from a ``(n, 3, 3)`` array, else ``default``.
+
+    A missing frame (out of range, or NaN in the array) keeps the fixed or
+    automatic intrinsics, so one frame without a DLT3D never stops the run.
+    """
+    if cam_seq is None or frame_idx >= len(cam_seq):
+        return default
+    K = cam_seq[frame_idx]
+    if not _finite_matrix(K):
+        return default
+    import torch
+
+    return torch.tensor(K, dtype=torch.float32).reshape(1, 3, 3)
+
+
+def _finite_matrix(K: Any) -> bool:
+    import numpy as np
+
+    return bool(np.isfinite(np.asarray(K, dtype=np.float64)).all())
 
 
 def build_cam_int(focal_px: float, width: int, height: int) -> Any:
@@ -1241,6 +1263,13 @@ def run_sam3d_from_sam(
     if args.focal_px is not None:
         cam_int = build_cam_int(float(args.focal_px), width, height)
         _log(f"Using fixed intrinsics: f={float(args.focal_px):.1f} px, principal point centred")
+    cam_seq = None
+    if getattr(args, "cam_int_npy", None):
+        import numpy as np
+
+        cam_seq = np.load(args.cam_int_npy)
+        usable = int(np.isfinite(cam_seq).all(axis=(1, 2)).sum()) if cam_seq.ndim == 3 else 0
+        _log(f"Per-frame intrinsics: {usable}/{len(cam_seq)} frames from {args.cam_int_npy}")
 
     writer = None
     overlay_path = output_dir / f"{stem}_sam3dinov3_overlay.mp4"
@@ -1305,7 +1334,7 @@ def run_sam3d_from_sam(
                             rgb,
                             bboxes=boxes,
                             masks=masks,
-                            cam_int=cam_int,
+                            cam_int=_cam_int_for_frame(cam_seq, frame_idx, cam_int),
                             use_mask=masks is not None,
                             inference_type=str(args.inference_type),
                         )
@@ -1585,6 +1614,8 @@ def build_worker_command(
     _add_if_value(cmd, "--worker-sam-dir", sam_dir)
     _add_if_value(cmd, "--weights-dir", args.weights_dir)
     _add_if_value(cmd, "--focal-px", args.focal_px)
+    # Per-frame intrinsics from the DLT3D: without this the isolated batch drops them.
+    _add_if_value(cmd, "--cam-int-npy", getattr(args, "cam_int_npy", None))
     _add_if_value(cmd, "--fov-estimator", args.fov_estimator or None)
     _add_if_value(cmd, "--sam-checkpoint", args.sam_checkpoint)
     _add_if_value(cmd, "--sam-max-frames", args.sam_max_frames)
@@ -2058,6 +2089,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "Known focal length in pixels for metric depth. Without it the model "
             "assumes a default FOV, so absolute depth inherits that assumption."
+        ),
+    )
+    parser.add_argument(
+        "--cam-int-npy",
+        default=None,
+        help=(
+            "Per-frame pinhole intrinsics, (n, 3, 3) float32 .npy, indexed by frame "
+            "(written by freekiki detect-3d from the field DLT3D). NaN frames fall back "
+            "to --focal-px or the default FOV."
         ),
     )
     parser.add_argument(

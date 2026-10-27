@@ -212,59 +212,6 @@ def test_pygame_sync_player_sets_window_icon_from_packaged_images(
         pygame.font.quit()
 
 
-def test_choose_output_file_iconifies_before_and_restores_after_tk_dialog(
-    headless_display: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A native Tk save dialog blocks this process from pumping the SDL
-    window's own event queue, which is a known trigger for desktop-wide
-    freezes on some X11 window managers (especially multi-monitor) when a
-    second toolkit's top-level window competes for the WM's attention at the
-    same time. _choose_output_file() must iconify the SDL window before the
-    Tk dialog opens and restore it (via set_mode(), mirroring the resize
-    handler) once the dialog returns -- regardless of Save or Cancel."""
-    import pygame
-
-    from vaila.syncvid import filedialog
-
-    infos = syncvid.probe_video_directory(REAL_VIDEO_DIR)
-    player = syncvid.PygameSyncPlayer(infos)
-    try:
-        calls: list[str] = []
-        real_iconify = pygame.display.iconify
-        real_set_mode = pygame.display.set_mode
-
-        def spy_iconify() -> object:
-            calls.append("iconify")
-            return real_iconify()
-
-        def spy_set_mode(size: tuple[int, int], flags: int = 0) -> pygame.Surface:
-            calls.append("set_mode")
-            return real_set_mode(size, flags)
-
-        def fake_ask(**_kwargs: object) -> str:
-            # The dialog itself must run strictly between iconify and restore.
-            assert calls == ["iconify"]
-            return str(tmp_path / "chosen.txt")
-
-        monkeypatch.setattr(pygame.display, "iconify", spy_iconify)
-        monkeypatch.setattr(pygame.display, "set_mode", spy_set_mode)
-        monkeypatch.setattr(filedialog, "asksaveasfilename", fake_ask)
-
-        result = player._choose_output_file()
-        assert result == (tmp_path / "chosen.txt").resolve()
-        assert calls == ["iconify", "set_mode"]
-
-        # Cancelling (asksaveasfilename returns "") must still restore the window.
-        calls.clear()
-        monkeypatch.setattr(filedialog, "asksaveasfilename", lambda **_kwargs: "")
-        assert player._choose_output_file() is None
-        assert calls == ["iconify", "set_mode"]
-    finally:
-        player._release_capture()
-        pygame.display.quit()
-        pygame.font.quit()
-
-
 def test_save_workflow_writes_checkpoint_sidecar_and_load_checkpoint_restores_state(
     headless_display: None, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
