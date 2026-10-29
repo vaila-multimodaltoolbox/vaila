@@ -293,7 +293,9 @@ def test_a_camera_with_its_kiki49_file_is_detected_by_hand_and_not_screened(
 
     def detect_video(ws, video, **kwargs):
         marked.append(kwargs.get("keypoints_csv"))
-        return network_detect(ws, video, **{"model": "active", **kwargs})
+        return network_detect(
+            ws, video, model="active", output_dir=kwargs["output_dir"], device=kwargs.get("device")
+        )
 
     monkeypatch.setattr(kp, "_screen_or_raise", screen)
     monkeypatch.setattr(fk, "detect_video", detect_video)
@@ -516,3 +518,25 @@ def test_the_cli_passes_the_set_piece_choice_and_refuses_others(
     assert seen["set_piece"] == "auto"
     with pytest.raises(SystemExit):
         fk.main([*argv, "--set-piece", "corner"])
+
+
+def test_a_figures_rewrite_keeps_the_sync_of_a_clip_without_sync_in_its_name(
+    tmp_path: Path, stubs: dict, monkeypatch
+) -> None:
+    video = tmp_path / "clip.mp4"  # no sync numbers in the name: the sync comes from the argument
+    video.write_bytes(b"")
+    (tmp_path / "clip_markers.csv").write_text("frame,p0_x,p0_y\n0,1,1\n", encoding="utf-8")
+    result = kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "kick", sync=(71, 63))
+    status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
+    assert status["sync"] == [71, 63]
+
+    seen: list = []
+    original = kp._analyses
+
+    def record(*args, **kwargs):
+        seen.append(kwargs.get("ref_sync"))
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(kp, "_analyses", record)
+    kp.regenerate_figures(result["out"])
+    assert seen == [(71, 63)]

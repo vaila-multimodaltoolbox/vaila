@@ -849,6 +849,9 @@ def regenerate_figures(
     if other3d is not None:
         other_video = Path(status["stages"][f"detect:{stems[1]}"]["inputs"]["video"]["path"])
     bino_dir = out / f"processed_rec3d_binocular_{ts}" if other3d is not None else None
+    # as in run_kick_analysis: the sync of a monocular clip whose name has none
+    sync = status.get("sync")
+    ref_sync = tuple(sync) if sync and other3d is None else None
     fps = _module("freekiki_detect3d")._video_fps(ref_video)
     found = _analyses(
         out, ref3d=ref3d, other3d=other3d, ref_work=out / "work" / ref_stem,
@@ -857,6 +860,7 @@ def regenerate_figures(
         kick_foot="auto", team_a=team_a, analysis=analysis,
         runner=lambda key, inputs, outputs, fn: fn(),
         setpiece=_chosen_setpiece(ref3d, _stored_choice(ref3d)),
+        ref_sync=ref_sync,
     )  # fmt: skip
     return {
         "out": str(out),
@@ -909,6 +913,8 @@ def run_kick_analysis(
         out = Path(out_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
     state = _State(out, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    # the sync given for a clip whose name has none: a figures rewrite needs it again
+    state.data["sync"] = list(sync) if sync is not None else None
     state.save()
     ts = state.ts
     work = out / "work"

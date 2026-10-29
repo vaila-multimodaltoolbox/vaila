@@ -1350,81 +1350,17 @@ def locate_3d_work(folder, video=None) -> WorkBundle | None:
             return None
         return WorkBundle(owner=owner, work=work, run_dir=run_dir, players_dir=players_dir)
 
-    # #region agent log
-    def _dbg(message: str, data: dict, hypothesis_id: str) -> None:
-        try:
-            import time
-
-            with open(
-                "/home/preto/data/vaila/.cursor/debug-a35129.log",
-                "a",
-                encoding="utf-8",
-            ) as _fh:
-                _fh.write(
-                    json.dumps(
-                        {
-                            "sessionId": "a35129",
-                            "timestamp": int(time.time() * 1000),
-                            "location": "freekiki_detect3d.py:locate_3d_work",
-                            "message": message,
-                            "data": data,
-                            "hypothesisId": hypothesis_id,
-                            "runId": "pre-fix",
-                        },
-                        default=str,
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-
-    # #endregion
-
-    local_work = folder / "work"
-    got = try_bundle(folder, local_work, folder)
-    # #region agent log
-    _dbg(
-        "try local work/",
-        {
-            "folder": str(folder),
-            "local_work": str(local_work),
-            "local_work_exists": local_work.is_dir(),
-            "sam3dinov3": (local_work / "sam3dinov3").is_dir(),
-            "ok": got is not None,
-        },
-        "A",
-    )
-    # #endregion
+    got = try_bundle(folder, folder / "work", folder)
     if got is not None:
         return got
 
     parent = folder.parent
     for name in dict.fromkeys([folder.name, stem]):
-        nested = parent / "work" / name
-        got = try_bundle(parent, nested, folder)
-        # #region agent log
-        _dbg(
-            "try batch parent work/<name>/",
-            {"name": name, "nested": str(nested), "exists": nested.is_dir(), "ok": got is not None},
-            "B",
-        )
-        # #endregion
+        got = try_bundle(parent, parent / "work" / name, folder)
         if got is not None:
             return got
 
     origin = _work_from(folder)
-    # #region agent log
-    _dbg(
-        "readme work from:",
-        {
-            "origin": str(origin) if origin is not None else None,
-            "origin_exists": bool(origin is not None and origin.is_dir()),
-            "origin_work": str(origin / "work") if origin is not None else None,
-            "origin_work_exists": bool(origin is not None and (origin / "work").is_dir()),
-        },
-        "C",
-    )
-    # #endregion
     if origin is not None and origin.is_dir():
         got = try_bundle(origin, origin / "work", origin)
         if got is not None:
@@ -1435,31 +1371,10 @@ def locate_3d_work(folder, video=None) -> WorkBundle | None:
                 return got
 
     if video_path is not None:
-        siblings = sorted(folder.parent.glob(f"{stem}_3d_*"), reverse=True)
-        # #region agent log
-        _dbg(
-            "try sibling *_3d_*",
-            {
-                "stem": stem,
-                "siblings": [
-                    {
-                        "path": str(s),
-                        "has_work": (s / "work").is_dir(),
-                        "has_sam": (s / "work" / "sam3dinov3").is_dir(),
-                    }
-                    for s in siblings
-                ],
-            },
-            "D",
-        )
-        # #endregion
-        for sib in siblings:
+        for sib in sorted(folder.parent.glob(f"{stem}_3d_*"), reverse=True):
             got = try_bundle(sib, sib / "work", sib)
             if got is not None:
                 return got
-    # #region agent log
-    _dbg("locate_3d_work failed", {"folder": str(folder), "stem": stem}, "E")
-    # #endregion
     return None
 
 
@@ -1544,9 +1459,11 @@ def rebuild_ball_3d(
     ``prev_dir`` is a ``<video>_3d_<time>`` folder (or a batch per-video child
     ``<batch>_3d_<ts>/<stem>/``), or one rebuilt from another, whose ``work/`` is
     found by :func:`locate_3d_work`. That ``work/`` (detect run, SAM 3D Body output,
-    focal, players) is read, not copied and not changed. The new folder is
-    ``<stem>_3d_<timestamp>`` next to ``prev_dir`` unless ``out_root`` is given; its README
-    names the folder that owns the ``work/`` in a ``work from:`` line, so it can be rebuilt again.
+    focal) is attached into the new folder: moved for flat single-video owners
+    (with a symlink left behind), or symlinked for batch nested trees. The new
+    folder is ``<stem>_3d_<timestamp>`` next to ``prev_dir`` unless ``out_root`` is
+    given; its README names the folder that owns the ``work/`` in a ``work from:``
+    line, so it can be rebuilt again even if an older sibling is deleted.
     """
     prev = Path(prev_dir)
     ball_csv = Path(ball_csv)
@@ -1562,55 +1479,18 @@ def rebuild_ball_3d(
         raise FileNotFoundError("The video is not in the README; pass --video")
     bundle = locate_3d_work(prev, video)
     if bundle is None:
-        # #region agent log
-        try:
-            import time
-
-            _origin = _work_from(prev)
-            with open(
-                "/home/preto/data/vaila/.cursor/debug-a35129.log",
-                "a",
-                encoding="utf-8",
-            ) as _fh:
-                _fh.write(
-                    json.dumps(
-                        {
-                            "sessionId": "a35129",
-                            "timestamp": int(time.time() * 1000),
-                            "location": "freekiki_detect3d.py:rebuild_ball_3d",
-                            "message": "bundle is None before raise",
-                            "data": {
-                                "prev": str(prev),
-                                "video": str(video),
-                                "work_from": str(_origin) if _origin else None,
-                                "work_from_exists": bool(_origin and _origin.is_dir()),
-                                "local_work": (prev / "work").is_dir(),
-                            },
-                            "hypothesisId": "C",
-                            "runId": "pre-fix",
-                        },
-                        default=str,
-                    )
-                    + "\n"
-                )
-        except Exception:
-            pass
-        # #endregion
+        missing = _work_from(prev)
+        hint = ""
+        if missing is not None and not missing.is_dir():
+            hint = (
+                f" README 'work from:' names {missing}, which is missing — "
+                "restore that folder (or its work/) and retry"
+            )
         raise FileNotFoundError(
             f"No work/ for {prev}: the folder has none, no batch parent "
             f"work/{video.stem}/, its 'work from:' folder has none, and no "
-            f"sibling {video.stem}_3d_* folder has one"
+            f"sibling {video.stem}_3d_* folder has one.{hint}"
         )
-    work = bundle.work
-    run_dir = bundle.run_dir
-    sam_out = work / "sam3dinov3"
-    camera_csv = _single(sorted(sam_out.rglob("*_sam3dinov3_camera.csv")), "camera csv")
-    if camera_csv is None:
-        raise FileNotFoundError(f"No sam3dinov3 camera csv in {sam_out}")
-    keypoints_csv = _single(
-        sorted(sam_out.rglob("*_sam3dinov3_keypoints3d.csv")), "keypoints3d csv"
-    )
-    dlt3d = _single(sorted(run_dir.glob("*.dlt3d")), "*.dlt3d")
     players_csv = bundle.players_dir / "players_on_field.csv"
     kept = _read_kept(players_csv)
 
@@ -1621,12 +1501,24 @@ def rebuild_ball_3d(
     stamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = Path(out_root) if out_root is not None else prev.parent / f"{video.stem}_3d_{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
+    # Move/symlink work into the new folder first so outputs stay rebuildable if
+    # the previous owner is deleted later.
+    work, work_owner_dir = _attach_work(out_dir, bundle.work, bundle.owner)
+    run_dir = _detect_run_dir(work, video.stem) or bundle.run_dir
+    sam_out = work / "sam3dinov3"
+    camera_csv = _single(sorted(sam_out.rglob("*_sam3dinov3_camera.csv")), "camera csv")
+    if camera_csv is None:
+        raise FileNotFoundError(f"No sam3dinov3 camera csv in {sam_out}")
+    keypoints_csv = _single(
+        sorted(sam_out.rglob("*_sam3dinov3_keypoints3d.csv")), "keypoints3d csv"
+    )
+    dlt3d = _single(sorted(run_dir.glob("*.dlt3d")), "*.dlt3d")
     if players_csv.is_file():
         (out_dir / "players_on_field.csv").write_bytes(players_csv.read_bytes())
     summary: dict = {
         "video": video.name,
         "rebuilt_from": str(prev),
-        "work_from": str(bundle.owner),
+        "work_from": str(work_owner_dir),
         "out": str(out_dir),
         "ball": {
             "mode": "corrected",

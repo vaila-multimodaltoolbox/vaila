@@ -8,6 +8,7 @@ the pitch / feet-on-field test, the ball row selection and the CSV helpers of
 from __future__ import annotations
 
 import csv
+import shutil
 from pathlib import Path
 
 import numpy as np
@@ -695,6 +696,26 @@ def _stub_outputs(monkeypatch: pytest.MonkeyPatch) -> None:
     )
 
 
+def test_rebuild_survives_deleting_the_previous_owner(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """After a rebuild, the new folder owns work/; deleting the old one is safe."""
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    origin = _write_3d_folder(tmp_path, video)
+    csv_path = tmp_path / "clip_markers.csv"
+    csv_path.write_text("frame,p0_x,p0_y\n0,100,200\n", encoding="utf-8")
+    _stub_outputs(monkeypatch)
+
+    first = d3.rebuild_ball_3d(origin, csv_path, timestamp="20260102_000000")
+    rebuilt1 = Path(first["out"])
+    shutil.rmtree(origin)
+    second = d3.rebuild_ball_3d(rebuilt1, csv_path, timestamp="20260103_000000")
+    rebuilt2 = Path(second["out"])
+    assert (rebuilt2 / "work" / "sam3dinov3").is_dir()
+    assert second["work_from"] == str(rebuilt2)
+
+
 def test_rebuild_twice_in_a_chain_reads_the_original_work(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -711,18 +732,23 @@ def test_rebuild_twice_in_a_chain_reads_the_original_work(
     origin_before = (origin / "README.txt").read_bytes()
     first = d3.rebuild_ball_3d(origin, csv_path, timestamp="20260102_000000")
     rebuilt1 = Path(first["out"])
-    assert "work from: " + str(origin) in (rebuilt1 / "README.txt").read_text(encoding="utf-8")
-    assert not (rebuilt1 / "work").exists()
+    # Flat owner: work/ moves into the new folder; origin keeps a symlink.
+    assert (rebuilt1 / "work").is_dir()
+    assert (rebuilt1 / "work" / "sam3dinov3").is_dir()
+    assert first["work_from"] == str(rebuilt1)
+    assert "work from: " + str(rebuilt1) in (rebuilt1 / "README.txt").read_text(encoding="utf-8")
+    assert (origin / "work").is_dir()  # symlink back to the moved tree
     assert (rebuilt1 / "players_on_field.csv").read_bytes() == (
         origin / "players_on_field.csv"
     ).read_bytes()
 
     second = d3.rebuild_ball_3d(rebuilt1, csv_path, timestamp="20260103_000000")
     rebuilt2 = Path(second["out"])
-    assert second["work_from"] == str(origin)  # the chain still points to the owner of work/
-    assert "work from: " + str(origin) in (rebuilt2 / "README.txt").read_text(encoding="utf-8")
+    assert second["work_from"] == str(rebuilt2)
+    assert (rebuilt2 / "work").is_dir()
+    assert "work from: " + str(rebuilt2) in (rebuilt2 / "README.txt").read_text(encoding="utf-8")
     assert (rebuilt2 / "players_on_field.csv").is_file()
-    assert (origin / "README.txt").read_bytes() == origin_before  # the owner is untouched
+    assert (origin / "README.txt").read_bytes() == origin_before  # the owner README is untouched
 
 
 def test_work_owner_follows_the_work_from_line_then_a_sibling(tmp_path: Path) -> None:
@@ -787,11 +813,14 @@ def test_rebuild_ball_uses_batch_nested_work(
 
     result = d3.rebuild_ball_3d(prev, ball_csv, video=video, timestamp="20260102_000000")
     out = Path(result["out"])
-    assert result["work_from"] == str(prev.parent)
+    # Batch nested work stays under the batch parent; rebuild gets a local symlink.
+    assert (out / "work").is_dir()
+    assert (prev.parent / "work" / video.stem).is_dir()
+    assert result["work_from"] == str(out)
     assert out.is_dir()
     assert (out / "ball.csv").is_file()
     assert (out / "players_on_field.csv").is_file()
-    assert "work from: " + str(prev.parent) in (out / "README.txt").read_text(encoding="utf-8")
+    assert "work from: " + str(out) in (out / "README.txt").read_text(encoding="utf-8")
 
 
 def test_a_hand_marked_ball_outside_the_pitch_keeps_its_frames() -> None:

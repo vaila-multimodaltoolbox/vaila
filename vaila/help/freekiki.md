@@ -777,8 +777,9 @@ JSON into the *Ball anchors* field; then *Rebuild ball* uses it. The JSON accept
 fix the points or mark the frames without a ball, and save: it writes `<video>_markers.csv` (`frame,p0_x,p0_y`).
 Then *Rebuild ball (after correction)* in section 5, or `freekiki.py ball-rebuild --out <3d folder> --ball-csv
 <markers.csv>`, writes a new `<video>_3d_<time>/` with the ball from your points (score 1.0). It reuses the `work/` of
-the folder, so it needs no GPU and does not run SAM 3D Body again. The physical smoothing still applies: a point it
-rejects leaves `ball_3d_on_field.csv` but stays in `ball.csv`.
+the folder, so it needs no GPU and does not run SAM 3D Body again. For a single-video run it **moves** `work/` into the
+new folder (and leaves a symlink at the old path), so you can delete older `_3d_*` siblings without breaking the next
+rebuild. The physical smoothing still applies: a point it rejects leaves `ball_3d_on_field.csv` but stays in `ball.csv`.
 
 You can rebuild again after another correction. The new folder's README has a `work from:` line naming the folder
 that holds the `work/`, and the GUI moves to the new folder once the rebuild ends.

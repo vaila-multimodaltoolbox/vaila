@@ -215,7 +215,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 28.Oct.2026 v0.4.12 (Python 3.12.15)
+vailá - 29.Oct.2026 v0.4.12 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -995,7 +995,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.12`** (28 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.12`** (29 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 
