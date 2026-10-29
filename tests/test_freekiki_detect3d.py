@@ -244,7 +244,8 @@ def test_detect_soccer_3d_chains_detect_then_3d(monkeypatch, tmp_path: Path) -> 
 
     def fake_detect_3d(run, **kwargs):
         calls["3d"] = {"run": run, **kwargs}
-        return [{"video": "clip.mp4"}]
+        # the real detect_3d returns one summary per video, with the folder it wrote ("out")
+        return [{"video": "clip.mp4", "out": str(kwargs["out_root"])}]
 
     monkeypatch.setattr(freekiki, "detect_videos", fake_detect_videos)
     monkeypatch.setattr(freekiki, "detect_3d", fake_detect_3d)
@@ -262,7 +263,7 @@ def test_detect_soccer_3d_chains_detect_then_3d(monkeypatch, tmp_path: Path) -> 
         snap=False,
     )
 
-    assert out == [{"video": "clip.mp4"}]
+    assert [result["video"] for result in out] == ["clip.mp4"]
     # The detection device and the SAM 3D Body device are separate options.
     assert calls["detect"]["device"] == "0"
     assert calls["detect"]["snap"] is False
@@ -310,7 +311,7 @@ def test_vitruvian_refit_recovers_a_planar_frame(tmp_path: Path) -> None:
         )
         for pid, (x, y) in enumerate(people):
             foot = project_dlt3d(L, np.array([[x, y, 0.0]]))[0]
-            head = project_dlt3d(L, np.array([[x, y, d3.VITRUVIAN_HEIGHT_M]]))[0]
+            head = project_dlt3d(L, np.array([[x, y, 1.83]]))[0]  # the height the fit assumes
             writer.writerow([0, pid, foot[0] - 15, head[1], foot[0] + 15, foot[1]])
 
     result = d3.vitruvian_refit(run, camera, tmp_path / "out")
@@ -408,7 +409,8 @@ def test_write_field_3d_writes_pitch_tables_and_c3d(tmp_path: Path) -> None:
     assert ball_only["parameters"]["POINT"]["LABELS"]["value"] == ["BALL"]
     # The pose stands on the pitch: the feet mean is on the ground under the box.
     row = [r for r in csv.DictReader(poses) if r["kpt_name"] == "nose"][0]
-    assert float(row["z_m"]) == pytest.approx(1.8, abs=1e-3)
+    # the nose is scaled to the stature prior: 1.83 m minus 0.10 m to the top of the head
+    assert float(row["z_m"]) == pytest.approx(1.83 - 0.10, abs=1e-3)
 
 
 @pytest.mark.parametrize("as_script", [False, True], ids=["package", "script"])
@@ -736,6 +738,62 @@ def test_work_owner_follows_the_work_from_line_then_a_sibling(tmp_path: Path) ->
     assert d3.work_owner(rebuilt, "other.mp4") is None
 
 
+def _write_batch_3d_layout(tmp_path: Path, video: Path) -> Path:
+    """Detect + 3D on a folder: outputs under <batch>_3d_<ts>/<stem>/, work under work/<stem>/."""
+    stem = video.stem
+    batch = tmp_path / "games_3d_20260101_000000"
+    out = batch / stem
+    out.mkdir(parents=True)
+    work = batch / "work" / stem
+    sam = work / "sam3dinov3" / stem
+    sam.mkdir(parents=True)
+    (sam / f"{stem}_sam3dinov3_camera.csv").write_text("frame,person_id\n", encoding="utf-8")
+    run = batch / "work" / "processed_freekiki_batch_1" / f"freekiki_predict_{stem}_1"
+    run.mkdir(parents=True)
+    header = "frame," + ",".join(f"L{i}" for i in range(1, 12))
+    row = ",".join(f"{v:.12g}" for v in _dlt3d_row(2400.0))
+    (run / f"{stem}.dlt3d").write_text(f"{header}\n0,{row}\n", encoding="utf-8")
+    (out / "ball.csv").write_text("frame,cx,cy,score\n0,1.0,2.0,0.9\n", encoding="utf-8")
+    (out / "players_on_field.csv").write_text(
+        "person_id,fraction,on,checked,keep\n1,1.0,32,32,True\n", encoding="utf-8"
+    )
+    (out / "README.txt").write_text(f"FreeKiki 3D output\nvideo: {video}\n", encoding="utf-8")
+    return out
+
+
+def test_work_owner_and_locate_find_batch_nested_work(tmp_path: Path) -> None:
+    video = tmp_path / "clip_a.mp4"
+    video.write_bytes(b"")
+    out = _write_batch_3d_layout(tmp_path, video)
+    batch = out.parent
+    assert d3.work_owner(out, video) == batch
+    bundle = d3.locate_3d_work(out, video)
+    assert bundle is not None
+    assert bundle.owner == batch
+    assert bundle.work == batch / "work" / video.stem
+    assert bundle.run_dir.name.startswith("freekiki_predict_clip_a_")
+    assert bundle.players_dir == out
+
+
+def test_rebuild_ball_uses_batch_nested_work(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    video = tmp_path / "clip_a.mp4"
+    video.write_bytes(b"")
+    prev = _write_batch_3d_layout(tmp_path, video)
+    ball_csv = tmp_path / "clip_a_markers.csv"
+    ball_csv.write_text("frame,p0_x,p0_y\n0,100,200\n", encoding="utf-8")
+    _stub_outputs(monkeypatch)
+
+    result = d3.rebuild_ball_3d(prev, ball_csv, video=video, timestamp="20260102_000000")
+    out = Path(result["out"])
+    assert result["work_from"] == str(prev.parent)
+    assert out.is_dir()
+    assert (out / "ball.csv").is_file()
+    assert (out / "players_on_field.csv").is_file()
+    assert "work from: " + str(prev.parent) in (out / "README.txt").read_text(encoding="utf-8")
+
+
 def test_a_hand_marked_ball_outside_the_pitch_keeps_its_frames() -> None:
     def row(f: int, x: float, y: float, on: bool) -> dict:
         return {"frame": f, "cx": "", "cy": "", "score": 1.0, "x_m": x, "y_m": y, "on_field": on}
@@ -874,3 +932,30 @@ def test_check_points_and_record_for_point_anchors() -> None:
     assert points[1]["frame"] == 9 and len(points[0]["color"]) == 3
     record = d3._anchor_points_record(anchors)
     assert record["p1"] == {"label": "meio", "frame": 9, "xyz": [-38.0, -14.0, 1.0]}
+
+
+def test_pose_rows_skip_a_frame_without_its_own_dlt(tmp_path: Path, monkeypatch) -> None:
+    """A frame with no DLT3D (dropped by the detect run) must not crash the pose stage.
+
+    The smoothed track can fill that frame; without a camera the pose cannot be placed on the
+    pitch, so the person is simply absent there (found in the one-click run on the veiga pair).
+    """
+    from vaila import freekiki_detect3d as d3
+
+    rows = ["frame,person_id,kpt_idx,kpt_name,xcam_m,ycam_m,zcam_m"]
+    for f in range(3):
+        rows.append(f"{f},0,0,nose,0.0,0.0,10.0")
+    csv_path = tmp_path / "kp3d.csv"
+    csv_path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    cameras = {0: np.zeros(11), 1: np.zeros(11)}  # frame 2 has no DLT3D
+    boxes = {(f, 0): np.array([0.0, 0.0, 10.0, 10.0]) for f in range(3)}
+    monkeypatch.setattr(d3, "box_ground", lambda L, box: (0.5, 0.5))
+    monkeypatch.setattr(
+        d3, "smooth_track", lambda pts, n, fps, model: dict.fromkeys(range(n), (1.0, 2.0))
+    )
+    monkeypatch.setattr(
+        d3, "pose_to_pitch", lambda names, xcam, L, box, ground_xy=None: np.zeros((len(names), 3))
+    )
+    poses, ground = d3._pose_rows(csv_path, cameras, boxes, None, 60.0, 3)
+    assert {r["frame"] for r in poses} == {0, 1}
+    assert {r["frame"] for r in ground} == {0, 1}

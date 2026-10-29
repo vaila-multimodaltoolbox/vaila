@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 27 October 2026
 Update Date: 27 October 2026
 
@@ -40,8 +40,8 @@ _STRINGS: dict[str, dict[str, str]] = {
             "goleiro diferem de 1 m ou mais. Trate altura, curva e velocidade como estimativas."
         ),
         "warn": (
-            "<b>Confiança {tier} no ajuste.</b> {tier_text} O maior desvio entre a trajetória e um ponto "
-            "físico do lance é de {worst} m. Veja a seção “O que estes números não dizem”."
+            "<b>Confiança {tier} no ajuste.</b> {tier_text} O maior desvio entre a trajetória e {reference} "
+            "é de {worst} m. Veja a seção “O que estes números não dizem”."
         ),
         "kicker_of": "do pé de {name}",
         "kicker_default": "do pé do jogador que bateu a falta",
@@ -109,6 +109,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "anchor_start": "início: bola no pé",
         "anchor_middle": "meio: bola no ar",
         "anchor_barrier": "barreira: bola sobre a barreira",
+        "anchor_contact": "início: contato do pé",
+        "anchor_wall_plane": "barreira: plano a 9,15 m",
+        "anchor_entry": "chegada: entrada no gol",
         "anchor_end": "chegada: mãos do goleiro",
         "anchor_goal": "chegada: gol",
         "anchor_kicker": "pé do chutador",
@@ -130,7 +133,64 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "top_how_auto": "Identificados pelo ponto mais próximo; --kicker-id, --wall-ids e --keeper-id trocam.",
         "top_how_manual": "Informados por --kicker-id, --wall-ids e --keeper-id.",
+        "top_how_map": (
+            "Mesmo ID nas duas câmeras: goleiro 0, cobrador 1, demais pela distância do pé à bola no contato."
+        ),
         "top_none": "Sem jogadores identificados no run (falta poses_3d_on_field.csv).",
+        "ref_anchors": "um ponto físico do lance",
+        "ref_binocular": "a posição triangulada pelas duas câmeras",
+        "ref_auto": "um ponto de referência da imagem",
+        "method_anchors": (
+            "Cada quadro da transmissão tem uma calibração da câmera, obtida pelas linhas pintadas do campo, "
+            "de medidas conhecidas. Com ela, a posição da bola em cada quadro vira uma posição real no campo. "
+            "A trajetória física (a gravidade, o arrasto e o Magnus) é ajustada de modo a reproduzir essas "
+            "posições com um erro médio de <b>{rms} pixel</b> na imagem. Além disso, três pontos físicos do lance "
+            "entram como referência: a bola começa no pé do chutador, passa a 1,8 m de altura a 0,3 m do ombro de "
+            "um jogador da barreira, e chega às mãos do goleiro. Essas posições não são reproduzidas exatamente: a "
+            "diferença está na seção 6."
+        ),
+        "method_binocular": (
+            "Cada quadro da transmissão tem uma calibração da câmera, obtida pelas linhas pintadas do campo. A bola "
+            "foi vista por <b>duas câmeras ao mesmo tempo</b>: em cada quadro, a posição é triangulada pelos dois "
+            "pontos de vista, e a trajetória física (a gravidade, o arrasto e o Magnus) é ajustada aos pixels das "
+            "duas câmeras, com um erro médio de <b>{rms} pixel</b>. Assim a altura da bola é medida, e não suposta. "
+            "A linha da barreira é marcada no ponto a 9,15 m do chute, onde a bola está nesse ajuste."
+        ),
+        "refs_anchors": (
+            "<b>Os pontos físicos de referência podem diferir.</b> O pé, a barreira e o goleiro são escolhidos a "
+            "partir dos jogadores reconstruídos, e não medidos diretamente no campo. Nesta reconstrução, a diferença "
+            "entre o ajuste e os pontos de referência é de {worst} m no pior caso."
+        ),
+        "refs_binocular": (
+            "<b>A posição é triangulada, não medida no campo.</b> Cada ponto vem de duas câmeras calibradas pelas "
+            "linhas do campo. A diferença entre o ajuste físico e a triangulação de cada quadro é de {worst} m no "
+            "pior caso (percentil 90). Os jogadores não entram como referência."
+        ),
+        "wall_anchors": "<b>A altura da barreira é uma hipótese</b> de 1,8 metro, e a trajetória sobre ela depende dessa escolha.",
+        "wall_binocular": (
+            "<b>A altura da barreira é uma hipótese</b> de 1,8 metro. A altura da bola no plano de 9,15 m é medida "
+            "pelas duas câmeras, mas isso não diz se ela passou sobre a barreira real."
+        ),
+        "ed_disabled": "Editor indisponível para a reconstrução com duas câmeras.",
+        "ed_disabled_auto": "Editor indisponível: o lance foi ajustado automaticamente (contato e chegada detectados).",
+        "method_auto": (
+            "Cada quadro da transmissão tem uma calibração da câmera, obtida pelas linhas pintadas do campo. Com "
+            "ela, a bola vira uma posição no campo. Uma só câmera não mede a profundidade, então a altura da bola "
+            "vem da física: a trajetória (gravidade, arrasto e Magnus) é ajustada aos pixels, com erro médio de "
+            "<b>{rms} pixel</b>. O lance começa no <b>contato do pé</b>, quando a bola sai do repouso; antes disso "
+            "ela está parada e não entra no cálculo. O lance termina na <b>entrada no gol</b>, pela homografia do "
+            "plano da baliza, ou nas <b>mãos do goleiro</b>, no último quadro."
+        ),
+        "refs_auto": (
+            "<b>Os pontos de referência vêm da própria imagem.</b> O repouso é a bola parada antes do contato, e a "
+            "entrada no gol é medida pela homografia do plano da baliza. A diferença entre o ajuste e os pontos de "
+            "referência é de {worst} m no pior caso."
+        ),
+        "wall_auto": (
+            "<b>A altura da barreira é uma hipótese</b> de 1,8 metro. A linha da barreira é marcada no ponto a "
+            "9,15 m do chute, onde a bola está nesse ajuste monocular; uma câmera não diz se ela passou sobre a "
+            "barreira real."
+        ),
         "ed_title": "Ajustar as âncoras e refazer o cálculo",
         "ed_intro": (
             "Mude as posições (metros no campo) ou os quadros dos pontos de referência e clique em "
@@ -180,8 +240,8 @@ _STRINGS: dict[str, dict[str, str]] = {
             "the wall and the goalkeeper differ by 1 m or more. Treat height, curve and speed as estimates."
         ),
         "warn": (
-            "<b>Fit confidence: {tier}.</b> {tier_text} The largest deviation between the trajectory and a "
-            "physical point of the kick is {worst} m. See “What these numbers do not say”."
+            "<b>Fit confidence: {tier}.</b> {tier_text} The largest deviation between the trajectory and "
+            "{reference} is {worst} m. See “What these numbers do not say”."
         ),
         "kicker_of": "from the foot of {name}",
         "kicker_default": "from the foot of the kicker",
@@ -249,6 +309,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "anchor_start": "start: ball on kick foot",
         "anchor_middle": "middle: ball in the air",
         "anchor_barrier": "barrier: ball over the wall",
+        "anchor_contact": "start: foot contact",
+        "anchor_wall_plane": "wall: the 9.15 m plane",
+        "anchor_entry": "end: goal entry",
         "anchor_end": "end: keeper's hands",
         "anchor_goal": "end: goal",
         "anchor_kicker": "kicker's foot",
@@ -270,7 +333,65 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "top_how_auto": "Found by the nearest point; --kicker-id, --wall-ids and --keeper-id replace them.",
         "top_how_manual": "Given by --kicker-id, --wall-ids and --keeper-id.",
+        "top_how_map": (
+            "Same ID in both cameras: goalkeeper 0, kicker 1, the rest by the distance of the foot to the ball at contact."
+        ),
         "top_none": "No people identified in the run (poses_3d_on_field.csv is missing).",
+        "ref_anchors": "a physical point of the kick",
+        "ref_binocular": "the position triangulated by the two cameras",
+        "ref_auto": "a reference point of the image",
+        "method_anchors": (
+            "Each frame of the broadcast has a camera calibration, obtained from the painted lines of the pitch, "
+            "whose measures are known. With it, the position of the ball in each frame becomes a real position on "
+            "the pitch. The physical trajectory (gravity, drag and Magnus) is fitted so as to reproduce these "
+            "positions with a mean error of <b>{rms} pixel</b> in the image. In addition, three physical points of "
+            "the kick enter as references: the ball starts on the kicker's foot, passes 1.8 m high 0.3 m from the "
+            "shoulder of a player in the wall, and reaches the keeper's hands. These positions are not reproduced "
+            "exactly: the difference is discussed in section 6."
+        ),
+        "method_binocular": (
+            "Each frame of the broadcast has a camera calibration, obtained from the painted lines of the pitch. The "
+            "ball was seen by <b>two cameras at the same time</b>: in each frame its position is triangulated from "
+            "both views, and the physical trajectory (gravity, drag and Magnus) is fitted to the pixels of both "
+            "cameras, with a mean error of <b>{rms} pixel</b>. The height of the ball is therefore measured, not "
+            "assumed. The wall line is marked at the point 9.15 m from the kick, where the ball is in this fit."
+        ),
+        "refs_anchors": (
+            "<b>The physical reference points may differ.</b> The foot, the wall and the goalkeeper are chosen from "
+            "the reconstructed players, and were not measured directly on the pitch. In this reconstruction, the "
+            "difference between the fit and the reference points is {worst} m in the worst case."
+        ),
+        "refs_binocular": (
+            "<b>The position is triangulated, not measured on the pitch.</b> Each point comes from two cameras "
+            "calibrated by the pitch lines. The difference between the physical fit and the triangulation of each "
+            "frame is {worst} m in the worst case (90th percentile). The players are not references."
+        ),
+        "wall_anchors": "<b>The height of the wall is a hypothesis</b> of 1.8 metres, and the trajectory over it depends on that choice.",
+        "wall_binocular": (
+            "<b>The height of the wall is a hypothesis</b> of 1.8 metres. The height of the ball on the 9.15 m plane "
+            "is measured by the two cameras, but that does not say whether it passed over the real wall."
+        ),
+        "ed_disabled": "Editor unavailable for the two-camera reconstruction.",
+        "ed_disabled_auto": "Editor unavailable: the kick was fitted automatically (contact and arrival detected).",
+        "method_auto": (
+            "Each frame of the broadcast has a camera calibration, obtained from the painted lines of the pitch. "
+            "With it, the ball becomes a position on the pitch. A single camera does not measure depth, so the "
+            "height of the ball comes from the physics: the trajectory (gravity, drag and Magnus) is fitted to the "
+            "pixels, with a mean error of <b>{rms} pixel</b>. The kick starts at the <b>foot contact</b>, when the "
+            "ball leaves rest; before that the ball is still and is not part of the calculation. The kick ends at "
+            "the <b>goal entry</b>, by the homography of the goal plane, or at the <b>keeper's hands</b>, in the last "
+            "frame."
+        ),
+        "refs_auto": (
+            "<b>The reference points come from the image itself.</b> The rest point is the still ball before the "
+            "contact, and the goal entry is measured by the homography of the goal plane. The difference between "
+            "the fit and the reference points is {worst} m in the worst case."
+        ),
+        "wall_auto": (
+            "<b>The height of the wall is a hypothesis</b> of 1.8 metres. The wall line is marked at the point "
+            "9.15 m from the kick, where the ball is in this monocular fit; one camera does not say whether it "
+            "passed over the real wall."
+        ),
         "ed_title": "Adjust the anchors and recompute",
         "ed_intro": (
             "Change the positions (metres on the pitch) or the frames of the reference points and click "
@@ -313,14 +434,17 @@ _STRINGS: dict[str, dict[str, str]] = {
 
 # The anchor labels of the first version (Portuguese and English), mapped to the keys above.
 _ANCHOR_KEYS = (
+    ("contato do pé", "anchor_contact"),
     ("início", "anchor_start"),
     ("start", "anchor_start"),
     ("meio", "anchor_middle"),
     ("middle", "anchor_middle"),
+    ("plano a 9,15", "anchor_wall_plane"),
     ("barreira", "anchor_barrier"),
     ("barrier", "anchor_barrier"),
     ("chegada: gol", "anchor_goal"),
     ("end: goal", "anchor_goal"),
+    ("entrada no gol", "anchor_entry"),
     ("chegada", "anchor_end"),
     ("end:", "anchor_end"),
     ("keeper", "anchor_end"),

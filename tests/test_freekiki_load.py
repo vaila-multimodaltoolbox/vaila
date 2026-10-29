@@ -67,6 +67,28 @@ def test_3d_folder_gives_its_run_video_and_pitch_and_ball_choices(tmp_path: Path
     assert got["ball_mode"] == "sam3"
 
 
+def test_3d_folder_finds_detect_run_nested_in_batch_under_work(tmp_path: Path) -> None:
+    """Detect+3D stores freekiki_predict_* under work/processed_freekiki_batch_*/."""
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"v")
+    prev = tmp_path / "clip_3d_20261028_224028"
+    batch = prev / "work" / "processed_freekiki_batch_20261028_224028"
+    run = _run(batch, "freekiki_predict_clip_20261028_224033")
+    (run / "README.txt").write_text(
+        DETECT_README.replace("/data/clip.mp4", str(video)), encoding="utf-8"
+    )
+    prev.mkdir(exist_ok=True)
+    (prev / "README.txt").write_text(
+        f"FreeKiki 3D output (vailá)\nvideo: {video}\nball: {{'mode': 'sam3'}}\n",
+        encoding="utf-8",
+    )
+    got = freekiki.read_result_settings(prev)
+    assert got is not None
+    assert got["run"] == str(run)
+    assert freekiki.resolve_detect_predictions(tmp_path, video) == run.resolve()
+    assert freekiki.resolve_detect_predictions(prev, video) == run.resolve()
+
+
 def test_corrected_ball_does_not_change_the_ball_choice(tmp_path: Path) -> None:
     prev = tmp_path / "clip_3d_20260101_000000"
     _run(prev / "work")

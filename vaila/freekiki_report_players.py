@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 27 October 2026
 Update Date: 27 October 2026
 
@@ -26,7 +26,7 @@ Description:
 from __future__ import annotations
 
 import csv
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import numpy as np
@@ -60,6 +60,31 @@ class People:
     wall: list[int]
     keeper: int | None
     manual: bool = False  # True when any role was given by the user instead of found
+    names: dict[int, int] = field(default_factory=dict)  # SAM id -> player_id (the player map)
+    source: str = "nearest"  # how the roles were found: "nearest", "manual" or "map"
+
+
+def load_camera_roles(run_dir) -> dict:
+    """This camera's roles from its ``player_map.csv``: the keeper and kicker SAM ids and the SAM
+    id -> player_id names. ``{}`` when the run has no player map (see ``freekiki_player_ids``)."""
+    path = Path(run_dir) / "player_map.csv"
+    if not path.is_file():
+        return {}
+    out: dict = {"names": {}}
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            sam, pid = int(row["sam_id"]), int(row["player_id"])
+            out["names"][sam] = pid
+            if row["role"] == "keeper":
+                out["keeper_id"] = sam
+            elif row["role"] == "kicker":
+                out["kicker_id"] = sam
+    return out
+
+
+def _name(people: People, pid: int) -> int:
+    """The id to show for a SAM id: its player_id when the run has a player map."""
+    return people.names.get(pid, pid)
 
 
 def load_ground_tracks(run_dir, n: int) -> dict[int, np.ndarray]:
@@ -142,14 +167,17 @@ def people_note(people: People | None, lang: str) -> str:
     """One line for the caption: which ids were drawn and how they were found."""
     if people is None or (people.kicker is None and not people.wall and people.keeper is None):
         return tr(lang, "top_none")
-    wall = ", ".join(str(p) for p in people.wall) or "—"
-    how = tr(lang, "top_how_manual" if people.manual else "top_how_auto")
+    wall = ", ".join(str(_name(people, p)) for p in people.wall) or "—"
+    if people.source == "map":
+        how = tr(lang, "top_how_map")
+    else:
+        how = tr(lang, "top_how_manual" if people.manual else "top_how_auto")
     return tr(
         lang,
         "top_note",
-        kicker="—" if people.kicker is None else str(people.kicker),
+        kicker="—" if people.kicker is None else str(_name(people, people.kicker)),
         wall=wall,
-        keeper="—" if people.keeper is None else str(people.keeper),
+        keeper="—" if people.keeper is None else str(_name(people, people.keeper)),
         how=how,
     )
 
@@ -198,12 +226,12 @@ def draw_people(
             )
         now = min(max(frame, kick_f), end_f)
         if np.isfinite(arr[now]).all():
-            _mark(ax, arr[now], KEEPER, tr(lang, "top_keeper", id=people.keeper), lang,
+            _mark(ax, arr[now], KEEPER, tr(lang, "top_keeper", id=_name(people, people.keeper)), lang,
                   labels=labels, dx=10, dy=-16)  # fmt: skip
     if people.kicker is not None and people.kicker in tracks:
         arr = tracks[people.kicker]
         if np.isfinite(arr[kick_f]).all():
-            _mark(ax, arr[kick_f], KICKER, tr(lang, "top_kicker", id=people.kicker), lang,
+            _mark(ax, arr[kick_f], KICKER, tr(lang, "top_kicker", id=_name(people, people.kicker)), lang,
                   labels=labels, dx=-40, dy=-18)  # fmt: skip
     wall_pts = [tracks[p][barrier_f] for p in people.wall if p in tracks]
     wall_pts = [w for w in wall_pts if np.isfinite(w).all()]
@@ -214,8 +242,9 @@ def draw_people(
         _mark(ax, xy, WALL, "", lang, labels=labels)
     if wall_pts and labels:
         mid = np.mean(np.array(wall_pts), axis=0)
-        text = (tr(lang, "top_wall", a=people.wall[0], b=people.wall[1])
-                if len(wall_pts) == 2 else tr(lang, "top_wall_one", a=people.wall[0]))  # fmt: skip
+        w0 = _name(people, people.wall[0])
+        text = (tr(lang, "top_wall", a=w0, b=_name(people, people.wall[1]))
+                if len(wall_pts) == 2 else tr(lang, "top_wall_one", a=w0))  # fmt: skip
         ax.annotate(text, mid, xytext=(14, 10), textcoords="offset points", color=WALL,
                     fontsize=9, fontweight="bold", zorder=8)  # fmt: skip
 

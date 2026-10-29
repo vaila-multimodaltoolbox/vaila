@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 26 October 2026
-Update Date: 27 October 2026
+Update Date: 28 October 2026
 
 Description:
     The broadcast video of the kick, every frame slowed down about five times, with the
@@ -343,7 +343,9 @@ def _minimap(fig, run: Any, m: dict, f: int, lang: str, people: Any = None) -> N
     xy = run.track[kf : ef + 1, :2]
     if not np.isfinite(xy).all():
         return
-    ax = fig.add_axes((0.015, 0.09, 0.23, 0.28))
+    # Bottom-right corner. set_aspect("equal") shrinks the axes; set_anchor("SE") keeps
+    # the shrunk box pinned low instead of floating up in the middle of the slot.
+    ax = fig.add_axes((0.755, 0.015, 0.23, 0.20))
     ax.set_facecolor("white")
     draw_goal_area(ax, run.track[ef, :2])
     ax.plot(xy[:, 0], xy[:, 1], color="#d62246", lw=2, zorder=3)
@@ -357,6 +359,7 @@ def _minimap(fig, run: Any, m: dict, f: int, lang: str, people: Any = None) -> N
     ax.set_xlim(extent[:, 0].min() - pad, extent[:, 0].max() + pad)
     ax.set_ylim(extent[:, 1].min() - pad, extent[:, 1].max() + pad)
     ax.set_aspect("equal")
+    ax.set_anchor("SE")
     ax.set_xticks([])
     ax.set_yticks([])
     ax.set_title(tr(lang, "vid_minimap"), fontsize=8)

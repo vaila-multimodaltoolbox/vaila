@@ -646,6 +646,28 @@ def test_detect_runs_finds_freekiki_predict_and_prefers_newer_stamp(tmp_path):
     assert old.is_dir()
 
 
+def test_resolve_detect_predictions_from_parent_of_3d_nested_batch(tmp_path):
+    """Correct often passes the folder next to the video (parent of *_3d_*), not the predict run."""
+    video = tmp_path / "c1_main.mp4"
+    video.write_bytes(b"v")
+    three_d = tmp_path / "c1_main_3d_20261028_224028"
+    batch = three_d / "work" / "processed_freekiki_batch_20261028_224028"
+    run = _detect_run(
+        batch / "freekiki_predict_c1_main_20261028_224033", video, "/models/freekiki_m.pt"
+    )
+    (three_d / "README.txt").write_text(
+        f"FreeKiki 3D output (vailá)\nvideo: {video}\n", encoding="utf-8"
+    )
+    assert freekiki.resolve_detect_predictions(tmp_path, video) == run.resolve()
+    assert freekiki.resolve_detect_predictions(three_d, video) == run.resolve()
+    opts = freekiki.freekiki_run_options(tmp_path)
+    assert opts["predictions"] == str(run.resolve())
+    empty = tmp_path / "elsewhere" / "empty"
+    empty.mkdir(parents=True)
+    with pytest.raises(ValueError, match="No freekiki detect run"):
+        freekiki.resolve_detect_predictions(empty, video)
+
+
 def test_run_video_follows_a_moved_video_and_run_options(tmp_path):
     ws = freekiki.init_workspace(tmp_path / "ws")
     model = ws / "models" / "freekiki_m.pt"

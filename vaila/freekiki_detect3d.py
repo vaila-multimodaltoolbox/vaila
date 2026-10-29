@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 25 October 2026
-Update Date: 26 October 2026
+Update Date: 29 October 2026
 
 Description:
     Runs on the output of a finished ``detect`` run (or batch) and adds, per video:
@@ -44,6 +44,7 @@ from __future__ import annotations
 import csv
 import json
 import re
+import shutil
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
@@ -53,6 +54,7 @@ from pathlib import Path
 import numpy as np
 
 try:
+    from .freekiki_auto_flight import auto_flight, auto_rows_and_record
     from .freekiki_ball import (
         ball_candidates_net,
         ball_candidates_video,
@@ -83,10 +85,15 @@ try:
     from .freekiki_physics import BALL_MODEL, PLAYER_MODEL, fit_flight, smooth_track
     from .freekiki_players import PITCH_HALF_LENGTH_M, PITCH_HALF_WIDTH_M, homography_from_dlt2d
     from .freekiki_players import players_on_field as pitch_verdicts
+    from .freekiki_stature import apply_stature_scale
     from .freekiki_topview import write_topview
     from .monocular_dlt_align import dlt_projection_matrix
     from .soccerfield_vitruvian_dlt3d import fit_vitruvian_frame
 except ImportError:
+    from freekiki_auto_flight import (  # ty: ignore[unresolved-import]
+        auto_flight,
+        auto_rows_and_record,
+    )
     from freekiki_ball import (  # ty: ignore[unresolved-import]
         ball_candidates_net,
         ball_candidates_video,
@@ -129,6 +136,7 @@ except ImportError:
         homography_from_dlt2d,
     )
     from freekiki_players import players_on_field as pitch_verdicts  # ty: ignore[unresolved-import]
+    from freekiki_stature import apply_stature_scale  # ty: ignore[unresolved-import]
     from freekiki_topview import write_topview  # ty: ignore[unresolved-import]
     from monocular_dlt_align import dlt_projection_matrix  # ty: ignore[unresolved-import]
     from soccerfield_vitruvian_dlt3d import fit_vitruvian_frame  # ty: ignore[unresolved-import]
@@ -228,7 +236,7 @@ def _filter_person_csv(src: Path, dst: Path, kept: set[int]) -> Path:
     return dst
 
 
-VITRUVIAN_HEIGHT_M = 1.80  # a person's height, the vertical scale when the boxes give no better one
+VITRUVIAN_HEIGHT_M = 1.83  # the stature prior, freekiki_stature.STATURE_M
 WEAK_CAMERAS = frozenset({"homography", "planar", "none"})
 
 
@@ -339,6 +347,15 @@ def vitruvian_refit(run_dir: Path, camera_csv: Path, out_dir: Path) -> dict:
 
 
 POSE_COLUMNS = ["frame", "person_id", "kpt_idx", "kpt_name", "x_m", "y_m", "z_m"]
+STATURE_COLUMNS = [
+    "person_id",
+    "frames",
+    "nose_median_raw_m",
+    "scale",
+    "stature_before_m",
+    "stature_after_m",
+    "flag",
+]
 GROUND_COLUMNS = ["frame", "person_id", "raw_x_m", "raw_y_m", "x_m", "y_m"]
 GROUND_KPT_IDX = 999  # index of the "ground" marker, after the 70 MHR keypoints
 BALL_MODES = ("off", "net", "sam3")
@@ -420,7 +437,9 @@ def _pose_rows(
     ground_rows: list[dict] = []
     for (frame, pid), people in sorted(groups.items()):
         track = tracks.get(pid, {})
-        if frame not in track:
+        # a frame without its own DLT3D (or ground point) has no camera to place the pose
+        # on the pitch; the smoothed track can still fill it, so it is skipped here
+        if frame not in track or frame not in raw_ground.get(pid, {}):
             continue
         L = cameras[frame]
         box = boxes[(frame, pid)]
@@ -1001,6 +1020,10 @@ def write_field_3d(
         }
         pose_rows, ground_rows = _pose_rows(keypoints_csv, cameras, boxes, kept, rate_hz, n_frames)
         write_table(out_dir / "ground_tracks.csv", GROUND_COLUMNS, ground_rows)
+        stature = apply_stature_scale(pose_rows)
+        write_table(
+            out_dir / "stature_by_person.csv", STATURE_COLUMNS, [asdict(s) for s in stature]
+        )
         # The smoothed ground point is also a marker of each person ("ground"), for the C3D.
         pose_rows += [
             {
@@ -1020,7 +1043,21 @@ def write_field_3d(
     ball_all = ball_3d(ball_rows, cameras)
     write_table(out_dir / "ball_3d.csv", BALL_3D_COLUMNS, ball_all)
     flight_summary: dict | None = None
-    if ball_trusted and ball_anchors is not None:
+    auto = None
+    pixels_all = {
+        int(r["frame"]): (float(r["cx"]), float(r["cy"])) for r in ball_rows if r["cx"] != ""
+    }
+    if ball_anchors is None and pixels_all:
+        auto = auto_flight(ball_all, pixels_all, cameras, pose_rows, rate_hz, n_frames)
+    if auto is not None:
+        ball_on, record = auto_rows_and_record(auto, pixels_all, n_frames)
+        (out_dir / "ball_flight.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
+        flight_summary = {k: record[k] for k in ("kick_time_s", "spin_rps", "rms_px", "max_px")}
+        flight_summary["anchor_residuals"] = record["anchor_residuals"]
+        flight_summary["peak_speed_mps"] = record["peak_speed_mps"]
+        flight_summary["arrival"] = record["arrival"]["type"] if record["arrival"] else None
+        _log(f"ball flight (monocular, automatic anchors): {flight_summary}")
+    elif ball_trusted and ball_anchors is not None:
         if isinstance(ball_anchors, BallAnchorPoints):
             anchors = anchors_from_points(ball_anchors)
         else:
@@ -1261,26 +1298,236 @@ def _work_from(folder: Path) -> Path | None:
     return None
 
 
+@dataclass(frozen=True)
+class WorkBundle:
+    """Resolved work tree for a 3D result folder (single-video or batch nested)."""
+
+    owner: Path
+    work: Path
+    run_dir: Path
+    players_dir: Path
+
+
+def _detect_run_dir(work: Path, stem: str) -> Path | None:
+    """``freekiki_predict_*`` for ``stem`` under ``work`` or a sibling batch detect folder."""
+    named = sorted(p for p in work.glob(f"freekiki_predict_{stem}_*") if p.is_dir())
+    if named:
+        return named[-1]
+    any_runs = sorted(p for p in work.glob("freekiki_predict_*") if p.is_dir())
+    if len(any_runs) == 1:
+        return any_runs[0]
+    # Batch Detect + 3D: work is <batch>/work/<stem>; detects sit under
+    # <batch>/work/processed_freekiki_batch_*/freekiki_predict_<stem>_*.
+    search_roots = [work]
+    if work.parent.name == "work":
+        search_roots.append(work.parent)
+    matches: list[Path] = []
+    for root in search_roots:
+        matches.extend(
+            p for p in root.glob(f"processed_freekiki_*/freekiki_predict_{stem}_*") if p.is_dir()
+        )
+        matches.extend(p for p in root.glob(f"freekiki_predict_{stem}_*") if p.is_dir())
+    unique = sorted(set(matches))
+    return unique[-1] if unique else None
+
+
+def locate_3d_work(folder, video=None) -> WorkBundle | None:
+    """Find SAM 3D Body work + detect run for a 3D folder (flat or batch nested).
+
+    Single-video layout: ``<stem>_3d_<ts>/work/{{sam3dinov3,freekiki_predict_*}}``.
+    Batch layout: ``<batch>_3d_<ts>/<stem>/`` with intermediates in
+    ``<batch>_3d_<ts>/work/<stem>/`` and detects in ``work/processed_freekiki_batch_*/``.
+    """
+    folder = Path(folder)
+    video_path = Path(video) if video else _video_from_readme(folder)
+    stem = video_path.stem if video_path is not None else folder.name
+
+    def try_bundle(owner: Path, work: Path, players_dir: Path) -> WorkBundle | None:
+        if not work.is_dir() or not (work / "sam3dinov3").is_dir():
+            return None
+        run_dir = _detect_run_dir(work, stem)
+        if run_dir is None:
+            return None
+        return WorkBundle(owner=owner, work=work, run_dir=run_dir, players_dir=players_dir)
+
+    # #region agent log
+    def _dbg(message: str, data: dict, hypothesis_id: str) -> None:
+        try:
+            import time
+
+            with open(
+                "/home/preto/data/vaila/.cursor/debug-a35129.log",
+                "a",
+                encoding="utf-8",
+            ) as _fh:
+                _fh.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a35129",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "freekiki_detect3d.py:locate_3d_work",
+                            "message": message,
+                            "data": data,
+                            "hypothesisId": hypothesis_id,
+                            "runId": "pre-fix",
+                        },
+                        default=str,
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+
+    # #endregion
+
+    local_work = folder / "work"
+    got = try_bundle(folder, local_work, folder)
+    # #region agent log
+    _dbg(
+        "try local work/",
+        {
+            "folder": str(folder),
+            "local_work": str(local_work),
+            "local_work_exists": local_work.is_dir(),
+            "sam3dinov3": (local_work / "sam3dinov3").is_dir(),
+            "ok": got is not None,
+        },
+        "A",
+    )
+    # #endregion
+    if got is not None:
+        return got
+
+    parent = folder.parent
+    for name in dict.fromkeys([folder.name, stem]):
+        nested = parent / "work" / name
+        got = try_bundle(parent, nested, folder)
+        # #region agent log
+        _dbg(
+            "try batch parent work/<name>/",
+            {"name": name, "nested": str(nested), "exists": nested.is_dir(), "ok": got is not None},
+            "B",
+        )
+        # #endregion
+        if got is not None:
+            return got
+
+    origin = _work_from(folder)
+    # #region agent log
+    _dbg(
+        "readme work from:",
+        {
+            "origin": str(origin) if origin is not None else None,
+            "origin_exists": bool(origin is not None and origin.is_dir()),
+            "origin_work": str(origin / "work") if origin is not None else None,
+            "origin_work_exists": bool(origin is not None and (origin / "work").is_dir()),
+        },
+        "C",
+    )
+    # #endregion
+    if origin is not None and origin.is_dir():
+        got = try_bundle(origin, origin / "work", origin)
+        if got is not None:
+            return got
+        for name in dict.fromkeys([folder.name, stem]):
+            got = try_bundle(origin, origin / "work" / name, folder)
+            if got is not None:
+                return got
+
+    if video_path is not None:
+        siblings = sorted(folder.parent.glob(f"{stem}_3d_*"), reverse=True)
+        # #region agent log
+        _dbg(
+            "try sibling *_3d_*",
+            {
+                "stem": stem,
+                "siblings": [
+                    {
+                        "path": str(s),
+                        "has_work": (s / "work").is_dir(),
+                        "has_sam": (s / "work" / "sam3dinov3").is_dir(),
+                    }
+                    for s in siblings
+                ],
+            },
+            "D",
+        )
+        # #endregion
+        for sib in siblings:
+            got = try_bundle(sib, sib / "work", sib)
+            if got is not None:
+                return got
+    # #region agent log
+    _dbg("locate_3d_work failed", {"folder": str(folder), "stem": stem}, "E")
+    # #endregion
+    return None
+
+
 def work_owner(folder, video=None) -> Path | None:
     """The 3D folder whose ``work/`` holds the detect run, SAM 3D Body output and focal.
 
-    In order: ``folder`` itself; the ``work from:`` folder of its README (written when a
-    folder is rebuilt); else the newest sibling ``<stem>_3d_*`` of ``video`` that has a
-    ``work/``. None when there is none.
+    In order: ``folder`` itself; a batch parent (``parent/work/<stem>/``); the
+    ``work from:`` folder of its README; else the newest sibling ``<stem>_3d_*``
+    of ``video`` that has a ``work/``. None when there is none.
     """
     folder = Path(folder)
     if (folder / "work").is_dir():
         return folder
+    bundle = locate_3d_work(folder, video)
+    if bundle is not None:
+        return bundle.owner
     origin = _work_from(folder)
     if origin is not None and (origin / "work").is_dir():
         return origin
     if not video:
+        # Batch child without a resolved video: parent/work/<folder.name> still counts.
+        nested = folder.parent / "work" / folder.name
+        if nested.is_dir():
+            return folder.parent
         return None
     siblings = sorted(
         (f for f in folder.parent.glob(f"{Path(video).stem}_3d_*") if (f / "work").is_dir()),
         reverse=True,
     )
-    return siblings[0] if siblings else None
+    if siblings:
+        return siblings[0]
+    nested = folder.parent / "work" / Path(video).stem
+    if nested.is_dir() or (folder.parent / "work" / folder.name).is_dir():
+        return folder.parent
+    return None
+
+
+def _attach_work(out_dir: Path, work: Path, owner: Path) -> tuple[Path, Path]:
+    """Put a usable ``work/`` in ``out_dir`` and return ``(work, work_owner)``.
+
+    Flat single-video runs store intermediates in ``owner/work/``. A ball rebuild
+    used to leave only a README ``work from:`` pointer, so deleting the owner
+    broke every later rebuild. For that layout, move ``work/`` into ``out_dir``
+    and leave a symlink at the old path so anything still pointing at the owner
+    keeps working. Batch nested trees (``owner/work/<stem>/``) stay shared via
+    symlink — moving would break sibling videos.
+    """
+    out_dir = Path(out_dir)
+    work = Path(work).resolve()
+    owner = Path(owner)
+    dest = out_dir / "work"
+    if dest.exists():
+        return dest.resolve(), out_dir
+    owner_work = owner / "work"
+    flat_owner_work = owner_work.is_dir() and work == owner_work.resolve()
+    if flat_owner_work and owner.resolve() != out_dir.resolve():
+        shutil.move(str(work), str(dest))
+        try:
+            owner_work.symlink_to(dest.resolve(), target_is_directory=True)
+        except OSError:
+            pass
+        return dest.resolve(), out_dir
+    try:
+        dest.symlink_to(work, target_is_directory=True)
+    except OSError:
+        # Last resort: share by reference only (README work from: still names owner).
+        return work, owner
+    return dest.resolve(), out_dir if dest.is_dir() else owner
 
 
 def rebuild_ball_3d(
@@ -1294,8 +1541,9 @@ def rebuild_ball_3d(
 ) -> dict:
     """Rebuild only the ball-dependent outputs from a 3D folder and a corrected ball.
 
-    ``prev_dir`` is a ``<video>_3d_<time>`` folder: itself, or one rebuilt from another, whose
-    ``work/`` is found by :func:`work_owner`. That ``work/`` (detect run, SAM 3D Body output,
+    ``prev_dir`` is a ``<video>_3d_<time>`` folder (or a batch per-video child
+    ``<batch>_3d_<ts>/<stem>/``), or one rebuilt from another, whose ``work/`` is
+    found by :func:`locate_3d_work`. That ``work/`` (detect run, SAM 3D Body output,
     focal, players) is read, not copied and not changed. The new folder is
     ``<stem>_3d_<timestamp>`` next to ``prev_dir`` unless ``out_root`` is given; its README
     names the folder that owns the ``work/`` in a ``work from:`` line, so it can be rebuilt again.
@@ -1312,17 +1560,49 @@ def rebuild_ball_3d(
     video = Path(video) if video is not None else _video_from_readme(prev)
     if video is None or not video.is_file():
         raise FileNotFoundError("The video is not in the README; pass --video")
-    source = work_owner(prev, video)
-    if source is None:
+    bundle = locate_3d_work(prev, video)
+    if bundle is None:
+        # #region agent log
+        try:
+            import time
+
+            _origin = _work_from(prev)
+            with open(
+                "/home/preto/data/vaila/.cursor/debug-a35129.log",
+                "a",
+                encoding="utf-8",
+            ) as _fh:
+                _fh.write(
+                    json.dumps(
+                        {
+                            "sessionId": "a35129",
+                            "timestamp": int(time.time() * 1000),
+                            "location": "freekiki_detect3d.py:rebuild_ball_3d",
+                            "message": "bundle is None before raise",
+                            "data": {
+                                "prev": str(prev),
+                                "video": str(video),
+                                "work_from": str(_origin) if _origin else None,
+                                "work_from_exists": bool(_origin and _origin.is_dir()),
+                                "local_work": (prev / "work").is_dir(),
+                            },
+                            "hypothesisId": "C",
+                            "runId": "pre-fix",
+                        },
+                        default=str,
+                    )
+                    + "\n"
+                )
+        except Exception:
+            pass
+        # #endregion
         raise FileNotFoundError(
-            f"No work/ for {prev}: the folder has none, its 'work from:' folder has none, and no "
+            f"No work/ for {prev}: the folder has none, no batch parent "
+            f"work/{video.stem}/, its 'work from:' folder has none, and no "
             f"sibling {video.stem}_3d_* folder has one"
         )
-    work = source / "work"
-    runs = [p for p in sorted(work.glob("freekiki_predict_*")) if p.is_dir()]
-    run_dir = _single(runs, "detect run folder in work/")
-    if run_dir is None:
-        raise FileNotFoundError(f"No freekiki_predict_* folder in {work}")
+    work = bundle.work
+    run_dir = bundle.run_dir
     sam_out = work / "sam3dinov3"
     camera_csv = _single(sorted(sam_out.rglob("*_sam3dinov3_camera.csv")), "camera csv")
     if camera_csv is None:
@@ -1331,7 +1611,8 @@ def rebuild_ball_3d(
         sorted(sam_out.rglob("*_sam3dinov3_keypoints3d.csv")), "keypoints3d csv"
     )
     dlt3d = _single(sorted(run_dir.glob("*.dlt3d")), "*.dlt3d")
-    kept = _read_kept(source / "players_on_field.csv")
+    players_csv = bundle.players_dir / "players_on_field.csv"
+    kept = _read_kept(players_csv)
 
     n_frames, _, _ = _video_info(video)
     fps = _video_fps(video)
@@ -1340,14 +1621,12 @@ def rebuild_ball_3d(
     stamp = timestamp or datetime.now().strftime("%Y%m%d_%H%M%S")
     out_dir = Path(out_root) if out_root is not None else prev.parent / f"{video.stem}_3d_{stamp}"
     out_dir.mkdir(parents=True, exist_ok=True)
-    if (source / "players_on_field.csv").is_file():
-        (out_dir / "players_on_field.csv").write_bytes(
-            (source / "players_on_field.csv").read_bytes()
-        )
+    if players_csv.is_file():
+        (out_dir / "players_on_field.csv").write_bytes(players_csv.read_bytes())
     summary: dict = {
         "video": video.name,
         "rebuilt_from": str(prev),
-        "work_from": str(source),
+        "work_from": str(bundle.owner),
         "out": str(out_dir),
         "ball": {
             "mode": "corrected",
@@ -1389,7 +1668,13 @@ def read_corrected_ball(path: Path, n_frames: int) -> list[dict]:
     """
     points: dict[int, tuple[float, float]] = {}
     with path.open(newline="", encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
+        reader = csv.DictReader(fh)
+        if "p1_x" in (reader.fieldnames or []):
+            raise ValueError(
+                f"{path.name} holds 49 field keypoints, not a ball track: the ball is "
+                "frame,p0_x,p0_y in <video>_markers.csv, the keypoints in <video>_kiki49.csv"
+            )
+        for row in reader:
             x, y = row.get("p0_x", ""), row.get("p0_y", "")
             if x and y:
                 points[int(float(row["frame"]))] = (float(x), float(y))

@@ -5,7 +5,7 @@
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
 - **Version:** 0.4.12
-- **Updated:** 2026-10-27
+- **Updated:** 2026-10-28
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -23,7 +23,14 @@ Interactive video cutting with frame-accurate navigation, TOML-based cut storage
   `.events.json` manifests. Direct `--video` + `--sync-file session.events.json` renders without a
   player window, using the manifest's exact rational output grid. Optional `--output-dir /tmp/new_run`
   selects a new destination; otherwise output goes into a timestamped directory beside the manifest.
-  Every output image is the nearest retained observation (ties choose the earlier one). Outputs include
+  The default event method selects the nearest retained observation (ties choose the earlier one).
+  **Sync by events + interpolation** instead preserves all originals and fills intermediate positions
+  with bidirectional Farnebäck estimates, at the minimum exact rational FPS up to 240.
+  Its per-camera CSV identifies `original`/`interpolated` rows, source neighbors and rational blend fractions.
+  Interpolated ball, feet and occlusions can show artifacts; they are estimates, not new physical observations.
+  Direct GUI handoff and event JSON loaded with **F** both show cancellable export progress;
+  CLI `--output-dir` stays headless and prints progress (Ctrl+C cancels).
+  Interrupted sets retain `INCOMPLETE.txt`; existing folders are never overwritten. Outputs include
   lossless RGB H.264 videos without audio, per-camera temporal-error/reuse CSVs, retained PNG sequences
   with physical times, and a shared audit manifest. Event calibration uses reviewed retained-frame
   ordinals between ordered events, not container FPS. Edit events and repeats in Sync Video.
@@ -140,7 +147,7 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 18 October 2026
+📅 **Last Updated:** 28 October 2026
 🔗 **Part of vailá - Multimodal Toolbox**
 
 ### Save current frame as PNG

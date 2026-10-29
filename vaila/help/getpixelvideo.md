@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.11
+**Version:** 0.4.12
 **Date:** 22 July 2025  
-**Updated:** 23 October 2026
+**Updated:** 28 October 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -67,7 +67,7 @@ it does not create train/val/test splits. See the FreeKiki help page for ingest.
 - **Rename (button / Ctrl+N):** Map marker slots `p0/p1…` to COCO-80 or custom names (pose keypoints or detect classes) before Save ML
 - **FIFA Labeling Mode:** Configure via **TOML** (Soccer-Kiki / `K` key — no separate Tk config dialog). Default **31** pitch keypoints (`idx 0 = top_left_corner`); fixed `N`, optional `start` skip, header base `0/1`; sparse CSV with **integer** pixels and empty cells for unmarked KPs. Optional `--fifa-dataset DIR` to append into an existing unified / pose tree.
 - **Guide (`G`):** **Visual only** overlay for active template:
-  - **Soccer-Kiki / soccerfield:** loads `vaila/models/soccerfield_kiki.csv` (49 landmarks) so you can walk and mark those named points; optional reference map (`V`)
+  - **Soccer-Kiki / soccerfield:** loads `vaila/models/soccerfield_kiki.csv` (49 landmarks) so you can walk and mark those named points; optional reference map (`V`). Saving the 49 points writes `<video>_kiki49.csv`; `<video>_markers.csv` stays the ball track (one point).
   - **MediaPipe / YOLO:** stick-figure pose guide
   - **Other Tpl presets:** name-list reference (scrolls with selected keypoint) + skeleton lines from the JSON when markers are present
   Marking behaviour is the same as with the guide off (TAB, **Ctrl+G** / Go KP, left/right click).

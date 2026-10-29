@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 137 | **Categories:** 7 | **Generated on:** 27/10/2026 (v0.4.12)
+**Documented topics:** 138 | **Categories:** 7 | **Generated on:** 29/10/2026 (v0.4.12)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -161,7 +161,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
 
-## Tools (45)
+## Tools (46)
 
 - **ai_tracker_train** — Offline fine-tuning for vailá Track AI assets under vaila/models/ai_tracker/,
   - [HTML](ai_tracker_train.html) · [Markdown](ai_tracker_train.md)
@@ -177,7 +177,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](compress_videos_h266.html) · [Markdown](compress_videos_h266.md)
 - **cop_calculate** — This script allows users to select six (6) headers for force plate data analysis.
   - [HTML](cop_calculate.html) · [Markdown](cop_calculate.md)
-- **cutvideo** — Interactive cuts, legacy sync and event-manifest export with exact rational FPS, temporal-error maps and retained observations.
+- **cutvideo** — Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with in...
   - [HTML](cutvideo.html) · [Markdown](cutvideo.md)
 - **drawboxe** — drawboxe is a tool for drawing boxes and polygons on videos. It allows you to create rectangular, trapezoidal, and free-form polygons to process videos, fill...
   - [HTML](drawboxe.html) · [Markdown](drawboxe.md)
@@ -203,13 +203,15 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](grf_gait.html) · [Markdown](grf_gait.md)
 - **load_vicon_csv_split_batch** — Split first-level VICON Nexus CSV files into device CSVs. The existing converter cleans and merges headers, adds the source file creation Timestamp and prese...
   - [HTML](load_vicon_csv_split_batch.html) · [Markdown](load_vicon_csv_split_batch.md)
+- **manual_video_cuts** — GUI: Frame C → Make Sync file → Manual cuts side by side (M)
+  - [HTML](manual_video_cuts.html) · [Markdown](manual_video_cuts.md)
 - **merge_multivideos** — Licensed under GNU Lesser General Public License v3.0
   - [HTML](merge_multivideos.html) · [Markdown](merge_multivideos.md)
 - **mergestack** — This script allows you to merge and stack CSV files.
   - [HTML](mergestack.html) · [Markdown](mergestack.md)
 - **mkvis3d** — Location: /home/preto/data/mkvis3d/mkvis3d.py
   - [HTML](mkvis3d.html) · [Markdown](mkvis3d.md)
-- **numberframes** — Metadata extraction plus Adjust real FPS (retag container rate before Cut/Sync). Frame C → Metadata info.
+- **numberframes** — This script provides scientific-grade video metadata extraction with high precision for research applications. It analyzes video files within a selected dire...
   - [HTML](numberframes.html) · [Markdown](numberframes.md)
 - **numstepsmp** — Opens a dialog to select a CSV file of foot coordinates and calculates the number of steps based on foot position using MediaPipe data. Includes Butterworth...
   - [HTML](numstepsmp.html) · [Markdown](numstepsmp.md)
@@ -229,7 +231,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](skout_bundle.html) · [Markdown](skout_bundle.md)
 - **standardize_header** — This script is designed to standardize headers across multiple CSV files in a selected directory. It allows users to select a specific line to use as the hea...
   - [HTML](standardize_header.html) · [Markdown](standardize_header.md)
-- **syncvid** — Synchronize by editable events and physical time; review repeats and export exact rational grids, temporal-error maps and retained samples.
+- **syncvid** — syncvid opens every supported video from one target directory in a fast Pygame player. Playback and frame navigation follow the same conventions as cutvideo....
   - [HTML](syncvid.html) · [Markdown](syncvid.md)
 - **transcribe_pdfs** — transcribe_pdfs.py converts PDF exams or handwritten/scanned documents into text files. It supports:
   - [HTML](transcribe_pdfs.html) · [Markdown](transcribe_pdfs.md)

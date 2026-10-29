@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 26 October 2026
-Version: 0.4.11
+Update: 28 October 2026
+Version: 0.4.12
 Python Version: 3.12.15
 
 Description:
@@ -2442,9 +2442,7 @@ def play_video_with_controls(
         if _write_scout_sync is None:
             return
         now = time.time()
-        same_pos = (
-            frame_count == _scout_sync_last_frame and paused == _scout_sync_last_paused
-        )
+        same_pos = frame_count == _scout_sync_last_frame and paused == _scout_sync_last_paused
         # Idle pause: do not rewrite. Playing: throttle ~10 Hz. Seek/play toggle: force.
         if not force and same_pos and paused:
             return
@@ -6131,9 +6129,7 @@ def play_video_with_controls(
             if sequential_mode:
                 parts.append("Seq")
             if track_ai_active:
-                arm_str = ":ARM" if live_tracker is None else ""
-                sh_str = f":{track_ai_shape[:3].capitalize()}"
-                parts.append(f"TrackAI[m{live_track_target_marker}{arm_str}{sh_str}]")
+                parts.append(f"TrackAI[{track_ai_shape[:3].capitalize()}]")
             if pitch_guide_mode:
                 parts.append("Guide")
                 parts.append("map" if pitch_guide_show_reference else "map-off")
@@ -10236,7 +10232,12 @@ def play_video_with_controls(
         in_freekiki = freekiki_session is not None
 
         _media_dir, base_v = _media_out_dir_and_stem()
-        csv_target = f"{base_v}_markers.csv" if not one_line_mode else f"{base_v}_1_line.csv"
+        if one_line_mode:
+            csv_target = f"{base_v}_1_line.csv"
+        elif template_mode != "free" and fifa_fixed_keypoints == 49:
+            csv_target = f"{base_v}_kiki49.csv"  # the 49 points; <base>_markers.csv is the ball
+        else:
+            csv_target = f"{base_v}_markers.csv"
 
         if in_freekiki:
             default_desc = "Save FreeKiki session & export reviewed frames (F9)"
@@ -12009,11 +12010,10 @@ def play_video_with_controls(
         if freekiki_session is None:
             _apply_template_mode("freekiki")  # 49 slots + session; raises if markers would be lost
         assert freekiki_session is not None and freekiki_api is not None
-        if not (folder / "README.txt").is_file():
-            runs = freekiki_api.detect_runs(folder)
-            folder = next(
-                (run for run, video in runs if video == Path(video_path).resolve()), folder
-            )
+        try:
+            folder = freekiki_api.resolve_detect_predictions(folder, video_path)
+        except ValueError as exc:
+            return f"FreeKiki run not loaded: {exc}"
         readme = (folder / "README.txt").read_text(encoding="utf-8").splitlines()
         model = next((line[7:] for line in readme if line.startswith("model: ")), "")
         ws = freekiki_api.workspace_for_model_file(model) if model else None
@@ -12089,7 +12089,16 @@ def play_video_with_controls(
         except (OSError, ValueError) as exc:
             return f"FreeKiki Load: {exc}"
         if not runs:
-            return "Not a freekiki detect folder (no README.txt from detect)"
+            # Parent of *_3d_* (or a 3D folder): resolve the detect run under work/
+            try:
+                if video_path:
+                    run = fk.resolve_detect_predictions(pick, video_path)
+                    runs = [(run, Path(video_path).resolve())]
+                else:
+                    run = fk.resolve_detect_predictions(pick)
+                    runs = [(run, fk.run_video(run))]
+            except (OSError, ValueError):
+                return "Not a freekiki detect folder (no README.txt from detect)"
         run, video = runs[0]
         if len(runs) > 1:
             menu = "  ".join(f"{i}) {v.name}" for i, (_, v) in enumerate(runs, 1))
@@ -12174,7 +12183,10 @@ def play_video_with_controls(
             and freekiki_options.get("predictions")
             and not freekiki_session["frames"]
         ):
-            save_message_text = _load_freekiki_run(Path(freekiki_options["predictions"]))
+            try:
+                save_message_text = _load_freekiki_run(Path(freekiki_options["predictions"]))
+            except (OSError, ValueError, KeyError) as exc:
+                save_message_text = f"FreeKiki run not loaded: {exc}"
         else:
             save_message_text = _enter_correction_mode(len(freekiki_session["frames"]))
         showing_save_message = True
@@ -17142,6 +17154,9 @@ def save_coordinates(
         output_file = str(output_file)
     elif is_sequential:
         output_file = os.path.join(video_dir, f"{base_name}_markers_sequential.csv")
+    elif fixed_keypoints_count == 49:
+        # Soccer-Kiki / FreeKiki (49 points) has its own file: <stem>_markers.csv is the ball.
+        output_file = os.path.join(video_dir, f"{base_name}_kiki49.csv")
     else:
         output_file = os.path.join(video_dir, f"{base_name}_markers.csv")
 

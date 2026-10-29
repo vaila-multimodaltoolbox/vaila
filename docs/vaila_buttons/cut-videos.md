@@ -76,7 +76,11 @@ The **folder** name always uses the source video stem; only **clip filenames** u
 ## Related Tools
 
 - **Metadata Info** (`numberframes.py`) — analyze video metadata
-- **Make Sync File** (`syncvid.py`) — multi-camera sync TXT
+- **Make Sync File** (`syncvid.py`) — default FPS sync TXT, physical-time event sync, event sync with
+  original-preserving Farnebäck interpolation, and independent side-by-side manual cuts. Only the
+  event interpolation workflow synthesizes intermediate images; manual cuts export selected originals
+  without synchronization. See the [Syncvid button guide](sync-videos.md) and
+  [detailed help](../../vaila/help/syncvid.md).
 - **Resize Video** (`resize_video.py`)
 
 ## Documentation
@@ -84,4 +88,4 @@ The **folder** name always uses the source video stem; only **clip filenames** u
 - [Help HTML](../../vaila/help/cutvideo.html)
 - [Help Markdown](../../vaila/help/cutvideo.md)
 
-**Last updated:** 2026-06-02 (v0.3.47)
+**Last updated:** 2026-10-28 (v0.4.12)

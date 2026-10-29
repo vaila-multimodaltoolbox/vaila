@@ -21,19 +21,124 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.4.12 · <strong>Updated:</strong> 2026-10-27<br>
+<strong>Version:</strong> 0.4.12 · <strong>Updated:</strong> 2026-10-28<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
 <p>Review every camera in a fast Pygame player, type each synchronization frame and the reference interval, then generate equal-duration ranges for Cut Video. <strong>Save + Cut Video</strong> opens Cut Video with the reference video and TXT already selected.</p>
 
+<h2 id="manual-cuts-side-by-side">Manual cuts side by side</h2>
+<div class="card">
+<p>Open <strong>Frame C → Make Sync file</strong>, select the folder and click
+<strong>Manual cuts side by side (M)</strong> above the event button. <strong>M</strong> enters this
+mode from any sync mode; <strong>Back to synchronization (M)</strong> returns, keeping manual edits.</p>
+<pre>uv run --no-sync python -m vaila.syncvid --manual-cuts --input-dir /path/to/videos</pre>
+<p>Click a pane to select the <strong>ACTIVE</strong> camera. Playback, stepping, Go to frame, zoom and
+D/Delete affect only that camera. The other stays at its independent position. PgUp/PgDn, camera rows
+and Prev/Next video switch cameras; folders with more than two cameras display in pairs. One video works too.</p>
+<ol>
+<li>Navigate to the first frame to keep and press <strong>I / Set Start</strong>.</li>
+<li>Navigate to the last frame to keep and press <strong>O / Set End</strong>.</li>
+<li>Or type <strong>Start/End</strong> in each camera row: original, 1-based, inclusive frame numbers.</li>
+<li><strong>D/Delete</strong> marks a frame for removal (red pane). Press D again to restore it.
+Marked originals stay visible during editing so marks can be undone.</li>
+<li>Watch each camera's <strong>kept / removed</strong> count and the <strong>Remaining / equal / diff</strong>
+summary. Only marks inside the interval reduce that cut's count.</li>
+<li><strong>Save all (Ctrl+S)</strong> exports all cameras; <strong>Save current video</strong> exports
+only the active camera. Choose a parent for a new <code>manual_cuts_TIMESTAMP/</code> directory.</li>
+</ol>
+<p>Manual marks are separate from sync/repeat-detector marks; no detector runs here. Save directly
+writes new trims, without a sync plan, Cut Video handoff, interpolation, duplicated frames or FPS
+adjustment. Each source FPS is preserved: frame removals shorten duration. Equal counts imply equal
+duration only for equal FPS. Counts may differ if you choose. Invalid or empty cuts block export;
+Save current validates only the active camera.</p>
+<p>Outputs are <code>&lt;original filename&gt;_manual.mp4</code> (lossless RGB H.264, source rational FPS,
+<strong>no audio</strong>), <code>_manual_frames.csv</code> (1-based output/source frames and exact rational
+times), and <code>manual_cuts.json</code> (independent edits for audit/replay, not a sync file).
+<strong>Load manual cuts JSON</strong> restores edits. Existing files are preserved. An interrupted export
+keeps <code>INCOMPLETE.txt</code> and deletes its active partial MP4; earlier completed cameras may remain.</p>
+<p>Progress stays visible; <strong>Cancel export / Esc</strong> stops rendering and keeps the editor open.
+Close exits when idle. GUI actions print equivalent CLI commands with <code>&gt;&gt;</code>.</p>
+<pre>uv run --no-sync python -m vaila.syncvid --manual-cuts --input-dir /path/to/videos \
+  --cuts-file /path/to/export/manual_cuts.json --output-dir /tmp/new_manual_export</pre>
+<p>This headless replay accepts Ctrl+C; the output directory must be new. Omit output-dir to open
+saved cuts in the editor. Source FPS and frame counts must match the saved definitions. Synchronization
+checkpoints belong to the sync modes and are not manual-cut definitions.</p>
+</div>
+
+<h2>Sync by events + interpolation</h2>
+<div class="card warn">
+<p>Choose a mode directly: <strong>FPS</strong> (default), <strong>Events: nearest</strong> or
+<strong>Events: interpolate</strong>. The selected button stays highlighted; clicking it again keeps
+that mode. Nearest selects a source image and creates no interpolated images.
+Interpolation preserves every original in each inclusive interval, even when container FPS matches.
+Enter ordered <strong>Start, Sync, End</strong> correspondences in every camera row; more events are supported.</p>
+<p><strong>Reference clock FPS</strong> starts from the reference file's rate and stays editable independently
+of output FPS. If an imported checkpoint clock differs from the current file (e.g. 59.94 versus 29.97),
+review it and click <strong>Confirm reference clock</strong> before saving. CLI users confirm by explicitly
+passing <code>--reference-fps</code>. Sessions record the confirmation and source rate. The clock and
+uniform source-frame spacing between events are assumptions, not measured acquisition timing.</p>
+<p>Exact fractions compute the minimum FPS containing every original sample time. Set
+<strong>Max output FPS (e.g. 480)</strong> to authorize the grid: default <strong>240</strong>, or
+<strong>480</strong> for higher rates. This is a ceiling; it does not force 480 FPS. Before saving,
+the panel shows exact/decimal output FPS, final count per camera and original/interpolated counts
+in each row. Every camera uses the same interpolation, including the one with fewer frames.
+Above the configured limit, validation reports the required rational rate and blocks export.
+No times are rounded and no originals are dropped. Raising the limit keeps the recorded reference
+clock unchanged; change that clock only when explicitly intended.
+Removal marks inside the intervals are rejected: clear them with D/Delete or revise events.
+Marks outside may remain for audit. All cameras need the same number of strictly increasing, valid
+events. There is no extrapolation beyond the extreme events.</p>
+<p>Original positions keep their decoded pixels unchanged. Intermediate positions use OpenCV
+<strong>bidirectional Farnebäck</strong>, inverse motion warps and temporal blending of neighboring originals.
+<strong>Images are estimates: ball, feet and occlusions may show ghosting or deformation.</strong>
+They do not recover missing physical measurements. Review foot–ball contact visually; counts and FPS
+alone do not establish interpolation quality.</p>
+<p><code>c1: 63, 71, 81</code> and <code>c2: 54, 58, 62</code> with a <code>30000/1001</code> reference
+clock yield <strong>37 frames per camera at 60000/1001 FPS</strong>. Events appear at output frames
+<strong>1, 17, 37</strong> (1-based). Sample span is 0.6006 s; playback duration includes the final
+frame's display period, about 0.617283 s.</p>
+<p><code>c1: 1, 9, 19</code> and <code>c2: 1, 9, 22</code>, keeping the saved
+<code>979001/32666</code> reference clock, need a <strong>480</strong> limit. They yield
+<strong>235 frames per camera at 12727013/32666 FPS</strong> (389.610390), events at
+<strong>1, 105, 235</strong>. C1 keeps 19 originals and adds 216 interpolated images; C2 keeps
+22 originals and adds 213. The default 240 limit blocks this session.</p>
+<pre>uv run --no-sync python -m vaila.syncvid --events --interpolate \
+  --input-dir /path/to/cameras --checkpoint /path/to/session.json \
+  --reference-fps 30000/1001 --output /tmp/interpolated.events.json
+uv run --no-sync python -m vaila.cutvideo --video /path/to/cameras/c1_main.mp4 \
+  --sync-file /tmp/interpolated.events.json --output-dir /tmp/new_interpolated_export</pre>
+<p>Use a checkpoint with the requested event lists or Start/Sync/End. Omit <code>--output-fps</code>:
+the output rate is automatic. Add <code>--max-output-fps 480</code> to raise the ceiling; omit
+<code>--reference-fps</code> to retain an already confirmed saved clock. CLI precedence is explicit
+limit, checkpoint limit, then 240. <strong>Save sync</strong> writes manifest and resume checkpoint;
+<strong>Save + Cut Video</strong> exports into a new timestamped directory and prints the equivalent
+CLI with <code>&gt;&gt;</code>. Existing export folders are never overwritten. GUI progress supports
+<strong>Cancel</strong>; headless CLI prints progress and accepts Ctrl+C. Interrupted sets keep
+<code>INCOMPLETE.txt</code>, delete the active partial MP4 and have no completed set manifest.
+Retry into a new directory.</p>
+<p>Exports use lossless RGB H.264 without audio, retained PNGs/timing CSV and a time-map CSV per camera.
+The map records 1-based <code>output_frame</code>, <code>requested_time_s</code>, exact
+<code>requested_time_rational</code>, <code>type</code> (original/interpolated),
+<code>original_frame</code> (empty for estimates), <code>source_frame_left</code>,
+<code>source_frame_right</code>, and exact <code>interpolation_fraction</code>. Original rows have
+identical neighbors and fraction 0. Legacy physical-time/error fields remain: zero assigned-time
+error does not measure image-estimation quality. Manifest and checkpoint record
+<code>interpolation_method: farneback_bidirectional</code> and
+<code>fps_policy: auto_preserve_originals</code> and rational-text <code>max_output_fps</code>;
+the manifest also has <code>event_output_frames</code> and per-camera
+<code>original_output_count</code> / <code>interpolated_output_count</code>. Older sessions without
+the ceiling use 240; sessions without an interpolation method retain nearest-image behavior.
+Encoder and MP4 time bases preserve the calculated rational clock exactly.</p>
+</div>
+
 <h2>Fast workflow</h2>
 <div class="card warn">
 <h2>Sync by events: physical time</h2>
-<p>Load the checkpoint with <strong>Load / Resume</strong>, then click <strong>Sync by events: ON</strong>.
+<p>Load the checkpoint with <strong>Load / Resume</strong>, then select <strong>Events: nearest</strong>.
 Each row imports the original Start, Sync and End as an editable ordered event list. Add more events
 with commas or spaces, using the same event order in every camera. Set the exact
-<strong>Reference clock FPS</strong> (assumed <code>60000/1001</code>) and
+<strong>Reference clock FPS</strong> (initially the reference file rate, or imported clock) and
 <strong>Output grid FPS</strong> (<code>30000/1001</code>). Container FPS does not shorten these ranges.</p>
 <p>Review repeats using Detect repeats and D/Delete first. Physical times are assigned by piecewise
 linear interpolation of <em>retained</em> frame ordinals between events. Reference event times use
@@ -196,5 +301,5 @@ uv run vaila/syncvid.py -i /path/to/cameras --dry-run
 uv run vaila/syncvid.py -i /path/to/cameras --remove-repeated</pre>
 
 <div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
-<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 26 October 2026 (v0.4.11)</div>
+<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 28 October 2026 (v0.4.12)</div>
 </div></body></html>

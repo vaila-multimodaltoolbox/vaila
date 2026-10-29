@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 30 July 2026
-Update Date: 24 September 2026
-Version: 0.4.5
+Update Date: 28 October 2026
+Version: 0.4.12
 
 Description:
     SAM3-guided Sapiens2 pose pipeline. SAM3 runs first and remains the
@@ -881,7 +881,7 @@ def _draw_sam_guidance(
         box_thickness = max(2, round(min(out.shape[:2]) / 500))
         cv2.rectangle(out, (round(x1), round(y1)), (round(x2), round(y2)), color, box_thickness)
         if draw_ids:
-            label = f"SAM #{obj_id} {float(track.get('score', 1.0)):.2f}"
+            label = f"{float(track.get('score', 1.0)):.2f}"  # the ID is drawn above it
             _draw_box_label(out, label, x1, y1, color)
     return out
 

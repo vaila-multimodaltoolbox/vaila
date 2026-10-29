@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 27 October 2026
+Update Date: 28 October 2026
 Version: 0.4.12
 
 Description:
@@ -49,6 +49,8 @@ Features:
 - Safe v2 TSV sync parser with legacy TXT compatibility and path/range validation.
 - Event JSON handoff exports exact rational grids, temporal-error maps and retained PNGs
   without opening the player. Optional --output-dir selects a new destination.
+- Event interpolation preserves originals with lossless RGB and fills intermediate
+  positions with bidirectional Farnebäck estimates; GUI progress supports Cancel.
 - Hardware H.264 encode when available (NVENC / VideoToolbox; auto CPU libx264 fallback).
 
 Usage:
@@ -1527,6 +1529,30 @@ def _write_sync_cut_without_repeats(output_path, output_dir, start_frame, end_fr
     return corrected
 
 
+def _export_events_with_progress(manifest, source_dir, destination, *, show_dialog=True):
+    """Shared event export for direct handoff and manifests loaded with F."""
+    dialog = None
+    try:
+        if show_dialog:
+            dialog = RenderProgressDialog(
+                "Exporting event synchronization",
+                len(manifest["cameras"]) * manifest["output_frame_count"],
+            )
+        return export_event_videos(
+            manifest,
+            source_dir,
+            destination,
+            progress_callback=(
+                (lambda name, done, total: dialog.update(f"{name}: {done}/{total} frames", done))
+                if dialog is not None
+                else None
+            ),
+        )
+    finally:
+        if dialog is not None:
+            dialog.close()
+
+
 def batch_process_sync_videos(video_path, sync_data):
     """Process all videos in a sync file with visible, cancellable progress."""
     if not sync_data:
@@ -1539,7 +1565,7 @@ def batch_process_sync_videos(video_path, sync_data):
         manifest = read_event_manifest(next(iter(event_files)))
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         destination = Path(next(iter(event_files))).parent / f"vailacut_events_{timestamp}"
-        export_event_videos(manifest, Path(video_path).parent, destination)
+        _export_events_with_progress(manifest, Path(video_path).parent, destination)
         return True
 
     video_dir = Path(video_path).parent
@@ -3616,7 +3642,9 @@ def run_cutvideo(video_path=None, sync_file=None, *, output_dir=None):
                 manifest = read_event_manifest(sync_file)
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
                 destination = output_dir or sync_file.parent / f"vailacut_events_{timestamp}"
-                exported = export_event_videos(manifest, video_path.parent, destination)
+                exported = _export_events_with_progress(
+                    manifest, video_path.parent, destination, show_dialog=output_dir is None
+                )
                 print(f">> Event videos and temporal maps saved: {exported}")
                 return True
         elif not Path(video_path).is_file():

@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 27 October 2026
+Update Date: 28 October 2026
 Version: 0.4.12
 
 Description:
@@ -19,6 +19,11 @@ Sync by events calibrates retained-frame ordinals piecewise between ordered
 events, using an assumed rational reference clock and a separate output grid.
 It saves an event JSON manifest and linked checkpoint; Cut Video exports exact
 rational-FPS videos, temporal-error CSVs and retained PNGs with physical times.
+Sync by events + interpolation preserves every selected original and fills a
+minimum exact grid (configurable ceiling, default 240 FPS) with bidirectional Farnebäck estimates. Original
+pixels survive lossless RGB encoding; per-camera CSVs distinguish estimates.
+Manual cuts mode shows independent videos side by side: I/O set inclusive
+bounds, D toggles removals, and Save exports trims at each source FPS.
 
 The versioned TSV sync file is consumed directly by ``vaila.cutvideo``. The
 ``Save + Open Cut Video`` button launches Cut Video with both the reference
@@ -77,18 +82,34 @@ from rich import print
 
 try:
     from .sync_events import (
+        AUTO_FPS,
+        INTERPOLATION,
+        INTERPOLATION_WARNING,
+        MAX_FPS,
         EventSyncError,
+        clock_needs_confirmation,
+        event_summary,
         manifest_from_checkpoint,
         parse_event_frames,
+        rational_rate,
         read_event_manifest,
+        source_clock,
         temporal_maps,
     )
 except ImportError:
     from sync_events import (  # ty: ignore[unresolved-import]
+        AUTO_FPS,
+        INTERPOLATION,
+        INTERPOLATION_WARNING,
+        MAX_FPS,
         EventSyncError,
+        clock_needs_confirmation,
+        event_summary,
         manifest_from_checkpoint,
         parse_event_frames,
+        rational_rate,
         read_event_manifest,
+        source_clock,
         temporal_maps,
     )
 
@@ -1264,6 +1285,21 @@ def read_checkpoint_file(checkpoint_file: str | Path) -> dict[str, Any]:
         raise SyncFileError("Checkpoint event_texts must map camera names to text")
     if not all(isinstance(data.get(k, ""), str) for k in ("reference_fps", "output_fps")):
         raise SyncFileError("Checkpoint reference_fps and output_fps must be rational text")
+    interpolation = data.get("interpolation_method", "nearest")
+    if interpolation not in ("nearest", INTERPOLATION):
+        raise SyncFileError("Unsupported checkpoint interpolation_method")
+    if data.get("fps_policy", AUTO_FPS if interpolation == INTERPOLATION else "manual") != (
+        AUTO_FPS if interpolation == INTERPOLATION else "manual"
+    ):
+        raise SyncFileError("Checkpoint interpolation/FPS policy mismatch")
+    if type(data.get("reference_clock_confirmed", False)) is not bool:
+        raise SyncFileError("Checkpoint reference_clock_confirmed must be boolean")
+    try:
+        data["max_output_fps"] = str(
+            rational_rate(data.get("max_output_fps", str(MAX_FPS)), "Max output FPS")
+        )
+    except EventSyncError as exc:
+        raise SyncFileError(str(exc)) from exc
     return data
 
 
@@ -2025,12 +2061,36 @@ class PygameSyncPlayer:
         self.real_fps_field = PygameTextField("real_fps", "", max_length=12)
         self.fps_overrides: dict[str, float] = {}
         self.event_mode = False
+        self.manual_mode = False
+        self.manual_start_fields = {
+            info.name: PygameTextField(f"manual_start:{info.name}", "1", max_length=16)
+            for info in self.video_infos
+        }
+        self.manual_end_fields = {
+            info.name: PygameTextField(
+                f"manual_end:{info.name}", str(info.frame_count), max_length=16
+            )
+            for info in self.video_infos
+        }
+        self.manual_removed_frames: dict[str, set[int]] = {
+            info.name: set() for info in self.video_infos
+        }
+        self.manual_view_rects: dict[str, pygame.Rect] = {}
+        self.manual_preview_cache: dict[str, tuple[Any, pygame.Surface]] = {}
+        self.manual_exporting = False
+        self.manual_cancelled = False
+        self.manual_last_redraw = 0
+        self.interpolate_events = False
+        self.clock_confirmation_required = False
         self.event_fields = {
             info.name: PygameTextField(f"events:{info.name}", "", max_length=260)
             for info in self.video_infos
         }
-        self.reference_clock_field = PygameTextField("reference_clock", "60000/1001")
+        self.reference_clock_field = PygameTextField(
+            "reference_clock", source_clock(self.video_infos[0])
+        )
         self.output_rate_field = PygameTextField("output_rate", "30000/1001")
+        self.max_output_rate_field = PygameTextField("max_output_rate", str(MAX_FPS))
         self.loaded_checkpoint: Path | None = None
         self.active_field: PygameTextField | None = None
 
@@ -2197,7 +2257,11 @@ class PygameSyncPlayer:
     def _toggle_removed_frame(self) -> None:
         """Mark or unmark the current frame of the current video as repeated."""
         self.playing = False
-        marks = self.removed_frames[self.current_info.name]
+        marks = (
+            self.manual_removed_frames
+            if getattr(self, "manual_mode", False)
+            else self.removed_frames
+        )[self.current_info.name]
         frame = self.current_frame
         if frame in marks:
             marks.discard(frame)
@@ -2207,7 +2271,7 @@ class PygameSyncPlayer:
         else:
             marks.add(frame)
             self._set_status(
-                f"Frame {frame + 1} marked as repeated in {self.current_info.name} "
+                f"Frame {frame + 1} marked for removal in {self.current_info.name} "
                 f"({len(marks)} marked; D again to keep it)"
             )
 
@@ -2236,6 +2300,12 @@ class PygameSyncPlayer:
         if self.frame is None:
             return
         viewport = self._video_viewport()
+        if getattr(self, "manual_mode", False):
+            cell = self.manual_view_rects.get(self.current_info.name, viewport)
+            viewport = cell.inflate(-8, -88)
+            viewport.y = 46
+            if not cell.collidepoint(pos):
+                return
         old_effective, _w, _h = self._zoomed_size(viewport)
         zoom = max(1.0, min(PLAYER_ZOOM_MAX, self.zoom_level * factor))
         if zoom == self.zoom_level:
@@ -2286,11 +2356,23 @@ class PygameSyncPlayer:
 
     def _all_fields(self) -> list[PygameTextField]:
         """Tab order: reference fields, each camera's Sync/Start/End, then real FPS."""
+        if getattr(self, "manual_mode", False):
+            return [
+                self.goto_field,
+                *[
+                    field
+                    for info in self.video_infos
+                    for field in (
+                        self.manual_start_fields[info.name],
+                        self.manual_end_fields[info.name],
+                    )
+                ],
+            ]
         if getattr(self, "event_mode", False):
             return [
                 self.reference_field,
                 self.reference_clock_field,
-                self.output_rate_field,
+                self.max_output_rate_field if self.interpolate_events else self.output_rate_field,
                 *self.event_fields.values(),
             ]
         reference_name = self._reference_name_or_none()
@@ -2469,8 +2551,10 @@ class PygameSyncPlayer:
             *self.range_start_fields.values(),
             *self.range_end_fields.values(),
             *getattr(self, "event_fields", {}).values(),
+            *getattr(self, "manual_start_fields", {}).values(),
+            *getattr(self, "manual_end_fields", {}).values(),
             *(
-                [self.reference_clock_field, self.output_rate_field]
+                [self.reference_clock_field, self.output_rate_field, self.max_output_rate_field]
                 if hasattr(self, "reference_clock_field")
                 else []
             ),
@@ -2486,7 +2570,7 @@ class PygameSyncPlayer:
             field.text = f"{self._effective_fps(self.current_info):.6g}"
         field.activate()
         prefix, _sep, video_name = field.key.partition(":")
-        if prefix in ("sync", "start", "end", "events"):
+        if prefix in ("sync", "start", "end", "events", "manual_start", "manual_end"):
             index = next(i for i, info in enumerate(self.video_infos) if info.name == video_name)
             if index != self.current_index:
                 self._open_video(index)
@@ -2537,6 +2621,10 @@ class PygameSyncPlayer:
             if field is self.reference_field:
                 name = resolve_reference_video(field.text, self.video_infos)
                 self._set_status(f"Reference video: {name}")
+            elif field.key.startswith(("manual_start:", "manual_end:")):
+                manifest = self._manual_manifest([self.current_info])
+                count = manifest["cameras"][self.current_info.name]["output_frame_count"]
+                self._set_status(f"{self.current_info.name}: {count} frames will be saved")
             elif field is self.start_field or field is self.end_field:
                 reference = resolve_reference_video(self.reference_field.text, self.video_infos)
                 info = next(item for item in self.video_infos if item.name == reference)
@@ -2559,6 +2647,7 @@ class PygameSyncPlayer:
             elif self.event_mode and field in [
                 self.reference_clock_field,
                 self.output_rate_field,
+                self.max_output_rate_field,
                 *self.event_fields.values(),
             ]:
                 manifest = self._event_manifest()
@@ -2676,12 +2765,17 @@ class PygameSyncPlayer:
     def _draw_video_and_controls(self) -> None:
         viewport = self._video_viewport()
         pygame.draw.rect(self.screen, (8, 10, 13), viewport)
-        video_surface = self._get_video_surface(viewport)
-        if video_surface is not None:
-            self._video_dest = video_surface.get_rect(center=viewport.center)
-            self.screen.blit(video_surface, self._video_dest)
-        marks = self.removed_frames[self.current_info.name]
-        if self.current_frame in marks:
+        if self.manual_mode:
+            self._draw_manual_previews(viewport)
+        else:
+            video_surface = self._get_video_surface(viewport)
+            if video_surface is not None:
+                self._video_dest = video_surface.get_rect(center=viewport.center)
+                self.screen.blit(video_surface, self._video_dest)
+        marks = (self.manual_removed_frames if self.manual_mode else self.removed_frames)[
+            self.current_info.name
+        ]
+        if self.current_frame in marks and not self.manual_mode:
             pygame.draw.rect(self.screen, (230, 60, 60), self._video_dest.clip(viewport), 4)
             removed_label = self.font.render(
                 "REPEATED - removed in saved videos (D to keep)", True, (255, 235, 235)
@@ -2692,14 +2786,16 @@ class PygameSyncPlayer:
 
         overlay = pygame.Surface((viewport.width, 36), pygame.SRCALPHA)
         overlay.fill((10, 12, 16, 205))
-        self.screen.blit(overlay, viewport.topleft)
+        if not self.manual_mode:
+            self.screen.blit(overlay, viewport.topleft)
         zoom_text = f"Zoom {self.zoom_level:.1f}x  " if self.zoom_level > 1.0 else ""
         speed_label = self.small_font.render(
             f"{zoom_text}Speed {format_playback_speed(self.playback_speed)}x",
             True,
             (245, 247, 250),
         )
-        self.screen.blit(speed_label, (viewport.right - speed_label.get_width() - 12, 9))
+        if not self.manual_mode:
+            self.screen.blit(speed_label, (viewport.right - speed_label.get_width() - 12, 9))
         info = self.current_info
         info_text = self._fit_label(
             f"{self.current_index + 1}/{len(self.video_infos)}  {info.name}  |  "
@@ -2707,7 +2803,8 @@ class PygameSyncPlayer:
             self.small_font,
             viewport.width - speed_label.get_width() - 36,
         )
-        self.screen.blit(self.small_font.render(info_text, True, (245, 247, 250)), (12, 9))
+        if not self.manual_mode:
+            self.screen.blit(self.small_font.render(info_text, True, (245, 247, 250)), (12, 9))
 
         controls = pygame.Rect(
             0,
@@ -2730,7 +2827,13 @@ class PygameSyncPlayer:
             f"Frame {self.current_frame + 1:,}/{self.current_info.frame_count:,}{recount}"
             f"    {seconds:.6f}s / {duration:.6f}s"
         )
-        if self.event_mode:
+        if self.manual_mode:
+            try:
+                kept = self._manual_manifest([info])["cameras"][info.name]["output_frame_count"]
+                frame_label = f"{info.name} | frame {self.current_frame + 1} | {kept} kept in cut"
+            except EventSyncError:
+                frame_label = f"Frame {self.current_frame + 1} | correct Start/End or removal marks"
+        elif self.event_mode:
             try:
                 timeline, _rows = temporal_maps(self._event_manifest(), info.name)
                 original = self.current_frame + 1
@@ -2761,6 +2864,26 @@ class PygameSyncPlayer:
             12,
         )
         pygame.draw.rect(self.screen, (73, 79, 87), self.timeline_rect, border_radius=4)
+        if self.manual_mode and self.current_info.frame_count > 1:
+            try:
+                camera = self._manual_manifest([self.current_info])["cameras"][
+                    self.current_info.name
+                ]
+                scale = self.timeline_rect.width / (self.current_info.frame_count - 1)
+                start_x = self.timeline_rect.left + round((camera["start"] - 1) * scale)
+                end_x = self.timeline_rect.left + round((camera["end"] - 1) * scale)
+                pygame.draw.rect(
+                    self.screen,
+                    (40, 155, 100),
+                    (
+                        start_x,
+                        self.timeline_rect.top,
+                        max(1, end_x - start_x),
+                        self.timeline_rect.height,
+                    ),
+                )
+            except EventSyncError:
+                pass
         fraction = (
             self.current_frame / (self.current_info.frame_count - 1)
             if self.current_info.frame_count > 1
@@ -2769,7 +2892,7 @@ class PygameSyncPlayer:
         knob_x = self.timeline_rect.left + round(fraction * self.timeline_rect.width)
         pygame.draw.rect(
             self.screen,
-            (52, 143, 214),
+            (52, 100, 170) if self.manual_mode else (52, 143, 214),
             (
                 self.timeline_rect.left,
                 self.timeline_rect.top,
@@ -2830,7 +2953,8 @@ class PygameSyncPlayer:
         self._draw_button(go_rect, "Go")
 
         hint = self.tiny_font.render(
-            "Space play | hold arrows step | [/] speed | wheel zoom, drag pan, 0 reset | D repeat",
+            "Space play | hold arrows step | [/] speed | wheel zoom, drag pan, 0 reset | "
+            + ("D remove/restore" if self.manual_mode else "D repeat"),
             True,
             (174, 188, 202),
         )
@@ -2855,7 +2979,295 @@ class PygameSyncPlayer:
             rendered = self.small_font.render(line, True, self.status_color)
             self.screen.blit(rendered, (rect.x, rect.y + index * 18))
 
+    def _manual_manifest(self, infos: Sequence[VideoInfo] | None = None) -> dict[str, Any]:
+        try:
+            from .manual_video_cuts import build_manual_cuts
+        except ImportError:
+            from manual_video_cuts import build_manual_cuts  # ty: ignore[unresolved-import]
+
+        return build_manual_cuts(
+            self.video_infos if infos is None else infos,
+            {
+                name: (field.text, self.manual_end_fields[name].text)
+                for name, field in self.manual_start_fields.items()
+            },
+            {
+                name: sorted(f + 1 for f in marks)
+                for name, marks in self.manual_removed_frames.items()
+            },
+        )
+
+    def _draw_manual_previews(self, viewport: pygame.Rect) -> None:
+        """Two independent positions, paginated in pairs for larger directories."""
+        first = self.current_index // 2 * 2
+        infos = self.video_infos[first : first + 2]
+        self.manual_view_rects.clear()
+        for column, info in enumerate(infos):
+            cell = pygame.Rect(
+                viewport.x + column * viewport.width // len(infos),
+                0,
+                viewport.width // len(infos),
+                viewport.height,
+            )
+            self.manual_view_rects[info.name] = cell
+            image_rect = cell.inflate(-8, -88)
+            image_rect.y = 46
+            position = self.positions[info.name]
+            active = info.name == self.current_info.name
+            if active:
+                surface = self._get_video_surface(image_rect)
+            else:
+                key = (position, image_rect.size)
+                cached = self.manual_preview_cache.get(info.name)
+                if cached is None or cached[0] != key:
+                    cap = cv2.VideoCapture(str(info.path))
+                    try:
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, position)
+                        ok, frame = cap.read()
+                    finally:
+                        cap.release()
+                    if not ok:
+                        self._set_status(
+                            f"Cannot decode {info.name}, frame {position + 1}", error=True
+                        )
+                        continue
+                    scale = min(image_rect.width / info.width, image_rect.height / info.height)
+                    image = cv2.resize(
+                        frame,
+                        (max(1, round(info.width * scale)), max(1, round(info.height * scale))),
+                    )
+                    surface = pygame.surfarray.make_surface(
+                        cv2.cvtColor(image, cv2.COLOR_BGR2RGB).swapaxes(0, 1)
+                    )
+                    self.manual_preview_cache[info.name] = (key, surface)
+                else:
+                    surface = cached[1]
+            if surface is not None:
+                destination = surface.get_rect(center=image_rect.center)
+                if active:
+                    self._video_dest = destination
+                self.screen.blit(surface, destination)
+            marked = position in self.manual_removed_frames[info.name]
+            color = (240, 70, 70) if marked else ((60, 180, 250) if active else (75, 85, 100))
+            pygame.draw.rect(self.screen, color, cell.inflate(-2, -2), 3)
+            label = ("ACTIVE " if active else "Click: ") + info.name
+            self.screen.blit(
+                self.small_font.render(
+                    self._fit_label(label, self.small_font, cell.width - 16), True, color
+                ),
+                (cell.x + 8, 8),
+            )
+            details = f"Frame {position + 1}/{info.frame_count} | {info.fps:.3f} fps"
+            self.screen.blit(
+                self.tiny_font.render(details, True, (220, 228, 235)), (cell.x + 8, 28)
+            )
+            try:
+                count = self._manual_manifest([info])["cameras"][info.name]["output_frame_count"]
+                caption = f"{count} kept" + (" | REMOVE (D restores)" if marked else " | D removes")
+            except EventSyncError:
+                caption = "Correct Start/End or removal marks"
+            self.screen.blit(
+                self.tiny_font.render(caption, True, color), (cell.x + 8, cell.bottom - 25)
+            )
+
+    def _draw_manual_panel(self) -> None:
+        panel = pygame.Rect(
+            self.window_width - self._panel_width(), 0, self._panel_width(), self.window_height
+        )
+        pygame.draw.rect(self.screen, (38, 43, 50), panel)
+        x, width = panel.x + 14, panel.width - 28
+        self.screen.blit(self.title_font.render("Manual cuts", True, (245, 248, 252)), (x, 14))
+        for y, text in [
+            (48, "Click a pane; only the active video moves."),
+            (69, "I: Start | O: End | D: remove/restore frame"),
+            (90, "Save keeps each source FPS; no synchronization."),
+            (111, "Start/End are inclusive original frame numbers."),
+        ]:
+            self.screen.blit(self.tiny_font.render(text, True, (200, 215, 230)), (x, y))
+        half = (width - 8) // 2
+        for action, label, rect in [
+            ("manual_start", "Set Start (I)", pygame.Rect(x, 138, half, 30)),
+            ("manual_end", "Set End (O)", pygame.Rect(x + half + 8, 138, half, 30)),
+            ("manual_mode", "Back to synchronization (M)", pygame.Rect(x, 184, width, 26)),
+        ]:
+            self.button_rects[f"side:{action}"] = rect
+            self._draw_button(rect, label)
+        self.screen.blit(
+            self.tiny_font.render("Camera / kept count", True, (200, 215, 230)), (x, 229)
+        )
+        self.screen.blit(
+            self.tiny_font.render("Start             End", True, (200, 215, 230)),
+            (panel.right - 154, 229),
+        )
+        self.visible_fields = [self.goto_field]
+        try:
+            counts = [c["output_frame_count"] for c in self._manual_manifest()["cameras"].values()]
+            difference = max(counts) - min(counts)
+            label = (
+                "Remaining: "
+                + " / ".join(str(n) for n in counts)
+                + (" | equal" if not difference else f" | diff {difference}")
+            )
+            color = (160, 225, 175) if not difference else (250, 210, 120)
+        except EventSyncError:
+            label, color = "Correct invalid intervals before saving", (255, 130, 120)
+        self.screen.blit(
+            self.tiny_font.render(self._fit_label(label, self.tiny_font, width), True, color),
+            (x, 214),
+        )
+        self.video_row_rects.clear()
+        for field in [*self.manual_start_fields.values(), *self.manual_end_fields.values()]:
+            field.set_rect(pygame.Rect(-1, -1, 0, 0))
+        self._clamp_list_scroll()
+        for row, index in enumerate(
+            range(
+                self.list_scroll,
+                min(len(self.video_infos), self.list_scroll + self._visible_row_count()),
+            )
+        ):
+            info = self.video_infos[index]
+            rect = pygame.Rect(x, 246 + row * self.ROW_HEIGHT, width, self.ROW_HEIGHT - 4)
+            self.video_row_rects[info.name] = rect
+            pygame.draw.rect(
+                self.screen,
+                (55, 91, 122) if index == self.current_index else (48, 53, 60),
+                rect,
+                border_radius=4,
+            )
+            label_width = width - 155
+            self.screen.blit(
+                self.tiny_font.render(
+                    self._fit_label(f"{index + 1}. {info.name}", self.tiny_font, label_width),
+                    True,
+                    (235, 239, 243),
+                ),
+                (x + 4, rect.y + 2),
+            )
+            try:
+                camera = self._manual_manifest([info])["cameras"][info.name]
+                removed = camera["end"] - camera["start"] + 1 - camera["output_frame_count"]
+                label = f"{camera['output_frame_count']} kept / {removed} removed"
+            except EventSyncError:
+                label = "Invalid interval or empty cut"
+            self.screen.blit(
+                self.tiny_font.render(
+                    self._fit_label(label, self.tiny_font, label_width), True, (250, 210, 120)
+                ),
+                (x + 4, rect.y + 20),
+            )
+            for column, field in enumerate(
+                (self.manual_start_fields[info.name], self.manual_end_fields[info.name])
+            ):
+                field.set_rect(pygame.Rect(panel.right - 158 + column * 74, rect.y + 4, 68, 28))
+                field.draw(self.screen, self.small_font)
+                self.visible_fields.append(field)
+        top = self.window_height - self.ACTIONS_AREA_HEIGHT
+        self._draw_wrapped_status(pygame.Rect(x, top - 47, width, 40))
+        for action, label, y in [
+            ("manual_save", "Save all (Ctrl+S)", 0),
+            ("manual_save_current", "Save current video", 43),
+            ("manual_load", "Load manual cuts JSON", 86),
+            ("help", "Help", 138),
+            ("cancel", "Cancel export" if self.manual_exporting else "Close", 181),
+        ]:
+            rect = pygame.Rect(x, top + y, width, 34)
+            self.button_rects[f"side:{action}"] = rect
+            self._draw_button(rect, label, accent=action.startswith("manual_save"))
+        self.screen.blit(
+            self.tiny_font.render(
+                "PgUp/PgDn: select camera | Tab: edit fields", True, (200, 215, 230)
+            ),
+            (x, top + 240),
+        )
+
+    def _manual_progress(self, name: str, done: int, total: int) -> bool:
+        for event in pygame.event.get():
+            if (
+                event.type in (pygame.QUIT, getattr(pygame, "WINDOWCLOSE", -1))
+                or (event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE)
+                or (
+                    event.type == pygame.MOUSEBUTTONDOWN
+                    and event.button == 1
+                    and self.button_rects.get("side:cancel", pygame.Rect(0, 0, 0, 0)).collidepoint(
+                        event.pos
+                    )
+                )
+            ):
+                self.manual_cancelled = True
+            elif event.type == pygame.VIDEORESIZE:
+                self._handle_event(event)
+        now = pygame.time.get_ticks()
+        if now - self.manual_last_redraw >= 100:
+            self._set_status(f"Saving {name}: {done}/{total} frames. Esc cancels.")
+            self._draw()
+            self.manual_last_redraw = now
+        return not self.manual_cancelled
+
+    def _save_manual_cuts(self, *, current_only: bool) -> None:
+        try:
+            from .manual_video_cuts import export_manual_cuts
+        except ImportError:
+            from manual_video_cuts import export_manual_cuts  # ty: ignore[unresolved-import]
+        self.playing = False
+        try:
+            manifest = self._manual_manifest([self.current_info] if current_only else None)
+            with self._sdl_released_for_dialog():
+                selected = _portable_path_dialog(
+                    "dir",
+                    title="Choose output parent for new manual-cut videos",
+                    initialdir=self.current_info.path.parent,
+                )
+            if not selected:
+                self._set_status("Save cancelled")
+                return
+            output = (
+                Path(selected) / f"manual_cuts_{dt.datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+            )
+            self.manual_exporting = True
+            self.manual_cancelled = False
+            self._set_status("Preparing manual cuts. Esc cancels.")
+            self._draw()
+            exported = export_manual_cuts(
+                manifest, self.video_infos, output, progress_callback=self._manual_progress
+            )
+            self.result = None
+            self._set_status(f"Saved {len(manifest['cameras'])} video(s) in {exported}")
+            print(f">> Manual-cut videos saved: {exported}")
+        except (OSError, EventSyncError) as exc:
+            self._set_status(str(exc), error=True)
+        finally:
+            self.manual_exporting = False
+
+    def _load_manual_cuts(self, path: Path | None = None) -> None:
+        try:
+            from .manual_video_cuts import read_manual_cuts
+        except ImportError:
+            from manual_video_cuts import read_manual_cuts  # ty: ignore[unresolved-import]
+        if path is None:
+            with self._sdl_released_for_dialog():
+                selected = _portable_path_dialog(
+                    "open",
+                    title="Load manual cuts JSON",
+                    initialdir=self.current_info.path.parent,
+                    filetypes=[("Manual cuts", "*.json")],
+                )
+            if not selected:
+                return
+            path = Path(selected)
+        try:
+            manifest = read_manual_cuts(path, self.video_infos)
+            for name, camera in manifest["cameras"].items():
+                self.manual_start_fields[name].text = str(camera["start"])
+                self.manual_end_fields[name].text = str(camera["end"])
+                self.manual_removed_frames[name] = {f - 1 for f in camera["removed_frames"]}
+            self._set_status("Loaded independent manual cuts")
+        except (OSError, EventSyncError) as exc:
+            self._set_status(str(exc), error=True)
+
     def _draw_side_panel(self) -> None:
+        if self.manual_mode:
+            self._draw_manual_panel()
+            return
         panel_width = self._panel_width()
         panel = pygame.Rect(
             self.window_width - panel_width,
@@ -2902,16 +3314,39 @@ class PygameSyncPlayer:
         )
         self.screen.blit(
             self.small_font.render(
-                "Output grid FPS" if self.event_mode else "Reference end", True, (198, 208, 218)
+                ("Max output FPS (e.g. 480)" if self.interpolate_events else "Output grid FPS")
+                if self.event_mode
+                else "Reference end",
+                True,
+                (198, 208, 218),
             ),
             (x + half + 10, 109),
         )
         top_start = self.reference_clock_field if self.event_mode else self.start_field
-        top_end = self.output_rate_field if self.event_mode else self.end_field
+        top_end = (
+            (self.max_output_rate_field if self.interpolate_events else self.output_rate_field)
+            if self.event_mode
+            else self.end_field
+        )
         top_start.set_rect(pygame.Rect(x, 130, half, 31))
         top_end.set_rect(pygame.Rect(x + half + 10, 130, half, 31))
         top_start.draw(self.screen, self.small_font)
         top_end.draw(self.screen, self.small_font)
+        if self.event_mode:
+            clock_rect = pygame.Rect(x, 163, content_width, 16)
+            self.button_rects["side:confirm_clock"] = clock_rect
+            label = (
+                "Confirm reference clock"
+                if self.clock_confirmation_required
+                else "Reference clock reviewed (click to confirm)"
+            )
+            self.screen.blit(
+                self.tiny_font.render(label, True, (250, 210, 120)), clock_rect.topleft
+            )
+        else:
+            manual_rect = pygame.Rect(x, 163, content_width, 17)
+            self.button_rects["side:manual_mode"] = manual_rect
+            self._draw_button(manual_rect, "Manual cuts side by side (M)")
 
         pygame.draw.line(
             self.screen,
@@ -2920,14 +3355,34 @@ class PygameSyncPlayer:
             (panel.right - 14, 178),
             1,
         )
-        mode_rect = pygame.Rect(x, 184, content_width, 26)
-        self.button_rects["side:event_mode"] = mode_rect
-        self._draw_button(
-            mode_rect, "Sync by events: ON" if self.event_mode else "Sync by events: OFF"
-        )
+        mode_width = (content_width - 60 - 12) // 2
+        for key, label, offset, width, selected in (
+            ("fps", "FPS", 0, 60, not self.event_mode),
+            (
+                "nearest",
+                "Events: nearest",
+                66,
+                mode_width,
+                self.event_mode and not self.interpolate_events,
+            ),
+            (
+                "interpolate",
+                "Events: interpolate",
+                72 + mode_width,
+                mode_width,
+                self.event_mode and self.interpolate_events,
+            ),
+        ):
+            mode_rect = pygame.Rect(x + offset, 184, width, 26)
+            self.button_rects[f"side:mode_{key}"] = mode_rect
+            self._draw_button(mode_rect, label, accent=selected)
         self.screen.blit(
             self.tiny_font.render(
-                "Ordered events: start, intermediate(s), end (1-based)"
+                (
+                    "Estimates: artifacts in ball, feet, occlusions"
+                    if self.interpolate_events
+                    else "Ordered events: start, intermediate(s), end (1-based)"
+                )
                 if self.event_mode
                 else "Empty Start/End = from sync frame + fps (grey preview)",
                 True,
@@ -2970,6 +3425,13 @@ class PygameSyncPlayer:
 
         reference_name = self._reference_name_or_none()
         preview = self._plan_preview()
+        event_preview = None
+        event_error = ""
+        if self.event_mode:
+            try:
+                event_preview = self._event_manifest()
+            except EventSyncError as exc:
+                event_error = str(exc)
 
         list_y = 246
         name_width = column_x[0] - x - 6
@@ -3000,8 +3462,18 @@ class PygameSyncPlayer:
             fps_overridden = info.name in self.fps_overrides
             fps_color = (250, 210, 120) if fps_overridden else (168, 182, 196)
             fps_label = f"{effective_fps:.3f} fps*" if fps_overridden else f"{info.fps:.3f} fps"
+            if event_preview is not None:
+                camera = event_preview["cameras"][info.name]
+                fps_label = (
+                    f"{camera['original_output_count']} orig + {camera['interpolated_output_count']} interp"
+                    if self.interpolate_events
+                    else f"{event_preview['output_frame_count']} nearest / 0 interp"
+                )
+            row_detail = fps_label if self.event_mode else f"{fps_label} · {info.frame_count:,} fr"
             self.screen.blit(
-                self.tiny_font.render(f"{fps_label} · {info.frame_count:,} fr", True, fps_color),
+                self.tiny_font.render(
+                    self._fit_label(row_detail, self.tiny_font, name_width - 10), True, fps_color
+                ),
                 (row_rect.x + 6, row_rect.y + 19),
             )
             row_fields = (
@@ -3052,9 +3524,15 @@ class PygameSyncPlayer:
             32,
         )
         load_rect = pygame.Rect(x, actions_top + 86, content_width, 32)
+        summary_label = (
+            f"{event_preview['output_frame_count']} frames/cam | {event_preview['output_fps']} FPS "
+            f"({float(rational_rate(event_preview['output_fps'], 'Output FPS')):.3f})"
+            if event_preview is not None
+            else "Event timing invalid; export blocked"
+        )
         self.screen.blit(
             self.tiny_font.render(
-                "Calibrate AFTER repeat review; inferred rates per segment:"
+                self._fit_label(summary_label, self.tiny_font, content_width)
                 if self.event_mode
                 else "Real FPS (norepeat / all cams) — Enter sets current; * = overridden",
                 True,
@@ -3093,23 +3571,18 @@ class PygameSyncPlayer:
         self._draw_button(cancel_rect, "Cancel")
         self._draw_button(load_rect, "Load / Resume")
         if self.event_mode:
-            try:
-                manifest = self._event_manifest()
-                segments = manifest["cameras"][self.current_info.name]["segments"]
+            if event_preview is not None:
+                segments = event_preview["cameras"][self.current_info.name]["segments"]
                 rates = " / ".join(f"{s['effective_fps_decimal']:.3f}" for s in segments)
-                label = self._fit_label(
-                    f"Current: {rates} fps (model)", self.small_font, content_width
-                )
-                self.screen.blit(
-                    self.small_font.render(label, True, (250, 210, 120)), (x, actions_top + 144)
-                )
-            except EventSyncError:
-                self.screen.blit(
-                    self.tiny_font.render(
-                        "Enter valid events in every camera.", True, (250, 210, 120)
-                    ),
-                    (x, actions_top + 144),
-                )
+                label = f"Current: {rates} fps (model)"
+            else:
+                label = event_error
+            self.screen.blit(
+                self.tiny_font.render(
+                    self._fit_label(label, self.tiny_font, content_width), True, (250, 210, 120)
+                ),
+                (x, actions_top + 144),
+            )
         else:
             self._draw_button(fps_this_rect, "FPS this")
             self._draw_button(fps_all_rect, "FPS all")
@@ -3129,6 +3602,7 @@ class PygameSyncPlayer:
         self.screen.blit(footer, (x, actions_top + 240))
 
     def _draw(self) -> None:
+        self.button_rects.clear()
         self.screen.fill((18, 21, 25))
         self._draw_video_and_controls()
         self._draw_side_panel()
@@ -3142,9 +3616,64 @@ class PygameSyncPlayer:
         return round(fraction * (self.current_info.frame_count - 1))
 
     def _handle_button(self, action: str) -> None:
-        if action == "side:event_mode":
+        if action == "side:manual_mode":
             self._set_active_field(None)
-            self.event_mode = not self.event_mode
+            self.playing = False
+            self.manual_mode = not self.manual_mode
+            self._reset_zoom()
+            if self.manual_mode:
+                print(
+                    ">> Equivalent manual editor CLI\n"
+                    + shlex.join(
+                        [
+                            "uv",
+                            "run",
+                            "--no-sync",
+                            "python",
+                            "-m",
+                            "vaila.syncvid",
+                            "--manual-cuts",
+                            "-i",
+                            str(self.current_info.path.parent),
+                        ]
+                    )
+                )
+            self._set_status(
+                "Manual cuts: click a pane; I/O set Start/End, D removes/restores. Save writes videos."
+                if self.manual_mode
+                else "Returned to synchronization"
+            )
+        elif action == "side:manual_start":
+            self.manual_start_fields[self.current_info.name].text = str(self.current_frame + 1)
+        elif action == "side:manual_end":
+            self.manual_end_fields[self.current_info.name].text = str(self.current_frame + 1)
+        elif action == "side:manual_save":
+            self._save_manual_cuts(current_only=False)
+        elif action == "side:manual_save_current":
+            self._save_manual_cuts(current_only=True)
+        elif action == "side:manual_load":
+            self._load_manual_cuts()
+        elif action == "side:confirm_clock":
+            try:
+                from fractions import Fraction
+
+                if Fraction(self.reference_clock_field.text) <= 0:
+                    raise ValueError
+                self.clock_confirmation_required = False
+                self._set_status(
+                    f"Confirmed reference clock: {self.reference_clock_field.text} FPS (assumed)"
+                )
+            except (ValueError, ZeroDivisionError):
+                self._set_status(
+                    "Enter a positive rational reference clock before confirming", error=True
+                )
+        elif action in ("side:mode_fps", "side:mode_nearest", "side:mode_interpolate"):
+            self._set_active_field(None)
+            was_interpolating = self.interpolate_events
+            self.event_mode = action != "side:mode_fps"
+            self.interpolate_events = action == "side:mode_interpolate"
+            if was_interpolating and not self.interpolate_events:
+                self.output_rate_field.text = "30000/1001"
             if self.event_mode:
                 reference = self._reference_name_or_none()
                 for info in self.video_infos:
@@ -3159,7 +3688,11 @@ class PygameSyncPlayer:
                         info.name
                     ].text = f"{start}, {self.sync_fields[info.name].text}, {end}"
             self._set_status(
-                "Event times use retained samples; review repeats before saving."
+                (
+                    INTERPOLATION_WARNING + " Clear removal marks inside intervals."
+                    if self.interpolate_events
+                    else "Events: nearest source image (0 interpolated). Review repeats before saving."
+                )
                 if self.event_mode
                 else "Sync frame + FPS mode"
             )
@@ -3191,10 +3724,10 @@ class PygameSyncPlayer:
             if self.event_mode:
                 try:
                     manifest = self._event_manifest()
-                    print(">> vaila/syncvid: Event calibration\n" + json.dumps(manifest, indent=2))
-                    self._set_status(
-                        f"Valid: {manifest['output_frame_count']} output frames; span {manifest['sample_span_seconds']:.6f} s"
+                    print(
+                        ">> vaila/syncvid: Event calibration\n" + "\n".join(event_summary(manifest))
                     )
+                    self._set_status(event_summary(manifest)[0])
                 except (EventSyncError, SyncWorkflowError) as exc:
                     self._set_status(str(exc), error=True)
             else:
@@ -3208,7 +3741,13 @@ class PygameSyncPlayer:
 
     def _handle_player_key(self, event: pygame.event.Event) -> None:
         ctrl = bool(event.mod & pygame.KMOD_CTRL)
-        if event.key == pygame.K_ESCAPE:
+        if event.key == pygame.K_m:
+            self._handle_button("side:manual_mode")
+        elif getattr(self, "manual_mode", False) and event.key in (pygame.K_i, pygame.K_o):
+            self._handle_button(
+                "side:manual_start" if event.key == pygame.K_i else "side:manual_end"
+            )
+        elif event.key == pygame.K_ESCAPE:
             self.running = False
         elif ctrl and event.key == pygame.K_s:
             self._save(False)
@@ -3296,6 +3835,15 @@ class PygameSyncPlayer:
                 index = next(i for i, info in enumerate(self.video_infos) if info.name == name)
                 self._open_video(index)
                 return
+        if self.manual_mode:
+            for name, rect in self.manual_view_rects.items():
+                if rect.collidepoint(event.pos):
+                    index = next(i for i, info in enumerate(self.video_infos) if info.name == name)
+                    if index != self.current_index:
+                        self._open_video(index)
+                    elif self.zoom_level > 1.0:
+                        self.panning = True
+                    return
         if self.timeline_rect.collidepoint(event.pos):
             self.dragging_timeline = True
             self.playing = False
@@ -3328,7 +3876,11 @@ class PygameSyncPlayer:
         elif event.type == pygame.MOUSEMOTION and self.panning:
             self.offset_x -= event.rel[0]
             self.offset_y -= event.rel[1]
-            self._clamp_pan(self._video_viewport())
+            viewport = self._video_viewport()
+            if self.manual_mode:
+                viewport = self.manual_view_rects[self.current_info.name].inflate(-8, -88)
+                viewport.y = 46
+            self._clamp_pan(viewport)
         elif event.type == pygame.MOUSEWHEEL:
             mouse_pos = pygame.mouse.get_pos()
             if mouse_pos[0] >= self.window_width - self._panel_width():
@@ -3406,10 +3958,26 @@ class PygameSyncPlayer:
             event_texts={name: field.text for name, field in self.event_fields.items()},
             reference_fps=self.reference_clock_field.text,
             output_fps=self.output_rate_field.text,
+            max_output_fps=self.max_output_rate_field.text,
+            interpolation_method=INTERPOLATION if self.interpolate_events else "nearest",
+            fps_policy=AUTO_FPS if self.interpolate_events else "manual",
+            reference_clock_confirmed=not self.clock_confirmation_required,
+            reference_source_fps=next(
+                (
+                    source_clock(info)
+                    for info in self.video_infos
+                    if info.name == self._reference_name_or_none()
+                ),
+                "",
+            ),
         )
         return state
 
     def _event_manifest(self) -> dict[str, Any]:
+        if self.interpolate_events and self.clock_confirmation_required:
+            raise EventSyncError(
+                "Checkpoint clock differs from current file FPS. Review Reference clock FPS and click Confirm reference clock."
+            )
         state = self._checkpoint_state(completed=False)
         try:
             state["reference"] = resolve_reference_video(
@@ -3420,13 +3988,16 @@ class PygameSyncPlayer:
         state["events"] = {
             name: parse_event_frames(field.text, name) for name, field in self.event_fields.items()
         }
-        return manifest_from_checkpoint(
+        manifest = manifest_from_checkpoint(
             state,
             self.video_infos,
             reference_fps=self.reference_clock_field.text,
             output_fps=self.output_rate_field.text,
             checkpoint_file=self.loaded_checkpoint,
         )
+        if self.interpolate_events:
+            self.output_rate_field.text = manifest["output_fps"]
+        return manifest
 
     def _save_events(self, open_cutvideo: bool) -> None:
         try:
@@ -3434,6 +4005,8 @@ class PygameSyncPlayer:
         except EventSyncError as exc:
             self._set_status(str(exc), error=True)
             return
+        for line in event_summary(manifest):
+            print(">> " + line)
         selected = self._choose_output_file()
         if selected is None:
             self._set_status("Save cancelled")
@@ -3514,10 +4087,17 @@ class PygameSyncPlayer:
         self.start_field.text = cast(str, data["start"])
         self.end_field.text = cast(str, data["end"])
         self.event_mode = data.get("sync_mode") == "events"
+        self.interpolate_events = data.get("interpolation_method") == INTERPOLATION
         for name, field in self.event_fields.items():
             field.text = data.get("event_texts", {}).get(name, "")
-        self.reference_clock_field.text = data.get("reference_fps", "60000/1001")
+        reference_info = next(
+            (info for info in self.video_infos if info.name == self._reference_name_or_none()),
+            self.current_info,
+        )
+        self.reference_clock_field.text = data.get("reference_fps", source_clock(reference_info))
+        self.clock_confirmation_required = clock_needs_confirmation(data, reference_info)
         self.output_rate_field.text = data.get("output_fps", "30000/1001")
+        self.max_output_rate_field.text = str(data.get("max_output_fps", MAX_FPS))
         overrides = cast(dict[str, float], data.get("fps_overrides", {}))
         info_by_name = {info.name: info for info in self.video_infos}
         self.fps_overrides = {}
@@ -3557,6 +4137,8 @@ class PygameSyncPlayer:
                 ">> vaila/syncvid: Dropped checkpoint FPS overrides that disagree "
                 "with file playback rate:\n  " + "\n  ".join(dropped_overrides)
             )
+        if self.clock_confirmation_required:
+            message += f" — confirm clock {self.reference_clock_field.text}; file {source_clock(reference_info)} FPS"
         self._set_status(message, error=bool(dropped_overrides))
 
     def _load_checkpoint(self) -> None:
@@ -3574,10 +4156,13 @@ class PygameSyncPlayer:
             data = read_checkpoint_file(Path(selected))
             self._apply_checkpoint(data)
             self.loaded_checkpoint = Path(selected).resolve()
-        except (SyncWorkflowError, OSError) as exc:
+        except (SyncWorkflowError, EventSyncError, OSError) as exc:
             self._set_status(f"Could not load checkpoint: {exc}", error=True)
 
     def _save(self, open_cutvideo: bool) -> None:
+        if self.manual_mode:
+            self._save_manual_cuts(current_only=False)
+            return
         if self.event_mode:
             self._save_events(open_cutvideo)
             return
@@ -3858,15 +4443,40 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("-i", "--input-dir", type=Path, help="Target directory containing videos")
     parser.add_argument("-o", "--output", type=Path, help="Destination sync TXT file")
     parser.add_argument(
+        "--manual-cuts",
+        action="store_true",
+        help="Independent side-by-side trims and D frame removals; Save exports videos",
+    )
+    parser.add_argument(
+        "--cuts-file", type=Path, help="Manual cuts JSON to load or export with --manual-cuts"
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="New output directory for headless --manual-cuts --cuts-file export",
+    )
+    parser.add_argument(
         "--events",
         action="store_true",
         help="Build an event manifest from --checkpoint without opening a window",
     )
     parser.add_argument("--checkpoint", type=Path, help="Existing checkpoint for --events")
     parser.add_argument(
-        "--reference-fps", default=None, help="Assumed reference clock, default 60000/1001"
+        "--interpolate",
+        action="store_true",
+        help="Sync by events + interpolation: preserve all originals at automatic exact FPS",
+    )
+    parser.add_argument(
+        "--reference-fps",
+        default=None,
+        help="Confirm assumed reference clock; interpolation defaults to reference file rate",
     )
     parser.add_argument("--output-fps", default=None, help="Output grid, default 30000/1001")
+    parser.add_argument(
+        "--max-output-fps",
+        default=None,
+        help="Interpolation FPS ceiling, e.g. 480; saved value or 240 by default (does not force FPS)",
+    )
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -3882,6 +4492,75 @@ def main(argv: Sequence[str] | None = None) -> int:
         ),
     )
     args = parser.parse_args(argv)
+    if (args.cuts_file is not None or args.output_dir is not None) and not args.manual_cuts:
+        parser.error("--cuts-file and --output-dir require --manual-cuts")
+    if args.manual_cuts:
+        if (
+            args.events
+            or args.interpolate
+            or args.remove_repeated
+            or args.dry_run
+            or args.output is not None
+            or args.checkpoint is not None
+            or args.output_fps is not None
+            or args.max_output_fps is not None
+            or args.reference_fps is not None
+        ):
+            parser.error(
+                "--manual-cuts is independent of synchronization, repeat detection and FPS options"
+            )
+        if args.output_dir is not None and args.cuts_file is None:
+            parser.error("Headless --output-dir requires --cuts-file")
+        try:
+            from .manual_video_cuts import export_manual_cuts, read_manual_cuts
+        except ImportError:
+            from manual_video_cuts import export_manual_cuts, read_manual_cuts  # ty: ignore[unresolved-import]
+        try:
+            directory = args.input_dir
+            if directory is None:
+                if args.output_dir is not None:
+                    parser.error("Headless manual export requires --input-dir")
+                selected = _portable_path_dialog(
+                    "dir", title="Select videos for independent manual cuts"
+                )
+                if not selected:
+                    return 0
+                directory = Path(selected)
+            infos = probe_video_directory(directory)
+            cuts = read_manual_cuts(args.cuts_file, infos) if args.cuts_file is not None else None
+            if args.output_dir is not None:
+                assert cuts is not None
+                export_manual_cuts(cuts, infos, args.output_dir)
+            else:
+                print(
+                    ">> Equivalent GUI CLI\n"
+                    + shlex.join(
+                        [
+                            "uv",
+                            "run",
+                            "--no-sync",
+                            "python",
+                            "-m",
+                            "vaila.syncvid",
+                            "--manual-cuts",
+                            "-i",
+                            str(directory),
+                        ]
+                        + (["--cuts-file", str(args.cuts_file)] if args.cuts_file else [])
+                    )
+                )
+                player = PygameSyncPlayer(infos)
+                player._handle_button("side:manual_mode")
+                if args.cuts_file is not None:
+                    player._load_manual_cuts(args.cuts_file)
+                player.run()
+        except (OSError, SyncWorkflowError, EventSyncError, pygame.error) as exc:
+            parser.error(str(exc))
+        return 0
+    if args.interpolate and not args.events:
+        parser.error("--interpolate requires --events")
+    if args.max_output_fps is not None and not args.events:
+        parser.error("--max-output-fps requires --events")
 
     if args.events:
         if args.checkpoint is None or args.input_dir is None or args.output is None:
@@ -3890,6 +4569,13 @@ def main(argv: Sequence[str] | None = None) -> int:
             state = read_checkpoint_file(args.checkpoint)
             infos = probe_video_directory(args.input_dir)
             state["reference"] = resolve_reference_video(state["reference"], infos)
+            interpolation = (
+                INTERPOLATION if args.interpolate else state.get("interpolation_method", "nearest")
+            )
+            if interpolation == INTERPOLATION and args.output_fps is not None:
+                raise EventSyncError(
+                    "Interpolation computes the minimum preserving FPS automatically; omit --output-fps"
+                )
             if state.get("sync_mode") == "events":
                 state["events"] = {
                     name: parse_event_frames(text, name)
@@ -3898,14 +4584,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             manifest = manifest_from_checkpoint(
                 state,
                 infos,
-                reference_fps=args.reference_fps or state.get("reference_fps", "60000/1001"),
+                reference_fps=args.reference_fps,
                 output_fps=args.output_fps or state.get("output_fps", "30000/1001"),
+                interpolation_method=interpolation,
+                max_output_fps=args.max_output_fps,
                 checkpoint_file=args.checkpoint.resolve(),
             )
             if args.output.resolve() == args.checkpoint.resolve():
                 raise EventSyncError("Choose a manifest output separate from the checkpoint")
+            for line in event_summary(manifest):
+                print(">> " + line)
             write_checkpoint_file(manifest, args.output)
             print(">> vaila/syncvid: Event manifest saved: " + str(args.output))
+            print(
+                f">> Output: {manifest['output_frame_count']} frames per camera at {manifest['output_fps']} FPS"
+            )
+            if interpolation == INTERPOLATION:
+                print(f">> Events at output frames (1-based): {manifest['event_output_frames']}")
+                print(">> " + INTERPOLATION_WARNING)
             for name, camera in manifest["cameras"].items():
                 print(
                     f">> {name}: events={camera['events']}; retained={camera['retained_count']}; "

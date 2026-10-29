@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 26 October 2026
-Update Date: 27 October 2026
+Update Date: 28 October 2026
 
 Description:
     ``freekiki.py report-tv --run <3D folder>`` writes ``report_tv/`` inside the finished run,
@@ -51,8 +51,11 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from .freekiki_detect3d import _single, _video_from_readme, work_owner
-    from .freekiki_field3d import dlt_for_frames
+    from .freekiki_layout import resolve
+except ImportError:
+    from freekiki_layout import resolve  # ty: ignore[unresolved-import]
+try:
+    from .freekiki_detect3d import _video_from_readme
     from .freekiki_physics import (
         AIR_DENSITY,
         BALL_AREA,
@@ -77,19 +80,16 @@ try:
         draw_goal_area,
         draw_people,
         find_people,
+        load_camera_roles,
         load_ground_tracks,
         people_extent,
         people_note,
     )
     from .freekiki_report_video import write_lance_video
+    from .freekiki_stereo import find_dlt3d
     from .monocular_dlt_align import dlt_projection_matrix
 except ImportError:
-    from freekiki_detect3d import (  # ty: ignore[unresolved-import]
-        _single,
-        _video_from_readme,
-        work_owner,
-    )
-    from freekiki_field3d import dlt_for_frames  # ty: ignore[unresolved-import]
+    from freekiki_detect3d import _video_from_readme  # ty: ignore[unresolved-import]
     from freekiki_physics import (  # ty: ignore[unresolved-import]
         AIR_DENSITY,
         BALL_AREA,
@@ -114,11 +114,13 @@ except ImportError:
         draw_goal_area,
         draw_people,
         find_people,
+        load_camera_roles,
         load_ground_tracks,
         people_extent,
         people_note,
     )
     from freekiki_report_video import write_lance_video  # ty: ignore[unresolved-import]
+    from freekiki_stereo import find_dlt3d  # ty: ignore[unresolved-import]
     from monocular_dlt_align import dlt_projection_matrix  # ty: ignore[unresolved-import]
 
 HERE = Path(__file__).resolve().parent
@@ -161,6 +163,7 @@ class ReportRun:
     pixels: dict[int, tuple[float, float]]
     projections: dict[int, np.ndarray]  # frame -> 3x4 pixel projection (the DLT3D of that frame)
     anchors: dict  # the anchor points of the fit (anchor_points of ball_flight.json)
+    people_dir: Path  # the folder with the poses and the player map (see _people_dir)
 
 
 def _read_csv(path: Path) -> list[dict]:
@@ -168,16 +171,33 @@ def _read_csv(path: Path) -> list[dict]:
         return list(csv.DictReader(fh))
 
 
+def _people_dir(run_dir: Path) -> Path:
+    """The folder whose ``poses_3d_on_field.csv`` and ``player_map.csv`` the report reads.
+
+    A binocular folder (``rec3d-binocular``) holds the flight but no poses: its ``summary.json``
+    names the reference camera's 3D folder, which has them. Any other folder is its own.
+    """
+    if (run_dir / "poses_3d_on_field.csv").is_file():
+        return run_dir
+    summary = resolve(run_dir, "summary.json")
+    if summary.is_file():
+        ref = json.loads(summary.read_text(encoding="utf-8")).get("reference_run")
+        if ref and (Path(ref) / "poses_3d_on_field.csv").is_file():
+            return Path(ref)
+    return run_dir
+
+
 def load_run(run_dir, video=None) -> ReportRun:
     """Read a finished 3D folder (the one ``ball-rebuild`` or ``detect-soccer-3d`` wrote)."""
     import cv2
 
     run_dir = Path(run_dir)
-    flight_path = run_dir / "ball_flight.json"
+    flight_path = resolve(run_dir, "ball_flight.json")
     if not flight_path.is_file():
         raise FileNotFoundError(
-            f"{flight_path} not found: run ball-rebuild with --ball-anchors first (the report "
-            "explains the fitted flight)"
+            f"{flight_path} not found: the report needs a fitted flight. In the GUI open "
+            "Ball anchors... (≥3 points), Save, then Rebuild ball; or pass --ball-anchors "
+            'to ball-rebuild (player ids or {"points": [...]})'
         )
     flight = json.loads(flight_path.read_text(encoding="utf-8"))
     video_path = Path(video) if video else _video_from_readme(run_dir)
@@ -191,24 +211,17 @@ def load_run(run_dir, video=None) -> ReportRun:
         raise ValueError(f"Cannot read the frame count of {video_path}")
 
     track = np.full((n, 3), np.nan)
-    for row in _read_csv(run_dir / "ball_3d_on_field.csv"):
+    for row in _read_csv(resolve(run_dir, "ball_3d_on_field.csv")):
         f = int(row["frame"])
         if 0 <= f < n and row["x_m"] != "":
             track[f] = [float(row["x_m"]), float(row["y_m"]), float(row["z_m"])]
     pixels = {
         int(r["frame"]): (float(r["cx"]), float(r["cy"]))
-        for r in _read_csv(run_dir / "ball.csv")
+        for r in _read_csv(resolve(run_dir, "ball.csv"))
         if r["cx"] != ""
     }
 
-    owner = work_owner(run_dir, video_path)
-    if owner is None:
-        raise FileNotFoundError("No work/ folder for this run: the per-frame DLT3D is needed")
-    runs = [p for p in sorted((owner / "work").glob("freekiki_predict_*")) if p.is_dir()]
-    dlt3d = _single([f for r in runs for f in sorted(r.glob("*.dlt3d"))], "*.dlt3d")
-    if dlt3d is None:
-        raise FileNotFoundError(f"No .dlt3d in {owner / 'work'}")
-    projections = {f: dlt_projection_matrix(L) for f, L in dlt_for_frames(dlt3d).items()}
+    projections = {f: dlt_projection_matrix(L) for f, L in find_dlt3d(run_dir, video_path).items()}
     return ReportRun(
         run_dir=run_dir,
         video=video_path,
@@ -219,6 +232,7 @@ def load_run(run_dir, video=None) -> ReportRun:
         pixels=pixels,
         projections=projections,
         anchors=flight.get("anchor_points", {}),
+        people_dir=_people_dir(run_dir),
     )
 
 
@@ -324,6 +338,7 @@ def compute_metrics(run: ReportRun) -> dict:
         "per_frame_px": {int(k): float(v) for k, v in flight["per_frame_px"].items()},
         "anchor_residuals": flight["anchor_residuals"],
         "tier": tier,
+        "method": str(flight.get("method", "anchors")),
         "worst_anchor_m": worst,
         "above_fit_range": bool(flight.get("above_fit_range", False)),
         "fit_success": bool(flight.get("success", True)),
@@ -349,8 +364,12 @@ def event_frames(anchors: dict, end_f: int) -> tuple[int, int, np.ndarray]:
     wall = labelled("barreira", "barrier") or anchors.get("barrier_target")
     if wall is None and items:
         wall = items[len(items) // 2]
-    keeper = anchors.get("keeper_hands") or (items[-1] if items else None)
     barrier_f = int(wall["frame"]) if wall is not None else 9
+    # the last anchor is the keeper only when it comes after the wall (a binocular run has
+    # the wall alone: the wall is not the keeper)
+    last = items[-1] if items else None
+    keeper_after_wall = last is not None and (wall is None or int(last["frame"]) > barrier_f)
+    keeper = anchors.get("keeper_hands") or (last if keeper_after_wall else None)
     keeper_f = int(keeper["frame"]) if keeper is not None else end_f
     keeper_xyz = np.array(keeper["xyz"], dtype=float) if keeper is not None else np.full(3, np.nan)
     return barrier_f, keeper_f, keeper_xyz
@@ -607,7 +626,18 @@ def _anchor_points(run: ReportRun, lang: str) -> list[dict]:
 
 def editor_payload(run: ReportRun, m: dict, lang: str) -> dict:
     """What the in-browser editor needs: the pixel observations with their cameras, the anchor
-    points (with their sigma), the fitted parameters and the texts of the editor."""
+    points (with their sigma), the fitted parameters and the texts of the editor.
+
+    The editor refits one camera; the two-camera fit is not reproduced in the browser, and the
+    automatic fit (its anchors come from the detection) is not editable yet: both switch the
+    editor off.
+    """
+    key = _method_key(m)
+    if key in ("binocular", "auto"):
+        labels = editor_labels(lang)
+        if key == "auto":
+            labels["ed_disabled"] = tr(lang, "ed_disabled_auto")
+        return {"disabled": True, "lang": lang, "labels": labels}
     points = _anchor_points(run, lang)
     frames = [
         {"frame": int(f), "u": float(uv[0]), "v": float(uv[1]),
@@ -642,6 +672,15 @@ def _b64(path: Path) -> str:
     return "data:image/png;base64," + base64.b64encode(path.read_bytes()).decode()
 
 
+def _method_key(m: dict) -> str:
+    """The suffix of the method texts: ``binocular`` for the two-camera fit, ``auto`` for the
+    monocular fit with the automatic start and arrival, else ``anchors``."""
+    method = m.get("method")
+    if method == "binocular":
+        return "binocular"
+    return "auto" if method == "monocular_auto" else "anchors"
+
+
 def _warn_block(m: dict, lang: str) -> str:
     if m["tier"] == "alta":
         return ""
@@ -654,6 +693,7 @@ def _warn_block(m: dict, lang: str) -> str:
             tier=tr(lang, key),
             tier_text=tr(lang, "tier_text_" + m["tier"]),
             worst=fmt_num(m["worst_anchor_m"], 1, lang),
+            reference=tr(lang, "ref_" + _method_key(m)),
         )
         + "</div>"
     )
@@ -713,6 +753,9 @@ def fill_template(m: dict, figs: dict[str, Path], meta: dict, lang: str, payload
         "worst": num(m["worst_anchor_m"], 1),
         "tier": tr(lang, "tier_" + m["tier"]),
         "warn_block": _warn_block(m, lang),
+        "method_text": tr(lang, "method_" + _method_key(m), rms=num(m["rms_px"], 1)),
+        "refs_text": tr(lang, "refs_" + _method_key(m), worst=num(m["worst_anchor_m"], 1)),
+        "wall_text": tr(lang, "wall_" + _method_key(m)),
         "quotes": _quotes(m, lang),
         "generated": meta["generated"],
         "players_note": meta["players_note"],
@@ -761,20 +804,30 @@ def _languages(lang: str) -> list[str]:
 
 
 def _people_for(run: ReportRun, m: dict, players: dict | None) -> People:
-    """The people of the top view: their ground tracks and the roles (found or given)."""
+    """The people of the top view: their ground tracks and the roles.
+
+    The roles come from the run's player map when it exists (the goalkeeper and the kicker of
+    the same clip, the same ids in every camera); otherwise they are the nearest persons. A role
+    given by the user (``players``) replaces both.
+    """
     _, _, keeper_xyz = event_frames(run.anchors, m["end_frame"])
     given = players or {}
-    return find_people(
-        load_ground_tracks(run.run_dir, run.n),
+    mapped = load_camera_roles(run.people_dir)
+    people = find_people(
+        load_ground_tracks(run.people_dir, run.n),
         run.track[:, :2],
         m["kick_frame"],
         m["barrier_f"],
         m["end_frame"],
         keeper_xyz[:2],
-        kicker_id=given.get("kicker_id"),
+        kicker_id=given.get("kicker_id", mapped.get("kicker_id")),
         wall_ids=given.get("wall_ids"),
-        keeper_id=given.get("keeper_id"),
+        keeper_id=given.get("keeper_id", mapped.get("keeper_id")),
     )
+    people.names = mapped.get("names", {})
+    people.manual = any(given.get(k) is not None for k in ("kicker_id", "wall_ids", "keeper_id"))
+    people.source = "manual" if people.manual else ("map" if mapped else "nearest")
+    return people
 
 
 def build_report(

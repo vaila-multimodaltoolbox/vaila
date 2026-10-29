@@ -45,6 +45,7 @@ uv run vaila.py
 - [vaila-ElasticKick (VEK)](vek.md)
 - [DLT 3D reconstruction and mesh alignment](dlt_reconstruction_and_mesh_alignment.md)
 - [GUI button documentation](vaila_buttons/README.md)
+- [Make Sync file — Syncvid workflows](vaila_buttons/sync-videos.md)
 - [PDF transcription (Brainstorm)](../vaila/help/transcribe_pdfs.md)
 - [Hardware & GPU guide](../vaila/help/gpu_guide.md)
 
@@ -96,6 +97,7 @@ uv run vaila.py
 - [VEK](vek.md)
 - [DLT 3D e alinhamento de mesh](dlt_reconstruction_and_mesh_alignment.md)
 - [Botões da GUI](vaila_buttons/README.md)
+- [Make Sync file — fluxos do Syncvid](vaila_buttons/sync-videos.md)
 
 ### Contribuição / Licença / Citação
 

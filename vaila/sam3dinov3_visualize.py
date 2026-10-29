@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 01 August 2026
-Update Date: 19 October 2026
-Version: 0.4.10
+Update Date: 28 October 2026
+Version: 0.4.12
 
 Description:
     CPU-only rerenderer for an existing SAM3+DINOv3 3D (SAM 3D Body) run. It
@@ -531,9 +531,8 @@ def _draw_sam_contour_outline_and_id(
     if bbox and len(bbox) >= 4:
         x1, y1, x2, y2 = [int(round(_safe_float(v))) for v in bbox[:4]]
         cv2.rectangle(out, (x1, y1), (x2, y2), color, 2, cv2.LINE_AA)
-        cam_t = instance.get("cam_t_m") or [0.0, 0.0, 0.0]
-        depth = _safe_float(cam_t[2] if len(cam_t) > 2 else None)
-        label = f"ID {selected_id}  z={depth:.2f} m"
+        # the ID only: cam_t_m[2] is the camera translation of SAM 3D Body (unscaled), not a height
+        label = f"ID {selected_id}"
         _draw_box_label(out, label, x1, y1, color)
     return out
 

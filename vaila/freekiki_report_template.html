@@ -142,12 +142,7 @@ pixels da imagem, precisa curvar do jeito que curvou. O ajuste inferiu uma rota�
 com o eixo de giro {{spin_axis}}, o que faz a bola curvar para os lados. Isso é uma <b>inferência</b>, não uma medida direta.</p>
 
 <h3>4.4 Como a trajetória foi ajustada à imagem</h3>
-<p>Cada quadro da transmissão tem uma calibração da câmera, obtida pelas linhas pintadas do campo, de medidas conhecidas.
-Com ela, a posição da bola em cada quadro vira uma posição real no campo. A trajetória física (a gravidade, o arrasto e o
-Magnus) é ajustada de modo a reproduzir essas posições com um erro médio de <b>{{rms}} pixel</b> na imagem. Além disso, três
-pontos físicos do lance entram como referência: a bola começa no pé do chutador, passa a 1,8 m de altura a 0,3 m do
-ombro de um jogador da barreira, e chega às mãos do goleiro. Essas posições não são reproduzidas exatamente: a
-diferença está na seção 6.</p>
+<p>{{method_text}}</p>
 <figure>
   <img src="{{img_residuos}}" alt="Erro de cada quadro entre a trajetória ajustada e as marcações">
   <figcaption>Quanto a trajetória ajustada se afasta das marcações em cada quadro. Quanto menor, melhor.</figcaption>
@@ -171,10 +166,8 @@ curva que a bola fez no ar, medida pelo afastamento da linha reta.</p>
   <li><b>A validação com um caso publicado não passou.</b> Simulamos o chute de Pelé publicado no material didático da
   UFRJ (Aguiar) e o ponto final ficou cerca de 10 a 12 metros longe do publicado. A física (forças, arrasto e Magnus) está
   implementada conforme as referências, mas esse teste mostra que ainda há diferenças de convenção ou de parâmetros.</li>
-  <li><b>Os pontos físicos de referência podem diferir.</b> O pé, a barreira e o goleiro são escolhidos a partir dos
-  jogadores reconstruídos, e não medidos diretamente no campo. Nesta reconstrução, a diferença entre o ajuste e os pontos
-  de referência é de {{worst}} m no pior caso.</li>
-  <li><b>A altura da barreira é uma hipótese</b> de 1,8 metro, e a trajetória sobre ela depende dessa escolha.</li>
+  <li>{{refs_text}}</li>
+  <li>{{wall_text}}</li>
   <li><b>O toque do goleiro não foi modelado.</b> A trajetória trata o voo como livre até a entrada.</li>
 </ul>
 </div>

@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.12
 Created: 26 October 2026
-Update Date: 26 October 2026
+Update Date: 27 October 2026
 
 Description:
     A track of pitch positions (metres, one point per frame) cannot jump: a ball does
@@ -280,31 +280,71 @@ def simulate_flight(
     return out
 
 
-def fit_flight(
-    pixels: dict[int, tuple[float, float]],
-    cameras: dict[int, np.ndarray],
+def seed_flight(
+    frames: np.ndarray,
+    xyz: np.ndarray,
+    fps: float,
+    *,
+    start_frame: int | None = None,
+    launch_height_m: float = 0.3,
+) -> np.ndarray:
+    """A starting guess of the flight ``theta`` from a rough track (metres, one row per frame).
+
+    The rest point is the track at ``start_frame`` (default: the first frame). The launch is the
+    first frame above ``launch_height_m``; when the track never leaves the ground (a single camera
+    lifted to the plane), the launch is the start and the velocity is the horizontal motion.
+    """
+    frames = np.asarray(frames, dtype=float)
+    xyz = np.asarray(xyz, dtype=float).reshape(-1, 3)
+    start = int(frames[0]) if start_frame is None else int(start_frame)
+    idx0 = int(np.argmin(np.abs(frames - start)))
+    rest = xyz[idx0]
+    lifted = np.flatnonzero((frames >= start) & (xyz[:, 2] > launch_height_m))
+    k = int(lifted[0]) if lifted.size else idx0
+    v = np.zeros(3)
+    after = np.flatnonzero(frames >= frames[k])
+    if after.size >= 4:
+        j = after[3]
+        dt = (frames[j] - frames[k]) / fps
+        if dt > 0:
+            v = (xyz[j] - xyz[k]) / dt
+    if not lifted.size:  # no lift in the track: keep only the horizontal motion
+        v[2] = 0.0
+    tk = max(frames[k] - 1, start) / fps
+    return np.array([rest[0], rest[1], v[0], v[1], v[2], tk, 0.0, 0.0, 0.0])
+
+
+def fit_flight_views(
+    views: list[tuple[dict[int, tuple[float, float]], dict[int, np.ndarray]]],
     fps: float,
     n_frames: int,
     *,
     anchors: dict,
     rest_height: float = BALL_RADIUS,
     spin_starts: int = 3,
+    theta0: np.ndarray | None = None,
+    kick_window: tuple[float, float] | None = None,
 ) -> dict:
-    """Fit one flight (velocity, spin and kick time) to a hand-corrected ball.
+    """Fit one flight to the pixels of one or more calibrated cameras (see :func:`fit_flight`).
 
-    ``pixels`` maps frame -> ``(u, v)`` of the ball centre; ``cameras`` maps frame -> the 3x4
-    projection of that frame (pitch metres -> pixels). ``anchors`` may hold ``"rest"`` (x, y at
-    the kick, the kicker's foot), ``"barrier"`` (``{"frame", "xy", "z", "offset"}``: the ball is
-    ``z`` high and ``offset`` horizontally from ``xy``) and ``"keeper"`` (``{"frame", "xyz"}``).
+    ``kick_window`` (seconds, optional) bounds the kick time: the flight cannot start before the
+    ball was seen to move, so a fit on the frames after the contact keeps its start there.
 
-    Residuals: reprojection in px (``PIXEL_SIGMA``) and the anchors in metres
-    (``ANCHOR_SIGMA``). Several kick times and spin starts are tried; the best is kept.
+    ``views`` is a list of ``(pixels, cameras)``, one pair per camera: ``pixels`` maps frame ->
+    ``(u, v)`` and ``cameras`` maps frame -> that camera's 3x4 projection on the same frame clock.
+    Each camera adds its own reprojection residuals, so a second camera fixes the depth of the
+    ball. ``theta0`` (optional) is one extra start for the search: the parameters of a rough
+    track, for example the triangulated one.
     """
     from scipy.optimize import least_squares
 
-    frames = np.array(sorted(f for f in pixels if f in cameras), dtype=int)
-    uv = np.array([pixels[f] for f in frames], dtype=np.float64)
-    P = np.array([cameras[f] for f in frames], dtype=np.float64)
+    obs: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+    for pixels, cameras in views:
+        frames = np.array(sorted(f for f in pixels if f in cameras), dtype=int)
+        uv = np.array([pixels[f] for f in frames], dtype=np.float64).reshape(-1, 2)
+        P = np.array([cameras[f] for f in frames], dtype=np.float64).reshape(-1, 3, 4)
+        obs.append((frames, uv, P))
+    n_obs = sum(2 * len(frames) for frames, _, _ in obs)
     times = np.arange(n_frames) / fps
     rest_xy = anchors.get("rest")
     barrier = anchors.get("barrier")
@@ -313,75 +353,119 @@ def fit_flight(
     point_frames = [int(p["frame"]) for p in point_list]
     point_xyz = [np.asarray(p["xyz"], dtype=float) for p in point_list]
     point_sigma = [float(p["sigma"]) for p in point_list]
+    tail_size = (
+        (2 if rest_xy is not None else 0)
+        + (2 if barrier is not None else 0)
+        + (3 if keeper is not None else 0)
+        + 3 * len(point_frames)
+    )
 
     def residuals(theta: np.ndarray) -> np.ndarray:
         pos = simulate_flight(theta, times, rest_height)
         if not np.isfinite(pos).all():
-            return np.full(2 * len(frames) + 12, 1e3)
-        X = np.column_stack([pos[frames], np.ones(len(frames))])
-        h = np.einsum("nij,nj->ni", P, X)
-        ok = h[:, 2] > 1e-6
-        proj = np.where(ok[:, None], h[:, :2] / np.where(ok, h[:, 2], 1.0)[:, None], 1e4)
-        out = [((proj - uv) / PIXEL_SIGMA).ravel()]
+            return np.full(n_obs + tail_size, 1e3)
+        parts = []
+        for frames, uv, P in obs:
+            X = np.column_stack([pos[frames], np.ones(len(frames))])
+            h = np.einsum("nij,nj->ni", P, X)
+            ok = h[:, 2] > 1e-6
+            proj = np.where(ok[:, None], h[:, :2] / np.where(ok, h[:, 2], 1.0)[:, None], 1e4)
+            parts.append(((proj - uv) / PIXEL_SIGMA).ravel())
         if rest_xy is not None:
-            out.append((theta[:2] - np.asarray(rest_xy, dtype=float)) / ANCHOR_SIGMA["rest"])
+            parts.append((theta[:2] - np.asarray(rest_xy, dtype=float)) / ANCHOR_SIGMA["rest"])
         if barrier is not None:
             b = int(barrier["frame"])
             d = float(np.hypot(*(pos[b, :2] - np.asarray(barrier["xy"], dtype=float))))
-            out.append(np.array([(d - float(barrier["offset"])) / ANCHOR_SIGMA["barrier_xy"]]))
-            out.append(np.array([(pos[b, 2] - float(barrier["z"])) / ANCHOR_SIGMA["barrier_z"]]))
+            parts.append(np.array([(d - float(barrier["offset"])) / ANCHOR_SIGMA["barrier_xy"]]))
+            parts.append(np.array([(pos[b, 2] - float(barrier["z"])) / ANCHOR_SIGMA["barrier_z"]]))
         if keeper is not None:
             k = int(keeper["frame"])
-            out.append((pos[k] - np.asarray(keeper["xyz"], dtype=float)) / ANCHOR_SIGMA["keeper"])
+            parts.append((pos[k] - np.asarray(keeper["xyz"], dtype=float)) / ANCHOR_SIGMA["keeper"])
         for f_p, xyz_p, s_p in zip(point_frames, point_xyz, point_sigma, strict=True):
-            out.append((pos[f_p] - xyz_p) / s_p)
-        return np.concatenate(out)
+            parts.append((pos[f_p] - xyz_p) / s_p)
+        return np.concatenate(parts)
 
     start_xy = rest_xy
-    if (
-        start_xy is None and point_frames
-    ):  # the start of the guess only; the residuals stay as they are
+    if start_xy is None and point_frames:  # the start of the guess only; residuals unchanged
         start_xy = point_xyz[int(np.argmin(point_frames))][:2]
     x0_guess = np.asarray(start_xy, dtype=float) if start_xy is not None else np.zeros(2)
     target: dict | None = keeper
     if target is None and point_frames and max(point_frames) > 0:
         last_i = int(np.argmax(point_frames))
         target = {"frame": point_frames[last_i], "xyz": point_xyz[last_i]}
-    spin_guesses = [np.zeros(3), np.array([0.0, 0.0, 2 * np.pi * 6.0]),
-                    np.array([0.0, 0.0, -2 * np.pi * 6.0])][:spin_starts]  # fmt: skip
+    spin_guesses = [
+        np.zeros(3),
+        np.array([0.0, 0.0, 2 * np.pi * 6.0]),
+        np.array([0.0, 0.0, -2 * np.pi * 6.0]),
+    ][:spin_starts]
     omega_max = 2 * np.pi * SPIN_MAX_RPS
-    best = None
-    for tk0 in (0.0, 0.5 / fps, 1.0 / fps):
+    lo = [-80, -60, -80, -80, -80, 0.0, -omega_max, -omega_max, -omega_max]
+    hi = [80, 60, 80, 80, 80, (n_frames - 1) / fps, omega_max, omega_max, omega_max]
+    if kick_window is not None:
+        lo[5] = max(lo[5], float(kick_window[0]))
+        hi[5] = min(hi[5], float(kick_window[1]))
+    starts: list[np.ndarray] = []
+    if theta0 is not None:
+        starts.append(np.asarray(theta0, dtype=float))
+    tk_guesses = [0.0, 0.5 / fps, 1.0 / fps]
+    if kick_window is not None:
+        tk_guesses.insert(0, 0.5 * (float(kick_window[0]) + float(kick_window[1])))
+    for tk0 in tk_guesses:
         v = np.zeros(3)
         if target is not None:
             kf = int(target["frame"])
             T = max(kf / fps - tk0, 1e-3)
             kx, ky, kz = (float(c) for c in np.asarray(target["xyz"], dtype=float))
-            v = np.array([(kx - x0_guess[0]) / T, (ky - x0_guess[1]) / T,
-                          (kz - rest_height + 0.5 * GRAVITY * T * T) / T])  # fmt: skip
+            v = np.array(
+                [
+                    (kx - x0_guess[0]) / T,
+                    (ky - x0_guess[1]) / T,
+                    (kz - rest_height + 0.5 * GRAVITY * T * T) / T,
+                ]
+            )
         for w0 in spin_guesses:
-            guess = np.concatenate([x0_guess, v, [tk0], w0])
-            lo = [-80, -60, -80, -80, -80, 0.0, -omega_max, -omega_max, -omega_max]
-            hi = [80, 60, 80, 80, 80, (n_frames - 1) / fps, omega_max, omega_max, omega_max]
-            sol = least_squares(residuals, guess, bounds=(lo, hi), method="trf", max_nfev=400)
-            if best is None or sol.cost < best.cost:
-                best = sol
+            starts.append(np.concatenate([x0_guess, v, [tk0], w0]))
+    best = None
+    for guess in starts:
+        sol = least_squares(
+            residuals,
+            np.clip(guess, lo, hi),
+            bounds=(lo, hi),
+            method="trf",
+            max_nfev=400,
+        )
+        if best is None or sol.cost < best.cost:
+            best = sol
 
     if best is None:  # the loops above always run, this only narrows the type
         raise RuntimeError("no flight was fitted")
     theta = best.x
     res = residuals(theta)
-    px = res[: 2 * len(frames)].reshape(-1, 2) * PIXEL_SIGMA
-    per_frame_px = {int(f): float(np.hypot(*e)) for f, e in zip(frames, px, strict=True)}
+    per_frame_acc: dict[int, list[float]] = {}
+    px_all: list[np.ndarray] = []
+    offset = 0
+    for frames, _uv, _P in obs:
+        n = 2 * len(frames)
+        px = res[offset : offset + n].reshape(-1, 2) * PIXEL_SIGMA
+        offset += n
+        for f, e in zip(frames, px, strict=True):
+            per_frame_acc.setdefault(int(f), []).append(float(np.hypot(*e)))
+            px_all.append(e)
+    px_arr = np.array(px_all) if px_all else np.zeros((0, 2))
+    per_frame_px = {f: float(np.mean(errs)) for f, errs in sorted(per_frame_acc.items())}
     pos = simulate_flight(theta, times, rest_height)
     speed = np.zeros(n_frames)
     if n_frames > 1:
         speed[1:] = np.linalg.norm(np.diff(pos, axis=0), axis=1) * fps
     omega = theta[6:9]
     omega_norm = float(np.linalg.norm(omega))
-    tail = res[2 * len(frames) :]
-    anchor_res: dict[str, float | None] = {"rest_m": None, "barrier_distance_m": None,
-                                           "barrier_height_m": None, "keeper_m": None}  # fmt: skip
+    tail = res[n_obs:]
+    anchor_res: dict[str, float | None] = {
+        "rest_m": None,
+        "barrier_distance_m": None,
+        "barrier_height_m": None,
+        "keeper_m": None,
+    }
     i = 0
     if rest_xy is not None:
         anchor_res["rest_m"] = round(float(np.hypot(*tail[i : i + 2]) * ANCHOR_SIGMA["rest"]), 3)
@@ -406,12 +490,52 @@ def fit_flight(
             round(float(v), 4) for v in (omega / omega_norm if omega_norm > 0 else omega)
         ],
         "per_frame_px": per_frame_px,
-        "rms_px": round(float(np.sqrt(np.mean(px**2))), 3),
-        "max_px": round(float(np.max(np.hypot(px[:, 0], px[:, 1]))), 3),
+        "rms_px": round(float(np.sqrt(np.mean(px_arr**2))), 3) if px_arr.size else None,
+        "max_px": round(float(np.max(np.hypot(px_arr[:, 0], px_arr[:, 1]))), 3)
+        if px_arr.size
+        else None,
         "anchor_residuals": anchor_res,
         "positions": {int(f): (float(x), float(y), float(z)) for f, (x, y, z) in enumerate(pos)},
         "speed_mps": [round(float(s), 2) for s in speed],
         "peak_speed_mps": round(float(speed.max()), 2),
         "above_fit_range": bool(speed.max() > BRAZUCA_CD["v_max"]),
         "success": bool(best.success),
+        "views": len(obs),
     }
+
+
+def fit_flight(
+    pixels: dict[int, tuple[float, float]],
+    cameras: dict[int, np.ndarray],
+    fps: float,
+    n_frames: int,
+    *,
+    anchors: dict,
+    rest_height: float = BALL_RADIUS,
+    spin_starts: int = 3,
+    theta0: np.ndarray | None = None,
+    kick_window: tuple[float, float] | None = None,
+) -> dict:
+    """Fit one flight (velocity, spin and kick time) to a hand-corrected ball.
+
+    ``pixels`` maps frame -> ``(u, v)`` of the ball centre; ``cameras`` maps frame -> the 3x4
+    projection of that frame (pitch metres -> pixels). ``anchors`` may hold ``"rest"`` (x, y at
+    the kick, the kicker's foot), ``"barrier"`` (``{"frame", "xy", "z", "offset"}``: the ball is
+    ``z`` high and ``offset`` horizontally from ``xy``), ``"keeper"`` (``{"frame", "xyz"}``) and
+    ``"points"`` (``{"frame", "xyz", "sigma"}`` each, at least three).
+
+    Residuals: reprojection in px (``PIXEL_SIGMA``) and the anchors in metres
+    (``ANCHOR_SIGMA``). Several kick times and spin starts are tried; the best is kept.
+    One camera only: :func:`fit_flight_views` takes several. ``theta0`` is an optional extra
+    start (see :func:`seed_flight`).
+    """
+    return fit_flight_views(
+        [(pixels, cameras)],
+        fps,
+        n_frames,
+        anchors=anchors,
+        rest_height=rest_height,
+        spin_starts=spin_starts,
+        theta0=theta0,
+        kick_window=kick_window,
+    )

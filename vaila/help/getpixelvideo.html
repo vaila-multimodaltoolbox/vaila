@@ -237,9 +237,9 @@
       </section>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.11<br />
+        <strong>Version:</strong> 0.4.12<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 23 October 2026<br />
+        <strong>Updated:</strong> 28 October 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -1171,7 +1171,9 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
           For Template:FIFA / soccerfield, it loads
           <code>vaila/models/soccerfield_kiki.csv</code> (49 landmarks, including
           goal posts, nets, corner flags, and <code>center_field</code>) so you can
-          walk and mark those named points on the video. FIFA-dataset labeling
+          walk and mark those named points on the video. Saving the 49 points writes
+          <code>&lt;video&gt;_kiki49.csv</code>; <code>&lt;video&gt;_markers.csv</code> stays the ball track (one point).
+          FIFA-dataset labeling
           (<code>prefer_fifa_dataset</code>) still uses
           <code>soccerfield_ref3d_fifa_dataset.csv</code> (48 points). MediaPipe/YOLO
           templates show a pose skeleton guide instead.

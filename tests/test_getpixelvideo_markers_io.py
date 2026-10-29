@@ -179,3 +179,13 @@ def test_export_labeling_dataset_accepts_loaded_tracking_bboxes(tmp_path) -> Non
     parts = labels[0].read_text(encoding="utf-8").strip().split()
     assert parts[0] == "0"
     assert len(parts) == 5
+
+
+def test_the_49_point_template_saves_kiki49_and_the_ball_keeps_markers_csv(tmp_path) -> None:
+    video = tmp_path / "clip.mp4"
+    video.write_bytes(b"")
+    kiki_points = {0: [(10.0, 20.0)] + [(None, None)] * 48}
+    kiki = gpv.save_coordinates(video, kiki_points, 1, None, fixed_keypoints_count=49)
+    ball = gpv.save_coordinates(video, {0: [(10.0, 20.0)]}, 1, None)
+    assert Path(kiki).name == "clip_kiki49.csv"
+    assert Path(ball).name == "clip_markers.csv"

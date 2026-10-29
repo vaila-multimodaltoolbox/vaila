@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 26 October 2026
-Version: 0.4.11
+Update Date: 28 October 2026
+Version: 0.4.12
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -729,6 +729,7 @@ def _draw_pose_overlay(
     *,
     draw_ids: bool,
     label_boxes: dict[int, tuple[float, float, float, float]] | None = None,
+    label_texts: dict[int, str] | None = None,
 ) -> np.ndarray:
     """Draw the reprojected MHR skeleton, colored by joint side.
 
@@ -779,8 +780,8 @@ def _draw_pose_overlay(
                 joint_color = side_colors[idx] if idx < len(side_colors) else center
                 cv2.circle(out, (x, y), 3, joint_color, -1, cv2.LINE_AA)
         if draw_ids:
-            depth = float(inst["cam_t"][2])
-            label = f"ID {int(inst['person_id'])}  z={depth:.2f} m"
+            # the ID only unless a label text is given (freekiki_teams: role, team and height)
+            label = (label_texts or {}).get(int(inst["sam_obj_id"]), f"ID {int(inst['person_id'])}")
             sam_box = (label_boxes or {}).get(int(inst["sam_obj_id"]))
             if sam_box is not None:
                 _draw_box_label(out, label, sam_box[0], sam_box[1], id_color, row=1)

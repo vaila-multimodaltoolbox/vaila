@@ -446,6 +446,12 @@
     var dataEl = doc.getElementById("ed-data");
     if (!dataEl) return;
     var data = JSON.parse(dataEl.textContent);
+    if (data.disabled) {
+      // the two-camera fit is not reproduced here: the editor section is hidden
+      var section = doc.getElementById("editor");
+      if (section) section.style.display = "none";
+      return;
+    }
     var L = data.labels;
     var lang = data.lang;
     var state = { points: data.points.map(clonePoint), theta: data.theta.slice() };

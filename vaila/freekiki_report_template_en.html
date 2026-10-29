@@ -142,12 +142,7 @@ the pixels of the image, must curve the way it did. The fit inferred a spin of <
 with the spin axis {{spin_axis}}, which makes the ball curve to the sides. This is an <b>inference</b>, not a direct measurement.</p>
 
 <h3>4.4 How the trajectory was fitted to the image</h3>
-<p>Each frame of the broadcast has a camera calibration, obtained from the painted lines of the pitch, whose measures are
-known. With it, the position of the ball in each frame becomes a real position on the pitch. The physical trajectory (gravity,
-drag and Magnus) is fitted so as to reproduce these positions with a mean error of <b>{{rms}} pixel</b> in the image. In
-addition, three physical points of the kick enter as references: the ball starts on the kicker's foot, passes 1.8 m high
-0.3 m from the shoulder of a player in the wall, and reaches the keeper's hands. These positions are not reproduced exactly:
-the difference is discussed in section 6.</p>
+<p>{{method_text}}</p>
 <figure>
   <img src="{{img_residuos}}" alt="Error of each frame between the fitted trajectory and the marked points">
   <figcaption>How far the fitted trajectory is from the marked points in each frame. The lower, the better.</figcaption>
@@ -171,10 +166,8 @@ curve the ball made in the air, measured by its offset from the straight line.</
   <li><b>The validation with a published case did not pass.</b> We simulated the kick of Pelé published in the teaching material of
   UFRJ (Aguiar), and the final point was about 10 to 12 metres away from the published one. The physics (forces, drag and Magnus)
   follows the references, but this test shows that there are still differences of convention or of parameters.</li>
-  <li><b>The physical reference points may differ.</b> The foot, the wall and the goalkeeper are chosen from the reconstructed
-  players, and were not measured directly on the pitch. In this reconstruction, the difference between the fit and the reference
-  points is {{worst}} m in the worst case.</li>
-  <li><b>The height of the wall is a hypothesis</b> of 1.8 metres, and the trajectory over it depends on that choice.</li>
+  <li>{{refs_text}}</li>
+  <li>{{wall_text}}</li>
   <li><b>The touch of the keeper was not modelled.</b> The trajectory treats the flight as free until the entry.</li>
 </ul>
 </div>

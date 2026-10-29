@@ -2,7 +2,22 @@
 
 **App version (GUI/CLI banner):** 0.4.12 (see `vaila.py`). **Package version:** 0.4.12 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-10-27
+**Last updated:** 2026-10-29
+
+Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
+set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.
+Live remaining-frame counts help match lengths by hand. **Save all / Save current video**
+export new trimmed videos at each source FPS, without synchronization or interpolation.
+See the [manual-cut workflow](vaila/help/syncvid.md#manual-cuts-side-by-side).
+
+Syncvid **Sync by events + interpolation** preserves every selected original and inserts
+bidirectional Farnebäck estimates on the minimum exact rational grid. Select **Events: interpolate**
+and set **Max output FPS** (default 240; CLI `--max-output-fps 480` to authorize higher rates).
+The limit does not force the output FPS. The preview shows the calculated rate, final count and
+original/interpolated counts for every camera; checkpoints save the limit.
+The `63/71/81 ↔ 54/58/62` example at a `30000/1001` reference clock yields 37 frames
+at `60000/1001`, with common events at output frames 1, 17 and 37. Interpolated ball,
+feet and occlusions can show artifacts. See the [interpolation workflow](vaila/help/syncvid.md#sync-by-events--interpolation).
 
 Syncvid **Sync by events** calibrates physical time after repeat review, using editable event pairs
 and exact rational clocks. Cut Video exports a shared time grid, temporal-error maps and retained
@@ -200,7 +215,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 27.Oct.2026 v0.4.12 (Python 3.12.15)
+vailá - 28.Oct.2026 v0.4.12 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -980,7 +995,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.12`** (27 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.12`** (28 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

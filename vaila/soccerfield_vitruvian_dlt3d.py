@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: vailá team
-Version: 0.3.120
+Version: 0.4.12
 Created: 11 August 2026
-Update Date: 03 September 2026
+Update Date: 27 October 2026
 ================================================================================
 Description:
     Estimate a time-varying DLT3D camera from two complementary sources:
@@ -579,7 +579,7 @@ def calibrate_time_varying(
     bbox_top_csv: Path | str,
     heights_csv: Path | str | None = None,
     known_verticals_csv: Path | str | None = None,
-    default_height_m: float | None = 1.80,
+    default_height_m: float | None = 1.83,
     bbox_weight: float = 0.25,
     known_weight: float = 1.0,
     min_field_points: int = 6,
@@ -703,7 +703,7 @@ def build_argparser() -> argparse.ArgumentParser:
         default=None,
         help="Optional goalpost/scene vertical controls in long CSV form",
     )
-    parser.add_argument("--default-height-m", type=float, default=1.80)
+    parser.add_argument("--default-height-m", type=float, default=1.83)
     parser.add_argument("--bbox-weight", type=float, default=0.25)
     parser.add_argument("--known-weight", type=float, default=1.0)
     parser.add_argument("--min-field-points", type=int, default=6)

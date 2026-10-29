@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 25 September 2026
-Update Date: 27 October 2026
+Update Date: 29 October 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -168,6 +168,8 @@ HELP_HTML = VAILA_DIR / "help" / "freekiki.html"
 USER_SETTINGS = Path.home() / ".vaila" / "freekiki.toml"
 # Private marker the GUI reader thread uses to pass a batch summary to the Tk loop.
 SKIPPED_NOTICE = "\x00freekiki-skipped\x00"
+# Hand-marked 49 keypoints of a video, next to it: ``<stem>_kiki49.csv`` (the ball is ``_markers.csv``).
+KIKI49_SUFFIX = "_kiki49.csv"
 
 NKP = 49
 CONFIG_NAME = "freekiki.toml"
@@ -3089,15 +3091,14 @@ def load_raw_review_predictions(
 ) -> int:
     """Load detect's raw CSV only after checking its README and video metadata.
 
-    ``directory`` is one detect output or a detect batch folder; for a batch the
-    newest output of the session's video is used. ``frames`` (a set of frame
-    indices) drafts only those frames; None drafts every predicted frame.
+    ``directory`` is one detect output, a detect batch, a ``*_3d_*`` folder, or a
+    parent that holds those; the detect run of the session's video is used.
+    ``frames`` (a set of frame indices) drafts only those frames; None drafts
+    every predicted frame.
     """
     import cv2
 
-    directory = Path(directory)
-    if not (directory / "README.txt").is_file():
-        directory = _prediction_dir_for_video(directory, session["video"])
+    directory = resolve_detect_predictions(directory, session["video"])
     readme = (directory / "README.txt").read_text(encoding="utf-8")
     video_line = next(
         (line[7:] for line in readme.splitlines() if line.startswith("video: ")), None
@@ -3225,6 +3226,27 @@ def _work_owner(folder: Path, video: str | None) -> Path | None:
     return work_owner(folder, video)
 
 
+def _detect_run_under_work(work: Path, video: str | None) -> Path | None:
+    """Newest ``freekiki_predict_*`` under ``work`` (flat or ``processed_freekiki_batch_*/``)."""
+    if not work.is_dir():
+        return None
+    try:
+        from .freekiki_detect3d import _detect_run_dir
+    except ImportError:
+        from freekiki_detect3d import _detect_run_dir  # ty: ignore[unresolved-import]
+    stem = Path(video).stem if video else ""
+    if stem:
+        found = _detect_run_dir(work, stem)
+        if found is not None:
+            return found
+    # No video / no stem match: any detect child (direct or under a batch folder).
+    children = _detect_run_children(work)
+    for batch in sorted(work.glob("processed_freekiki_*"), reverse=True):
+        if batch.is_dir():
+            children.extend(_detect_run_children(batch))
+    return children[0] if children else None
+
+
 def _settings_from_3d(folder: Path) -> dict:
     """Settings of a ``<video>_3d_<time>`` folder: its detect run, video and the ball/player choices."""
     r = _readme_fields(folder)
@@ -3236,9 +3258,9 @@ def _settings_from_3d(folder: Path) -> dict:
     if source is not None:
         if source != folder:
             s["work_from"] = str(source)
-        runs = [p for p in sorted((source / "work").glob("freekiki_predict_*")) if p.is_dir()]
-        if runs:
-            s |= {k: v for k, v in _settings_from_run(runs[-1]).items() if k not in s}
+        run = _detect_run_under_work(source / "work", r.get("video"))
+        if run is not None:
+            s |= {k: v for k, v in _settings_from_run(run).items() if k not in s}
         kept = source / "players_on_field.csv"
         if kept.is_file():
             with kept.open(newline="", encoding="utf-8") as fh:
@@ -3314,9 +3336,123 @@ def detect_runs(path) -> list[tuple[Path, Path]]:
     return sorted(((r, v) for v, r in newest.items()), key=lambda rv: rv[1].name)
 
 
+def _is_detect_like_folder(folder: Path) -> bool:
+    """True when ``folder`` looks like a detect run (title README or video:+raw CSV)."""
+    if detect_output_dir(folder) is not None:
+        return True
+    fields = _readme_fields(folder)
+    if "video" not in fields:
+        return False
+    return (folder / "field_kps_raw.csv").is_file() or "model_sha256" in fields or "model" in fields
+
+
+def _readme_video_matches(fields: dict[str, str], video_path: Path) -> bool:
+    raw = fields.get("video")
+    if not raw:
+        return False
+    try:
+        return Path(raw).resolve() == video_path
+    except OSError:
+        return Path(raw).name == video_path.name
+
+
+def resolve_detect_predictions(path, video=None) -> Path:
+    """Resolve ``path`` to the detect-run folder getpixelvideo should load.
+
+    Accepts a detect run, a detect batch, a ``*_3d_*`` folder, or a parent that
+    holds those (the FreeKiki Correct button often passes the output root next
+    to the video). ``video`` selects among several runs when needed.
+
+    Raises ``ValueError`` when nothing is a FreeKiki detect output.
+    """
+    path = Path(path).expanduser()
+    video_path = Path(video).resolve() if video else None
+
+    run = detect_output_dir(path)
+    if run is not None:
+        return run
+
+    folder = path if path.is_dir() else path.parent
+    if not folder.is_dir():
+        raise ValueError(f"No freekiki detect run at {path}")
+
+    # Direct detect folder: titled README, or older/minimal README with video: + raw CSV.
+    if _is_detect_like_folder(folder):
+        fields = _readme_fields(folder)
+        if video_path is None or _readme_video_matches(fields, video_path):
+            return folder.resolve()
+
+    runs = detect_runs(folder)
+    if video_path is not None:
+        for run_dir, run_video_path in runs:
+            if run_video_path == video_path:
+                return run_dir
+    elif len(runs) == 1:
+        return runs[0][0]
+    elif len(runs) > 1:
+        raise ValueError(
+            f"Several detect runs in {folder}; pass the video to choose one "
+            f"({', '.join(v.name for _, v in runs)})"
+        )
+
+    # Batch folder (or parent): newest child whose README names this video.
+    if video_path is not None:
+        batch_errors: list[ValueError] = []
+        for batch in (folder, *sorted(folder.glob("processed_freekiki_*"), reverse=True)):
+            if not batch.is_dir() or not _detect_run_children(batch):
+                continue
+            try:
+                return _prediction_dir_for_video(batch, str(video_path))
+            except ValueError as exc:
+                batch_errors.append(exc)
+        if batch_errors and not any(folder.glob("*_3d_*")):
+            raise batch_errors[0]
+
+    # 3D folder, or a parent that holds <stem>_3d_<time>/work/.../freekiki_predict_*.
+    candidates: list[Path] = []
+    head = folder / "README.txt"
+    if head.is_file() and head.read_text(encoding="utf-8", errors="replace").startswith(
+        "FreeKiki 3D output"
+    ):
+        candidates.append(folder)
+    stem = video_path.stem if video_path is not None else None
+    if stem:
+        candidates.extend(sorted(folder.glob(f"{stem}_3d_*"), reverse=True))
+    candidates.extend(sorted(folder.glob("*_3d_*"), reverse=True))
+
+    seen: set[Path] = set()
+    for three_d in candidates:
+        three_d = three_d.resolve()
+        if three_d in seen or not three_d.is_dir():
+            continue
+        seen.add(three_d)
+        fields = _readme_fields(three_d)
+        if (
+            video_path is not None
+            and "video" in fields
+            and not _readme_video_matches(fields, video_path)
+        ):
+            continue
+        source = _work_owner(three_d, str(video_path) if video_path else fields.get("video"))
+        if source is None:
+            continue
+        found = _detect_run_under_work(
+            source / "work", str(video_path) if video_path else fields.get("video")
+        )
+        if found is not None:
+            return found
+
+    label = video_path.name if video_path is not None else str(path)
+    raise ValueError(
+        f"No freekiki detect run for {label} in {path} "
+        "(need a freekiki_predict_* folder, a detect batch, or a *_3d_* result with work/)"
+    )
+
+
 def freekiki_run_options(run_dir) -> dict:
     """getpixelvideo options that open a detect run in correction mode."""
-    readme = (Path(run_dir) / "README.txt").read_text(encoding="utf-8").splitlines()
+    run_dir = resolve_detect_predictions(run_dir)
+    readme = (run_dir / "README.txt").read_text(encoding="utf-8").splitlines()
     model = next((line[7:] for line in readme if line.startswith("model: ")), "")
     ws = workspace_for_model_file(model) if model else None
     return {
@@ -4731,13 +4867,14 @@ def export_wide_markers_csv(
 
     written = []
     video_stem = Path(session.get("video", "video")).stem
+    # The 49 points go to <stem>_kiki49.csv: <stem>_markers.csv is the ball track.
     csv_paths = [
-        root / f"{video_stem}_markers.csv",
+        root / f"{video_stem}{KIKI49_SUFFIX}",
         root / "field_kps_getpixelvideo.csv",
     ]
     video_path = Path(session.get("video", ""))
     if video_path.parent.is_dir() and video_path.parent.resolve() != root.resolve():
-        csv_paths.append(video_path.parent / f"{video_stem}_markers.csv")
+        csv_paths.append(video_path.parent / f"{video_stem}{KIKI49_SUFFIX}")
 
     for cp in csv_paths:
         try:
@@ -5762,6 +5899,7 @@ POINT_CODES = {
     "Rk": "rejected: keypoint conf < kp_conf",
     "Ro": "rejected: outside the image",
     "Rd": "rejected: same pixel (< 3 px@1920) as a higher-confidence index",
+    "A": "absent: not marked by hand (manual keypoints, --keypoints-csv)",
     "I": "interpolated (field_kps_filled_*.csv only; gap <= --fill-gaps frames, same shot)",
 }
 
@@ -5840,6 +5978,63 @@ def video_quality(
     return out
 
 
+def read_manual_keypoints(path, n_frames: int) -> dict:
+    """Frame -> ``(NKP, 2)`` pixels of a hand-marked 49-point CSV (``frame,p0_x,p0_y,...``).
+
+    The layout is the one getpixelvideo saves for the Soccer-Kiki template and the FreeKiki
+    export writes. A blank point is NaN; a frame without any mark is absent from the dict.
+    A frame outside the video is refused. A point outside the image is kept and rejected
+    later (status ``Ro``).
+    """
+    import numpy as np
+
+    name = Path(path).name
+    header = ["frame"] + [f"p{i}_{k}" for i in range(NKP) for k in ("x", "y")]
+    marks: dict = {}
+    with Path(path).open(newline="", encoding="utf-8") as fh:
+        reader = csv.reader(fh)
+        first = next(reader, [])
+        if [h.strip() for h in first] != header:
+            raise ValueError(f"{name}: not the 49-keypoint layout (frame,p0_x,p0_y,...,p48_y)")
+        for row in reader:
+            if not row or not row[0].strip():
+                continue
+            if len(row) < len(header):
+                raise ValueError(f"{name}: a row has {len(row)} columns, expected {len(header)}")
+            frame = int(float(row[0]))
+            if frame < 0 or (n_frames and frame >= n_frames):
+                raise ValueError(f"{name}: frame {frame} is outside the video ({n_frames} frames)")
+            pts = np.full((NKP, 2), np.nan)
+            for i in range(NKP):
+                x, y = row[1 + 2 * i].strip(), row[2 + 2 * i].strip()
+                if x and y:
+                    pts[i] = (float(x), float(y))
+            if np.isfinite(pts).any():
+                marks[frame] = pts
+    return marks
+
+
+def manual_prediction(pts):
+    """``(box_conf, xy, kc)`` of one hand-marked frame, in the shape the network returns.
+
+    A marked point has keypoint confidence 1.0. An unmarked point is NaN with confidence 0.
+    A frame without any mark has no instance (``None``), so it gets the ``N`` status.
+    """
+    import numpy as np
+
+    if pts is None:
+        return float("nan"), None, None
+    marked = np.isfinite(pts).all(axis=1)
+    return 1.0, pts, np.where(marked, 1.0, 0.0)
+
+
+def manual_keypoints_for(video) -> Path | None:
+    """The hand-marked ``<video stem>_kiki49.csv`` next to a video, else None."""
+    video = Path(video)
+    found = video.with_name(f"{video.stem}{KIKI49_SUFFIX}")
+    return found if found.is_file() else None
+
+
 def detect_video(
     ws,
     video,
@@ -5861,6 +6056,7 @@ def detect_video(
     snap: bool = True,
     snap_band: float | None = None,
     snap_max_move: float | None = None,
+    keypoints_csv=None,
 ) -> Path:
     """Detect the 49 field keypoints in a video; returns the output folder.
 
@@ -5874,6 +6070,9 @@ def detect_video(
     separate ``field_kps_filled_*`` CSVs with short gaps interpolated.
     ``geom`` adds field-geometry CSVs (``field_kps_geom_*``) and per-frame DLT
     files (``.dlt2d``, ``.dlt3d``) fitted to the snapped points.
+    ``keypoints_csv`` (a hand-marked 49-point CSV, see :func:`read_manual_keypoints`)
+    replaces the network: no model is loaded and the points are not snapped (a hand
+    mark stays where it was put). The field geometry still fills the unmarked points.
     """
     import cv2
     import numpy as np
@@ -5885,7 +6084,9 @@ def detect_video(
     geom_settings = all_settings["geometry"]
     geom_mode = str(geom or geom_settings.get("mode", "fill"))
     G = _geom() if geom_mode != "off" else None
-    fs = _snap() if snap else None
+    # A hand mark is kept exactly where it was put: no snap for manual keypoints.
+    keypoints_csv = Path(keypoints_csv).expanduser().resolve() if keypoints_csv else None
+    fs = _snap() if snap and keypoints_csv is None else None
     snap_kw: dict = {}
     if snap_band is not None:
         snap_kw["band_px"] = float(snap_band)
@@ -5894,16 +6095,20 @@ def detect_video(
     conf = float(defaults["conf"] if conf is None else conf)
     kp_conf = float(defaults["kp_conf"] if kp_conf is None else kp_conf)
     stride = max(1, int(stride))
-    model_path = resolve_model(ws, model)
-    model_info = describe_model(ws, model, model_path)
-    _log(f"model: {model_info}")
-    predictor = load_predictor(
-        model_path, imgsz=imgsz, fallback_imgsz=defaults["imgsz"], device=device
-    )
-    imgsz = predictor.imgsz
+    predictor = None
+    if keypoints_csv is None:
+        model_path = resolve_model(ws, model)
+        model_info = describe_model(ws, model, model_path)
+        _log(f"model: {model_info}")
+        predictor = load_predictor(
+            model_path, imgsz=imgsz, fallback_imgsz=defaults["imgsz"], device=device
+        )
+        imgsz = predictor.imgsz
+    else:
+        model_path, model_info = None, "none (manual keypoints)"
+        _log(f"keypoints: {keypoints_csv.name} (marked by hand, no network)")
     base_out = Path(output_dir).expanduser() if output_dir else video.parent
     out = base_out / f"freekiki_predict_{video.stem}_{datetime.now():%Y%m%d_%H%M%S}"
-    (out / "diag_frames").mkdir(parents=True, exist_ok=True)
 
     cap = cv2.VideoCapture(str(video))
     if not cap.isOpened():
@@ -5912,6 +6117,14 @@ def detect_video(
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    manual = None
+    if keypoints_csv is not None:
+        try:
+            manual = read_manual_keypoints(keypoints_csv, total)
+        except (OSError, ValueError):
+            cap.release()
+            raise
+    (out / "diag_frames").mkdir(parents=True, exist_ok=True)
     if start > 0:
         cap.set(cv2.CAP_PROP_POS_FRAMES, start)
     bones = load_bones()
@@ -5945,11 +6158,18 @@ def detect_video(
             ok, frame = cap.read()
             if not ok:
                 break
-            box_conf, xy, kc = predictor.predict(frame)
+            if manual is None:
+                assert predictor is not None  # the network path loads it above
+                box_conf, xy, kc = predictor.predict(frame)
+            else:
+                box_conf, xy, kc = manual_prediction(manual.get(frame_idx))
             sig = diag.frame_signature(frame)
             cut = diag.is_cut(prev_sig, sig, cut_threshold)
             prev_sig = sig
             codes = point_codes(xy, kc, box_conf, conf, kp_conf, (width, height))
+            if manual is not None and xy is not None:
+                marked = np.isfinite(xy).all(axis=1)
+                codes = [c if m else "A" for c, m in zip(codes, marked, strict=True)]
             all_codes.update(codes)
             acc = np.array([c == "D" for c in codes])
 
@@ -5976,6 +6196,11 @@ def detect_video(
     finally:
         cap.release()
 
+    if manual is not None and all_codes.get("Ro"):
+        _log(
+            f"WARNING {all_codes['Ro']} hand mark(s) outside the image were rejected (status Ro): "
+            "check their x and y in the keypoints CSV"
+        )
     if fs is not None and len(nets) > 0:
         final_pts = fs.stabilize(np.array(nets), np.array(snaps), width)
     else:
@@ -6344,14 +6569,20 @@ def detect_video(
                 for t, f in enumerate(frames)
             ],
         )
+    source_text = (
+        f"model: {model_path}\nmodel_sha256: {file_sha256(model_path)}\n"
+        f"model_info: {model_info}\nimgsz: {imgsz}\n"
+        if manual is None
+        else f"keypoints: manual, {keypoints_csv} (sha256 {file_sha256(keypoints_csv)})\n"
+        "network: not used (the points are the hand marks, status A = not marked)\n"
+    )
     (out / "README.txt").write_text(
         "FreeKiki field keypoints (vailá)\n"
-        f"video: {video}\nmodel: {model_path}\nmodel_sha256: {file_sha256(model_path)}\n"
-        f"model_info: {model_info}\n"
+        f"video: {video}\n{source_text}"
         f"dimensions: {width}x{height}\nframes: {processed} (start={start}, "
         f"stride={stride})\ndetection (box) conf: {conf}\nkeypoint conf: {kp_conf}\n"
-        f"imgsz: {imgsz}\nfill gaps: {fill_gaps} frames\ngeometry: {geom_mode}\n"
-        f"snap: {snap} (snapped onto painted pitch lines, raw network shifts discarded)\n"
+        f"fill gaps: {fill_gaps} frames\ngeometry: {geom_mode}\n"
+        f"snap: {fs is not None} (snapped onto painted pitch lines, raw network shifts discarded)\n"
         "schema: vaila/models/soccerfield_kiki.csv (p0..p48, 0-based)\n\n"
         "field_kps_getpixelvideo.csv  accepted points only (status D, snapped to paint)\n"
         "field_kps_snap_getpixelvideo.csv accepted points after snap (identical to getpixelvideo)\n"
@@ -6388,7 +6619,13 @@ def detect_video(
         encoding="utf-8",
     )
     quality = (
-        {"video": video.name, "model": model_path, "conf": conf, "kp_conf": kp_conf}
+        {
+            "video": video.name,
+            "keypoint_source": "network" if manual is None else "manual",
+            "model": model_path,
+            "conf": conf,
+            "kp_conf": kp_conf,
+        }
         | video_quality(xy_seq, kc_seq, kp_conf, width=width, cuts=cuts, calib=calib)
         | {"point_codes": dict(sorted(all_codes.items())), "note": "label-free, not accuracy"}
     )
@@ -6737,7 +6974,14 @@ def screen_verdict(rates: dict, min_camera_ok: float) -> tuple[bool, str]:
 
 
 def detect_videos(
-    ws, source, *, output_dir=None, screen: bool = True, min_camera_ok: float = 0.3, **kwargs
+    ws,
+    source,
+    *,
+    output_dir=None,
+    screen: bool = True,
+    min_camera_ok: float = 0.3,
+    keypoints_csv=None,
+    **kwargs,
 ) -> Path:
     """Detect on one video or on every video of a folder.
 
@@ -6752,6 +6996,9 @@ def detect_videos(
     in a folder batch and listed in ``skipped_videos.csv`` (a single video that
     was named explicitly is still processed, with a warning). ``min_camera_ok``
     is the share of sampled frames that need a valid pitch camera.
+
+    A video with a hand-marked ``<stem>_kiki49.csv`` next to it is not screened: its
+    keypoints are those marks (:func:`detect_video` with ``keypoints_csv``).
     """
     validate_detection_workspace(ws, kwargs.get("model", "active"))
     source = Path(source).expanduser().resolve()
@@ -6782,16 +7029,19 @@ def detect_videos(
 
     verdicts_cache: dict = {}
     if source.is_file():
-        if screen:
+        keypoints = Path(keypoints_csv) if keypoints_csv else manual_keypoints_for(source)
+        if screen and keypoints is None:
             usable, reason, _ = judge(source)
             if not usable:
                 _log(f"WARNING {source.name}: {reason}; processing it because it was named")
-        return detect_video(ws, source, output_dir=output_dir, **kwargs)
+        return detect_video(ws, source, output_dir=output_dir, keypoints_csv=keypoints, **kwargs)
     videos = sorted(p for p in source.iterdir() if p.suffix.lower() in VIDEO_EXTS)
     if not videos:
         videos = find_videos(source, recursive=True)
     if not videos:
         raise FileNotFoundError(f"No videos ({', '.join(sorted(VIDEO_EXTS))}) in {source}")
+    if keypoints_csv:
+        raise ValueError("--keypoints-csv names the keypoints of one video: give that video")
     base_out = Path(output_dir).expanduser() if output_dir else source
     batch = base_out / f"processed_freekiki_batch_{datetime.now():%Y%m%d_%H%M%S}"
     batch.mkdir(parents=True, exist_ok=True)
@@ -6800,7 +7050,8 @@ def detect_videos(
     failed = []
     skipped = []
     for video in videos:
-        if screen:
+        keypoints = manual_keypoints_for(video)
+        if screen and keypoints is None:
             usable, reason, rates = judge(video)
             if not usable:
                 _log(f"SKIP {video.name}: {reason}")
@@ -6816,7 +7067,7 @@ def detect_videos(
                 )
                 continue
         try:
-            out = detect_video(ws, video, output_dir=batch, **kwargs)
+            out = detect_video(ws, video, output_dir=batch, keypoints_csv=keypoints, **kwargs)
         except (OSError, ValueError, RuntimeError) as exc:
             # One bad video must not lose the others (hours of GPU on a long batch).
             _log(f"ERROR on {video.name}: {type(exc).__name__}: {exc} - continuing")
@@ -7195,7 +7446,7 @@ def detect_soccer_3d(
         device=device,
         **detect_kwargs,
     )
-    return detect_3d(
+    results = detect_3d(
         run,
         text=text,
         weights_dir=weights_dir,
@@ -7205,6 +7456,33 @@ def detect_soccer_3d(
         players_on_field=players_on_field,
         field_min_frac=field_min_frac,
         out_root=final,
+    )
+    try:
+        from .freekiki_detect3d import _ball_mode
+    except ImportError:
+        from freekiki_detect3d import _ball_mode  # ty: ignore[unresolved-import]
+    for result in results:
+        _announce_set_piece(result["out"], _ball_mode(ball))
+    return results
+
+
+def _announce_set_piece(folder, ball_mode: str) -> None:
+    """Judge the set piece of a 3D folder from its own ball and print it, as a provisional guess.
+
+    A failure here does not undo the 3D run: the folder is complete without it.
+    """
+    try:
+        from .freekiki_setpiece import write_provisional
+    except ImportError:
+        from freekiki_setpiece import write_provisional  # ty: ignore[unresolved-import]
+    try:
+        result = write_provisional(folder, ball_mode)
+    except (OSError, ValueError, KeyError) as exc:
+        _log(f"set piece (provisional) not written for {folder}: {exc}")
+        return
+    _log(
+        f"set piece (provisional, ball of this run = {ball_mode}): "
+        f"{result['kind']} - {result['reason']}"
     )
 
 
@@ -7282,6 +7560,28 @@ def build_parser() -> argparse.ArgumentParser:
             "report-tv",
             "HTML + PDF + slow-motion animation of a finished 3D run, for the press (report_tv/).",
         ),
+        (
+            "rec3d-binocular",
+            "Ball in metres from two synchronized cameras (triangulation), from two 3D folders.",
+        ),
+        (
+            "players-link",
+            "One player_id per person across two cameras of one kick (goalkeeper 0, kicker 1, rest by distance).",
+        ),
+        (
+            "players-id",
+            "One player_id per person for one camera (same rules, no partner camera).",
+        ),
+        (
+            "kick-analysis",
+            "One click: two cut cameras with their corrected ball -> the whole analysis in one new "
+            "folder (3D per camera, binocular ball, triangulated people, kicker metrics, report).",
+        ),
+        (
+            "kick-figures",
+            "Rewrites the kicker's metrics, series and figures (sticks, curves, overlays, interactive "
+            "page) of a finished kick_analysis folder from its files. Nothing is detected again.",
+        ),
     ):
         p = sub.add_parser(cmd, help=help_text)
         if cmd == "export":
@@ -7296,7 +7596,14 @@ def build_parser() -> argparse.ArgumentParser:
                 default="only_correct",
                 help="Export mode: full (all frames with keypoints) or only_correct/lite (human-reviewed only).",
             )
-        elif cmd not in ("ball-rebuild", "report-tv"):
+        elif cmd not in (
+            "ball-rebuild",
+            "report-tv",
+            "rec3d-binocular",
+            "players-link",
+            "players-id",
+            "kick-figures",
+        ):
             p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
         if cmd == "import-dataset":
             p.add_argument("--src", required=True, help="kiki49 dataset folder (has data.yaml).")
@@ -7420,6 +7727,96 @@ def build_parser() -> argparse.ArgumentParser:
             )
             p.add_argument("--band", type=float, help="Search band half width, px@1920 (35).")
             p.add_argument("--max-move", type=float, help="Largest move allowed, px@1920 (40).")
+        elif cmd == "kick-figures":
+            p.add_argument(
+                "kick_dir", help="Finished kick_analysis_<time> folder (from kick-analysis)."
+            )
+            p.add_argument(
+                "--team-a",
+                default="green",
+                choices=("green", "blue", "orange", "yellow"),
+                help="Shirt colour of TEAM_A (green). TEAM_B is the other colour most field "
+                "players wear.",
+            )
+            p.add_argument(
+                "--analysis",
+                choices=("binocular", "mono-ref", "mono-other"),
+                default=None,
+                help="Analysis marked as the result in the README (default: binocular, or "
+                "mono-ref when the run has one camera).",
+            )
+        elif cmd == "kick-analysis":
+            p.add_argument(
+                "--videos",
+                nargs="+",
+                required=True,
+                help="Folder with one cut video (monocular analysis) or two ('_sync_N_frames_A_to_B' "
+                "in the name: binocular and monocular of each camera), or the video files. Each needs "
+                "its '<video>_markers.csv'.",
+            )
+            p.add_argument(
+                "--analysis",
+                choices=("binocular", "mono-ref", "mono-other"),
+                default=None,
+                help="Analysis marked as the result in the README (default: binocular with two "
+                "cameras, mono-ref with one). All the analyses of the run are computed.",
+            )
+            p.add_argument(
+                "--set-piece",
+                choices=("auto", "penalty", "free_kick"),
+                default="auto",
+                help="Kind of set piece: auto (the ball rule decides, default), penalty or free_kick. "
+                "The rule's own answer stays in data/setpiece.json as auto_kind.",
+            )
+            p.add_argument(
+                "--reference",
+                choices=("1", "2"),
+                default="1",
+                help="Camera whose frames are the output frames (1 or 2, default 1).",
+            )
+            p.add_argument(
+                "--out",
+                help="Output folder. Default: kick_analysis_<time> next to the first video. An "
+                "existing folder continues an interrupted run.",
+            )
+            p.add_argument(
+                "--sync",
+                type=int,
+                help="Sync frame of one video whose name has no '_sync_N' (the frame where the ball "
+                "is touched, the same clock as the cut). Needs --cut-start.",
+            )
+            p.add_argument(
+                "--cut-start",
+                type=int,
+                help="First frame of the cut in the original video ('_frames_A_to_B'). Needs --sync.",
+            )
+            p.add_argument(
+                "--kick-foot",
+                choices=("auto", "left", "right"),
+                default="auto",
+                help="Kicking foot: auto = the foot nearest the ball at contact (default).",
+            )
+            p.add_argument(
+                "--no-reuse",
+                action="store_true",
+                help="Run every stage again instead of reusing the stages already finished.",
+            )
+            p.add_argument("--model", default="active", help="Detection model (default: active).")
+            p.add_argument("--device", help="Detection device, e.g. cuda:0.")
+            p.add_argument("--sam-device", help="SAM 3D Body device (default: automatic).")
+            p.add_argument(
+                "--team-a",
+                default="green",
+                choices=("green", "blue", "orange", "yellow"),
+                help="Shirt colour of TEAM_A (green). TEAM_B is the other colour most field "
+                "players wear.",
+            )
+            p.add_argument(
+                "--min-camera-ok",
+                type=float,
+                default=0.3,
+                help="Share of sampled frames in which a camera must show the pitch (0.3).",
+            )
         elif cmd == "report-tv":
             p.add_argument(
                 "-w", "--workspace", help="Not needed: accepted because the GUI always passes it."
@@ -7463,6 +7860,75 @@ def build_parser() -> argparse.ArgumentParser:
                 "--names", default="", help="Player name used in the text, e.g. Paquetá."
             )
             p.add_argument("--no-animation", action="store_true", help="Report only, no MP4.")
+        elif cmd == "rec3d-binocular":
+            p.add_argument("--run1", required=True, help="3D folder of the reference camera.")
+            p.add_argument("--run2", required=True, help="3D folder of the second camera.")
+            p.add_argument(
+                "--timing1",
+                type=Path,
+                help="Original file of camera 1 whose capture times set its clock (default: nominal frame/fps).",
+            )
+            p.add_argument(
+                "--timing2",
+                type=Path,
+                help="Original file of camera 2 whose capture times set its clock (default: nominal frame/fps).",
+            )
+            p.add_argument(
+                "--markers1",
+                type=Path,
+                help="Ball markers of camera 1 (default: next to its cut video).",
+            )
+            p.add_argument(
+                "--markers2",
+                type=Path,
+                help="Ball markers of camera 2 (default: next to its cut video).",
+            )
+            p.add_argument(
+                "--sync1",
+                type=int,
+                help="Sync frame of camera 1 in the original file (default: from its name).",
+            )
+            p.add_argument(
+                "--sync2",
+                type=int,
+                help="Sync frame of camera 2 in the original file (default: from its name).",
+            )
+            p.add_argument(
+                "--cut-start1",
+                type=int,
+                help="First original frame of camera 1's cut (default: from its name).",
+            )
+            p.add_argument(
+                "--cut-start2",
+                type=int,
+                help="First original frame of camera 2's cut (default: from its name).",
+            )
+            p.add_argument(
+                "--out",
+                type=Path,
+                help="Output folder (default: processed_rec3d_binocular_<time>/ next to run1).",
+            )
+            p.add_argument(
+                "--max-resid",
+                type=float,
+                default=3.0,
+                help="Largest reprojection error in px for a valid frame.",
+            )
+            p.add_argument(
+                "--min-angle",
+                type=float,
+                default=5.0,
+                help="Smallest angle in degrees between the two rays.",
+            )
+        elif cmd == "players-link":
+            p.add_argument(
+                "--run1",
+                required=True,
+                help="3D folder of the reference camera (its ids are 0 and 1).",
+            )
+            p.add_argument("--run2", required=True, help="3D folder of the second camera.")
+        elif cmd == "players-id":
+            p.add_argument("--run", required=True, help="3D folder of the camera.")
         elif cmd == "ball-rebuild":
             p.add_argument(
                 "-w", "--workspace", help="Not needed: accepted because the GUI always passes it."
@@ -7799,6 +8265,11 @@ def build_parser() -> argparse.ArgumentParser:
                 type=float,
                 help="Largest move allowed for snap, px@1920 (default 40).",
             )
+            p.add_argument(
+                "--keypoints-csv",
+                help="Hand-marked 49 keypoints of this video (frame,p0_x,p0_y,...): no network, "
+                "no screen. Default: <video stem>_kiki49.csv next to the video, when it exists.",
+            )
             p.set_defaults(snap=True)
     return parser
 
@@ -7820,6 +8291,58 @@ def main(argv: list[str] | None = None) -> int:
     if args.command in (None, "gui"):
         run_freekiki()
         return 0
+    if args.command == "kick-figures":
+        try:
+            from .freekiki_kick_pipeline import regenerate_figures
+        except ImportError:
+            from freekiki_kick_pipeline import regenerate_figures  # ty: ignore[unresolved-import]
+        try:
+            result = regenerate_figures(args.kick_dir, team_a=args.team_a, analysis=args.analysis)
+        except (OSError, KeyError, ValueError) as exc:
+            _log(f"kick-figures: {exc}")
+            return 1
+        _log(f"kick figures written: {result['out']}")
+        return 0
+    if args.command == "kick-analysis":
+        try:
+            from .freekiki_kick_pipeline import KickInputError, KickStageError, run_kick_analysis
+        except ImportError:
+            from freekiki_kick_pipeline import (  # ty: ignore[unresolved-import]
+                KickInputError,
+                KickStageError,
+                run_kick_analysis,
+            )
+        videos = args.videos[0] if len(args.videos) == 1 else args.videos
+        if (args.sync is None) != (args.cut_start is None):
+            _log("kick-analysis: --sync and --cut-start go together")
+            return 1
+        sync = None if args.sync is None else (args.sync, args.cut_start)
+        try:
+            result = run_kick_analysis(
+                args.workspace,
+                videos,
+                reference=int(args.reference),
+                out_dir=args.out,
+                kick_foot=args.kick_foot,
+                reuse=not args.no_reuse,
+                model=args.model,
+                device=args.device,
+                sam_device=args.sam_device,
+                min_camera_ok=args.min_camera_ok,
+                team_a=args.team_a,
+                analysis=args.analysis,
+                sync=sync,
+                set_piece=args.set_piece,
+            )
+        except (KickInputError, KickStageError) as exc:
+            _log(f"kick-analysis: {exc}")
+            return 1
+        setpiece = result["summary"].get("setpiece") or {}
+        _log(
+            f"kick analysis written: {result['out']} | status: {result['status_file']} | "
+            f"set piece: {setpiece.get('kind', 'unknown')} ({setpiece.get('reason', '')})"
+        )
+        return 0
     if args.command == "report-tv":
         result = report_tv(
             args.run,
@@ -7835,6 +8358,55 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"report written: {result['dir']} | confidence: {result['tier']}")
         for code, paths in result["languages"].items():
             _log(f"  [{code}] html: {paths['html']} | pdf: {paths['pdf']}")
+        return 0
+    if args.command == "rec3d-binocular":
+        try:
+            from .freekiki_stereo import run_binocular
+        except ImportError:
+            from freekiki_stereo import run_binocular  # ty: ignore[unresolved-import]
+
+        summary = run_binocular(
+            args.run1,
+            args.run2,
+            out_dir=args.out,
+            markers_a=args.markers1,
+            markers_b=args.markers2,
+            timing_a=args.timing1,
+            timing_b=args.timing2,
+            sync_a=args.sync1,
+            sync_b=args.sync2,
+            cut_start_a=args.cut_start1,
+            cut_start_b=args.cut_start2,
+            max_residual_px=args.max_resid,
+            min_angle_deg=args.min_angle,
+        )
+        counts = summary["counts"]
+        _log(
+            f"binocular ball: {counts['valid']}/{counts['frames']} frames valid | "
+            f"median reprojection error {counts['median_resid_ref_px']:.2f} px (cam1), "
+            f"{counts['median_resid_other_px']:.2f} px (cam2) | out: {summary['out_dir']}"
+        )
+        return 0
+    if args.command in ("players-link", "players-id"):
+        try:
+            from .freekiki_player_ids import run_player_ids
+        except ImportError:
+            from freekiki_player_ids import run_player_ids  # ty: ignore[unresolved-import]
+
+        folders = (
+            [Path(args.run1), Path(args.run2)]
+            if args.command == "players-link"
+            else [Path(args.run)]
+        )
+        summary = run_player_ids(folders)
+        _log(
+            f"players: {summary['players']} ({summary['cross_camera_players']} seen in two cameras) | "
+            f"median match {summary['median_match_m']} m | conflicts {summary['conflicts']} | "
+            f"keeper {summary['keeper'] or 'not found'} | kicker {summary['kicker'] or 'not found'}"
+        )
+        _log(
+            "player_map.csv, poses_3d_on_field_players.csv and ground_tracks_players.csv written in each folder"
+        )
         return 0
     if args.command == "ball-rebuild":
         anchors = None
@@ -8085,6 +8657,7 @@ def main(argv: list[str] | None = None) -> int:
             geom=args.geom,
             screen=not args.no_screen,
             min_camera_ok=args.min_camera_ok,
+            keypoints_csv=args.keypoints_csv,
             snap=args.snap,
             snap_band=args.snap_band,
             snap_max_move=args.snap_max_move,
@@ -8119,6 +8692,11 @@ def run_freekiki() -> None:
         from .dialogsuser import link_output_to_input
     except ImportError:
         from dialogsuser import link_output_to_input  # ty: ignore[unresolved-import]
+
+    try:
+        from .gui_help import add_help
+    except ImportError:
+        from gui_help import add_help  # ty: ignore[unresolved-import]
 
     root = tk.Tk()
     root.title("FreeKiki - soccer-field keypoints (kiki49)")
@@ -8230,7 +8808,9 @@ def run_freekiki() -> None:
                     "Some videos were skipped: the network found no usable pitch camera in them "
                     "(zoom, behind the goal, close-up).\n\n"
                     f"{text[len(SKIPPED_NOTICE) :].strip()}\n\n"
-                    "Details are in skipped_videos.csv of the batch folder.",
+                    "Details are in skipped_videos.csv of the batch folder.\n\n"
+                    "To use a skipped video anyway: mark its 49 keypoints (Mark keypoints button), "
+                    "then Detect + 3D again. A video with its <video>_kiki49.csv is not screened.",
                     parent=root,
                 )
                 continue
@@ -8408,6 +8988,29 @@ def run_freekiki() -> None:
             args.append("--no-snap")
         run_cli(args)
 
+    def do_mark_keypoints():
+        """Open getpixelvideo on the video, Soccer-Kiki 49 points, to mark its keypoints by hand."""
+        video = v["video"].get().strip()
+        ws = v["ws"].get().strip()
+        if not (video and Path(video).is_file()):
+            messagebox.showerror("FreeKiki", "Choose the video in the Video field.", parent=root)
+            return
+        if not ws:
+            messagebox.showerror("FreeKiki", "Choose a workspace folder first.", parent=root)
+            return
+        gpv = Path(__file__).resolve().parent / "getpixelvideo.py"
+        argv = ["-f", video, "--freekiki", "--freekiki-workspace", ws]
+        print_gui_cli_mirror("vaila/getpixelvideo", ["uv", "run", "--no-sync", str(gpv), *argv])
+        saved = Path(video).with_name(f"{Path(video).stem}{KIKI49_SUFFIX}")
+        log.insert(
+            "end",
+            f"\n>> getpixelvideo {' '.join(argv)}\n"
+            "   Mark the 49 points, then Save from the Save menu (Markers CSV, not F9): it writes\n"
+            f"   {saved}\n"
+            "   Then Detect + 3D: this video is not screened and uses the marked points.\n",
+        )
+        subprocess.Popen([sys.executable, str(gpv), *argv])  # own window, runs alongside
+
     def open_help():
         webbrowser.open(HELP_HTML.resolve().as_uri())
 
@@ -8461,17 +9064,67 @@ def run_freekiki() -> None:
         if src:
             run_cli(["extend", "--src", src] + (["--commit"] if commit else []))
 
+    kick_result = tk.StringVar(value="auto")  # the analysis marked as the result
+    kick_set_piece = tk.StringVar(value="auto")  # penalty or free kick, or auto (the ball rule)
+
+    def do_kick_analysis():
+        ws = v["ws"].get().strip()
+        if not ws:
+            messagebox.showerror("FreeKiki", "Choose a workspace folder first.", parent=root)
+            return
+        source = v["video"].get().strip()
+        if not source:
+            messagebox.showerror(
+                "FreeKiki",
+                "Choose the folder with the two cut videos (or one of them) in section 5.",
+                parent=root,
+            )
+            return
+        path = Path(source)
+        # a new folder next to the videos every time: an old run is never resumed by accident
+        cmd = ["kick-analysis", "--videos", str(path if path.is_dir() else path.parent)]
+        if kick_result.get() != "auto":
+            cmd += ["--analysis", kick_result.get()]
+        if kick_set_piece.get() != "auto":
+            cmd += ["--set-piece", kick_set_piece.get()]
+        run_cli(cmd)
+
+    def do_kick_figures():
+        folder = filedialog.askdirectory(
+            parent=root, title="Finished kick analysis folder (kick_analysis_<time>)"
+        )
+        if folder:
+            run_cli(["kick-figures", folder])
+
     def do_report_tv():
         ws = v["ws"].get().strip()
         if not ws:
             messagebox.showerror("FreeKiki", "Choose a workspace folder first.", parent=root)
             return
         video = v["video"].get().strip()
-        folder = _chosen_3d_folder(video, v["out"].get().strip()) if video else None
-        if folder is None:
+        loaded = state.get("loaded") or {}
+        folder = None
+        if loaded.get("folder3d"):
+            folder = Path(loaded["folder3d"])
+        elif video:
+            folder = _chosen_3d_folder(video, v["out"].get().strip())
+        if folder is None or not folder.is_dir():
             folder_text = filedialog.askdirectory(title="Finished 3D folder (<video>_3d_<time>)")
             folder = Path(folder_text) if folder_text else None
         if folder is None:
+            return
+        if not (folder / "ball_flight.json").is_file():
+            open_anchors = messagebox.askyesno(
+                "FreeKiki",
+                "This 3D folder has no ball_flight.json.\n\n"
+                "TV Report needs a fitted flight: open Ball anchors... (≥3 points), "
+                "Save, then Rebuild ball — that writes ball_flight.json. "
+                "Then run TV Report again.\n\n"
+                "Open Ball anchors now?",
+                parent=root,
+            )
+            if open_anchors:
+                do_anchor_dialog()
             return
         run_cli(["report-tv", "--run", str(folder)])
 
@@ -8875,6 +9528,22 @@ def run_freekiki() -> None:
                 )
                 return
             cmd += ["--ball-anchors", anchors_text]
+        else:
+            choice = messagebox.askyesnocancel(
+                "FreeKiki",
+                "Ball anchors are empty.\n\n"
+                "Without them, Rebuild ball only updates the track (no ball_flight.json) "
+                "and TV Report will fail.\n\n"
+                "Yes = open Ball anchors...\n"
+                "No = rebuild the track only\n"
+                "Cancel = abort",
+                parent=root,
+            )
+            if choice is None:
+                return
+            if choice:
+                do_anchor_dialog()
+                return
         run_cli(cmd)
 
     def do_trajectories():
@@ -8960,14 +9629,23 @@ def run_freekiki() -> None:
         )
         gpv = Path(__file__).resolve().parent / "getpixelvideo.py"
         if Path(video).is_file():
-            predictions = out
             loaded = state.get("loaded") or {}
             if loaded.get("run") and _same_file(loaded.get("video"), video):
                 predictions = loaded["run"]  # the detect run inside work/ of a loaded 3D folder
+            else:
+                try:
+                    # out is often the parent of the video / *_3d_* folders, not the predict run
+                    predictions = str(resolve_detect_predictions(out, video))
+                except ValueError as exc:
+                    messagebox.showerror("FreeKiki", str(exc), parent=root)
+                    return
             argv = ["-f", video, "--freekiki", "--freekiki-workspace", ws]
             argv += ["--freekiki-predictions", predictions]
         else:  # a folder of videos: FreeKiki Load on the newest batch, one video after the other
             batches = sorted(Path(out).glob("processed_freekiki_batch_*"))
+            if not batches:
+                # Detect+3D puts the batch under <stem>_3d_<ts>/work/
+                batches = sorted(Path(out).glob("*_3d_*/work/processed_freekiki_batch_*"))
             argv = ["--freekiki-run", str(batches[-1] if batches else out)]
         print_gui_cli_mirror("vaila/getpixelvideo", ["uv", "run", "--no-sync", str(gpv), *argv])
         log.insert("end", f"\n>> getpixelvideo {' '.join(argv)}\n")
@@ -9159,10 +9837,9 @@ def run_freekiki() -> None:
         "Heatmap preset = HRNet-W32 distilled from the Teacher (active): "
         "L = L_gt + λ·L_distill (λ 0.5; YOLO weights are not copied).",
     )
-    for r, line in enumerate(retrain_lines, start=10):
-        ttk.Label(box, text=line, wraplength=560, justify="left").grid(
-            row=r, column=0, columnspan=3, sticky="w", padx=4, pady=1
-        )
+    add_help(box, "\n".join(retrain_lines), title="3. Train / Retrain").grid(
+        row=0, column=3, sticky="e", padx=(8, 4)
+    )
 
     box = ttk.LabelFrame(frm, text="4. Evaluate quality (labelled split)", padding=6)
     box.pack(fill="x", pady=4)
@@ -9177,11 +9854,12 @@ def run_freekiki() -> None:
     ttk.Button(bar, text="Compare with its slot", command=do_compare).pack(side="left", padx=6)
     ttk.Button(bar, text="Model slots", command=lambda: run_cli(["models"])).pack(side="left")
     ttk.Button(bar, text="Audit dataset", command=lambda: run_cli(["audit"])).pack(side="left")
-    ttk.Label(
+    add_help(
         box,
-        text="Uses Model / Conf / KP conf below. Choose thresholds and compare models on val;\n"
+        "Uses Model / Conf / KP conf below. Choose thresholds and compare models on val;\n"
         "test only for the final report. Reports in <workspace>/outputs.",
-    ).grid(row=1, column=0, columnspan=3, sticky="w", padx=4)
+        title="4. Evaluate quality",
+    ).grid(row=0, column=3, sticky="e", padx=(8, 4))
 
     box = ttk.LabelFrame(
         frm, text="5. Soccer field: keypoints, then 3D (poses, ball, C3D)", padding=6
@@ -9253,6 +9931,7 @@ def run_freekiki() -> None:
     ttk.Button(bar, text="Detect", command=do_detect).pack(side="left")
     ttk.Button(bar, text="Detect + 3D", command=do_detect3d).pack(side="left", padx=6)
     ttk.Button(bar, text="Correct in getpixelvideo", command=do_correct).pack(side="left", padx=6)
+    ttk.Button(bar, text="Mark keypoints", command=do_mark_keypoints).pack(side="left", padx=6)
     ttk.Button(bar, text="Ball track in getpixelvideo", command=do_trajectories).pack(
         side="left", padx=6
     )
@@ -9263,6 +9942,28 @@ def run_freekiki() -> None:
         side="left", padx=6
     )
     ttk.Button(bar2, text="TV Report", command=do_report_tv).pack(side="left", padx=6)
+    ttk.Button(bar2, text="One-click kick analysis", command=do_kick_analysis).pack(
+        side="left", padx=6
+    )
+    bar3 = ttk.Frame(box)
+    bar3.grid(row=10, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(bar3, text="Result of the one-click analysis:").pack(side="left", padx=(4, 4))
+    ttk.Combobox(
+        bar3,
+        textvariable=kick_result,
+        values=("auto", "binocular", "mono-ref", "mono-other"),
+        width=11,
+        state="readonly",
+    ).pack(side="left")
+    ttk.Label(bar3, text="Set piece:").pack(side="left", padx=(12, 4))
+    ttk.Combobox(
+        bar3,
+        textvariable=kick_set_piece,
+        values=("auto", "penalty", "free_kick"),
+        width=10,
+        state="readonly",
+    ).pack(side="left")
+    ttk.Button(bar2, text="Kick figures", command=do_kick_figures).pack(side="left", padx=6)
     ttk.Button(bar2, text="Load previous result...", command=do_load_result).pack(
         side="left", padx=6
     )
@@ -9271,15 +9972,18 @@ def run_freekiki() -> None:
         "(net = workspace models/ball.pt, sam3 = sam3.pt) and the C3D + CSV in pitch metres.",
         "Output: one folder <video>_3d_<time>/ with the full overlay video, the CSVs and the C3D files "
         "(detect run and SAM 3D Body under work/).",
+        "Set piece: Detect + 3D prints a provisional penalty or free kick from the ball of that run "
+        "(data/setpiece_provisional.json); a SAM ball is not corrected, so One-click confirms it with "
+        "the corrected ball (set piece line of the kick analysis README).",
+        "Set piece box (next to One-click): auto = the ball rule decides; penalty or free_kick forces "
+        "the kind of the kick analysis, and the rule's answer stays in data/setpiece.json (auto_kind).",
         "Correct: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
         "F9 Save dataset (Full or Only Correct mode).",
         "Then put that folder in section 3 'Corrections' and Train (Base 'active' = fine-tune).",
     )
-    for r, line in enumerate(help_lines, start=10):
-        # wraplength keeps the text in a column of about 620 px: the window does not grow sideways
-        ttk.Label(box, text=line, wraplength=560, justify="left").grid(
-            row=r, column=0, columnspan=3, sticky="w", padx=4, pady=1
-        )
+    add_help(box, "\n".join(help_lines), title="5. Soccer field").grid(
+        row=0, column=3, sticky="e", padx=(8, 4)
+    )
 
     bar = ttk.Frame(frm)
     bar.pack(fill="x", pady=4)

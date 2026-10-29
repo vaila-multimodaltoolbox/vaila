@@ -26,7 +26,7 @@
         <p><strong>Category:</strong> Tools</p>
         <p><strong>File:</strong> vaila/cutvideo.py</p>
         <p><strong>Version:</strong> 0.4.12</p>
-        <p><strong>Updated:</strong> 27 October 2026</p>
+        <p><strong>Updated:</strong> 28 October 2026</p>
         <p><strong>Author:</strong> Paulo Roberto Pereira Santiago</p>
         <p><strong>Email:</strong> paulosantiago@usp.br</p>
         <p><strong>GitHub:</strong> <a href="https://github.com/vaila-multimodaltoolbox/vaila">vaila-multimodaltoolbox/vaila</a></p>
@@ -46,7 +46,14 @@
         <code>--sync-file session.events.json</code> handoff exports without a player window.
         Optional <code>--output-dir /tmp/new_run</code> selects a new output directory; by default a
         timestamped directory is created beside the manifest. Event JSON also loads with F for batch export.
-        Exact rational output FPS, nearest retained images (ties choose the earlier one), lossless RGB
+        The default event method selects nearest retained images (ties choose the earlier one).
+        <strong>Sync by events + interpolation</strong> preserves all originals and inserts bidirectional
+        Farnebäck estimates on the minimum exact rational grid up to 240 FPS. The CSV identifies
+        original/interpolated rows, source neighbors and exact blend fractions. Ball, feet and occlusions
+        may show artifacts: synthesized images are estimates, not new physical observations.
+        GUI exports show cancellable progress, including event JSON loaded with F. CLI
+        <code>--output-dir</code> stays headless, prints progress and accepts Ctrl+C. Interrupted sets keep
+        <code>INCOMPLETE.txt</code>; existing folders are never overwritten. Exact FPS, lossless RGB
         H.264 without audio, per-camera error/reuse maps, retained PNG sequences with physical times,
         and a shared audit manifest are exported. Edit event lists and removal marks in Sync Video.
         Calibration is piecewise linear over retained sample ordinals after repeat review, independent
@@ -162,7 +169,7 @@
     </div>
 
     <div class="footer">
-        <p>📅 Last Updated: 27 October 2026 (v0.4.12; inclusive end-frame select + event sync)</p>
+        <p>📅 Last Updated: 28 October 2026 (v0.4.12; event sync + interpolation)</p>
         <p>🔗 Part of vailá - Multimodal Toolbox | <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
     </div>
 </div>
