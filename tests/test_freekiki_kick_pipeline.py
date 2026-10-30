@@ -153,6 +153,19 @@ def test_pick_videos_takes_one_video_for_the_monocular_analysis(tmp_path: Path) 
     assert [p.stem for p in kp.pick_videos(tmp_path)] == [CAM1]
 
 
+def test_pick_videos_takes_a_folder_video_with_no_sync_name_alone(tmp_path: Path) -> None:
+    clip = tmp_path / "c1_main_camera_platform_frame_63_to_81.mp4"  # the cut tool's name, no sync
+    clip.write_bytes(b"")
+    assert kp.pick_videos(tmp_path) == [clip]
+
+
+def test_pick_videos_still_refuses_two_videos_with_no_sync_names(tmp_path: Path) -> None:
+    (tmp_path / "a.mp4").write_bytes(b"")
+    (tmp_path / "b.mp4").write_bytes(b"")
+    with pytest.raises(kp.KickInputError, match="one or two"):
+        kp.pick_videos(tmp_path)
+
+
 def test_pick_videos_refuses_a_folder_with_three_cut_videos(tmp_path: Path) -> None:
     _cameras(tmp_path)
     (tmp_path / "c3_sync_1_frames_0_to_5.mp4").write_bytes(b"")
@@ -200,6 +213,120 @@ def test_one_video_needs_no_sync_name(tmp_path: Path, monkeypatch: pytest.Monkey
     (tmp_path / "lance_markers.csv").write_text("frame,p0_x,p0_y\n0,1,1\n", encoding="utf-8")
     cams = kp.validate_inputs([video], reference=1)
     assert len(cams) == 1 and cams[0].stem == "lance"
+
+
+def _equalized(folder: Path, *, markers: bool = True) -> list[Path]:
+    """The two videos of the event equalizer: no sync in the names, the manifest has it."""
+    videos = []
+    for stem in ("reference_c2_16mm_left_equalized", "source_c1_main_equalized"):
+        video = folder / f"{stem}.mp4"
+        video.write_bytes(b"")
+        if markers:
+            (folder / f"{stem}_markers.csv").write_text(
+                "frame,p0_x,p0_y\n0,1,1\n", encoding="utf-8"
+            )
+        videos.append(video)
+    manifest = {
+        "vaila_event_equalizer": 1,
+        "frame_base": 1,
+        "output_event_frames": [1, 33, 85],
+        "cameras": {
+            "reference": {"video": videos[0].name},
+            "source": {"video": videos[1].name},
+        },
+    }
+    (folder / "event_equalizer.json").write_text(json.dumps(manifest), encoding="utf-8")
+    return videos
+
+
+def test_pick_videos_takes_the_two_videos_of_the_event_equalizer(tmp_path: Path) -> None:
+    reference, source = _equalized(tmp_path, markers=False)
+    assert kp.pick_videos(tmp_path) == [reference, source]  # the folder the equalizer wrote
+
+
+def test_the_two_equalized_videos_share_the_contact_as_their_sync(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kp, "nominal_clock", lambda path: np.arange(85) / 120.0)
+    monkeypatch.setattr(d3, "_video_fps", lambda path: 120.0)
+    cams = kp.validate_inputs(kp.pick_videos(_equalized(tmp_path)[0].parent), reference=1)
+    assert [(c.sync_frame, c.cut_start) for c in cams] == [(32, 0), (32, 0)]
+    assert cams[0].stem == "reference_c2_16mm_left_equalized"
+    swapped = kp.validate_inputs(kp.pick_videos(tmp_path), reference=2)
+    assert swapped[0].stem == "source_c1_main_equalized"
+
+
+def test_missing_ball_markers_are_listed_for_every_camera_with_the_command(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kp, "nominal_clock", lambda path: np.arange(85) / 120.0)
+    monkeypatch.setattr(d3, "_video_fps", lambda path: 120.0)
+    videos = _equalized(tmp_path, markers=False)
+    with pytest.raises(kp.KickInputError) as raised:
+        kp.validate_inputs(videos, reference=1)
+    text = str(raised.value)
+    assert "ball markers not found" in text
+    for video in videos:
+        assert f"{video.stem}_markers.csv" in text
+        assert f"getpixelvideo.py -f {video}" in text  # the exact command that writes the file
+
+
+def test_one_equalized_video_uses_its_manifest_sync_unless_one_is_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kp, "nominal_clock", lambda path: np.arange(85) / 120.0)
+    monkeypatch.setattr(d3, "_video_fps", lambda path: 120.0)
+    reference = _equalized(tmp_path)[0]
+    alone = kp.validate_inputs([reference], reference=1)
+    assert (alone[0].sync_frame, alone[0].cut_start) == (32, 0)
+    given = kp.validate_inputs([reference], reference=1, sync=(40, 5))
+    assert (given[0].sync_frame, given[0].cut_start) == (40, 5)
+
+
+def test_the_equalized_pair_runs_the_binocular_and_both_monocular_analyses(
+    tmp_path: Path, stubs: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(kp, "nominal_clock", lambda path: np.arange(85) / 120.0)
+    monkeypatch.setattr(d3, "_video_fps", lambda path: 120.0)
+    _equalized(tmp_path)
+    result = kp.run_kick_analysis("ws", tmp_path, reference=1, out_dir=tmp_path / "kick")
+    status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
+    assert all(rec["status"] == "ok" for rec in status["stages"].values())
+    assert {"binocular", "triangulate", "kicker:binocular", "kicker:mono-other"} <= set(
+        status["stages"]
+    )
+    assert result["summary"]["chosen"] == "binocular"
+
+
+def test_the_player_ids_align_two_equalized_cameras_with_no_offset(tmp_path: Path) -> None:
+    folders = []
+    for video in _equalized(tmp_path):
+        folder = tmp_path / f"{video.stem}_3d_20261029_000000"
+        folder.mkdir()
+        (folder / "README.txt").write_text(f"video: {video}\n", encoding="utf-8")
+        folders.append(folder)
+    assert [pids._cut_sync(f) for f in folders] == [(32, 0), (32, 0)]
+
+
+def test_a_single_camera_with_no_sync_anywhere_still_gets_its_view(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    video = tmp_path / "plain_clip.mp4"
+    video.write_bytes(b"")
+    folder = tmp_path / "plain_clip_3d_20261029_000000"
+    folder.mkdir()
+    (folder / "README.txt").write_text(f"video: {video}\n", encoding="utf-8")
+    seen: dict = {}
+
+    def load_view(run_dir, *, markers, timing, sync_frame, cut_start, name):
+        seen.update(sync_frame=sync_frame, cut_start=cut_start)
+        return "view", video
+
+    monkeypatch.setattr(st, "load_view", load_view)
+    assert kp._camera_view(folder) == "view"  # a monocular free kick needs only the DLT
+    assert seen == {"sync_frame": 0, "cut_start": 0}
+    kp._camera_view(folder, (71, 63))
+    assert seen == {"sync_frame": 71, "cut_start": 63}
 
 
 def test_a_finished_stage_is_reused_until_its_inputs_change(tmp_path: Path) -> None:
@@ -373,7 +500,7 @@ def test_a_sync_given_for_one_clip_reaches_the_monocular_teams_and_the_set_piece
     assert status["stages"]["setpiece"]["inputs"]["penalty_tolerance_m"] == 1.5
 
 
-def test_a_penalty_gets_the_pynalty_metrics_and_no_freekiki_ball_report(
+def test_a_penalty_gets_the_pynalty_metrics_and_the_freekiki_report(
     tmp_path: Path, stubs: dict, monkeypatch
 ) -> None:
     video = _cameras(tmp_path, both=False)[0]
@@ -390,7 +517,7 @@ def test_a_penalty_gets_the_pynalty_metrics_and_no_freekiki_ball_report(
     )
     calls: list[tuple[str, float]] = []
 
-    def fake_penalty(ref3d, ref_video, ref_work, folder, ball_csv, *, goal_x):
+    def fake_penalty(ref3d, ref_video, ref_work, folder, *, goal_x, track_csv=None):
         calls.append((folder.name, goal_x))
         return {
             "available": True,
@@ -404,11 +531,41 @@ def test_a_penalty_gets_the_pynalty_metrics_and_no_freekiki_ball_report(
     result = kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "kick")
     status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
     assert "penalty:mono-ref" in status["stages"]
-    assert "report:mono-ref" not in status["stages"]
+    assert (
+        "report:mono-ref" in status["stages"]
+    )  # the freekiki report (report_tv) is made for a penalty too
+    assert "teams:mono-ref" not in status["stages"]  # no team split for a penalty
     assert len(calls) == 1 and calls[0][0].startswith(CAM1) and calls[0][1] == 52.45
     readme = (Path(result["out"]) / "README.txt").read_text(encoding="utf-8")
     assert "set piece: penalty (stub)" in readme
     assert "coord_x: 3.0" in readme
+
+
+def test_the_readme_says_whether_the_penalty_ball_path_is_straight_or_bowed() -> None:
+    path = {
+        "available": True,
+        "source": "binocular",
+        "shape": "curved",
+        "bow_side": "right",
+        "max_dev_m": 0.33,
+        "apex_z_m": 1.2,
+        "spot_fit_offset_m": 0.14,
+        "last_frame": 48,
+        "goal_frame": 48,
+        "arrival_in_goal_mouth": True,
+    }
+    lines = kp._penalty_lines({"available": True, "metrics": {"coord_x": 3.0}, "path": path})
+    assert any(
+        "Ball path (data/penalty_path.csv, binocular ball): curved bowing right, max 0.33 m" in line
+        and "crosses the goal line at frame 48 (inside the goal mouth)" in line
+        for line in lines
+    )
+    straight = dict(path, shape="straight", max_dev_m=0.01)
+    lines = kp._penalty_lines({"available": True, "metrics": {}, "path": straight})
+    assert any(
+        line.startswith("Ball path (data/penalty_path.csv, binocular ball): straight, max 0.01 m")
+        for line in lines
+    )
 
 
 def test_a_failing_monocular_analysis_does_not_stop_the_others(
@@ -540,3 +697,90 @@ def test_a_figures_rewrite_keeps_the_sync_of_a_clip_without_sync_in_its_name(
     monkeypatch.setattr(kp, "_analyses", record)
     kp.regenerate_figures(result["out"])
     assert seen == [(71, 63)]
+
+
+def test_a_penalty_writes_the_other_people_to_other_ids_and_no_one_else(tmp_path: Path) -> None:
+    player_map = tmp_path / "player_map.csv"
+    player_map.write_text(
+        "player_id,role,camera,sam_id\n0,keeper,c1,12\n1,kicker,c1,7\n2,other,c1,1\n3,other,c1,18\n",
+        encoding="utf-8",
+    )
+    poses = tmp_path / "poses_3d_on_field.csv"
+    poses.write_text(
+        "frame,person_id,kpt_idx,kpt_name,x_m,y_m,z_m\n"
+        "0,12,0,nose,50.0,0.0,1.7\n0,7,0,nose,41.0,0.0,1.8\n0,1,0,nose,30.0,5.0,1.7\n0,18,0,nose,20.0,-6.0,1.7\n",
+        encoding="utf-8",
+    )
+    out = kp._penalty_others(player_map, poses, "person_id", tmp_path / "data")
+    assert out == tmp_path / "data" / "other_IDs" / "poses_other_persons.csv"
+    kept = [line.split(",")[1] for line in out.read_text(encoding="utf-8").splitlines()[1:]]
+    assert kept == ["1", "18"]  # the keeper (12) and the kicker (7) are not in other_IDs
+
+
+def test_the_fitted_contact_replaces_the_marker_only_when_the_fit_is_reliable_and_far() -> None:
+    fps = 30.0
+    flight = {"kick_time_s": 8 / fps, "rms_px": 1.0}
+    assert kp._fit_contact(flight, 5, fps) == 8  # the marker drifted 3 frames early
+    assert kp._fit_contact(flight, 7, fps) is None  # within one frame: the marker stays
+    assert kp._fit_contact({**flight, "rms_px": 50.0}, 5, fps) is None  # a rejected fit
+    assert kp._fit_contact({"rms_px": 1.0}, 5, fps) is None  # no kick time in the fit
+    assert kp._fit_contact(flight, None, fps) is None  # no marker to compare with
+
+
+def test_the_penalty_overlay_is_redrawn_with_the_player_ids(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    cam3d, work = tmp_path / "cam3d", tmp_path / "work"
+    cam3d.mkdir()
+    work.mkdir()
+    (cam3d / "player_map.csv").write_text(
+        "player_id,role,camera,sam_id\n0,keeper,c1,12\n1,kicker,c1,7\n2,other,c1,1\n",
+        encoding="utf-8",
+    )
+    (cam3d / "poses_3d_on_field.csv").write_text(
+        "frame,person_id,kpt_idx,kpt_name,x_m,y_m,z_m\n"
+        "0,12,0,nose,50.0,0.0,1.7\n0,7,0,nose,41.0,0.0,1.8\n",
+        encoding="utf-8",
+    )
+    detect_run = tmp_path / "detect"
+    seen: dict = {}
+    monkeypatch.setattr(d3, "_detect_run_dir", lambda _work, _stem: detect_run)
+
+    def fake_overlay(video, run_dir, out_dir, work_dir, *, kept=None, labels=None):
+        seen.update(video=video, run_dir=run_dir, out_dir=out_dir, kept=kept, labels=labels)
+        return Path(out_dir) / "o.mp4"
+
+    monkeypatch.setattr(d3, "write_3d_overlay", fake_overlay)
+    kp._penalty_overlay(cam3d, tmp_path / "clip.mp4", work)
+    assert seen["labels"] == {12: 0, 7: 1, 1: 2}  # SAM id -> player id: ID0 keeper, ID1 kicker
+    assert seen["kept"] == {12, 7}  # the people that are on the pitch, not every track
+    assert seen["run_dir"] == detect_run and seen["out_dir"] == cam3d
+
+    # no detect run or no poses: nothing is redrawn
+    seen.clear()
+    monkeypatch.setattr(d3, "_detect_run_dir", lambda _work, _stem: None)
+    kp._penalty_overlay(cam3d, tmp_path / "clip.mp4", work)
+    assert not seen
+
+
+def test_a_failing_overlay_redraw_does_not_stop_the_penalty_analysis(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    cam3d, work = tmp_path / "cam3d", tmp_path / "work"
+    cam3d.mkdir()
+    work.mkdir()
+    (cam3d / "player_map.csv").write_text(
+        "player_id,role,camera,sam_id\n0,keeper,c1,12\n1,kicker,c1,7\n", encoding="utf-8"
+    )
+    (cam3d / "poses_3d_on_field.csv").write_text(
+        "frame,person_id,kpt_idx,kpt_name,x_m,y_m,z_m\n0,12,0,nose,50.0,0.0,1.7\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(d3, "_detect_run_dir", lambda _work, _stem: tmp_path)
+
+    def broken(*_args, **_kwargs):
+        raise FileNotFoundError("field_kps_getpixelvideo.csv")
+
+    monkeypatch.setattr(d3, "write_3d_overlay", broken)
+    kp._penalty_overlay(cam3d, tmp_path / "clip.mp4", work)  # does not raise
+    assert "overlay not redrawn" in capsys.readouterr().out

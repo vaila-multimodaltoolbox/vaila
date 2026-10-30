@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 28 October 2026
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 
 Description:
     The core kick metrics of one kicker, from ``poses_3d_binocular.csv`` (the triangulated
@@ -64,8 +64,10 @@ import numpy as np
 
 try:
     from .freekiki_auto_flight import kick_onset
+    from .freekiki_com import com_track
 except ImportError:
     from freekiki_auto_flight import kick_onset  # ty: ignore[unresolved-import]
+    from freekiki_com import com_track  # ty: ignore[unresolved-import]
 
 WINDOW_S = 0.033  # the window before the contact (foot) and after it (ball), ~2 frames at 60 Hz
 SEARCH_S = (
@@ -319,11 +321,29 @@ def _value_at(series: np.ndarray, f: int) -> float:
     return float(series[f]) if 0 <= f < len(series) else math.nan
 
 
-def _kick_direction(ball_vel: np.ndarray, contact: int, nw: int) -> np.ndarray | None:
-    """The unit horizontal direction in which the ball goes after the contact; None if unknown."""
+KICK_DIR_MIN_M = 0.5  # the ball has left its rest position when it is this far (metres) from it
+
+
+def _kick_direction(
+    ball_vel: np.ndarray, contact: int, nw: int, ball: np.ndarray | None = None
+) -> np.ndarray | None:
+    """The unit horizontal direction in which the ball goes after the contact; None if unknown.
+
+    It is the mean velocity in the ``nw`` frames after the contact. When the ball has not moved yet
+    there (a contact taken from a marker that drifted early) it is the displacement of the ball from
+    the contact frame to the first frame ``KICK_DIR_MIN_M`` away from it.
+    """
     vel = _finite_mean(ball_vel[contact : contact + nw, :2])
     norm = float(np.linalg.norm(vel)) if np.isfinite(vel).all() else 0.0
-    return vel / norm if norm > 0 else None
+    if norm > 0:
+        return vel / norm
+    if ball is None or not 0 <= contact < len(ball) or not np.isfinite(ball[contact, :2]).all():
+        return None
+    for f in range(contact + 1, len(ball)):
+        step = ball[f, :2] - ball[contact, :2]
+        if np.isfinite(step).all() and float(np.linalg.norm(step)) >= KICK_DIR_MIN_M:
+            return step / float(np.linalg.norm(step))
+    return None
 
 
 def _signed_angle_2d(ref: np.ndarray, vec: np.ndarray) -> np.ndarray:
@@ -441,13 +461,33 @@ def analyze_kicker(
     fit_peak_speed_mps: float | None = None,
     fit_spin_rps: float | None = None,
     window_s: float = WINDOW_S,
+    keeper_id: int | None = None,
+    contact_override: int | None = None,
+    goal_x: float | None = None,
 ) -> dict:
-    """The metrics of one kicker. Returns ``metrics`` (rows), ``events``, ``series`` and ``sensitivity``."""
+    """The metrics of one kicker. Returns ``metrics`` (rows), ``events``, ``series`` and ``sensitivity``.
+
+    ``keeper_id`` (optional) is the goalkeeper's player id: his points go to the figures only, never to
+    the kicker's metrics. ``contact_override`` is the contact frame of the fitted flight: when given it
+    replaces the first frame in which the hand-marked ball moves, which can drift a few frames early.
+    ``goal_x`` is the attacked goal line (metres, signed), which sets the side of the front views.
+    """
     n = len(ball)
     warnings: list[str] = []
     points = person_points(rows, kicker_id, n)
-    contact = contact_frame(ball_pixels)
-    events: dict = {"kicker_id": kicker_id, "fps": fps, "contact_frame": contact}
+    keeper_points = person_points(rows, keeper_id, n) if keeper_id is not None else {}
+    marker_contact = contact_frame(ball_pixels)
+    contact = marker_contact
+    contact_source = "marker"
+    if contact_override is not None and marker_contact is not None:
+        contact, contact_source = int(contact_override), "fit"
+    events: dict = {
+        "kicker_id": kicker_id,
+        "fps": fps,
+        "contact_frame": contact,
+        "contact_source": contact_source,
+        "marker_contact_frame": marker_contact,
+    }
     metrics: list[dict] = []
     if contact is None or not points:
         reason = (
@@ -470,8 +510,19 @@ def analyze_kicker(
         if abs(check) > 1.0 / fps:
             warnings.append(f"fit kick time differs from the contact by {check * fps:+.1f} frames")
         metrics.append(_metric("kick_time_check_s", check, "s", "inferido", "ok"))
-    metrics.append(_metric("contact_frame", contact, "frame", "observado", "ok"))
-    metrics.append(_metric("contact_time_s", contact / fps, "s", "observado", "ok"))
+    from_fit = contact_source == "fit"
+    contact_source_label = "ajustado" if from_fit else "observado"
+    contact_reason = (
+        f"contact of the fitted flight; the hand-marked ball moved at frame {marker_contact}"
+        if from_fit
+        else ""
+    )
+    metrics.append(
+        _metric("contact_frame", contact, "frame", contact_source_label, "ok", contact_reason)
+    )
+    metrics.append(
+        _metric("contact_time_s", contact / fps, "s", contact_source_label, "ok", contact_reason)
+    )
 
     if kick_foot == "auto":
         side, dist = choose_kick_foot(points, ball, contact)
@@ -591,7 +642,7 @@ def analyze_kicker(
     if fit_spin_rps is not None:
         metrics.append(_metric("fit_spin_rps", fit_spin_rps, "rev/s", "ajustado", "ok"))
 
-    kick_dir = _kick_direction(ball_vel, contact, nw)
+    kick_dir = _kick_direction(ball_vel, contact, nw, ball)
     posture = _posture(points, side, foot, fps, n, kick_dir, knee_rate)
     pre = range(contact - nw, contact)
     at_contact = (
@@ -633,6 +684,9 @@ def analyze_kicker(
         "points": points, "ball": ball, "rows": rows, "fps": fps, "contact": contact,
         "kicker_id": kicker_id, "kick_foot": side, "support_foot": other, "kick_dir": kick_dir,
         "window_s": nw / fps,
+        "goal_x": goal_x, "keeper_id": keeper_id, "contact_source": contact_source,
+        "keeper_points": keeper_points, "com": com_track(points),
+        "keeper_com": com_track(keeper_points) if keeper_points else np.empty((0, 3)),
     }  # fmt: skip
     return {"metrics": metrics, "events": events, "series": series, "sensitivity": sensitivity,
             "warnings": warnings, "context": context}  # fmt: skip
@@ -710,9 +764,40 @@ def write_outputs(
         _write_rows(paths["series"], result["series"])
     if result["sensitivity"]:
         _write_rows(paths["sensitivity"], result["sensitivity"])
+    if result.get("context"):
+        com_path = _write_com(result["context"], out / "com_players.csv")
+        if com_path is not None:
+            paths["com"] = com_path
     if result["series"] and result.get("context"):
         paths.update(_figures().write_figures(result, out, views=views))
     return paths
+
+
+def _write_com(ctx: dict, path: Path) -> Path | None:
+    """``com_players.csv``: the centre of mass of the kicker and of the goalkeeper, frame by frame."""
+    rows = []
+    for role, player_id, track in (
+        ("kicker", ctx["kicker_id"], ctx.get("com")),
+        ("keeper", ctx.get("keeper_id"), ctx.get("keeper_com")),
+    ):
+        if player_id is None or track is None or not len(track):
+            continue
+        for frame, xyz in enumerate(track):
+            if np.isfinite(xyz).all():
+                rows.append(
+                    {
+                        "frame": frame,
+                        "role": role,
+                        "player_id": player_id,
+                        "x_m": round(float(xyz[0]), 4),
+                        "y_m": round(float(xyz[1]), 4),
+                        "z_m": round(float(xyz[2]), 4),
+                    }  # fmt: skip
+                )
+    if not rows:
+        return None
+    _write_rows(path, rows)
+    return path
 
 
 def _write_rows(path: Path, rows: list[dict]) -> None:

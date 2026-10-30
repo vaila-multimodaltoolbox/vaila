@@ -12,12 +12,13 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 27 October 2026
-Update Date: 27 October 2026
+Update Date: 29 October 2026
 
 Description:
     The top view of the report (figure and animation minimap) shows, besides the ball, the
     goal area, the kicker, the two players of the wall nearest the ball at the wall frame, and
-    the goalkeeper with his path. Each person is the mean of the ankles in
+    the goalkeeper with his path (a penalty kick has no wall; ``draw_hands`` marks the keeper's
+    hands at the kick and in the last frame instead). Each person is the mean of the ankles in
     ``poses_3d_on_field.csv`` (pitch metres, on the ground). The roles are found by the nearest
     person; ``kicker_id``, ``wall_ids`` and ``keeper_id`` replace them. Nothing here changes the
     fit: this module only reads the poses and draws.
@@ -62,6 +63,7 @@ class People:
     manual: bool = False  # True when any role was given by the user instead of found
     names: dict[int, int] = field(default_factory=dict)  # SAM id -> player_id (the player map)
     source: str = "nearest"  # how the roles were found: "nearest", "manual" or "map"
+    penalty: bool = False  # a penalty kick: no wall, the note names only the kicker and the keeper
 
 
 def load_camera_roles(run_dir) -> dict:
@@ -139,14 +141,18 @@ def find_people(
     kicker_id: int | None = None,
     wall_ids: list[int] | None = None,
     keeper_id: int | None = None,
+    penalty: bool = False,
 ) -> People:
     """The roles: the kicker is the person nearest the ball at the kick, the wall the two
     persons nearest the ball at the wall frame (not the kicker), the keeper the person nearest
-    the entry point at the last frame. The arguments given by the user replace the search."""
+    the entry point at the last frame. A penalty has no wall: nobody is searched for it, and the
+    keeper is never counted as a wall player. The arguments given by the user replace the search."""
     manual = kicker_id is not None or wall_ids is not None or keeper_id is not None
     if kicker_id is None and tracks:
         near = _nearest(tracks, kick_f, _at(ball_xy, kick_f), ROLE_RADIUS_M["kicker"])
         kicker_id = near[0][1] if near else None
+    if wall_ids is None and penalty:
+        wall_ids = []
     if wall_ids is None:
         near = _nearest(
             tracks,
@@ -174,7 +180,7 @@ def people_note(people: People | None, lang: str) -> str:
         how = tr(lang, "top_how_manual" if people.manual else "top_how_auto")
     return tr(
         lang,
-        "top_note",
+        "top_note_pk" if people.penalty else "top_note",
         kicker="—" if people.kicker is None else str(_name(people, people.kicker)),
         wall=wall,
         keeper="—" if people.keeper is None else str(_name(people, people.keeper)),
@@ -227,7 +233,7 @@ def draw_people(
         now = min(max(frame, kick_f), end_f)
         if np.isfinite(arr[now]).all():
             _mark(ax, arr[now], KEEPER, tr(lang, "top_keeper", id=_name(people, people.keeper)), lang,
-                  labels=labels, dx=10, dy=-16)  # fmt: skip
+                  labels=labels, dx=10, dy=10 if people.penalty else -16)  # fmt: skip
     if people.kicker is not None and people.kicker in tracks:
         arr = tracks[people.kicker]
         if np.isfinite(arr[kick_f]).all():
@@ -247,6 +253,22 @@ def draw_people(
                 if len(wall_pts) == 2 else tr(lang, "top_wall_one", a=w0))  # fmt: skip
         ax.annotate(text, mid, xytext=(14, 10), textcoords="offset points", color=WALL,
                     fontsize=9, fontweight="bold", zorder=8)  # fmt: skip
+
+
+def draw_hands(ax, start, end, lang: str, *, labels: bool = True) -> None:
+    """The goalkeeper's hands (the mean of the wrists) at the kick (open circle) and in the last
+    frame (filled circle), joined by a dotted line; ``start`` and ``end`` are metres or None.
+    ``labels`` names them in a legend (the points sit near the keeper, where text would overlap)."""
+    if start is not None and end is not None:
+        ax.plot([start[0], end[0]], [start[1], end[1]], color=KEEPER, lw=1.4, ls=":", zorder=5)
+    if start is not None:
+        ax.plot(start[0], start[1], "o", ms=9, mfc="white", mec=KEEPER, mew=2.0, zorder=7,
+                label=tr(lang, "fig_hands_start") if labels else None)  # fmt: skip
+    if end is not None:
+        ax.plot(end[0], end[1], "o", ms=9, color=KEEPER, mec="white", mew=1.2, zorder=7,
+                label=tr(lang, "fig_hands_end") if labels else None)  # fmt: skip
+    if labels and (start is not None or end is not None):
+        ax.legend(loc="upper right", fontsize=8, framealpha=0.9)
 
 
 def people_extent(people: People | None, kick_f: int, end_f: int) -> np.ndarray:

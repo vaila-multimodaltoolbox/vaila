@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 26 October 2026
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 
 Description:
     ``freekiki.py report-tv --run <3D folder>`` writes ``report_tv/`` inside the finished run,
@@ -33,6 +33,11 @@ Description:
     * :func:`build_report` - fills the template of each language and prints the PDF with
       Chrome (or Chromium) headless.
 
+    A penalty kick (``data/setpiece.json`` of the run says ``"kind": "penalty"``) has no wall: the
+    report then drops the wall (anchor, rectangle, time to the wall, texts) and shows the
+    goalkeeper's hands (the mean of the wrists of the keeper of the player map) at the kick and
+    in the last frame, and their distance to the ball.
+
     The confidence tier decides the warning at the top: ``alta`` (anchors within 0.3 m),
     ``média`` (within 1 m) or ``baixa`` (1 m or more, the numbers of the track are an estimate).
 """
@@ -43,6 +48,7 @@ import base64
 import copy
 import csv
 import json
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -76,8 +82,10 @@ try:
         tr,
     )
     from .freekiki_report_players import (
+        KEEPER,
         People,
         draw_goal_area,
+        draw_hands,
         draw_people,
         find_people,
         load_camera_roles,
@@ -110,8 +118,10 @@ except ImportError:
         tr,
     )
     from freekiki_report_players import (  # ty: ignore[unresolved-import]
+        KEEPER,
         People,
         draw_goal_area,
+        draw_hands,
         draw_people,
         find_people,
         load_camera_roles,
@@ -145,6 +155,9 @@ LEGACY_ANCHOR_KEYS = {
     "barrier_shoulder": "anchor_shoulder",
     "keeper_hands": "anchor_end",
 }
+HANDS_NEAR_M = 0.5  # the hands this close to the ball are within the error of the measurement
+HANDS_REACH_FRAMES = 2  # a hand missing on the frame is taken from a frame this close
+WRIST_NAMES = ("left-wrist", "right-wrist")  # the MHR70 has no hand point: the hands are the wrists
 INK = "#14213d"
 MUTED = "#5b6577"
 BALL = "#d62246"
@@ -164,6 +177,9 @@ class ReportRun:
     projections: dict[int, np.ndarray]  # frame -> 3x4 pixel projection (the DLT3D of that frame)
     anchors: dict  # the anchor points of the fit (anchor_points of ball_flight.json)
     people_dir: Path  # the folder with the poses and the player map (see _people_dir)
+    penalty: bool = False  # data/setpiece.json says "penalty": no wall, the keeper's hands instead
+    keeper_hands: np.ndarray | None = None  # (n, 3) mean of the keeper's wrists, penalty only
+    goal_x: float | None = None  # the goal line of the kick (m), from data/setpiece.json
 
 
 def _read_csv(path: Path) -> list[dict]:
@@ -185,6 +201,57 @@ def _people_dir(run_dir: Path) -> Path:
         if ref and (Path(ref) / "poses_3d_on_field.csv").is_file():
             return Path(ref)
     return run_dir
+
+
+def _setpiece(people_dir: Path) -> dict:
+    """``data/setpiece.json`` of the run (the kind of set piece the pipeline decided); {} if none."""
+    path = Path(people_dir) / "data" / "setpiece.json"
+    if not path.is_file():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def keeper_wrists(people_dir, person_id: int, n: int) -> np.ndarray | None:
+    """The keeper's hands per frame, ``(n, 3)`` in pitch metres: the mean of the two wrists of the
+    person ``person_id`` in ``poses_3d_on_field.csv``. NaN where no wrist was found; None when the
+    file has no wrist of that person."""
+    path = Path(people_dir) / "poses_3d_on_field.csv"
+    if not path.is_file():
+        return None
+    sums = np.zeros((n, 3))
+    count = np.zeros(n)
+    with path.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row["kpt_name"] not in WRIST_NAMES or int(row["person_id"]) != person_id:
+                continue
+            f = int(row["frame"])
+            if not 0 <= f < n or "" in (row["x_m"], row["y_m"], row["z_m"]):
+                continue
+            xyz = np.array([float(row["x_m"]), float(row["y_m"]), float(row["z_m"])])
+            if np.isfinite(xyz).all():
+                sums[f] += xyz
+                count[f] += 1
+    if not count.any():
+        return None
+    out = np.full((n, 3), np.nan)
+    seen = count > 0
+    out[seen] = sums[seen] / count[seen, None]
+    return out
+
+
+def _hands_at(hands: np.ndarray | None, frame: int) -> np.ndarray | None:
+    """The hands on ``frame``, or on the nearest frame within ``HANDS_REACH_FRAMES`` that has them."""
+    if hands is None:
+        return None
+    for d in range(HANDS_REACH_FRAMES + 1):
+        for f in (frame - d, frame + d):
+            if 0 <= f < len(hands) and np.isfinite(hands[f]).all():
+                return np.asarray(hands[f], dtype=float).copy()
+    return None
 
 
 def load_run(run_dir, video=None) -> ReportRun:
@@ -222,6 +289,11 @@ def load_run(run_dir, video=None) -> ReportRun:
     }
 
     projections = {f: dlt_projection_matrix(L) for f, L in find_dlt3d(run_dir, video_path).items()}
+    people_dir = _people_dir(run_dir)
+    setpiece = _setpiece(people_dir)
+    penalty = setpiece.get("kind") == "penalty"
+    keeper = load_camera_roles(people_dir).get("keeper_id") if penalty else None
+    goal_x = setpiece.get("goal_x_m")
     return ReportRun(
         run_dir=run_dir,
         video=video_path,
@@ -232,7 +304,10 @@ def load_run(run_dir, video=None) -> ReportRun:
         pixels=pixels,
         projections=projections,
         anchors=flight.get("anchor_points", {}),
-        people_dir=_people_dir(run_dir),
+        people_dir=people_dir,
+        penalty=penalty,
+        keeper_hands=None if keeper is None else keeper_wrists(people_dir, keeper, n),
+        goal_x=None if goal_x is None else float(goal_x),
     )
 
 
@@ -283,13 +358,26 @@ def compute_metrics(run: ReportRun) -> dict:
     a_drag = np.where(speed > 0, DRAG_K * cd * speed**2, np.nan)
     a_magnus = np.where(speed > 0, DRAG_K * cl * speed**2, np.nan)
 
-    barrier_f, keeper_f, keeper_hands = event_frames(run.anchors, end_f)
+    penalty = run.penalty
+    barrier_f, keeper_f, keeper_hands = event_frames(run.anchors, end_f, penalty=penalty)
+    hands_start = _hands_at(run.keeper_hands, kick_f) if penalty else None
+    hands_end = _hands_at(run.keeper_hands, end_f) if penalty else None
+    if hands_end is not None:
+        keeper_hands = hands_end
     radial = np.linalg.norm(track[:, :2] - track[kick_f, :2], axis=1)
     entry = track[end_f]
     tier, worst = confidence(flight)
     dev = _deviation_from_chord(track[kick_f : end_f + 1, :2])
-    wall_ok = barrier_f < run.n and np.isfinite(track[barrier_f, 2])
+    wall_ok = not penalty and barrier_f < run.n and np.isfinite(track[barrier_f, 2])
+    nan = float("nan")
     return {
+        "penalty": penalty,
+        "anchors": display_anchors(run.anchors, penalty, kick_f, end_f, hands_start, hands_end),
+        "hands_start": hands_start,
+        "hands_end": hands_end,
+        "hands_travel_m": float(np.linalg.norm(hands_end - hands_start))
+        if hands_start is not None and hands_end is not None
+        else None,
         "kick_frame": kick_f,
         "end_frame": end_f,
         "frames": frames,
@@ -315,14 +403,12 @@ def compute_metrics(run: ReportRun) -> dict:
         "a_magnus": a_magnus,
         "a_gravity": GRAVITY,
         "barrier_f": barrier_f,
-        "barrier_t": float((barrier_f - kick_f) / run.fps),
-        "barrier_kmh": float(speed[barrier_f] * 3.6) if barrier_f < run.n else float("nan"),
-        "barrier_to_goal_m": float(np.linalg.norm(entry - track[barrier_f]))
-        if barrier_f < run.n
-        else float("nan"),
-        "after_wall_s": float(flight_s - (barrier_f - kick_f) / run.fps),
-        "wall_z": float(track[barrier_f, 2]) if wall_ok else float("nan"),
-        "wall_clear_cm": float((track[barrier_f, 2] - 1.8) * 100) if wall_ok else float("nan"),
+        "barrier_t": nan if penalty else float((barrier_f - kick_f) / run.fps),
+        "barrier_kmh": float(speed[barrier_f] * 3.6) if wall_ok else nan,
+        "barrier_to_goal_m": float(np.linalg.norm(entry - track[barrier_f])) if wall_ok else nan,
+        "after_wall_s": nan if penalty else float(flight_s - (barrier_f - kick_f) / run.fps),
+        "wall_z": float(track[barrier_f, 2]) if wall_ok else nan,
+        "wall_clear_cm": float((track[barrier_f, 2] - 1.8) * 100) if wall_ok else nan,
         "re_min": float(np.nanmin(re[kick_f + 1 : end_f + 1])),
         "re_max": float(np.nanmax(re[kick_f + 1 : end_f + 1])),
         "keeper_f": keeper_f,
@@ -345,12 +431,71 @@ def compute_metrics(run: ReportRun) -> dict:
     }
 
 
-def event_frames(anchors: dict, end_f: int) -> tuple[int, int, np.ndarray]:
+WALL_ANCHOR_KEYS = ("p_wall", "barrier_target", "barrier_shoulder")
+WALL_WORDS = ("barreira", "barrier", "plano a 9,15", "wall", "ombro", "shoulder")
+KEEPER_ANCHOR_KEYS = ("keeper_hands", "p_arrival")
+KEEPER_WORDS = ("goleiro", "keeper", "mãos", "hands")
+
+
+def _label(spec: dict) -> str:
+    return str(spec.get("label", "")).lower()
+
+
+def _is_wall_anchor(key: str, spec: dict) -> bool:
+    return key in WALL_ANCHOR_KEYS or any(w in _label(spec) for w in WALL_WORDS)
+
+
+def _is_keeper_anchor(key: str, spec: dict) -> bool:
+    return key in KEEPER_ANCHOR_KEYS or any(w in _label(spec) for w in KEEPER_WORDS)
+
+
+def display_anchors(
+    anchors: dict,
+    penalty: bool,
+    kick_f: int,
+    end_f: int,
+    hands_start: np.ndarray | None,
+    hands_end: np.ndarray | None,
+) -> dict:
+    """The anchor points the animation draws.
+
+    A free kick draws them all. A penalty kick has no wall, so the wall anchors are dropped; the
+    keeper's hands measured from the poses (at the kick and in the last frame) replace the
+    keeper anchor of the fit, which is the same hand taken once. ``show_from`` is the first frame
+    the point is drawn at and ``i18n`` the text key of its label.
+    """
+    if not penalty:
+        return dict(anchors)
+    shown = {
+        k: v
+        for k, v in anchors.items()
+        if isinstance(v, dict) and "xyz" in v and not _is_wall_anchor(k, v)
+    }
+    if hands_start is None and hands_end is None:
+        return shown
+    shown = {k: v for k, v in shown.items() if not _is_keeper_anchor(k, v)}
+    if hands_start is not None:
+        shown["keeper_hands_start"] = {
+            "frame": kick_f, "xyz": [float(c) for c in hands_start], "show_from": kick_f,
+            "i18n": "vid_anchor_hands_start", "label_offset": [14, 22],
+        }  # fmt: skip
+    if hands_end is not None:
+        shown["keeper_hands"] = {
+            "frame": end_f, "xyz": [float(c) for c in hands_end], "show_from": end_f,
+            "i18n": "vid_anchor_hands_end", "label_offset": [14, -30],
+        }  # fmt: skip
+    return shown
+
+
+def event_frames(
+    anchors: dict, end_f: int, *, penalty: bool = False
+) -> tuple[int, int, np.ndarray]:
     """``(wall frame, keeper frame, keeper point)`` from the anchor points of a run.
 
     The wall is the anchor whose label says "barreira" or "barrier" (or the legacy
     ``barrier_target``, or else the middle anchor by frame); the keeper point is the legacy
-    ``keeper_hands`` or else the last anchor by frame.
+    ``keeper_hands`` or else the last anchor by frame. A penalty has no wall: its "wall frame" is
+    the last frame, and the keeper point is the anchor that names the goalkeeper's hand (NaN if none).
     """
     items = [v for v in anchors.values() if isinstance(v, dict) and "frame" in v and "xyz" in v]
     items.sort(key=lambda v: int(v["frame"]))
@@ -360,6 +505,11 @@ def event_frames(anchors: dict, end_f: int) -> tuple[int, int, np.ndarray]:
             (v for v in items if any(w in str(v.get("label", "")).lower() for w in words)),
             None,
         )
+
+    if penalty:
+        keeper = anchors.get("keeper_hands") or anchors.get("p_arrival") or labelled(*KEEPER_WORDS)
+        xyz = np.array(keeper["xyz"], dtype=float) if keeper is not None else np.full(3, np.nan)
+        return end_f, end_f, xyz
 
     wall = labelled("barreira", "barrier") or anchors.get("barrier_target")
     if wall is None and items:
@@ -413,6 +563,8 @@ def make_figures(
     out_dir.mkdir(parents=True, exist_ok=True)
     paths: dict[str, Path] = {}
     kf, ef = m["kick_frame"], m["end_frame"]
+    penalty = bool(m.get("penalty"))
+    hands = [m.get("hands_start"), m.get("hands_end")]
     track = run.track[kf : ef + 1]
     speed = m["speed_kmh"][kf : ef + 1]
     t = (np.arange(kf, ef + 1) - kf) / run.fps
@@ -424,6 +576,7 @@ def make_figures(
     ax.plot(track[:, 0], track[:, 1], color=BALL, lw=1.6, zorder=2)
     draw_people(ax, people, kick_f=kf, barrier_f=m["barrier_f"], end_f=ef, frame=ef,
                 lang=lang)  # fmt: skip
+    draw_hands(ax, hands[0], hands[1], lang)
     ax.plot(*track[0, :2], "o", color="white", mec=BALL, ms=11, zorder=4)
     ax.annotate(
         tr(lang, "fig_start"),
@@ -434,16 +587,22 @@ def make_figures(
         fontweight="bold",
     )
     ax.annotate(
-        tr(lang, "fig_entry"),
+        tr(lang, "fig_entry_pk" if penalty else "fig_entry"),
         tuple(track[-1, :2]),
-        xytext=(8, 6),
+        xytext=(8, -16) if penalty else (8, 6),  # a penalty ends beside the keeper's label
         textcoords="offset points",
         color=INK,
         fontweight="bold",
     )
     cb = fig.colorbar(sc, ax=ax, shrink=0.8)
     cb.set_label(tr(lang, "fig_top_cbar"))
-    extent = np.vstack([track[:, :2], people_extent(people, kf, ef)])
+    extent = np.vstack(
+        [
+            track[:, :2],
+            people_extent(people, kf, ef),
+            *[h[:2][None] for h in hands if h is not None],
+        ]
+    )
     ax.set_xlim(extent[:, 0].min() - 3, extent[:, 0].max() + 3)
     ax.set_ylim(extent[:, 1].min() - 3, extent[:, 1].max() + 3)
     ax.set_aspect("equal")
@@ -461,20 +620,45 @@ def make_figures(
     fig.savefig(paths["vista_de_cima"], dpi=150)
     plt.close(fig)
 
-    # 2. Side profile: height against the horizontal distance, with the wall and the crossbar.
+    # 2. Side profile: height against the horizontal distance, with the wall (a free kick) or the
+    #    goalkeeper's hands (a penalty) and the crossbar.
     fig, ax = plt.subplots(figsize=(8, 4.2))
     r = m["radial"][kf : ef + 1]
     ax.plot(r, track[:, 2], color=BALL, lw=2.6, label=tr(lang, "fig_traj"))
-    ax.add_patch(plt.Rectangle((BARRIER_M - 0.25, 0), 0.5, 1.8, color=WALL, alpha=0.85))
-    ax.annotate(
-        tr(lang, "fig_wall_label"),
-        (BARRIER_M + 0.4, 1.2),
-        color=WALL,
-        fontsize=9,
-        fontweight="bold",
-    )
-    ax.plot([r[-1], r[-1]], [0, CROSSBAR_M], color=INK, lw=3)
-    ax.annotate(tr(lang, "fig_crossbar"), (r[-1] - 4.5, CROSSBAR_M + 0.1), color=INK, fontsize=9)
+    goal_r = float(r[-1])
+    if penalty:
+        if run.goal_x is not None:
+            goal_r = float(abs(run.goal_x - run.track[kf, 0]))
+        for h, filled, key, dy in (
+            (hands[0], False, "fig_hands_start", 8),
+            (hands[1], True, "fig_hands_end", -14),
+        ):
+            if h is None:
+                continue
+            hr = float(np.linalg.norm(h[:2] - run.track[kf, :2]))
+            ax.plot(
+                hr,
+                h[2],
+                "o",
+                ms=9,
+                mfc=KEEPER if filled else "white",
+                mec=KEEPER,
+                mew=2.0,
+                zorder=5,
+            )
+            ax.annotate(tr(lang, key), (hr, h[2]), xytext=(8, dy), textcoords="offset points",
+                        color=KEEPER, fontsize=9, fontweight="bold")  # fmt: skip
+    else:
+        ax.add_patch(plt.Rectangle((BARRIER_M - 0.25, 0), 0.5, 1.8, color=WALL, alpha=0.85))
+        ax.annotate(
+            tr(lang, "fig_wall_label"),
+            (BARRIER_M + 0.4, 1.2),
+            color=WALL,
+            fontsize=9,
+            fontweight="bold",
+        )
+    ax.plot([goal_r, goal_r], [0, CROSSBAR_M], color=INK, lw=3)
+    ax.annotate(tr(lang, "fig_crossbar"), (goal_r - 4.5, CROSSBAR_M + 0.1), color=INK, fontsize=9)
     ax.axhline(0, color=MUTED, lw=1)
     ax.set_xlabel(tr(lang, "fig_profile_x"))
     ax.set_ylabel(tr(lang, "fig_profile_y"))
@@ -496,7 +680,8 @@ def make_figures(
         2, 1, figsize=(8, 5.2), sharex=True, gridspec_kw={"height_ratios": [1.3, 1]}
     )
     ax.plot(t, speed, color=BALL, lw=2.6)
-    ax.axvline(m["barrier_t"], color=WALL, ls=":", lw=1.4)
+    if not penalty:
+        ax.axvline(m["barrier_t"], color=WALL, ls=":", lw=1.4)
     ax.set_ylabel(tr(lang, "fig_time_speed"))
     _style(ax)
     ax2.plot(t, m["cd"][kf : ef + 1], color=INK, lw=2, label=tr(lang, "fig_time_cd"))
@@ -523,7 +708,13 @@ def make_figures(
         normal = np.array([-u[1], u[0]])
         along, side = xy @ u, xy @ normal
         ax.plot(along, side, color=BALL, lw=2.8, label=tr(lang, "fig_traj"))
-        ax.axhline(0, color=INK, lw=1.4, ls="--", label=tr(lang, "fig_curve_line"))
+        ax.axhline(
+            0,
+            color=INK,
+            lw=1.4,
+            ls="--",
+            label=tr(lang, "fig_curve_line_pk" if penalty else "fig_curve_line"),
+        )
         ax.fill_between(along, 0, side, color=BALL, alpha=0.08)
     ax.set_xlabel(tr(lang, "fig_curve_x"))
     ax.set_ylabel(tr(lang, "fig_curve_y"))
@@ -541,9 +732,14 @@ def make_figures(
     plt.close(fig)
 
     # 5. Forces in three instants: gravity, drag and Magnus accelerations (m/s^2).
+    middle = (
+        (tr(lang, "fig_when_mid"), (kf + ef) // 2)
+        if penalty
+        else (tr(lang, "fig_when_wall"), m["barrier_f"])
+    )
     picks = [
         (tr(lang, "fig_when_after"), kf + 1),
-        (tr(lang, "fig_when_wall"), m["barrier_f"]),
+        middle,
         (tr(lang, "fig_when_end"), max(ef - 1, kf + 1)),
     ]
     picks = [(lab, f) for lab, f in picks if f < run.n and np.isfinite(m["a_drag"][f])]
@@ -691,7 +887,12 @@ def _warn_block(m: dict, lang: str) -> str:
             lang,
             "warn",
             tier=tr(lang, key),
-            tier_text=tr(lang, "tier_text_" + m["tier"]),
+            tier_text=tr(
+                lang,
+                "penalty_tier_text_baixa"
+                if m.get("penalty") and m["tier"] == "baixa"
+                else "tier_text_" + m["tier"],
+            ),
             worst=fmt_num(m["worst_anchor_m"], 1, lang),
             reference=tr(lang, "ref_" + _method_key(m)),
         )
@@ -703,10 +904,11 @@ def _quotes(m: dict, lang: str) -> str:
     def num(x, nd=1):
         return fmt_num(x, nd, lang)
 
+    sfx = "_pk" if m.get("penalty") else ""
     items = [
         tr(lang, "quote_distance", dist=num(m["distance_m"]), flight=num(m["flight_s"], 2)),
-        tr(lang, "quote_mean", mean=num(m["mean_kmh"], 0)),
-        tr(lang, "quote_height", zmax=num(m["zmax_m"], 1)),
+        tr(lang, "quote_mean" + sfx, mean=num(m["mean_kmh"], 0)),
+        tr(lang, "quote_height" + sfx, zmax=num(m["zmax_m"], 1)),
         tr(lang, "quote_measured"),
     ]
     if m["tier"] != "baixa":
@@ -714,9 +916,35 @@ def _quotes(m: dict, lang: str) -> str:
     return "\n".join(f"<li>{s}</li>" for s in items)
 
 
+def _hands_texts(m: dict, lang: str) -> tuple[str, str]:
+    """``(lead sentence, paragraph)`` about the goalkeeper's hands of a penalty; "" when unknown."""
+
+    def num(x, nd=1):
+        return fmt_num(x, nd, lang)
+
+    gap, travel = m.get("keeper_gap_m"), m.get("hands_travel_m")
+    moved = tr(lang, "hands_moved", travel=num(travel)) if travel is not None else ""
+    if gap is None:
+        tail = "" if travel is not None else tr(lang, "hands_missing")
+        lead = ""
+    else:
+        tail = tr(lang, "hands_near" if gap <= HANDS_NEAR_M else "hands_far", gap=num(gap))
+        lead = tr(lang, "hands_lead", gap=num(gap))
+    return lead, " ".join(t for t in (moved, tail) if t)
+
+
+def _select_blocks(html: str, penalty: bool) -> str:
+    """Keep the ``<!--pk-->..<!--/pk-->`` blocks of a penalty or the ``<!--fk-->`` blocks of a free
+    kick, and drop the others: the template carries the text of both set pieces."""
+    keep, drop = ("pk", "fk") if penalty else ("fk", "pk")
+    html = re.sub(rf"<!--{drop}-->.*?<!--/{drop}-->", "", html, flags=re.S)
+    return html.replace(f"<!--{keep}-->", "").replace(f"<!--/{keep}-->", "")
+
+
 def fill_template(m: dict, figs: dict[str, Path], meta: dict, lang: str, payload: dict) -> str:
     """The HTML: the template of ``lang`` with every placeholder replaced."""
-    html = TEMPLATES[lang].read_text(encoding="utf-8")
+    html = _select_blocks(TEMPLATES[lang].read_text(encoding="utf-8"), bool(m.get("penalty")))
+    hands_lead, hands_text = _hands_texts(m, lang)
 
     def num(x, nd=1):
         return fmt_num(x, nd, lang)
@@ -747,6 +975,9 @@ def fill_template(m: dict, figs: dict[str, Path], meta: dict, lang: str, payload
         "re_max": num(m["re_max"] / 1e5, 1),
         "wall_goal": num(m["barrier_to_goal_m"], 1),
         "keeper_gap": num(m["keeper_gap_m"], 1),
+        "hands_lead": hands_lead,
+        "hands_text": hands_text,
+        "hands_limit": tr(lang, "hands_limit"),
         "dev": num(m["dev_m"], 2),
         "dev_at": num(m["dev_at_m"], 1),
         "rms": num(m["rms_px"], 1),
@@ -810,9 +1041,10 @@ def _people_for(run: ReportRun, m: dict, players: dict | None) -> People:
     the same clip, the same ids in every camera); otherwise they are the nearest persons. A role
     given by the user (``players``) replaces both.
     """
-    _, _, keeper_xyz = event_frames(run.anchors, m["end_frame"])
+    _, _, keeper_xyz = event_frames(run.anchors, m["end_frame"], penalty=run.penalty)
     given = players or {}
     mapped = load_camera_roles(run.people_dir)
+    penalty = run.penalty
     people = find_people(
         load_ground_tracks(run.people_dir, run.n),
         run.track[:, :2],
@@ -823,8 +1055,10 @@ def _people_for(run: ReportRun, m: dict, players: dict | None) -> People:
         kicker_id=given.get("kicker_id", mapped.get("kicker_id")),
         wall_ids=given.get("wall_ids"),
         keeper_id=given.get("keeper_id", mapped.get("keeper_id")),
+        penalty=penalty,
     )
     people.names = mapped.get("names", {})
+    people.penalty = penalty
     people.manual = any(given.get(k) is not None for k in ("kicker_id", "wall_ids", "keeper_id"))
     people.source = "manual" if people.manual else ("map" if mapped else "nearest")
     return people
@@ -852,11 +1086,15 @@ def build_report(
 
     langs = _languages(lang)
     run = load_run(run_dir, video)
+    given_keeper = (players or {}).get("keeper_id")
+    if run.penalty and given_keeper is not None:
+        run.keeper_hands = keeper_wrists(run.people_dir, int(given_keeper), run.n)
     m = compute_metrics(run)
     people = _people_for(run, m, players)
     root = Path(run.run_dir) / "report_tv"
     result: dict = {"dir": str(root), "tier": m["tier"], "languages": {}}
     today = date.today()
+    sfx = "_pk" if run.penalty else ""
     for code in langs:
         out = root / code
         html_name, pdf_name, mp4_name = FILE_NAMES[code]
@@ -864,16 +1102,16 @@ def build_report(
         video_path = None
         if animation:
             video_path = write_lance_video(
-                run, out / mp4_name, m, title=title or tr(code, "default_title"), lang=code,
+                run, out / mp4_name, m, title=title or tr(code, "default_title" + sfx), lang=code,
                 people=people,
             )  # fmt: skip
         meta = {
-            "title": title or tr(code, "default_title"),
+            "title": title or tr(code, "default_title" + sfx),
             "subtitle": subtitle or tr(code, "default_subtitle"),
             "authors": authors,
             "kicker_phrase": tr(code, "kicker_of", name=names)
             if names
-            else tr(code, "kicker_default"),
+            else tr(code, "kicker_default" + sfx),
             "generated": tr(code, "date_format", d=today.day, m=today.month, y=today.year),
             "animation": mp4_name if video_path else "",
             "players_note": people_note(people, code),

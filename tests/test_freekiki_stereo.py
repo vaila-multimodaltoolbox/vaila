@@ -95,6 +95,88 @@ def test_parse_sync_name_reads_sync_and_cut_start() -> None:
     assert st.parse_sync_name("plain_clip") is None
 
 
+def _equalizer_folder(folder: Path, *, contact: int = 33, frame_base: int = 1) -> list[Path]:
+    """Two videos and the ``event_equalizer.json`` that video_event_equalizer writes next to them."""
+    names = {"reference": "reference_c2_equalized.mp4", "source": "source_c1_equalized.mp4"}
+    for name in names.values():
+        (folder / name).write_bytes(b"")
+    manifest = {
+        "vaila_event_equalizer": 1,
+        "frame_base": frame_base,
+        "output_event_frames": [frame_base, contact, 85],
+        "cameras": {role: {"video": name} for role, name in names.items()},
+    }
+    (folder / st.EQUALIZER_MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
+    return [folder / names["reference"], folder / names["source"]]
+
+
+def test_the_equalizer_videos_are_the_reference_and_the_source_in_that_order(
+    tmp_path: Path,
+) -> None:
+    reference, source = _equalizer_folder(tmp_path)
+    assert st.equalizer_videos(tmp_path) == [reference, source]
+
+
+def test_the_equalizer_sync_is_the_contact_frame_counted_from_zero(tmp_path: Path) -> None:
+    reference, source = _equalizer_folder(tmp_path, contact=33)
+    assert st.equalizer_sync(reference) == st.equalizer_sync(source) == (32, 0)
+    assert st.video_sync(reference) == (32, 0)
+    zero_based = tmp_path / "zero"
+    zero_based.mkdir()
+    (first, _) = _equalizer_folder(zero_based, contact=32, frame_base=0)
+    assert st.equalizer_sync(first) == (32, 0)
+
+
+def test_the_sync_in_the_name_wins_over_the_equalizer(tmp_path: Path) -> None:
+    _equalizer_folder(tmp_path)
+    named = tmp_path / "c1_main_sync_15_frames_2_to_79.mp4"
+    named.write_bytes(b"")
+    assert st.video_sync(named) == (15, 2)
+
+
+def test_load_view_reads_the_sync_of_an_equalized_video_from_its_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    reference, _ = _equalizer_folder(tmp_path)
+    run_dir = tmp_path / "reference_c2_equalized_3d_20261029_000000"
+    run_dir.mkdir()
+    (run_dir / "README.txt").write_text(f"video: {reference}\n", encoding="utf-8")
+    (tmp_path / "reference_c2_equalized_markers.csv").write_text(
+        "frame,p0_x,p0_y\n0,1,1\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(st, "nominal_clock", lambda path: np.arange(85) / 120.0)
+    monkeypatch.setattr(st, "find_dlt3d", lambda folder, video: {})
+    view, video = st.load_view(
+        run_dir, markers=None, timing=None, sync_frame=None, cut_start=None, name="ref"
+    )
+    assert video == reference
+    assert (view.cut_start, view.sync_cut) == (0, 32)  # no ValueError: the name has no sync
+
+
+def test_a_video_the_manifest_does_not_name_has_no_equalizer_sync(tmp_path: Path) -> None:
+    _equalizer_folder(tmp_path)
+    other = tmp_path / "another.mp4"
+    other.write_bytes(b"")
+    assert st.video_sync(other) is None
+
+
+def test_a_broken_or_foreign_manifest_gives_no_sync(tmp_path: Path) -> None:
+    videos = _equalizer_folder(tmp_path)
+    manifest = tmp_path / st.EQUALIZER_MANIFEST
+    manifest.write_text("{not json", encoding="utf-8")
+    assert st.video_sync(videos[0]) is None
+    manifest.write_text(json.dumps({"output_event_frames": [1, 33, 85]}), encoding="utf-8")
+    assert st.video_sync(videos[0]) is None  # not written by the equalizer
+    assert st.equalizer_videos(tmp_path) == []
+
+
+def test_a_manifest_naming_a_missing_video_gives_no_pair(tmp_path: Path) -> None:
+    videos = _equalizer_folder(tmp_path)
+    videos[1].unlink()
+    assert st.equalizer_videos(tmp_path) == []
+    assert st.video_sync(videos[0]) is None
+
+
 def test_triangulate_recovers_a_known_point() -> None:
     X = np.array([-40.0, -3.0, 1.7])
     uv_a, uv_b = _pix(L_A, X), _pix(L_B, X)

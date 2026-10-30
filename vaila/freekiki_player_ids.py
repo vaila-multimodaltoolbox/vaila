@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 27 October 2026
-Update Date: 27 October 2026
+Update Date: 29 October 2026
 
 Description:
     Each camera numbers its people with the SAM 3 object id, so the same player can carry
@@ -414,12 +414,25 @@ def _write_rows(path: Path, header: list[str], rows: list[dict]) -> None:
 
 
 def _cut_sync(folder: Path) -> tuple[int, int] | None:
-    """``(sync frame, cut start)`` from the folder name, or None when the name has no sync."""
+    """``(sync frame, cut start)`` from the folder name, or None when the name has no sync.
+
+    The video of the folder (its README) is the second source: two videos of the event equalizer
+    carry their sync in ``event_equalizer.json``, not in their names.
+    """
     try:
-        from .freekiki_stereo import parse_sync_name
+        from .freekiki_detect3d import _video_from_readme
+        from .freekiki_stereo import parse_sync_name, video_sync
     except ImportError:
-        from freekiki_stereo import parse_sync_name  # ty: ignore[unresolved-import]
-    return parse_sync_name(folder.name)
+        from freekiki_detect3d import _video_from_readme  # ty: ignore[unresolved-import]
+        from freekiki_stereo import (  # ty: ignore[unresolved-import]
+            parse_sync_name,
+            video_sync,
+        )
+    named = parse_sync_name(folder.name)
+    if named is not None:
+        return named
+    video = _video_from_readme(folder)
+    return video_sync(video) if video is not None else None
 
 
 def run_player_ids(folders: list[Path]) -> dict:

@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 138 | **Categories:** 7 | **Generated on:** 29/10/2026 (v0.4.12)
+**Documented topics:** 139 | **Categories:** 7 | **Generated on:** 29/10/2026 (v0.4.12)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -161,7 +161,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
 
-## Tools (46)
+## Tools (47)
 
 - **ai_tracker_train** — Offline fine-tuning for vailá Track AI assets under vaila/models/ai_tracker/,
   - [HTML](ai_tracker_train.html) · [Markdown](ai_tracker_train.md)
@@ -251,6 +251,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](vaila_stroboscopic.html) · [Markdown](vaila_stroboscopic.md)
 - **vaila_ytdown** — Download video as MP4 or audio as MP3 from one editable list. Open Video and Image → YouTube Downloader or run the module without CLI inputs.
   - [HTML](vaila_ytdown.html) · [Markdown](vaila_ytdown.md)
+- **video_event_equalizer** — GUI: Frame C → Make Sync file → Equalize by events (RIFE)
+  - [HTML](video_event_equalizer.html) · [Markdown](video_event_equalizer.md)
 - **video_stabilizer** — Stabilize a video from physically fixed scene markers exported by getpixelvideo.
   - [HTML](video_stabilizer.html) · [Markdown](video_stabilizer.md)
 - **videoprocessor** — This script allows users to process and edit video files, enabling batch processing of videos. Users can choose between two main operations: 1. Merging a vid...

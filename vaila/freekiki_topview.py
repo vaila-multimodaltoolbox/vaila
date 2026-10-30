@@ -112,8 +112,13 @@ def render_frame(
     tracks: dict[int, dict[int, tuple[float, float]]],
     ball: dict[int, tuple[float, float]],
     fps: float,
+    labels: dict[int, int] | None = None,
 ) -> np.ndarray:
-    """The pitch with every person's path up to ``frame`` and the ball's path."""
+    """The pitch with every person's path up to ``frame`` and the ball's path.
+
+    ``labels`` maps a track id to the number to write beside the person (the player id of a run
+    with a player map: ID0 is the keeper and ID1 the kicker of a penalty); the track id otherwise.
+    """
     import cv2
 
     img = base.copy()
@@ -134,8 +139,16 @@ def render_frame(
                 centre = pitch_to_px(x, y)
                 cv2.circle(img, centre, 8, colour, -1, cv2.LINE_AA)
                 cv2.circle(img, centre, 8, LINE_BGR, 1, cv2.LINE_AA)
+                shown = labels.get(pid, pid) if labels else pid
                 cv2.putText(
-                    img, f"{pid}", (centre[0] + 10, centre[1] - 8), 0, 0.6, LINE_BGR, 2, cv2.LINE_AA
+                    img,
+                    f"{shown}",
+                    (centre[0] + 10, centre[1] - 8),
+                    0,
+                    0.6,
+                    LINE_BGR,
+                    2,
+                    cv2.LINE_AA,
                 )
     trail(ball, BALL_BGR)
     if frame in ball:
@@ -179,11 +192,19 @@ def _read_ball(path: Path) -> dict[int, tuple[float, float]]:
     return ball
 
 
-def write_topview(out_dir: Path | str, stem: str, *, fps: float, n_frames: int) -> dict[str, str]:
+def write_topview(
+    out_dir: Path | str,
+    stem: str,
+    *,
+    fps: float,
+    n_frames: int,
+    labels: dict[int, int] | None = None,
+) -> dict[str, str]:
     """Write ``<stem>_topview.mp4`` and ``<stem>_topview.png`` from the run's CSVs.
 
     Reads ``ground_tracks.csv`` (the smoothed ground of each kept person) and
-    ``ball_3d_on_field.csv`` from ``out_dir``. Returns the names of the two files.
+    ``ball_3d_on_field.csv`` from ``out_dir``. ``labels`` is as in :func:`render_frame`. Returns the
+    names of the two files.
     """
     import cv2
 
@@ -201,7 +222,7 @@ def write_topview(out_dir: Path | str, stem: str, *, fps: float, n_frames: int) 
     last = None
     try:
         for f in range(n_frames):
-            last = render_frame(base, f, tracks, ball, fps)
+            last = render_frame(base, f, tracks, ball, fps, labels)
             writer.write(last)
     finally:
         writer.release()

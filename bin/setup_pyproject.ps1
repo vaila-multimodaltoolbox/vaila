@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
     Unified interactive bootstrap for vailá on Windows (PowerShell).
+    Updated: 29 October 2026; Version: 0.4.12.
 
 .DESCRIPTION
     Detects OS / architecture / NVIDIA GPU, picks the PyTorch dependency group
@@ -42,6 +43,9 @@
 .PARAMETER NoSync
     Skip `uv sync`.
 
+.PARAMETER NoRife
+    Skip automatic RIFE 4.25 code/model setup on CUDA.
+
 .EXAMPLE
     pwsh bin/setup_pyproject.ps1
     pwsh bin/setup_pyproject.ps1 -Target cuda -Extras sam
@@ -61,6 +65,7 @@ param(
     [switch]$Upgrade,
     [switch]$NoLock,
     [switch]$NoSync,
+    [switch]$NoRife,
     [switch]$SkipWorktree,
     [switch]$NoSkipWorktree
 )
@@ -267,6 +272,14 @@ if (-not $NoSync) {
         if ($currentVal -ne '1') {
             [Environment]::SetEnvironmentVariable('UV_NO_SYNC', '1', 'User')
             Write-Host "Persisted UV_NO_SYNC=1 as a user-level environment variable." -ForegroundColor Green
+        }
+    }
+
+    if ($Target -eq 'cuda' -and -not $NoRife) {
+        Write-Host 'Setting up RIFE 4.25 (event video interpolation)...' -ForegroundColor Cyan
+        & uv run --no-sync python bin/setup_rife.py
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'RIFE unavailable; retry: pwsh bin/setup_rife.ps1 (see Syncvid Help).'
         }
     }
 

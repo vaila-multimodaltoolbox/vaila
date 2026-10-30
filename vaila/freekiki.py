@@ -7605,6 +7605,10 @@ def build_parser() -> argparse.ArgumentParser:
             "kick-figures",
         ):
             p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
+        if cmd == "kick-figures":  # not needed, but the GUI always passes it
+            p.add_argument(
+                "-w", "--workspace", help="Not needed: accepted because the GUI always passes it."
+            )
         if cmd == "import-dataset":
             p.add_argument("--src", required=True, help="kiki49 dataset folder (has data.yaml).")
         elif cmd == "ingest":
@@ -7751,8 +7755,9 @@ def build_parser() -> argparse.ArgumentParser:
                 nargs="+",
                 required=True,
                 help="Folder with one cut video (monocular analysis) or two ('_sync_N_frames_A_to_B' "
-                "in the name: binocular and monocular of each camera), or the video files. Each needs "
-                "its '<video>_markers.csv'.",
+                "in the name, or the two videos of the event equalizer with their event_equalizer.json: "
+                "binocular and monocular of each camera), or the video files. Each needs "
+                "its '<video>_markers.csv' (the ball marked in getpixelvideo).",
             )
             p.add_argument(
                 "--analysis",
@@ -9076,13 +9081,23 @@ def run_freekiki() -> None:
         if not source:
             messagebox.showerror(
                 "FreeKiki",
-                "Choose the folder with the two cut videos (or one of them) in section 5.",
+                "Choose the folder with the two cut videos or the two equalized videos (or one of them) in section 5.",
                 parent=root,
             )
             return
         path = Path(source)
+        try:
+            from .freekiki_stereo import video_sync
+        except ImportError:
+            from freekiki_stereo import video_sync  # ty: ignore[unresolved-import]
+        if path.is_dir():
+            target = path
+        elif video_sync(path) is None:
+            target = path  # one video with no sync in its name: the monocular analysis of it
+        else:
+            target = path.parent  # a cut video of a pair: the folder gives both cameras
         # a new folder next to the videos every time: an old run is never resumed by accident
-        cmd = ["kick-analysis", "--videos", str(path if path.is_dir() else path.parent)]
+        cmd = ["kick-analysis", "--videos", str(target)]
         if kick_result.get() != "auto":
             cmd += ["--analysis", kick_result.get()]
         if kick_set_piece.get() != "auto":
@@ -9955,14 +9970,18 @@ def run_freekiki() -> None:
         width=11,
         state="readonly",
     ).pack(side="left")
-    ttk.Label(bar3, text="Set piece:").pack(side="left", padx=(12, 4))
-    ttk.Combobox(
-        bar3,
-        textvariable=kick_set_piece,
-        values=("auto", "penalty", "free_kick"),
-        width=10,
-        state="readonly",
-    ).pack(side="left")
+    bar4 = ttk.Frame(box)
+    bar4.grid(row=11, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(bar4, text="Set piece:").pack(side="left", padx=(4, 8))
+    ttk.Radiobutton(bar4, text="Auto (geral)", variable=kick_set_piece, value="auto").pack(
+        side="left", padx=(0, 10)
+    )
+    ttk.Radiobutton(bar4, text="Penalty", variable=kick_set_piece, value="penalty").pack(
+        side="left", padx=(0, 10)
+    )
+    ttk.Radiobutton(bar4, text="Free kick", variable=kick_set_piece, value="free_kick").pack(
+        side="left"
+    )
     ttk.Button(bar2, text="Kick figures", command=do_kick_figures).pack(side="left", padx=6)
     ttk.Button(bar2, text="Load previous result...", command=do_load_result).pack(
         side="left", padx=6
@@ -9975,8 +9994,9 @@ def run_freekiki() -> None:
         "Set piece: Detect + 3D prints a provisional penalty or free kick from the ball of that run "
         "(data/setpiece_provisional.json); a SAM ball is not corrected, so One-click confirms it with "
         "the corrected ball (set piece line of the kick analysis README).",
-        "Set piece box (next to One-click): auto = the ball rule decides; penalty or free_kick forces "
-        "the kind of the kick analysis, and the rule's answer stays in data/setpiece.json (auto_kind).",
+        "Set piece radios (below One-click): Auto (geral) = the ball rule decides; Penalty or "
+        "Free kick forces the kind of the kick analysis, and the rule's answer stays in "
+        "data/setpiece.json (auto_kind).",
         "Correct: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
         "F9 Save dataset (Full or Only Correct mode).",
         "Then put that folder in section 3 'Corrections' and Train (Base 'active' = fine-tune).",

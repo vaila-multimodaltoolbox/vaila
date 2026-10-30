@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 27 October 2026
-Update Date: 27 October 2026
+Update Date: 29 October 2026
 
 Description:
     The monocular ball is placed on the ground plane, so a ball in the air leaves the pitch. A
@@ -200,9 +200,10 @@ def auto_flight(
         return None
     last_frame = max(pixels)
     rest_xy = rest_point(lifted, onset)
-    # the contact lies between the last still frame and the first moved one: the flight cannot
-    # start earlier (the frames before the contact are not observations of the flight)
-    kick_window = (max(onset - 1, 0) / fps, onset / fps)
+    # the contact is anywhere before the last frame. A window around the first moved frame forced the
+    # fit to a wrong kick time: a hand-marked ball drifts a few frames before the real contact, and on
+    # a real penalty that window gave 28 px rms and a 13.6 m anchor residual (2.3 px with this window)
+    kick_window = (0.0, (last_frame - 1) / fps)
     x0 = float(start["x_m"])
     after = {f: uv for f, uv in pixels.items() if f >= onset}
     frames = np.array(sorted(f for f in lifted if f >= onset), dtype=float)

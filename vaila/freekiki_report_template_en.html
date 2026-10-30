@@ -74,14 +74,21 @@
 
 {{warn_block}}
 
+<!--fk-->
 <p class="lead">The ball travelled <b>{{dist}} metres</b> in <b>{{flight}} s</b>, at an average speed of
 <b>about {{mean}} km/h</b>. It rose to <b>{{zmax}} metres</b>, was <b>{{wall_z}} metre</b> above the ground when it crossed the wall and reached the goal.
 After it passed the wall, the ball took about <b>{{after_wall}} seconds</b> to reach the entry.</p>
+<!--/fk-->
+<!--pk-->
+<p class="lead">From the kick to the last frame analysed, the ball travelled <b>{{dist}} metres</b> in <b>{{flight}} s</b>,
+at an average speed of <b>about {{mean}} km/h</b>, and rose to <b>{{zmax}} metres</b>. A penalty kick has no wall.
+{{hands_lead}}</p>
+<!--/pk-->
 
 <div class="cards">
-  <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l">distance from the kick to the entry into the goal <span class="tag solid">measured</span></div></div>
+  <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l"><!--fk-->distance from the kick to the entry into the goal<!--/fk--><!--pk-->distance from the kick to the last frame<!--/pk--> <span class="tag solid">measured</span></div></div>
   <div class="card"><div class="n">{{flight}} <small>s</small></div><div class="l">flight time of the ball <span class="tag solid">measured</span></div></div>
-  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l">average speed from the foot to the entry <span class="tag solid">measured</span></div></div>
+  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l"><!--fk-->average speed from the foot to the entry<!--/fk--><!--pk-->average speed from the foot to the last frame<!--/pk--> <span class="tag solid">measured</span></div></div>
   <div class="card"><div class="n">{{launch}} <small>km/h</small></div><div class="l">speed leaving the foot <span class="tag est">estimate</span></div></div>
   <div class="card"><div class="n">{{zmax}} <small>m</small></div><div class="l">maximum height of the ball <span class="tag est">estimate</span></div></div>
   <div class="card"><div class="n">{{spin}} <small>rps</small></div><div class="l">spin of the ball, inferred from the curve <span class="tag est">estimate</span></div></div>
@@ -90,27 +97,41 @@ After it passed the wall, the ball took about <b>{{after_wall}} seconds</b> to r
 the physical model fitted to the trajectory; that is why we show the order of magnitude.</p>
 
 <h2>1. The path of the ball</h2>
-<p>The ball left {{kicker_phrase}} and reached the entry into the goal in {{flight}} s. Seen from above, it did not travel
+<p>The ball left {{kicker_phrase}} and <!--fk-->reached the entry into the goal<!--/fk--><!--pk-->flew until the last frame analysed<!--/pk--> in {{flight}} s. Seen from above, it did not travel
 in a straight line: the colour shows the speed, from the fastest (yellow) to the slowest (red).</p>
 <figure>
   <img src="{{img_vista_de_cima}}" alt="Top view of the trajectory of the ball, coloured by speed">
-  <figcaption>Top view of the reconstructed trajectory. Each dot is one frame of the broadcast (about 1/30 of a second). The green segment is the wall, between the two players; the orange path is the goalkeeper.<br>{{players_note}}</figcaption>
+  <figcaption>Top view of the reconstructed trajectory. Each dot is one frame of the broadcast (about 1/30 of a second). <!--fk-->The green segment is the wall, between the two players; the orange path is the goalkeeper.<!--/fk--><!--pk-->The orange path is the goalkeeper; the open and the filled circle are the goalkeeper's hands at the kick and in the last frame.<!--/pk--><br>{{players_note}}</figcaption>
 </figure>
 
+<!--pk-->
+<h2>2. The goalkeeper's hands</h2>
+<p>{{hands_text}} The ball reached <b>{{zmax}} metres</b> high, at about {{zmax_t}} seconds after the kick; the crossbar is 2.44 m high.</p>
+<!--/pk-->
+<!--fk-->
 <h2>2. Over the wall</h2>
 <p>The free kick is a geometry problem: the ball must rise enough to pass the wall, but come down in time to enter
 under the crossbar (2.44 m). According to the reconstruction, the ball reached <b>{{zmax}} metres</b> high, at about
 {{zmax_t}} seconds after the kick. When it crossed the wall, it was {{wall_z}} metre above the ground: {{wall_clear}} cm
 {{wall_side}} the top of the wall, which we took as 1.8 metres (a hypothesis).</p>
+<!--/fk-->
 <figure>
-  <img src="{{img_perfil}}" alt="Height of the ball against distance, with the wall and the crossbar">
-  <figcaption>Side view: height of the ball along the distance travelled, with the wall (hypothesis of 1.8 m) and the crossbar.</figcaption>
+  <img src="{{img_perfil}}" alt="Height of the ball against distance, with the wall or the goalkeeper's hands, and the crossbar">
+  <figcaption><!--fk-->Side view: height of the ball along the distance travelled, with the wall (hypothesis of 1.8 m) and the crossbar.<!--/fk--><!--pk-->Side view: height of the ball along the distance travelled, with the goalkeeper's hands at the kick (open circle) and in the last frame (filled circle), and the crossbar.<!--/pk--></figcaption>
 </figure>
 
+<!--fk-->
 <h2>3. A little more than a second</h2>
 <p>The ball took about {{wall_t}} seconds to reach the wall. When it passed it, it was travelling at about
 {{wall_kmh}} km/h. From there to the entry into the goal, the ball still moved {{wall_goal}} metres. Along the flight, the speed falls
 continuously: the ball loses speed to the air, and the air resistance is greater the faster the ball moves.</p>
+<!--/fk-->
+<!--pk-->
+<h2>3. The flight of the ball</h2>
+<p>The ball left the foot at about {{launch}} km/h and, {{flight}} s later, in the last frame analysed, was at about
+{{end_kmh}} km/h. Along the flight, the speed falls continuously: the ball loses speed to the air, and the air resistance
+is greater the faster the ball moves.</p>
+<!--/pk-->
 <figure>
   <img src="{{img_tempo}}" alt="Speed of the ball, drag coefficient and Reynolds number over time">
   <figcaption>Top: speed of the ball. Bottom: the drag coefficient (dark line) and the Reynolds number
@@ -149,12 +170,12 @@ with the spin axis {{spin_axis}}, which makes the ball curve to the sides. This 
 </figure>
 
 <h2>5. The curve</h2>
-<p>Imagine a taut string from the kicker's foot to the entry into the goal. The ball went a little outside that string and then
+<p>Imagine a taut string from the kicker's foot to <!--fk-->the entry into the goal<!--/fk--><!--pk-->the last position of the ball<!--/pk-->. The ball went a little outside that string and then
 came back inside. The largest offset was about <b>{{dev}} m</b>, at about {{dev_at}} m after the kick. This is the
 curve the ball made in the air, measured by its offset from the straight line.</p>
 <figure>
   <img src="{{img_curva}}" alt="Sideways offset of the ball from the straight line of the kick to the entry">
-  <figcaption>Dashed line: the straight path from the kick to the entry. Curve: how far the ball moved to the side.</figcaption>
+  <figcaption>Dashed line: the straight path from the kick to <!--fk-->the entry<!--/fk--><!--pk-->the last frame<!--/pk-->. Curve: how far the ball moved to the side.</figcaption>
 </figure>
 
 <h2>6. What these numbers do not say</h2>
@@ -167,7 +188,8 @@ curve the ball made in the air, measured by its offset from the straight line.</
   UFRJ (Aguiar), and the final point was about 10 to 12 metres away from the published one. The physics (forces, drag and Magnus)
   follows the references, but this test shows that there are still differences of convention or of parameters.</li>
   <li>{{refs_text}}</li>
-  <li>{{wall_text}}</li>
+  <!--fk--><li>{{wall_text}}</li><!--/fk-->
+  <!--pk--><li>{{hands_limit}}</li><!--/pk-->
   <li><b>The touch of the keeper was not modelled.</b> The trajectory treats the flight as free until the entry.</li>
 </ul>
 </div>
@@ -193,6 +215,10 @@ curve the ball made in the air, measured by its offset from the straight line.</
   <li>Aguiar, C. E. <i>Aerodinâmica da bola de futebol: da Copa de 70 à Jabulani</i>. Instituto de Física, UFRJ (teaching material, in Portuguese).</li>
   <li>NASA Glenn Research Center. <i>Drag</i>: the drag equation and the Reynolds number, for students.</li>
   <li>Technical documentation of the method: <i>docs/fisica_bola_freekiki.html</i> (vailá, 2026).</li>
+  <li>Monteiro, R. L. M.; Bedo, B. L. S.; Monteiro, P. H. M.; de Andrade, F. S. P.; Moura, F. A.; Cunha, S. A.; Torres, R. S.; Memmert, D.; Santiago, P. R. P. <i>Penalty feet positioning rule modification and laterality effect on soccer goalkeepers' diving kinematics</i>. Scientific Reports, 2022. doi:10.1038/s41598-022-21508-6</li>
+  <li>Monteiro, R. L. M.; dos Santos, C. C. A.; Blauberger, P.; Link, D.; Russomanno, T. G.; Tahara, A. K.; Chinaglia, A. G.; Santiago, P. R. P. <i>Enhancing soccer goalkeepers penalty dive kinematics with instructional video and laterality insights in field conditions</i>. Scientific Reports, 2024. doi:10.1038/s41598-024-60074-x</li>
+  <li>Navarro, M.; van der Kamp, J.; Ranvaud, R.; Savelsbergh, G. J. <i>The mere presence of a goalkeeper affects the accuracy of penalty kicks</i>. Journal of Sports Sciences, 2013. doi:10.1080/02640414.2012.762602 (PubMed 23360203).</li>
+  <li>Attaallah, Bassiouni, Hassan et al. <i>The penalty kick accuracy in soccer: A new biomechanical approach</i>. Journal of Human Sport and Exercise, 2021. doi:10.14198/jhse.2021.16.proc4.01 (title and DOI checked in Crossref; the author list is abridged).</li>
 </ol>
 
 <h2>Ready-made quotes for the story</h2>

@@ -5,7 +5,7 @@
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
 - **Version:** 0.4.12
-- **Updated:** 2026-10-28
+- **Updated:** 2026-10-29
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 
@@ -14,6 +14,164 @@
 `syncvid` opens every supported video from one target directory in a fast Pygame player. Playback and frame navigation follow the same conventions as `cutvideo.py`. The synchronization values are typed directly in the side panel, avoiding separate Mark, Reference, Start, and End buttons.
 
 The generated versioned TXT maps one inclusive reference-camera interval into equal-duration ranges for every camera. **Save + Cut Video** launches Cut Video with both the reference video and TXT already selected.
+
+## Equalize by events (RIFE)
+
+Open **Frame C → Make Sync file**, select the video folder, then click
+**Equalize by events (RIFE)** at the bottom of the synchronization panel. A separate
+Tkinter window opens; Syncvid remains available. This action uses the reference
+camera's frame count and exact rational FPS by default. **Output FPS** and
+**Output frame count** can define a different common grid. The existing **Events: interpolate**
+mode still uses Farnebäck and its grid that preserves every original.
+
+1. Choose **Reference video** (the desired output timeline) and **Source video**.
+2. Enter **Reference: start, contact, end** and **Source: start, contact, end**.
+   Values are original, 1-based, inclusive frames. Start/end initialize from the
+   video counts when browsing; contact must be entered or reviewed. Syncvid's
+   launcher prefills the current sync-frame values. Use Browse after changing videos
+   to refresh the bounds. Removal marks and FPS overrides from Syncvid do not apply.
+3. Optionally set **Output FPS** (decimal/fraction; **60** and **120** shortcuts)
+   and/or **Output frame count** (integer ≥3). Blank fields retain the reference grid.
+   FPS alone derives `N = round_half_up(reference anchor span × FPS) + 1`;
+   count alone uses reference FPS; both are honored independently. `29.970` is exactly
+   `2997/100`, distinct from NTSC `30000/1001`. FPS must be positive and finite;
+   FPS-only requests calculating fewer than 3 frames are rejected.
+4. Set **Practical-RIFE checkout**, **RIFE model directory** and **Output parent directory**.
+5. Click **Preview**. Review exact FPS/count, original/generated counts in both cameras,
+   first-to-last duration `(N−1)/FPS`, file duration `N/FPS`, change relative to the
+   reference anchor span, and contact timing adjustments. Click **Run** after review;
+   editing settings requires another preview. Progress appears in the window and terminal, including the equivalent
+   CLI. **Cancel export** stops the worker; partial directories remain marked INCOMPLETE.
+
+The output anchors are start=1 and end=N. Contact follows the reference interval
+proportion, rounded to nearest with ties up, then clamped to 2…N−1. Each camera's
+source positions are linear within its two segments. All three anchors are copied
+exactly; fractional positions in either camera, including the reference, use RIFE.
+See [full output controls and audit fields](video_event_equalizer.md#output-fps-and-frame-count).
+
+With FPS/count blank, for the Roseguine example, choose reference `c2_16mm_left.mp4`, events `1,9,22`,
+and source `c1_main.mp4`, events `1,9,19`. Both outputs have 22 frames at **2997/100 FPS**
+and retain their original resolution. C1 frames 1–9 and its final frame 19 are copied;
+the other 12 output images are generated. For output frame `j > 9`, the source
+position is `9 + (j − 9) × 10/13`. This re-samples the segment rather than merely
+inserting three pictures. Not every post-contact original appears in the output.
+With **Output FPS=60** and count blank, both have 43 frames, contact=17, span=0.7 s,
+and file duration=43/60 s. With **120** they have 85 frames and contact=33.
+Setting both FPS=120 and count=31 gives a 0.25 s span and changes playback speed.
+
+Each new `processed_event_equalize_TIMESTAMP/` contains:
+
+- `reference_<stem>_equalized.mp4` and `source_<stem>_equalized.mp4`: lossless RGB H.264,
+  exact selected FPS, **no audio**. Originals are never overwritten.
+- `reference_frames.csv` and `source_frames.csv`: output/reference index, rational
+  output time, fractional source position, left/right source frames, interpolation
+  fraction, and `original`/`generated` label. Added columns record rational reference
+  position, anchor labels, requested/effective FPS/count, output anchors and timing adjustments.
+  `reference_frame` can be rational on a custom grid; default integer values are preserved.
+- `event_equalizer.json`: source paths/counts/FPS/events, output policy, RIFE revision,
+  code hashes, weight SHA256 and GPU/runtime information, requested/effective output
+  parameters, rational durations, contact adjustments and per-camera original/generated
+  counts; `README.txt` states assumptions and the preview.
+- `INCOMPLETE.txt` exists during processing and remains after failure/cancellation.
+
+**Interpretation:** event equivalence is supplied by the operator. Uniform spacing
+between each pair of events and the reference clock are assumptions. Generated ball,
+feet and occlusion pixels can contain artifacts and are not acquired measurements.
+Increasing FPS generates visual estimates; freely choosing FPS and count changes
+playback speed. Contact rounding can shift event timing; the preview records that shift.
+For quantitative 3D work, retain measured source coordinates and their provenance.
+
+### RIFE setup
+
+Requires NVIDIA CUDA, CUDA-enabled PyTorch, FFmpeg and the official
+[Practical-RIFE](https://github.com/hzwer/Practical-RIFE) checkout plus its matching
+**4.25** model bundle. The existing CUDA environment supplies cuDNN; do not replace
+its torch packages by installing upstream's full requirements file.
+
+**Automatic installation:** `install_vaila_linux.sh` and `install_vaila_win.ps1`
+run RIFE setup when the CUDA/GPU profile is selected. The unified bootstraps
+`bin/setup_pyproject.sh --target=cuda` and `bin/setup_pyproject.ps1 -Target cuda`
+also run it after dependency sync. CPU/macOS profiles do not install RIFE.
+`--no-sync` / `-NoSync` skip this step too. Use `--no-rife` / `-NoRife` to skip
+only RIFE in the unified bootstrap. Failed optional setup prints a retry command
+and leaves the rest of vailá available.
+
+**Install or reinstall only RIFE**, from the vailá repository root after the CUDA
+environment has been installed:
+
+```bash
+# Linux / WSL / Git Bash
+bash bin/setup_rife.sh
+```
+
+```powershell
+# Windows PowerShell
+pwsh bin/setup_rife.ps1
+```
+
+Both call `bin/setup_rife.py` using the existing vailá Python environment with
+`uv run --no-sync`. They clone the validated revision, download the official
+4.25 ZIP (~23 MB), verify the archive and model SHA256 hashes, install the model,
+and run actual CUDA inference. Repeating the command reuses verified assets.
+No Hugging Face login, separate cuDNN installation, or new Python extra is needed.
+The NVIDIA driver must support the CUDA PyTorch build selected by vailá.
+
+Installed assets, relative to the repository:
+
+| Location | Contents |
+| --- | --- |
+| `.local/third_party/Practical-RIFE/` | Official code, pinned Git revision |
+| `vaila/models/rife/train_log/` | `flownet.pkl` and its matching Python model files |
+| `.local/downloads/rife425.zip` | Verified download cache, created on automatic download |
+| `vaila/models/rife/setup_manifest.json` | Model identity and CUDA inference verification |
+
+These assets are ignored by Git: **each computer needs its own setup**. To move
+them offline, preserve both the complete pinned checkout (including `.git`) and
+the model directory at these same relative locations, then re-run setup to test
+the destination GPU. A previously downloaded official ZIP can also be supplied:
+
+```bash
+uv run --no-sync python bin/setup_rife.py --archive /path/to/rife425.zip
+```
+
+The ZIP avoids downloading weights; cloning still needs network if the checkout
+is absent. `--skip-check` stages assets without CUDA testing and explicitly does
+not report GPU readiness. Existing modified/different checkouts are preserved
+and require review before switching to the validated revision. Linux CUDA setup
+was tested from an empty directory and on reinstall; Windows integration has
+not yet been executed on a Windows host.
+
+**Manual recovery** if the download service is unavailable:
+
+```bash
+git clone https://github.com/hzwer/Practical-RIFE.git .local/third_party/Practical-RIFE
+git -C .local/third_party/Practical-RIFE checkout bbfd2ea90910789a860ea3e2b32a240cd577b75e
+```
+
+Download the official **4.25** bundle linked in that project's README:
+[Google Drive](https://drive.google.com/file/d/1ZKjcbmt1hypiFprJPIKW0Tt0lr_2i7bg/view).
+Extract it into `vaila/models/rife/`, retaining the `train_log/` directory.
+The model directory must contain `RIFE_HDv3.py`, `IFNet_HDv3.py`, and `flownet.pkl`.
+Keep the accompanying Python files together. All model-bundle files are ignored by Git.
+Expected `flownet.pkl` SHA256 for the validated bundle:
+`6615790efd627772917205db291f51cd392528a157ecbb2ecaeec3bff8eb6de2`.
+The loader checks inference weights strictly, excluding only training-only
+`teacher.*` and `caltime.*` tensors, and performs an actual-resolution preflight.
+The upstream README lists Python ≤3.11; this adapter was functionally validated
+with vailá's Python 3.12, RIFE 4.25 and an RTX 4090.
+
+```bash
+uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c2_16mm_left.mp4 --source /path/to/c1_main.mp4 \
+  --reference-events 1,9,22 --source-events 1,9,19 \
+  --output-dir /path/to/results
+```
+
+Use `--rife-dir` and `--weights` to select other local locations. Add `--dry-run`
+to probe/decode-count videos and print exact frame maps without loading RIFE or
+writing output. Run with `--gui` to open the same window directly.
+Use `--output-fps 60` / `--output-fps 120` / `--output-fps 30000/1001` and optionally
+`--output-frame-count 85` for the same output controls as the GUI.
 
 ## Manual cuts side by side
 
@@ -479,4 +637,4 @@ uv run vaila/syncvid.py -i /path/to/camera_directory --remove-repeated
 
 ---
 
-Part of *vailá* — Multimodal Toolbox. Updated 28 October 2026 (v0.4.12).
+Part of *vailá* — Multimodal Toolbox. Updated 29 October 2026 (v0.4.12).

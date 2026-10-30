@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 27 October 2026
-Update Date: 27 October 2026
+Update Date: 29 October 2026
 
 Description:
     Every text the report, its figures, its animation and its interactive editor show outside
@@ -45,6 +45,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "kicker_of": "do pé de {name}",
         "kicker_default": "do pé do jogador que bateu a falta",
+        "kicker_default_pk": "do pé do cobrador do pênalti",
         "kicker_name_default": "o jogador que bateu a falta",
         "wall_above": "acima",
         "wall_below": "abaixo",
@@ -52,6 +53,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "spin_tilted": "inclinado",
         "date_format": "{d:02d}/{m:02d}/{y}",
         "default_title": "A física de um chute de falta",
+        "default_title_pk": "A física de um pênalti",
         "default_subtitle": "Reconstrução 3D a partir de transmissão, feita com software livre vailá",
         "fig_top_title": "Vista de cima: {d} m em {t} s",
         "fig_top_x": "x no campo (m)",
@@ -59,6 +61,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fig_top_cbar": "velocidade da bola (km/h)",
         "fig_start": "chute",
         "fig_entry": "entrada",
+        "fig_entry_pk": "último quadro",
+        "fig_hands_start": "mãos do goleiro: início",
+        "fig_hands_end": "mãos do goleiro: fim",
         "fig_profile_title": "De lado: sobe até {z} m",
         "fig_profile_x": "distância horizontal desde o chute (m)",
         "fig_profile_y": "altura da bola (m)",
@@ -71,6 +76,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fig_time_re": "Reynolds (×10⁵)",
         "fig_time_title": "A bola perde velocidade no ar",
         "fig_curve_line": "linha reta do chute até a entrada",
+        "fig_curve_line_pk": "linha reta do chute até o último quadro",
         "fig_curve_x": "distância ao longo da linha reta (m)",
         "fig_curve_y": "afastamento lateral (m)",
         "fig_curve_title": "A curva: até {dev} m para o lado da linha reta",
@@ -81,6 +87,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fig_force_magnus": "Magnus",
         "fig_when_after": "logo após o chute",
         "fig_when_wall": "ao passar a barreira",
+        "fig_when_mid": "no meio do voo",
         "fig_when_end": "perto da entrada",
         "fig_res_title": "Quanto a trajetória se afasta das marcações",
         "fig_res_x": "quadro",
@@ -91,6 +98,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "vid_rising": "Bola subindo",
         "vid_wall": "Bola sobre a barreira",
         "vid_goal": "Entrada no gol",
+        "vid_flight": "Bola em voo",
+        "vid_last": "Último quadro",
         "vid_after": "após o chute",
         "vid_speed": "velocidade",
         "vid_height": "altura",
@@ -106,6 +115,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "vid_anchor_shoulder": "ombro",
         "vid_anchor_wall": "barreira",
         "vid_anchor_keeper": "mãos do goleiro",
+        "vid_anchor_hands_start": "mãos do goleiro: início",
+        "vid_anchor_hands_end": "mãos do goleiro: fim",
         "anchor_start": "início: bola no pé",
         "anchor_middle": "meio: bola no ar",
         "anchor_barrier": "barreira: bola sobre a barreira",
@@ -119,6 +130,32 @@ _STRINGS: dict[str, dict[str, str]] = {
         "quote_distance": "A bola percorreu {dist} metros em {flight} segundos.",
         "quote_mean": "Na média, a bola andou a cerca de {mean} km/h do pé até a entrada.",
         "quote_height": "A bola subiu até {zmax} metros de altura, e a barreira tem cerca de 1,8 metro.",
+        "quote_mean_pk": "Na média, a bola andou a cerca de {mean} km/h do pé até o último quadro analisado.",
+        "quote_height_pk": "A bola subiu até {zmax} metros de altura; o travessão fica a 2,44 metros.",
+        "penalty_tier_text_baixa": (
+            "A trajetória reproduz as marcações da bola, mas as posições físicas do pé e do goleiro "
+            "diferem de 1 m ou mais. Trate altura, curva e velocidade como estimativas."
+        ),
+        "hands_lead": "No último quadro, as mãos do goleiro estavam a <b>{gap} metros</b> da bola.",
+        "hands_moved": (
+            "O goleiro não é um ponto fixo: as mãos dele (a média dos dois punhos) estavam no ponto marcado como "
+            "“início” no momento do chute e no ponto marcado como “fim” no último quadro. A distância entre os "
+            "dois pontos é de <b>{travel} metros</b>."
+        ),
+        "hands_near": (
+            "No último quadro, as mãos ficaram a <b>{gap} metros</b> da bola, uma distância da ordem do erro desta "
+            "medição: o punho não é a mão, e a posição de ambos vem de uma só câmera. A reconstrução não separa um "
+            "toque de uma bola que passou perto."
+        ),
+        "hands_far": "No último quadro, as mãos ficaram a <b>{gap} metros</b> da bola.",
+        "hands_missing": (
+            "As mãos do goleiro não puderam ser medidas neste lance (faltam os punhos dele na reconstrução 3D "
+            "ou o mapa de jogadores)."
+        ),
+        "hands_limit": (
+            "<b>As mãos do goleiro são os punhos.</b> O modelo de pose não tem um ponto da mão, e a posição 3D de "
+            "cada punho vem de uma só câmera, com erro de algumas dezenas de centímetros."
+        ),
         "quote_measured": "Tudo isso foi medido a partir de uma única transmissão, usando as linhas do campo como régua.",
         "quote_curve": "A bola fez uma curva de até {dev} metro para o lado da linha reta do chute.",
         "footer_generated": "Gerado em {date}. Animação em câmera lenta: {animation}.",
@@ -130,6 +167,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "top_note": (
             "Jogadores no chão (média dos tornozelos): chutador id {kicker}, barreira ids {wall}, "
             "goleiro id {keeper}. {how}"
+        ),
+        "top_note_pk": (
+            "Jogadores no chão (média dos tornozelos): cobrador id {kicker} e goleiro id {keeper}. "
+            "Pênalti: sem barreira. {how}"
         ),
         "top_how_auto": "Identificados pelo ponto mais próximo; --kicker-id, --wall-ids e --keeper-id trocam.",
         "top_how_manual": "Informados por --kicker-id, --wall-ids e --keeper-id.",
@@ -245,6 +286,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         ),
         "kicker_of": "from the foot of {name}",
         "kicker_default": "from the foot of the kicker",
+        "kicker_default_pk": "from the foot of the penalty taker",
         "kicker_name_default": "the kicker",
         "wall_above": "above",
         "wall_below": "below",
@@ -252,6 +294,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "spin_tilted": "tilted",
         "date_format": "{m:02d}/{d:02d}/{y}",
         "default_title": "The physics of a free kick",
+        "default_title_pk": "The physics of a penalty kick",
         "default_subtitle": "3D reconstruction from broadcast footage, made with free software vailá",
         "fig_top_title": "Top view: {d} m in {t} s",
         "fig_top_x": "x on the pitch (m)",
@@ -259,6 +302,9 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fig_top_cbar": "ball speed (km/h)",
         "fig_start": "kick",
         "fig_entry": "entry",
+        "fig_entry_pk": "last frame",
+        "fig_hands_start": "goalkeeper's hands: start",
+        "fig_hands_end": "goalkeeper's hands: end",
         "fig_profile_title": "Side view: rises to {z} m",
         "fig_profile_x": "horizontal distance from the kick (m)",
         "fig_profile_y": "ball height (m)",
@@ -271,6 +317,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fig_time_re": "Reynolds (×10⁵)",
         "fig_time_title": "The ball loses speed in the air",
         "fig_curve_line": "straight line from the kick to the entry",
+        "fig_curve_line_pk": "straight line from the kick to the last frame",
         "fig_curve_x": "distance along the straight line (m)",
         "fig_curve_y": "sideways offset (m)",
         "fig_curve_title": "The curve: up to {dev} m to the side of the straight line",
@@ -281,6 +328,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "fig_force_magnus": "Magnus",
         "fig_when_after": "right after the kick",
         "fig_when_wall": "passing the wall",
+        "fig_when_mid": "mid-flight",
         "fig_when_end": "near the entry",
         "fig_res_title": "How far the trajectory is from the marked points",
         "fig_res_x": "frame",
@@ -291,6 +339,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "vid_rising": "Ball rising",
         "vid_wall": "Ball over the wall",
         "vid_goal": "Ball enters the goal",
+        "vid_flight": "Ball in flight",
+        "vid_last": "Last frame",
         "vid_after": "after the kick",
         "vid_speed": "speed",
         "vid_height": "height",
@@ -306,6 +356,8 @@ _STRINGS: dict[str, dict[str, str]] = {
         "vid_anchor_shoulder": "shoulder",
         "vid_anchor_wall": "wall",
         "vid_anchor_keeper": "keeper's hands",
+        "vid_anchor_hands_start": "goalkeeper's hands: start",
+        "vid_anchor_hands_end": "goalkeeper's hands: end",
         "anchor_start": "start: ball on kick foot",
         "anchor_middle": "middle: ball in the air",
         "anchor_barrier": "barrier: ball over the wall",
@@ -319,6 +371,32 @@ _STRINGS: dict[str, dict[str, str]] = {
         "quote_distance": "The ball travelled {dist} metres in {flight} seconds.",
         "quote_mean": "On average, the ball moved at about {mean} km/h from the foot to the entry.",
         "quote_height": "The ball rose to {zmax} metres, and the wall is about 1.8 metres high.",
+        "quote_mean_pk": "On average, the ball moved at about {mean} km/h from the foot to the last frame analysed.",
+        "quote_height_pk": "The ball rose to {zmax} metres; the crossbar is 2.44 metres high.",
+        "penalty_tier_text_baixa": (
+            "The trajectory reproduces the marked points of the ball, but the physical positions of the foot "
+            "and the goalkeeper differ by 1 m or more. Treat height, curve and speed as estimates."
+        ),
+        "hands_lead": "In the last frame, the goalkeeper's hands were <b>{gap} metres</b> from the ball.",
+        "hands_moved": (
+            "The goalkeeper is not a fixed point: the hands (the mean of the two wrists) were at the point marked "
+            "“start” when the ball was kicked and at the point marked “end” in the last frame. The distance between "
+            "the two points is <b>{travel} metres</b>."
+        ),
+        "hands_near": (
+            "In the last frame the hands were <b>{gap} metres</b> from the ball, a distance of the order of the "
+            "error of this measurement: a wrist is not a hand, and the position of both comes from a single "
+            "camera. The reconstruction does not tell a touch from a ball that passed close."
+        ),
+        "hands_far": "In the last frame the hands were <b>{gap} metres</b> from the ball.",
+        "hands_missing": (
+            "The goalkeeper's hands could not be measured in this kick (the wrists are missing in the 3D "
+            "reconstruction, or the player map is)."
+        ),
+        "hands_limit": (
+            "<b>The goalkeeper's hands are the wrists.</b> The pose model has no hand point, and the 3D position "
+            "of each wrist comes from a single camera, with an error of a few tens of centimetres."
+        ),
         "quote_measured": "All of this was measured from a single broadcast, using the pitch lines as a ruler.",
         "quote_curve": "The ball curved up to {dev} metre to the side of the straight line of the kick.",
         "footer_generated": "Generated on {date}. Slow-motion animation: {animation}.",
@@ -330,6 +408,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "top_note": (
             "People on the ground (mean of the ankles): kicker id {kicker}, wall ids {wall}, "
             "goalkeeper id {keeper}. {how}"
+        ),
+        "top_note_pk": (
+            "People on the ground (mean of the ankles): penalty taker id {kicker} and goalkeeper id {keeper}. "
+            "Penalty kick: no wall. {how}"
         ),
         "top_how_auto": "Found by the nearest point; --kicker-id, --wall-ids and --keeper-id replace them.",
         "top_how_manual": "Given by --kicker-id, --wall-ids and --keeper-id.",

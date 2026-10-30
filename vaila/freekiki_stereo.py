@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 27 October 2026
-Update Date: 27 October 2026
+Update Date: 29 October 2026
 
 Description:
     The monocular 3D run places the ball on the ground plane (z = 0.11 m), so its height is
@@ -23,6 +23,9 @@ Description:
 
     The two cameras must describe the same instant. The sync is the frame pair written in the
     file names (``*_sync_<n>_frames_<a>_to_<b>``): both cuts start at the same instant there.
+    The two videos of ``video_event_equalizer`` carry no sync in their names: they share one
+    grid, and the contact frame of the ``event_equalizer.json`` beside them is the sync of both
+    (:func:`video_sync`).
     The default clock of a frame is ``frame / fps`` of its cut video. An original capture clock
     (ffprobe of the file the cut came from) can be given instead; the summary then reports both,
     so the clock the pair agrees with is visible, not assumed.
@@ -61,6 +64,7 @@ except ImportError:
     from monocular_dlt_align import dlt_projection_matrix  # ty: ignore[unresolved-import]
 
 SYNC_NAME = re.compile(r"_sync_(\d+)_frames_(\d+)_to_(\d+)")
+EQUALIZER_MANIFEST = "event_equalizer.json"  # video_event_equalizer: two videos on one grid
 MAX_RESIDUAL_PX = 3.0  # both views must reproduce the ball within this (operational choice)
 MIN_ANGLE_DEG = 5.0  # below this the two rays are nearly parallel and depth is not trusted
 OUTPUT_PREFIX = "processed_rec3d_binocular"
@@ -91,6 +95,64 @@ def parse_sync_name(stem: str) -> tuple[int, int] | None:
         return None
     sync, start, _end = (int(value) for value in match.groups())
     return sync, start
+
+
+def _equalizer_manifest(folder: Path) -> dict | None:
+    """The ``event_equalizer.json`` of a folder written by ``video_event_equalizer``, or None."""
+    path = Path(folder) / EQUALIZER_MANIFEST
+    if not path.is_file():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(data, dict) or "vaila_event_equalizer" not in data:
+        return None
+    events = data.get("output_event_frames")
+    if not isinstance(events, list) or len(events) != 3:
+        return None
+    return data
+
+
+def equalizer_videos(folder: Path | str) -> list[Path]:
+    """The two videos of an event-equalizer folder, reference camera first.
+
+    Empty when the folder has no manifest or a video the manifest names is missing.
+    """
+    folder = Path(folder)
+    data = _equalizer_manifest(folder)
+    cameras = (data or {}).get("cameras")
+    if not isinstance(cameras, dict):
+        return []
+    videos = [
+        folder / str(cameras[role].get("video", ""))
+        for role in ("reference", "source")
+        if isinstance(cameras.get(role), dict)
+    ]
+    return videos if len(videos) == 2 and all(v.is_file() for v in videos) else []
+
+
+def equalizer_sync(video: Path | str) -> tuple[int, int] | None:
+    """``(sync_frame, cut_start)`` of a video the event equalizer wrote, else None.
+
+    Both cameras of the equalizer share one grid: the contact (the middle event) is the same output
+    frame in each, so it is the sync, and the video is its own cut (``cut_start`` 0). The manifest
+    counts frames from ``frame_base`` (1); the pipeline counts from 0.
+    """
+    video = Path(video)
+    data = _equalizer_manifest(video.parent)
+    if data is None or video not in equalizer_videos(video.parent):
+        return None
+    try:
+        return int(data["output_event_frames"][1]) - int(data.get("frame_base", 1)), 0
+    except (TypeError, ValueError):
+        return None
+
+
+def video_sync(video: Path | str) -> tuple[int, int] | None:
+    """``(sync_frame, cut_start)`` of a cut video: the numbers in its name, else the equalizer's."""
+    video = Path(video)
+    return parse_sync_name(video.stem) or equalizer_sync(video)
 
 
 def video_timestamps(path: Path | str) -> np.ndarray:
@@ -433,7 +495,7 @@ def load_view(
     cut_video = _video_from_readme(run_dir)
     if cut_video is None or not cut_video.is_file():
         raise FileNotFoundError(f"The video of {run_dir} is not in its README; pass it explicitly")
-    parsed = parse_sync_name(cut_video.stem)
+    parsed = video_sync(cut_video)
     if sync_frame is None or cut_start is None:
         if parsed is None:
             raise ValueError(

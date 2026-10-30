@@ -1,6 +1,6 @@
 """Physical-time synchronization from reviewed events and retained samples.
 
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 Version: 0.4.12
 
 All public frame numbers are 1-based. Fractions preserve the reference clock,
@@ -514,6 +514,7 @@ def _encode_samples(
     interpolation_rows: Sequence[Mapping[str, Any]] | None = None,
     tick: Callable[[], None] = lambda: None,
     frame_done: Callable[[], None] = lambda: None,
+    render_images: Callable[..., Iterator[Any]] | None = None,
 ) -> None:
     """Sequential decoding preserves original frame identity; FFmpeg uses exact FPS.
 
@@ -567,7 +568,8 @@ def _encode_samples(
                     if interpolation_rows is not None
                     else [{"source_frame_left": f, "source_frame_right": f} for f in frames]
                 )
-                for frame in _render_images(cap, source, rows, tick):
+                renderer = render_images or _render_images
+                for frame in renderer(cap, source, rows, tick):
                     tick()
                     process.stdin.write(frame.tobytes())
                     frame_done()
