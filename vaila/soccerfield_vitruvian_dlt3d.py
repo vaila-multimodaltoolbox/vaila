@@ -8,7 +8,7 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: vailá team
-Version: 0.4.12
+Version: 0.4.13
 Created: 11 August 2026
 Update Date: 27 October 2026
 ================================================================================

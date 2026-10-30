@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Unified interactive bootstrap for vailá on Windows (PowerShell).
-    Updated: 29 October 2026; Version: 0.4.12.
+    Updated: 30 October 2026; Version: 0.4.13.
 
 .DESCRIPTION
     Detects OS / architecture / NVIDIA GPU, picks the PyTorch dependency group
@@ -43,8 +43,14 @@
 .PARAMETER NoSync
     Skip `uv sync`.
 
+.PARAMETER Rife
+    Also install RIFE 4.25 on CUDA (optional, ~50 MB; not installed by default).
+
+.PARAMETER RifeHome
+    Install RIFE into this folder (any disk) instead of the vaila folder; implies -Rife.
+
 .PARAMETER NoRife
-    Skip automatic RIFE 4.25 code/model setup on CUDA.
+    Accepted for old command lines (RIFE is no longer installed by default).
 
 .EXAMPLE
     pwsh bin/setup_pyproject.ps1
@@ -65,6 +71,8 @@ param(
     [switch]$Upgrade,
     [switch]$NoLock,
     [switch]$NoSync,
+    [switch]$Rife,
+    [string]$RifeHome = '',
     [switch]$NoRife,
     [switch]$SkipWorktree,
     [switch]$NoSkipWorktree
@@ -78,6 +86,10 @@ $ErrorActionPreference = 'Stop'
 If (-not $env:UV_NO_SYNC) { $env:UV_NO_SYNC = "1" }
 
 $Root = Resolve-Path (Join-Path $PSScriptRoot '..')
+# A relative -RifeHome is relative to where this was run, not to the repository root.
+If ($RifeHome -and -not $RifeHome.StartsWith('~') -and -not [System.IO.Path]::IsPathRooted($RifeHome)) {
+    $RifeHome = Join-Path (Get-Location).Path $RifeHome  # works in Windows PowerShell 5.1 and pwsh
+}
 Set-Location $Root
 
 # ---------- detection ----------
@@ -275,12 +287,16 @@ if (-not $NoSync) {
         }
     }
 
-    if ($Target -eq 'cuda' -and -not $NoRife) {
+    if ($Target -eq 'cuda' -and ($Rife -or $RifeHome) -and -not $NoRife) {
         Write-Host 'Setting up RIFE 4.25 (event video interpolation)...' -ForegroundColor Cyan
-        & uv run --no-sync python bin/setup_rife.py
+        $rifeArgs = @()
+        if ($RifeHome) { $rifeArgs = @('--home', $RifeHome) }
+        & uv run --no-sync python bin/setup_rife.py @rifeArgs
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning 'RIFE unavailable; retry: pwsh bin/setup_rife.ps1 (see Syncvid Help).'
+            Write-Warning 'RIFE unavailable; retry: pwsh bin/setup_rife.ps1 [--home DIR] (see Syncvid Help).'
         }
+    } elseif ($Target -eq 'cuda') {
+        Write-Host 'RIFE (event equalizer) not installed. To add it on any disk: pwsh bin/setup_rife.ps1 --home DIR'
     }
 
     Write-Host ''

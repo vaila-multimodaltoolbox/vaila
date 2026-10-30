@@ -521,6 +521,8 @@ def test_the_penalty_report_has_no_wall_text_and_shows_the_hands(
     for text in present:
         assert text in html, text
     assert "fig_wall" not in html
+    alts = re.findall(r'alt="([^"]*)"', html)
+    assert alts and not any(re.search(r"barreira|\bwall\b", alt, re.I) for alt in alts), alts
     figs = Path(result["languages"][lang]["dir"]) / "figuras"
     assert (figs / "fig_perfil.png").is_file() and (figs / "fig_vista_de_cima.png").is_file()
 
@@ -530,6 +532,7 @@ def test_the_free_kick_report_keeps_the_wall_text(tmp_path: Path) -> None:
     html = _html(result, "en")
     assert "Over the wall" in html and "The free kick is a geometry problem" in html
     assert "The goalkeeper's hands" not in html and "<!--pk" not in html
+    assert 'alt="Height of the ball against distance, with the wall and the crossbar"' in html
 
 
 def test_the_penalty_animation_shows_the_hands_and_no_wall(tmp_path: Path) -> None:

@@ -9,6 +9,7 @@ empty with the reason, never with a number.
 from __future__ import annotations
 
 import math
+import warnings
 from pathlib import Path
 
 import numpy as np
@@ -137,6 +138,34 @@ def test_a_missing_goal_crossing_is_empty_with_the_reason() -> None:
     goal = _metric(result, "goal_error_m")
     assert goal["value"] == "" and goal["quality"] == "missing"
     assert "no crossing" in goal["reason"]
+
+
+def test_frames_without_a_hip_are_missing_not_a_warning_or_a_wrong_number() -> None:
+    """The pelvis path is the mean of the hips found; a frame with neither is NaN, silently."""
+    rows = [r for r in _rows() if not (r["kpt_name"].endswith("-hip") and r["frame"] < 5)]
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)  # "Mean of empty slice" must not appear
+        result = kk.analyze_kicker(
+            rows, _ball(), _pixels(), kicker_id=KICKER, fps=FPS, kick_time_s=CONTACT / FPS
+        )
+    assert math.isclose(_metric(result, "approach_angle_deg")["value"], 90.0, abs_tol=1e-3)
+
+
+def test_one_hip_is_enough_for_the_approach_angle() -> None:
+    rows = [r for r in _rows() if r["kpt_name"] != "right-hip"]
+    result = kk.analyze_kicker(
+        rows, _ball(), _pixels(), kicker_id=KICKER, fps=FPS, kick_time_s=CONTACT / FPS
+    )
+    assert math.isclose(_metric(result, "approach_angle_deg")["value"], 90.0, abs_tol=1e-3)
+
+
+def test_no_hips_at_all_leaves_the_approach_angle_missing() -> None:
+    rows = [r for r in _rows() if not r["kpt_name"].endswith("-hip")]
+    result = kk.analyze_kicker(
+        rows, _ball(), _pixels(), kicker_id=KICKER, fps=FPS, kick_time_s=CONTACT / FPS
+    )
+    angle = _metric(result, "approach_angle_deg")
+    assert angle["value"] == "" and angle["quality"] == "missing"
 
 
 def test_a_kicker_without_points_gives_no_numbers() -> None:

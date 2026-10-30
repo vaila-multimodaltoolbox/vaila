@@ -10,7 +10,7 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.12
+Version: 0.4.13
 Created: 27 October 2026
 Update Date: 29 October 2026
 

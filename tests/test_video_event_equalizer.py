@@ -1,7 +1,7 @@
 """Common event grid, exact FPS, export provenance and Syncvid launcher regressions.
 
-Update Date: 29 October 2026
-Version: 0.4.12
+Update Date: 30 October 2026
+Version: 0.4.13
 """
 
 import argparse
@@ -9,6 +9,7 @@ import csv
 import json
 import shutil
 import subprocess
+import sys
 from fractions import Fraction
 from unittest.mock import MagicMock
 
@@ -16,6 +17,7 @@ import cv2
 import numpy as np
 import pytest
 
+from vaila import rife_paths
 from vaila import video_event_equalizer as equalizer
 
 
@@ -360,6 +362,81 @@ def test_cli_dry_run_uses_same_plan(video_args, capsys, fps, count):
         == equalizer.prepare(video_args)["cameras"]["source"]["rows"]
     )
     assert not video_args.output_dir.exists()
+
+
+class CaptureRife(StandInRife):
+    """Records which folders the network is loaded from."""
+
+    loaded: dict = {}
+
+    def __init__(self, checkout, weights):
+        super().__init__()
+        CaptureRife.loaded = {"checkout": checkout, "weights": weights}
+
+
+def _export_argv(video_args, *extra):
+    return [
+        "--reference", str(video_args.reference),
+        "--source", str(video_args.source),
+        "--reference-events", video_args.reference_events,
+        "--source-events", video_args.source_events,
+        "--output-dir", str(video_args.output_dir),
+        *extra,
+    ]  # fmt: skip
+
+
+def test_export_loads_rife_from_the_chosen_home(video_args, monkeypatch, tmp_path, capsys):
+    monkeypatch.delenv(rife_paths.ENV_HOME, raising=False)
+    monkeypatch.setattr(equalizer, "RifeInterpolator", CaptureRife)
+    home = tmp_path / "rife on another disk"
+    assert equalizer.main(_export_argv(video_args, "--rife-home", str(home))) == 0
+    assert CaptureRife.loaded == {
+        "checkout": home / "Practical-RIFE",
+        "weights": home / "train_log",
+    }
+    assert "--rife-home" in capsys.readouterr().out  # the log says where it came from
+
+
+def test_export_uses_the_environment_home_and_flags_override_it(video_args, monkeypatch, tmp_path):
+    monkeypatch.setattr(equalizer, "RifeInterpolator", CaptureRife)
+    monkeypatch.setenv(rife_paths.ENV_HOME, str(tmp_path / "env"))
+    assert equalizer.main(_export_argv(video_args)) == 0
+    assert CaptureRife.loaded["checkout"] == tmp_path / "env" / "Practical-RIFE"
+    assert equalizer.main(_export_argv(video_args, "--weights", str(tmp_path / "w"))) == 0
+    assert CaptureRife.loaded == {
+        "checkout": tmp_path / "env" / "Practical-RIFE",
+        "weights": tmp_path / "w",
+    }
+
+
+def test_default_still_finds_the_install_inside_the_checkout(video_args, monkeypatch):
+    monkeypatch.delenv(rife_paths.ENV_HOME, raising=False)
+    monkeypatch.setattr(equalizer, "RifeInterpolator", CaptureRife)
+    assert equalizer.main(_export_argv(video_args)) == 0
+    assert CaptureRife.loaded == {
+        "checkout": rife_paths.LEGACY_CHECKOUT,
+        "weights": rife_paths.LEGACY_WEIGHTS,
+    }
+
+
+def test_a_dry_run_needs_no_rife_at_all(video_args, monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(equalizer, "RifeInterpolator", CaptureRife)
+    CaptureRife.loaded = {}
+    argv = _export_argv(video_args, "--rife-home", str(tmp_path / "nowhere"), "--dry-run")
+    assert equalizer.main(argv) == 0
+    assert CaptureRife.loaded == {}
+    assert json.loads(capsys.readouterr().out)["cameras"]
+
+
+def test_missing_rife_error_explains_how_to_choose_a_folder(
+    video_args, tmp_path, monkeypatch, capsys
+):
+    monkeypatch.delenv(rife_paths.ENV_HOME, raising=False)
+    monkeypatch.setitem(sys.modules, "torch", MagicMock())  # CUDA is checked before the files
+    argv = _export_argv(video_args, "--rife-home", str(tmp_path / "empty"))
+    assert equalizer.main(argv) == 1
+    err = capsys.readouterr().err
+    assert "--rife-home" in err and "VAILA_RIFE_HOME" in err and "--export" in err
 
 
 def test_preview_reports_counts_and_timing(video_args):

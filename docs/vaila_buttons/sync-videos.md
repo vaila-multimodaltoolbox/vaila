@@ -2,7 +2,7 @@
 
 **Button:** Frame C → Video and Image → C_B_r2_c3 — Make Sync file  
 **Module:** [`vaila/syncvid.py`](../../vaila/syncvid.py)  
-**Version:** 0.4.12 · **Updated:** 2026-10-28
+**Version:** 0.4.13 · **Updated:** 2026-10-28
 
 Make Sync file opens the multi-camera Pygame player. The default workflow creates the familiar
 sync TXT and hands it to Cut Video. The event selector adds physical-time calibration workflows;

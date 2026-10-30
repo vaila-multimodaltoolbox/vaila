@@ -1,7 +1,7 @@
 """Equalize two videos on a configurable common event grid using local CUDA RIFE.
 
-Update Date: 29 October 2026
-Version: 0.4.12
+Update Date: 30 October 2026
+Version: 0.4.13
 
 Frames are 1-based and inclusive. Generated images are estimates, not acquired
 measurements. Linear spacing between events is assumed; output FPS/count can
@@ -34,6 +34,7 @@ import numpy as np
 
 try:
     from .ffmpeg_utils import get_ffprobe_path
+    from .rife_paths import RifePaths, missing_message, resolve_paths
     from .sync_events import (
         EventSyncError,
         _encode_samples,
@@ -43,6 +44,11 @@ try:
     )
 except ImportError:
     from ffmpeg_utils import get_ffprobe_path  # ty: ignore[unresolved-import]
+    from rife_paths import (  # ty: ignore[unresolved-import]
+        RifePaths,
+        missing_message,
+        resolve_paths,
+    )
     from sync_events import (  # ty: ignore[unresolved-import]
         EventSyncError,
         _encode_samples,
@@ -52,8 +58,6 @@ except ImportError:
     )
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_RIFE = ROOT / ".local/third_party/Practical-RIFE"
-DEFAULT_WEIGHTS = ROOT / "vaila/models/rife/train_log"
 WARNING = (
     "Generated frames are estimates; ball, feet and occlusions may show artifacts. "
     "Not every source original survives resampling. No new physical measurements "
@@ -327,7 +331,10 @@ class RifeInterpolator:
             weights / "flownet.pkl",
         ):
             if not path.is_file():
-                raise EventSyncError(f"Missing RIFE file: {path}. See Syncvid Help → RIFE setup.")
+                raise EventSyncError(
+                    f"Missing RIFE file: {path}. "
+                    + missing_message(RifePaths(checkout, weights, "the folders selected"))
+                )
         # The official bundle imports train_log.*; bind that package to the chosen
         # model directory without copying code or modifying the third-party tree.
         sys.path.insert(0, str(checkout))
@@ -423,8 +430,11 @@ def export(args: argparse.Namespace) -> Path:
     manifest = prepare(args)
     print(">> Export preview\n" + preview_text(manifest), flush=True)
     print(">> " + WARNING, flush=True)
+    paths = resolve_paths(getattr(args, "rife_dir", None), getattr(args, "weights", None))
+    source = getattr(args, "rife_source", None) or paths.source
+    print(f">> RIFE from {source}: code {paths.checkout}, weights {paths.weights}", flush=True)
     print(">> Loading RIFE and checking CUDA inference…", flush=True)
-    rife = RifeInterpolator(Path(args.rife_dir), Path(args.weights))
+    rife = RifeInterpolator(paths.checkout, paths.weights)
     # Preflight the actual dimensions and first pair needing interpolation before
     # creating an output directory. Catch weight/API/VRAM failures early.
     for role, camera in manifest["cameras"].items():
@@ -769,13 +779,24 @@ def main(argv: Sequence[str] | None = None) -> int:
         default="",
         help="Exact count >=3; without FPS uses reference rate. FPS alone derives count from reference duration.",
     )
-    parser.add_argument("--rife-dir", type=Path, default=DEFAULT_RIFE)
-    parser.add_argument("--weights", type=Path, default=DEFAULT_WEIGHTS)
+    parser.add_argument(
+        "--rife-home",
+        type=Path,
+        help="Folder holding Practical-RIFE/ and train_log/ (default: $VAILA_RIFE_HOME, else the "
+        "vailá checkout). Install or copy one with bin/setup_rife.py --home / --export",
+    )
+    parser.add_argument("--rife-dir", type=Path, help="Practical-RIFE code folder (overrides home)")
+    parser.add_argument(
+        "--weights", type=Path, help="train_log folder with flownet.pkl (overrides home)"
+    )
     parser.add_argument("--output-dir", type=Path, default=ROOT)
     parser.add_argument(
         "--dry-run", action="store_true", help="Validate/probe and print maps without loading RIFE"
     )
     args = parser.parse_args(argv)
+    # Concrete folders from here on: the window shows them and the copied command repeats them.
+    chosen = resolve_paths(args.rife_dir, args.weights, args.rife_home)
+    args.rife_dir, args.weights, args.rife_source = chosen.checkout, chosen.weights, chosen.source
     if args.gui:
         show_gui(args)
         return 0

@@ -1,7 +1,7 @@
 """Independent video trims and explicit frame removals, without synchronization.
 
 Update Date: 28 October 2026
-Version: 0.4.12
+Version: 0.4.13
 
 Public frame numbers are 1-based and inclusive. Output preserves the source FPS;
 removing frames shortens playback rather than changing the playback clock.

@@ -17,6 +17,7 @@ import pytest
 from vaila import freekiki as fk
 from vaila import freekiki_detect3d as d3
 from vaila import freekiki_kick_pipeline as kp
+from vaila import freekiki_physics as fk_physics
 from vaila import freekiki_player_ids as pids
 from vaila import freekiki_report as rep
 from vaila import freekiki_stereo as st
@@ -387,6 +388,71 @@ def test_a_second_run_in_the_same_folder_reuses_every_stage(tmp_path: Path, stub
     before = dict(stubs)
     kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
     assert stubs == before
+
+
+def test_a_run_from_before_the_flight_version_redoes_what_is_built_from_it(
+    tmp_path: Path, stubs: dict
+) -> None:
+    """The stored flight of an older fit must not be reused, nor the stages that read it."""
+    videos = _cameras(tmp_path)
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
+    status_path = out / kp.STATUS_NAME
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    threed = status["stages"][f"3d:{CAM1}"]["inputs"]
+    assert threed["flight_model"] == fk_physics.FLIGHT_MODEL
+    del threed["flight_model"]  # what a folder made before the tag looks like
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    before = dict(stubs)
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
+    assert stubs["3d"] == before["3d"] + 1  # the stage of that camera, not of the other one
+    assert stubs["detect"] == before["detect"]  # the detection does not depend on the fit
+    for built_from_it in ("players", "binocular", "triangulate", "kicker", "report"):
+        assert stubs[built_from_it] > before[built_from_it], built_from_it
+    again = dict(stubs)
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)  # and now everything is current
+    assert stubs == again
+
+
+def test_a_new_detection_redoes_the_3d_stage_of_that_camera(tmp_path: Path, stubs: dict) -> None:
+    videos = _cameras(tmp_path)
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
+    status_path = out / kp.STATUS_NAME
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    status["stages"][f"detect:{CAM1}"]["inputs"]["model"] = "an older model"
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    before = dict(stubs)
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
+    assert stubs["detect"] == before["detect"] + 1 and stubs["3d"] == before["3d"] + 1
+
+
+@pytest.mark.parametrize(
+    ("record", "expected"),
+    [
+        (None, None),  # no ball_flight.json: a smoothed ball, nothing to be stale
+        ({"flight_model": "CURRENT"}, None),
+        ({"rms_px": 28.1}, "first flight fit"),  # a folder from before the tag
+        ({"flight_model": "flight-v0"}, "flight-v0 flight fit"),
+    ],
+)
+def test_stale_flight_names_the_fit_and_the_way_out(
+    tmp_path: Path, record: dict | None, expected: str | None
+) -> None:
+    if record is not None:
+        record = {k: (fk_physics.FLIGHT_MODEL if v == "CURRENT" else v) for k, v in record.items()}
+        (tmp_path / "ball_flight.json").write_text(json.dumps(record), encoding="utf-8")
+    reason = kp.stale_flight(tmp_path)
+    if expected is None:
+        assert reason is None
+    else:
+        assert reason is not None and expected in reason
+        assert "ball-rebuild" in reason and str(tmp_path) in reason
+
+
+def test_stale_flight_reports_a_file_it_cannot_read(tmp_path: Path) -> None:
+    (tmp_path / "ball_flight.json").write_text("{not json", encoding="utf-8")
+    assert "cannot be read" in (kp.stale_flight(tmp_path) or "")
 
 
 def test_a_camera_the_screen_rejects_stops_the_run(

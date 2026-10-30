@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bin/setup_pyproject.sh
-# Updated: 29 October 2026; Version: 0.4.12.
+# Updated: 30 October 2026; Version: 0.4.13.
 #
 # Unified interactive bootstrap for vailá: detects OS/arch/NVIDIA, picks the
 # PyTorch dependency group (`cpu` or `cuda`) and the optional extras, then runs
@@ -36,12 +36,15 @@
 #   --upgrade          Upgrade uv.lock, then sync the selected hardware/extras
 #   --no-lock          Skip `uv lock` (default)
 #   --no-sync          Skip `uv sync`
-#   --no-rife          Skip automatic RIFE code/model setup on CUDA
+#   --rife             Also install RIFE 4.25 on CUDA (optional, ~50 MB; not installed by default)
+#   --rife-home=DIR    Install RIFE into DIR (any disk) instead of the vailá folder; implies --rife
+#   --no-rife          Accepted for old command lines (RIFE is no longer installed by default)
 #   --help, -h         Show this help and exit
 
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INVOKE_DIR="$PWD"  # a relative --rife-home=DIR is relative to where this was run
 cd "$ROOT"
 
 # ---------- defaults ----------
@@ -52,7 +55,8 @@ ACCEPT_DEFAULTS=0
 RUN_LOCK=0
 UPGRADE=0
 RUN_SYNC=1
-RUN_RIFE=1
+RUN_RIFE=0
+RIFE_HOME=""
 
 # ---------- args ----------
 print_help() {
@@ -70,6 +74,9 @@ for arg in "$@"; do
         --upgrade)         RUN_LOCK=1; UPGRADE=1 ;;
         --no-lock)         RUN_LOCK=0; UPGRADE=0 ;;
         --no-sync)         RUN_SYNC=0 ;;
+        --rife)            RUN_RIFE=1 ;;
+        --rife-home=*)     RUN_RIFE=1; RIFE_HOME="${arg#*=}"
+                           case "$RIFE_HOME" in /*|"~"*) ;; *) RIFE_HOME="$INVOKE_DIR/$RIFE_HOME" ;; esac ;;
         --no-rife)         RUN_RIFE=0 ;;
         --skip-worktree|--no-skip-worktree)
             # Kept for backward compatibility: pyproject.toml / uv.lock are now
@@ -403,7 +410,11 @@ if [[ "$RUN_SYNC" == 1 ]]; then
 
     if [[ "$TARGET" == "cuda" && "$RUN_RIFE" == 1 ]]; then
         info "Setting up RIFE 4.25 (event video interpolation)..."
-        uv run --no-sync python bin/setup_rife.py || warn "RIFE unavailable; retry: bash bin/setup_rife.sh (see Syncvid Help)."
+        RIFE_ARGS=()
+        [[ -n "$RIFE_HOME" ]] && RIFE_ARGS=(--home "$RIFE_HOME")
+        uv run --no-sync python bin/setup_rife.py "${RIFE_ARGS[@]+"${RIFE_ARGS[@]}"}" || warn "RIFE unavailable; retry: bash bin/setup_rife.sh [--home DIR] (see Syncvid Help)."
+    elif [[ "$TARGET" == "cuda" ]]; then
+        info "RIFE (event equalizer) not installed. To add it on any disk: bash bin/setup_rife.sh --home DIR"
     fi
 
     ok ""

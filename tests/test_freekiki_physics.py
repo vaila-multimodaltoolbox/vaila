@@ -157,6 +157,7 @@ def test_fit_flight_recovers_a_spinning_flight_from_noisy_pixels() -> None:
     assert err.max() < 0.25, err.max()
     assert fit["rms_px"] < 1.5
     assert fit["spin_rps"] == pytest.approx(5.0, rel=0.1)
+    assert fit["flight_model"] == ph.FLIGHT_MODEL  # ball_flight.json carries the version of the fit
 
 
 def test_fit_flight_with_three_point_anchors_recovers_the_flight() -> None:

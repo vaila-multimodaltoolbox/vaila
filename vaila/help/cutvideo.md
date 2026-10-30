@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.4.12
+- **Version:** 0.4.13
 - **Updated:** 2026-10-28
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br

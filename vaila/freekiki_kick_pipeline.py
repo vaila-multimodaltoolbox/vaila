@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.12
+Version: 0.4.13
 Created: 28 October 2026
-Update Date: 29 October 2026
+Update Date: 30 October 2026
 
 Description:
     ``freekiki.py kick-analysis`` (and the One-click button of section 5) turns two cut videos of
@@ -263,6 +263,7 @@ class _State:
     def __init__(self, out: Path, ts: str) -> None:
         self.out = out
         self.path = out / STATUS_NAME
+        self.runs = 0  # stages that really ran (not reused) in this call
         self.data: dict = {}
         if self.path.is_file():
             self.data = json.loads(self.path.read_text(encoding="utf-8"))
@@ -301,6 +302,7 @@ class _State:
         ):
             _log(f"{key}: already done, reused")
             return record["result"]
+        self.runs += 1
         self.data["stages"][key] = {"status": "running", "inputs": _jsonable(inputs),
                                     "started": datetime.now().isoformat(timespec="seconds")}  # fmt: skip
         self.save()
@@ -1048,6 +1050,27 @@ def _readme(out: Path, summary: dict) -> Path:
     return path
 
 
+def stale_flight(three_d: Path | str) -> str | None:
+    """Why the ball flight of a 3D folder is older than the current fit, or None when it is current.
+
+    ``kick-figures`` rewrites the analyses from the stored flight; it never fits it again, so a run
+    made before ``FLIGHT_MODEL`` keeps its old ball path until ``ball-rebuild``.
+    """
+    path = Path(three_d) / "ball_flight.json"
+    if not path.is_file():
+        return None  # no flight (a ball kept as a smoothed track): nothing to be stale
+    current = _module("freekiki_physics").FLIGHT_MODEL
+    try:
+        found = json.loads(path.read_text(encoding="utf-8")).get("flight_model")
+    except (OSError, ValueError):
+        return f"{path.name} cannot be read"
+    if found == current:
+        return None
+    return (f"{path.name} comes from the {found or 'first'} flight fit (now {current}); "
+            f"the ball path may be wrong: refit it with 'freekiki.py ball-rebuild --out {Path(three_d)} "
+            f"--ball-csv <video>_markers.csv', then run the one-click in a new folder")  # fmt: skip
+
+
 def regenerate_figures(
     kick_dir: Path | str, *, team_a: str = "green", analysis: str | None = None
 ) -> dict:
@@ -1066,6 +1089,10 @@ def regenerate_figures(
     ref3d = out / f"{ref_stem}_3d_{ts}"
     other3d = out / f"{stems[1]}_3d_{ts}" if len(stems) > 1 else None
     ref_video = Path(status["stages"][f"detect:{ref_stem}"]["inputs"]["video"]["path"])
+    for folder in (ref3d, other3d):
+        reason = stale_flight(folder) if folder is not None else None
+        if reason:
+            _log(f"WARNING: {reason}")
     other_video = None
     if other3d is not None:
         other_video = Path(status["stages"][f"detect:{stems[1]}"]["inputs"]["video"]["path"])
@@ -1145,6 +1172,7 @@ def run_kick_analysis(
          f"| out {out}")  # fmt: skip
 
     def camera_stages(cam: CameraInput) -> tuple[Path, Path, dict]:
+        runs_before = state.runs
         detect_key = f"detect:{cam.stem}"
         inputs = {"video": _file_key(cam.video), "markers": _file_key(cam.markers), "model": model}
         if cam.keypoints is not None:
@@ -1180,15 +1208,22 @@ def run_kick_analysis(
                                  device=sam_device, ball_csv=cam.markers,
                                  players_on_field=True)  # fmt: skip
 
-        res = state.stage(threed_key, {"predict": str(predict), **inputs, "sam_device": sam_device, "players_on_field": True},
+        res = state.stage(threed_key, {"predict": str(predict), **inputs, "sam_device": sam_device, "players_on_field": True,
+                                       "flight_model": _module("freekiki_physics").FLIGHT_MODEL},
                           [threed_dir / "poses_3d_on_field.csv", threed_dir / "ball.csv"], threed,
-                          reuse=reuse)  # fmt: skip
+                          reuse=reuse and state.runs == runs_before)  # fmt: skip  # a new detect redoes the 3D
         return threed_dir, cam_work, res
 
+    runs_at_start = state.runs
     ref3d, ref_work, _ = camera_stages(ref)
     other3d, other_work = None, None
     if other is not None:
         other3d, other_work, _ = camera_stages(other)
+    if reuse and state.runs != runs_at_start:
+        # The later stages only name the 3D folders, not their content: a camera stage that ran
+        # again (a new fit, new ball marks, a new video) makes every stage built from it stale.
+        _log("a camera stage ran again: the stages built from the cameras run again too")
+        reuse = False
 
     def players() -> dict:
         folders = [ref3d] if other3d is None else [ref3d, other3d]
