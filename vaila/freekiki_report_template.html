@@ -74,14 +74,21 @@
 
 {{warn_block}}
 
+<!--fk-->
 <p class="lead">A bola percorreu <b>{{dist}} metros</b> em <b>{{flight}} s</b>, a uma velocidade média de
 <b>cerca de {{mean}} km/h</b>. Ela subiu até <b>{{zmax}} metros</b> de altura, passou a <b>{{wall_z}} metro</b> do chão ao cruzar a barreira e chegou ao gol.
 Depois que passou a barreira, a bola levou cerca de <b>{{after_wall}} segundo</b> até a entrada.</p>
+<!--/fk-->
+<!--pk-->
+<p class="lead">Do chute até o último quadro analisado, a bola percorreu <b>{{dist}} metros</b> em <b>{{flight}} s</b>, a uma
+velocidade média de <b>cerca de {{mean}} km/h</b>, e subiu até <b>{{zmax}} metros</b> de altura. No pênalti não há barreira.
+{{hands_lead}}</p>
+<!--/pk-->
 
 <div class="cards">
-  <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l">distância do chute até a entrada no gol <span class="tag solid">medido</span></div></div>
+  <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l"><!--fk-->distância do chute até a entrada no gol<!--/fk--><!--pk-->distância do chute até o último quadro<!--/pk--> <span class="tag solid">medido</span></div></div>
   <div class="card"><div class="n">{{flight}} <small>s</small></div><div class="l">tempo de voo da bola <span class="tag solid">medido</span></div></div>
-  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l">velocidade média do pé até a entrada <span class="tag solid">medido</span></div></div>
+  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l"><!--fk-->velocidade média do pé até a entrada<!--/fk--><!--pk-->velocidade média do pé até o último quadro<!--/pk--> <span class="tag solid">medido</span></div></div>
   <div class="card"><div class="n">{{launch}} <small>km/h</small></div><div class="l">velocidade na saída do pé <span class="tag est">estimativa</span></div></div>
   <div class="card"><div class="n">{{zmax}} <small>m</small></div><div class="l">altura máxima da bola <span class="tag est">estimativa</span></div></div>
   <div class="card"><div class="n">{{spin}} <small>rps</small></div><div class="l">rotação da bola, inferida da curva <span class="tag est">estimativa</span></div></div>
@@ -90,27 +97,41 @@ Depois que passou a barreira, a bola levou cerca de <b>{{after_wall}} segundo</b
 modelo físico que ajustamos à trajetória; por isso mostramos a ordem de grandeza.</p>
 
 <h2>1. O caminho da bola</h2>
-<p>A bola saiu {{kicker_phrase}} e foi até a entrada no gol em {{flight}} s. Vista de cima, ela não andou em
+<p>A bola saiu {{kicker_phrase}} e <!--fk-->foi até a entrada no gol<!--/fk--><!--pk-->voou até o último quadro analisado<!--/pk--> em {{flight}} s. Vista de cima, ela não andou em
 linha reta: a cor mostra a velocidade, do mais rápido (amarelo) ao mais lento (vermelho).</p>
 <figure>
   <img src="{{img_vista_de_cima}}" alt="Vista de cima da trajetória da bola, colorida pela velocidade">
-  <figcaption>Vista de cima da trajetória reconstruída. Cada ponto é um quadro da transmissão (cerca de 1/30 de segundo). A faixa verde é a barreira, entre os dois jogadores; a laranja é o goleiro, com o caminho dele.<br>{{players_note}}</figcaption>
+  <figcaption>Vista de cima da trajetória reconstruída. Cada ponto é um quadro da transmissão (cerca de 1/30 de segundo). <!--fk-->A faixa verde é a barreira, entre os dois jogadores; a laranja é o goleiro, com o caminho dele.<!--/fk--><!--pk-->A linha laranja é o goleiro, com o caminho dele; o círculo vazio e o cheio são as mãos do goleiro no chute e no último quadro.<!--/pk--><br>{{players_note}}</figcaption>
 </figure>
 
+<!--pk-->
+<h2>2. As mãos do goleiro</h2>
+<p>{{hands_text}} A bola chegou a <b>{{zmax}} metros</b> de altura, por volta de {{zmax_t}} segundos depois do chute; o travessão fica a 2,44 m.</p>
+<!--/pk-->
+<!--fk-->
 <h2>2. Por cima da barreira</h2>
 <p>O desafio da falta é geométrico: a bola precisa subir o bastante para passar a barreira, mas descer a tempo de entrar
 abaixo do travessão (2,44 m). Pela reconstrução, a bola chegou a <b>{{zmax}} metros</b> de altura, por volta de
 {{zmax_t}} segundos depois do chute. Ao cruzar a barreira, estava a {{wall_z}} metro do chão: {{wall_clear}} cm
 {{wall_side}} do topo da barreira, que tomamos como 1,8 metro (hipótese).</p>
+<!--/fk-->
 <figure>
-  <img src="{{img_perfil}}" alt="Altura da bola em função da distância, com a barreira e o travessão">
-  <figcaption>De lado: altura da bola ao longo da distância percorrida, com a barreira (hipótese de 1,8 m) e o travessão.</figcaption>
+  <img src="{{img_perfil}}" alt="Altura da bola em função da distância, com a barreira ou as mãos do goleiro, e o travessão">
+  <figcaption><!--fk-->De lado: altura da bola ao longo da distância percorrida, com a barreira (hipótese de 1,8 m) e o travessão.<!--/fk--><!--pk-->De lado: altura da bola ao longo da distância percorrida, com as mãos do goleiro no chute (círculo vazio) e no último quadro (círculo cheio), e o travessão.<!--/pk--></figcaption>
 </figure>
 
+<!--fk-->
 <h2>3. Pouco mais de um segundo</h2>
 <p>A bola levou cerca de {{wall_t}} segundos para chegar à barreira. Quando passou por ela, estava a cerca de
 {{wall_kmh}} km/h. Dali até a entrada no gol, a bola ainda andou {{wall_goal}} metros. Ao longo do voo, a velocidade cai
 de forma contínua: a bola perde velocidade para o ar, e a resistência do ar é maior quanto mais rápido a bola anda.</p>
+<!--/fk-->
+<!--pk-->
+<h2>3. O voo da bola</h2>
+<p>A bola saiu do pé a cerca de {{launch}} km/h e, {{flight}} s depois, no último quadro analisado, estava a cerca de
+{{end_kmh}} km/h. Ao longo do voo, a velocidade cai de forma contínua: a bola perde velocidade para o ar, e a
+resistência do ar é maior quanto mais rápido a bola anda.</p>
+<!--/pk-->
 <figure>
   <img src="{{img_tempo}}" alt="Velocidade da bola, coeficiente de arrasto e número de Reynolds ao longo do tempo">
   <figcaption>Em cima: velocidade da bola. Embaixo: o coeficiente de arrasto (linha escura) e o número de Reynolds
@@ -149,12 +170,12 @@ com o eixo de giro {{spin_axis}}, o que faz a bola curvar para os lados. Isso é
 </figure>
 
 <h2>5. A curva</h2>
-<p>Imagine uma corda esticada do pé do chutador até a entrada no gol. A bola saiu um pouco para fora dessa corda e depois
+<p>Imagine uma corda esticada do pé do chutador até <!--fk-->a entrada no gol<!--/fk--><!--pk-->a última posição da bola<!--/pk-->. A bola saiu um pouco para fora dessa corda e depois
 voltou para dentro. O maior afastamento foi de cerca de <b>{{dev}} m</b>, por volta de {{dev_at}} m depois do chute. Essa é a
 curva que a bola fez no ar, medida pelo afastamento da linha reta.</p>
 <figure>
   <img src="{{img_curva}}" alt="Afastamento lateral da bola em relação à linha reta do chute até a entrada">
-  <figcaption>Linha tracejada: caminho reto do chute até a entrada. Curva: quanto a bola se afastou para o lado.</figcaption>
+  <figcaption>Linha tracejada: caminho reto do chute até <!--fk-->a entrada<!--/fk--><!--pk-->o último quadro<!--/pk-->. Curva: quanto a bola se afastou para o lado.</figcaption>
 </figure>
 
 <h2>6. O que estes números não dizem</h2>
@@ -167,7 +188,8 @@ curva que a bola fez no ar, medida pelo afastamento da linha reta.</p>
   UFRJ (Aguiar) e o ponto final ficou cerca de 10 a 12 metros longe do publicado. A física (forças, arrasto e Magnus) está
   implementada conforme as referências, mas esse teste mostra que ainda há diferenças de convenção ou de parâmetros.</li>
   <li>{{refs_text}}</li>
-  <li>{{wall_text}}</li>
+  <!--fk--><li>{{wall_text}}</li><!--/fk-->
+  <!--pk--><li>{{hands_limit}}</li><!--/pk-->
   <li><b>O toque do goleiro não foi modelado.</b> A trajetória trata o voo como livre até a entrada.</li>
 </ul>
 </div>
@@ -193,6 +215,10 @@ curva que a bola fez no ar, medida pelo afastamento da linha reta.</p>
   <li>Aguiar, C. E. <i>Aerodinâmica da bola de futebol: da Copa de 70 à Jabulani</i>. Instituto de Física, UFRJ (material didático).</li>
   <li>NASA Glenn Research Center. <i>Drag</i>: equação de arrasto e número de Reynolds, para estudantes.</li>
   <li>Documentação técnica do método: <i>docs/fisica_bola_freekiki.html</i> (vailá, 2026).</li>
+  <li>Monteiro, R. L. M.; Bedo, B. L. S.; Monteiro, P. H. M.; de Andrade, F. S. P.; Moura, F. A.; Cunha, S. A.; Torres, R. S.; Memmert, D.; Santiago, P. R. P. <i>Penalty feet positioning rule modification and laterality effect on soccer goalkeepers' diving kinematics</i>. Scientific Reports, 2022. doi:10.1038/s41598-022-21508-6</li>
+  <li>Monteiro, R. L. M.; dos Santos, C. C. A.; Blauberger, P.; Link, D.; Russomanno, T. G.; Tahara, A. K.; Chinaglia, A. G.; Santiago, P. R. P. <i>Enhancing soccer goalkeepers penalty dive kinematics with instructional video and laterality insights in field conditions</i>. Scientific Reports, 2024. doi:10.1038/s41598-024-60074-x</li>
+  <li>Navarro, M.; van der Kamp, J.; Ranvaud, R.; Savelsbergh, G. J. <i>The mere presence of a goalkeeper affects the accuracy of penalty kicks</i>. Journal of Sports Sciences, 2013. doi:10.1080/02640414.2012.762602 (PubMed 23360203).</li>
+  <li>Attaallah, Bassiouni, Hassan et al. <i>The penalty kick accuracy in soccer: A new biomechanical approach</i>. Journal of Human Sport and Exercise, 2021. doi:10.14198/jhse.2021.16.proc4.01 (título e DOI conferidos no Crossref; lista de autores abreviada).</li>
 </ol>
 
 <h2>Frases prontas para a reportagem</h2>

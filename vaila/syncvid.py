@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 Version: 0.4.12
 
 Description:
@@ -24,6 +24,9 @@ minimum exact grid (configurable ceiling, default 240 FPS) with bidirectional Fa
 pixels survive lossless RGB encoding; per-camera CSVs distinguish estimates.
 Manual cuts mode shows independent videos side by side: I/O set inclusive
 bounds, D toggles removals, and Save exports trims at each source FPS.
+Equalize by events (RIFE) opens a separate Tk window for CUDA resampling onto
+a common grid with configurable FPS/count, previewed durations/contact timing,
+three original event anchors and original/generated frame maps for both cameras.
 
 The versioned TSV sync file is consumed directly by ``vaila.cutvideo``. The
 ``Save + Open Cut Video`` button launches Cut Video with both the reference
@@ -3594,12 +3597,9 @@ class PygameSyncPlayer:
         self._draw_button(detect_rect, "Detect repeats")
         self._draw_button(write_rect, "Save w/o repeats")
 
-        footer = self.tiny_font.render(
-            "Tab fields | Enter validate | Ctrl+S save | Esc cancel",
-            True,
-            (164, 177, 190),
-        )
-        self.screen.blit(footer, (x, actions_top + 240))
+        equalize_rect = pygame.Rect(x, actions_top + 240, content_width, 24)
+        self.button_rects["side:equalize_rife"] = equalize_rect
+        self._draw_button(equalize_rect, "Equalize by events (RIFE)")
 
     def _draw(self) -> None:
         self.button_rects.clear()
@@ -3616,7 +3616,9 @@ class PygameSyncPlayer:
         return round(fraction * (self.current_info.frame_count - 1))
 
     def _handle_button(self, action: str) -> None:
-        if action == "side:manual_mode":
+        if action == "side:equalize_rife":
+            self._launch_event_equalizer()
+        elif action == "side:manual_mode":
             self._set_active_field(None)
             self.playing = False
             self.manual_mode = not self.manual_mode
@@ -3889,6 +3891,32 @@ class PygameSyncPlayer:
             elif self._video_viewport().collidepoint(mouse_pos) and event.y:
                 factor = PLAYER_ZOOM_STEP if event.y > 0 else 1.0 / PLAYER_ZOOM_STEP
                 self._zoom_at(mouse_pos, factor)
+
+    def _launch_event_equalizer(self) -> None:
+        """Open a separate Tk process, prefilled from reviewed sync frames."""
+        self.playing = False
+        reference = self._reference_name_or_none() or self.current_info.name
+        source = next((info for info in self.video_infos if info.name != reference), None)
+        if source is None:
+            self._set_status("Equalize by events requires two camera videos", error=True)
+            return
+        ref = next(info for info in self.video_infos if info.name == reference)
+        command = [sys.executable, "-m", "vaila.video_event_equalizer", "--gui"]
+        for role, info in (("reference", ref), ("source", source)):
+            command.extend([f"--{role}", str(info.path)])
+            command.extend(
+                [
+                    f"--{role}-events",
+                    f"1,{self.sync_fields[info.name].text},{info.frame_count}",
+                ]
+            )
+        command.extend(["--output-dir", str(ref.path.parent)])
+        print(">> Event equalizer launcher\n" + shlex.join(command))
+        try:
+            subprocess.Popen(command, cwd=Path(__file__).resolve().parents[1])
+            self._set_status("Opened Equalize by events (RIFE); review both event rows before Run")
+        except OSError as exc:
+            self._set_status(f"Cannot launch event equalizer: {exc}", error=True)
 
     @contextlib.contextmanager
     def _sdl_released_for_dialog(self) -> Generator[None, None, None]:

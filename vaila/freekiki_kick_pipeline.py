@@ -47,9 +47,14 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from .freekiki_stereo import nominal_clock, parse_sync_name
+    from .freekiki_stereo import equalizer_videos, nominal_clock, parse_sync_name, video_sync
 except ImportError:
-    from freekiki_stereo import nominal_clock, parse_sync_name  # ty: ignore[unresolved-import]
+    from freekiki_stereo import (  # ty: ignore[unresolved-import]
+        equalizer_videos,
+        nominal_clock,
+        parse_sync_name,
+        video_sync,
+    )
 
 VIDEO_SUFFIXES = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
 STATUS_NAME = "pipeline_status.json"
@@ -57,6 +62,12 @@ KICK_FOOT_CHOICES = ("auto", "left", "right")
 # the pynalty metrics shown in the README of a penalty run (the rest is in data/penalty_metrics.csv)
 PENALTY_KEEP = ("shot_outcome", "vel_kmh", "dist", "coord_x", "coord_z", "gk_response_time",
                 "gk_dive_time_s", "gk_vel_ms")  # fmt: skip
+# the ball path of a penalty (freekiki_penalty.penalty_path); a change here reruns the penalty stage
+PENALTY_MODEL = "gk-partial-v9"
+# the kicker stage: a change here reruns it (the contact of the fitted flight, the goal side)
+KICKER_MODEL = "contact-fit-v1"
+# the only people a penalty reads: ID0 (the goalkeeper) and ID1 (the kicker), as in player_map.csv
+PENALTY_PLAYERS = ("keeper", "kicker")
 FPS_TOLERANCE = 0.01  # the two cameras must share a frame rate (the clocks are frame / fps)
 
 
@@ -95,26 +106,42 @@ def _jsonable(value):
 
 
 def cut_videos_in(folder: Path) -> list[Path]:
-    """The cut videos of a folder: the video files whose names carry a sync (``_sync_N_frames_A_to_B``)."""
-    return sorted(
+    """The cut videos of a folder: the video files whose names carry a sync (``_sync_N_frames_A_to_B``).
+
+    A folder written by the event equalizer (``event_equalizer.json``) has no sync in the names: its
+    two videos share one grid and the contact frame of the manifest is the sync (reference camera
+    first).
+    """
+    named = sorted(
         p
         for p in folder.iterdir()
-        if p.is_file()
-        and p.suffix.lower() in VIDEO_SUFFIXES
-        and parse_sync_name(p.stem) is not None
+        if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES and video_sync(p) is not None
     )
+    return named or equalizer_videos(folder)
+
+
+def video_files_in(folder: Path) -> list[Path]:
+    """Every video file of a folder, sync in the name or not."""
+    return sorted(p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in VIDEO_SUFFIXES)
 
 
 def pick_videos(source) -> list[Path]:
-    """One or two videos from a folder (one or two cut videos) or the files given."""
+    """One or two videos from a folder (one or two cut videos) or the files given.
+
+    A folder whose only video has no sync in its name is the monocular analysis of that video.
+    """
     path = Path(source).expanduser()
     if path.is_dir():
         videos = cut_videos_in(path)
+        plain = video_files_in(path)
+        if not videos and len(plain) == 1:
+            return plain  # one video alone, no sync needed: the monocular analysis of it
         if len(videos) not in (1, 2):
             names = ", ".join(v.name for v in videos) or "none"
             raise KickInputError(
                 f"{path} needs one or two cut videos (found {len(videos)}: {names}). Two videos "
-                "are named '..._sync_N_frames_A_to_B...'. Give the files with --videos instead."
+                "are named '..._sync_N_frames_A_to_B...' or come from the event equalizer "
+                "(event_equalizer.json). Give the files with --videos instead."
             )
         return videos
     if path.is_file():
@@ -141,11 +168,12 @@ class CameraInput:
 def validate_inputs(
     videos: list[Path], reference: int, *, sync: tuple[int, int] | None = None
 ) -> list[CameraInput]:
-    """E0: two cut videos, each with its sync in the name and its corrected ball markers.
+    """E0: two cut videos, each with its sync and its corrected ball markers.
 
-    ``reference`` (1 or 2) is the camera whose frames are the output frames. ``sync`` is
-    ``(sync_frame, cut_start)`` for one video whose name carries no sync numbers; the name wins when
-    it has them.
+    The sync is in the name (``_sync_N_frames_A_to_B``) or, for the two videos of the event equalizer,
+    in the ``event_equalizer.json`` beside them. ``reference`` (1 or 2) is the camera whose frames are
+    the output frames. ``sync`` is ``(sync_frame, cut_start)`` for one video whose name carries no sync
+    numbers; the name wins when it has them.
     """
     video_fps = _module("freekiki_detect3d")._video_fps
 
@@ -160,24 +188,25 @@ def validate_inputs(
     if len(videos) == 2 and videos[0].resolve() == videos[1].resolve():
         raise KickInputError("the two videos are the same file: give one video per camera")
     cams: list[CameraInput] = []
+    missing: list[Path] = []
     for video in videos:
         video = Path(video).expanduser().resolve()
         if not video.is_file():
             raise KickInputError(f"video not found: {video}")
-        parsed = parse_sync_name(video.stem)
+        parsed = video_sync(video)
+        if len(videos) == 1 and sync is not None and parse_sync_name(video.stem) is None:
+            parsed = sync  # the sync given for one video beats the equalizer's, not the name's
         if parsed is None and len(videos) == 1:
-            parsed = sync or (0, 0)  # one camera alone: no sync is needed unless it is given
+            parsed = (0, 0)  # one camera alone: no sync is needed unless it is given
         if parsed is None:
             raise KickInputError(
-                f"{video.name} has no sync in its name ('_sync_N_frames_A_to_B'); "
-                "rename the cut video as the cut tool wrote it"
+                f"{video.name} has no sync in its name ('_sync_N_frames_A_to_B') and no "
+                "event_equalizer.json beside it; rename the cut video as the cut tool wrote it"
             )
         markers = video.with_name(f"{video.stem}_markers.csv")
         if not markers.is_file():
-            raise KickInputError(
-                f"ball markers not found: {markers}. Correct the ball of this camera in "
-                "getpixelvideo (the file is written next to the video) and run again"
-            )
+            missing.append(video)  # every camera is listed at once, not one run per camera
+            continue
         with markers.open(encoding="utf-8") as fh:
             is_keypoints = "p1_x" in fh.readline()
         if is_keypoints:
@@ -199,6 +228,14 @@ def validate_inputs(
                 n,
                 keypoints if keypoints.is_file() else None,
             )
+        )
+    if missing:
+        commands = "\n".join(f"  uv run --no-sync vaila/getpixelvideo.py -f {v}" for v in missing)
+        raise KickInputError(
+            "ball markers not found: "
+            + ", ".join(str(v.with_name(f"{v.stem}_markers.csv")) for v in missing)
+            + ". Mark the ball of each camera in getpixelvideo (Save writes <video>_markers.csv "
+            "next to the video) and run again:\n" + commands
         )
     if len(cams) == 1:
         return cams
@@ -331,12 +368,74 @@ def _sam_boxes_csv(work: Path) -> Path:
     return found[-1]
 
 
+def _keeper_id(player_map: Path) -> int | None:
+    """The goalkeeper's player id (ID0 of a penalty), or None when the players link found no keeper."""
+    with player_map.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row["role"] == "keeper":
+                return int(row["player_id"])
+    return None
+
+
 def _kicker_id(player_map: Path) -> int:
     with player_map.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
             if row["role"] == "kicker":
                 return int(row["player_id"])
     raise KickStageError(f"no kicker in {player_map}: the players link found no kicker")
+
+
+def _penalty_topview(cam3d: Path, video: Path) -> None:
+    """Redraw the top view of a penalty with player ids: ID0 is the keeper, ID1 the kicker, and the
+    others 2, 3, ... (the SAM ids drawn at detection time are not the ids a penalty uses)."""
+    if not (cam3d / "ground_tracks.csv").is_file():
+        return
+    names = _module("freekiki_report_players").load_camera_roles(cam3d).get("names", {})
+    fps = _module("freekiki_detect3d")._video_fps(video)
+    n = int(nominal_clock(video).size)
+    _module("freekiki_topview").write_topview(cam3d, video.stem, fps=fps, n_frames=n, labels=names)
+
+
+def _penalty_overlay(cam3d: Path, video: Path, work: Path) -> None:
+    """Redraw the overlay video of a penalty with player ids: ID0 the keeper, ID1 the kicker, the others
+    2, 3, ... (the track ids written at detection time are not the ids a penalty uses). A failure is
+    logged and leaves the first overlay: it is a picture, and the analysis does not depend on it."""
+    detect3d = _module("freekiki_detect3d")
+    run_dir = detect3d._detect_run_dir(Path(work), video.stem)
+    poses = cam3d / "poses_3d_on_field.csv"
+    if run_dir is None or not poses.is_file():
+        return
+    names = _module("freekiki_report_players").load_camera_roles(cam3d).get("names", {})
+    with poses.open(newline="", encoding="utf-8") as fh:
+        kept = {int(row["person_id"]) for row in csv.DictReader(fh)}
+    try:
+        detect3d.write_3d_overlay(video, run_dir, cam3d, Path(work), kept=kept, labels=names)
+    except Exception as exc:  # only the picture: the analysis goes on with the first overlay
+        _log(f"overlay not redrawn with the player ids: {type(exc).__name__}: {exc}")
+
+
+def _penalty_others(player_map: Path, poses: Path, id_column: str, data_dir: Path) -> Path:
+    """The people a penalty does not use, written to ``other_IDs/`` for the record and read by nothing.
+
+    A penalty reads the keeper (ID0) and the kicker (ID1) only, taken from ``player_map.csv``; every
+    other person's poses go to ``other_IDs/poses_other_persons.csv``. ``id_column`` is the poses column
+    that holds the person: ``person_id`` (the SAM id, monocular poses) or ``player_id`` (binocular).
+    """
+    key = "sam_id" if id_column == "person_id" else "player_id"
+    with player_map.open(newline="", encoding="utf-8") as fh:
+        keep = {str(int(row[key])) for row in csv.DictReader(fh) if row["role"] in PENALTY_PLAYERS}
+    out_dir = data_dir / "other_IDs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out = out_dir / "poses_other_persons.csv"
+    with poses.open(newline="", encoding="utf-8") as src:
+        reader = csv.DictReader(src)
+        with out.open("w", newline="", encoding="utf-8") as dst:
+            writer = csv.DictWriter(dst, fieldnames=reader.fieldnames or [])
+            writer.writeheader()
+            for row in reader:
+                if str(int(float(row[id_column]))) not in keep:
+                    writer.writerow(row)
+    return out
 
 
 def _triangulate(
@@ -424,7 +523,14 @@ def _find_poses(out: Path, bino_dir: Path) -> Path:
 
 
 def _camera_view(folder: Path, sync: tuple[int, int] | None = None):
-    """The camera of a 3D folder. ``sync`` is ``(sync_frame, cut_start)``; None reads the name."""
+    """The camera of a 3D folder. ``sync`` is ``(sync_frame, cut_start)``; None reads the name.
+
+    One camera alone needs no sync (only its DLT3D is read here), so a video with no sync in its
+    name nor an equalizer manifest gets ``(0, 0)`` instead of an error.
+    """
+    if sync is None:
+        video = _module("freekiki_detect3d")._video_from_readme(folder)
+        sync = (video_sync(video) if video is not None else None) or (0, 0)
     view, _ = _module("freekiki_stereo").load_view(
         folder, markers=None, timing=None,
         sync_frame=None if sync is None else sync[0],
@@ -499,6 +605,20 @@ def _c3d_binocular(
     )
 
 
+def _fit_contact(flight: dict, marker: int | None, fps: float) -> int | None:
+    """The contact frame of the fitted flight when it should replace the marker's, else None.
+
+    It replaces the marker only when the fit is reliable and the two differ by more than one frame.
+    """
+    kick_time, rms = flight.get("kick_time_s"), flight.get("rms_px")
+    if kick_time is None or marker is None or rms is None:
+        return None
+    if float(rms) > _module("freekiki_auto_flight").PIXEL_REJECT_PX:
+        return None
+    fit = round(float(kick_time) * fps)
+    return fit if abs(fit - marker) > 1 else None
+
+
 def _kicker(
     ref3d: Path,
     binocular: Path,
@@ -510,22 +630,34 @@ def _kicker(
     other3d: Path | None = None,
     ref_work: Path | None = None,
     other_work: Path | None = None,
+    goal_x: float | None = None,
 ) -> dict:
-    """E5: the kicker's metrics and figures. ``binocular`` is the folder with the ball fit."""
+    """E5: the kicker's metrics and figures. ``binocular`` is the folder with the ball fit.
+
+    ``goal_x`` is the attacked goal line of the set piece: it sets the side of the views from behind.
+    The contact is the first frame in which the hand-marked ball moves, unless the fitted flight is
+    reliable (RMS up to ``PIXEL_REJECT_PX``) and puts the kick more than a frame away: a marker that
+    drifts early would otherwise move every metric of the kicker to the wrong frame.
+    """
     kicker = _module("freekiki_kicker")
     fps = _module("freekiki_detect3d")._video_fps(ref_video)
     n = int(nominal_clock(ref_video).size)
     flight = json.loads((binocular / "ball_flight.json").read_text(encoding="utf-8"))
+    ball_pixels = kicker.read_ball_pixels(ref3d / "ball.csv")
+    contact_override = _fit_contact(flight, kicker.contact_frame(ball_pixels), fps)
     result = kicker.analyze_kicker(
         kicker.read_poses(poses_csv),
         kicker.read_ball_xyz(binocular / "ball_3d_on_field.csv", n),
-        kicker.read_ball_pixels(ref3d / "ball.csv"),
+        ball_pixels,
         kicker_id=_kicker_id(ref3d / "player_map.csv"),
+        keeper_id=_keeper_id(ref3d / "player_map.csv"),
         fps=fps,
         kick_foot=kick_foot,
         kick_time_s=flight.get("kick_time_s"),
         fit_peak_speed_mps=flight.get("peak_speed_mps"),
         fit_spin_rps=flight.get("spin_rps"),
+        contact_override=contact_override,
+        goal_x=goal_x,
     )
     views = None
     if other3d is not None and ref_work is not None and other_work is not None:
@@ -544,28 +676,64 @@ def _kicker(
 
 
 def _penalty(
-    ref3d: Path, ref_video: Path, ref_work: Path, folder: Path, ball_csv: Path, *, goal_x: float
+    ref3d: Path,
+    ref_video: Path,
+    ref_work: Path,
+    folder: Path,
+    *,
+    goal_x: float,
+    track_csv: Path | None = None,
 ) -> dict:
-    """The pynalty metrics and report of a penalty (reference camera pixels, the 3D crossing of ``ball_csv``).
+    """The pynalty metrics, the ball path and the report of a penalty (reference camera pixels and DLT3D).
 
-    ``folder`` is the chosen analysis: its ``data/`` gets the metrics, its ``report_tv/penalty/`` the report.
+    ``folder`` is the chosen analysis: its ``data/`` gets the metrics and the path, its
+    ``report_tv/penalty/`` the report. ``track_csv`` is the binocular ball of a run with two cameras:
+    when it is given, the ball path's verdict is that ball (:func:`freekiki_penalty.penalty_path`); without
+    it the verdict is the monocular fit, which is provisional.
     """
     penalty = _module("freekiki_penalty")
     kicker = _module("freekiki_kicker")
+    stereo = _module("freekiki_stereo")
     fps = _module("freekiki_detect3d")._video_fps(ref_video)
     n = int(nominal_clock(ref_video).size)
     keeper = penalty.keeper_sam_id(ref3d / "player_map.csv")
     boxes = penalty.read_boxes(_sam_boxes_csv(ref_work))
+    try:
+        matrix = _module("monocular_dlt_align").dlt_projection_matrix
+        cameras = {f: matrix(L) for f, L in stereo.find_dlt3d(ref3d, ref_video).items()}
+    except FileNotFoundError:
+        cameras = None  # the penalty reports the missing per-frame DLT3D
+    track = None
+    if track_csv is not None and track_csv.is_file():
+        xyz = kicker.read_ball_xyz(track_csv, n)
+        track = {f: xyz[f] for f in range(n) if np.isfinite(xyz[f]).all()}
     result = penalty.penalty_metrics(
         field_rows=penalty.read_field_rows(ref3d / "field_kps_3d.csv"),
         ball_px=kicker.read_ball_pixels(ref3d / "ball.csv"),
-        ball_xyz=kicker.read_ball_xyz(ball_csv, n),
+        cameras=cameras,
         keypoints=_module("freekiki_pose_binocular").read_keypoints2d(_keypoints_csv(ref_work), n),
         keeper_boxes=boxes.get(keeper, {}) if keeper is not None else {},
         keeper_sam=keeper,
         fps=fps,
+        n_frames=n,
         goal_x=goal_x,
+        track=track,
     )
+    path = result.get("path") or {}
+    keeper_id = _keeper_id(ref3d / "player_map.csv")
+    if keeper_id is not None and path.get(
+        "available"
+    ):  # the goalkeeper's move, partial (no goal line)
+        keeper = kicker.person_points(
+            kicker.read_poses(ref3d / "poses_3d_on_field_players.csv"), keeper_id, n
+        )
+        # the contact of the fitted flight, not the first moved marker frame (which can drift early)
+        contact = path["kick_frame"]
+        if path.get("fit", {}).get("kick_time_s") is not None:
+            contact = min(round(path["fit"]["kick_time_s"] * fps), path["last_frame"])
+        result["gk_partial"] = penalty.gk_partial(
+            keeper, kick=contact, last=path["last_frame"], fps=fps, goal_x=goal_x
+        )
     files = penalty.write(_layout().data_dir(folder), result)
     html = penalty.report(folder / "report_tv" / "penalty", ref_video, fps, result)
     return {
@@ -574,37 +742,48 @@ def _penalty(
         "metrics": {
             k: result["metrics"][k] for k in PENALTY_KEEP if k in result.get("metrics", {})
         },
+        "path": {k: v for k, v in (result.get("path") or {}).items() if k != "rows"} or None,
+        "gk_partial": result.get("gk_partial"),
         "files": {k: str(v) for k, v in files.items()},
         "report": html,
     }
 
 
 def _mono_analysis(
-    key, cam3d, video, work, is_ref, *, kick_foot, team_a, runner, report=True, sync=None
-):
+    key, cam3d, video, work, is_ref, *, kick_foot, team_a, runner, sync=None, penalty=False,
+    goal_x=None,
+):  # fmt: skip
     """One camera alone: its teams, its kicker and its report. Returns the entry and the kicker values.
 
-    A failure is recorded in the entry; the other analyses still run. ``report`` False leaves the
-    freekiki ball report out (a penalty has its pynalty report instead). ``sync`` is the
-    ``(sync_frame, cut_start)`` of a video whose name has none.
+    A failure is recorded in the entry; the other analyses still run. A penalty has no team split
+    (``penalty``). ``sync`` is the ``(sync_frame, cut_start)`` of a video whose name has none.
     """
     entry: dict = {"folder": str(cam3d), "status": "ok"}
     fps = _module("freekiki_detect3d")._video_fps(video)
     try:
-        teams = runner(f"teams:{key}", {"player_map": cam3d.name, "sync": sync},
-                       [cam3d / "data" / "team_map.csv"],
-                       lambda: _teams_mono(cam3d, video, work, is_ref=is_ref, key=key, team_a=team_a,
-                                           fps=fps, sync=sync))  # fmt: skip
-        entry["counts"] = teams["counts"]
-        kick = runner(f"kicker:{key}", {"poses": "poses_3d_on_field_players.csv", "kick_foot": kick_foot},
+        if (
+            penalty
+        ):  # no team or referee split: a penalty reads the keeper (ID0) and the kicker (ID1)
+            _penalty_others(cam3d / "player_map.csv", cam3d / "poses_3d_on_field.csv", "person_id",
+                            _layout().data_dir(cam3d))  # fmt: skip
+            _penalty_topview(cam3d, video)
+            _penalty_overlay(cam3d, video, work)
+        else:
+            teams = runner(f"teams:{key}", {"player_map": cam3d.name, "sync": sync},
+                           [cam3d / "data" / "team_map.csv"],
+                           lambda: _teams_mono(cam3d, video, work, is_ref=is_ref, key=key, team_a=team_a,
+                                               fps=fps, sync=sync))  # fmt: skip
+            entry["counts"] = teams["counts"]
+        kick = runner(f"kicker:{key}", {"poses": "poses_3d_on_field_players.csv", "kick_foot": kick_foot,
+                                        "goal_x": goal_x, "model": KICKER_MODEL},
                       [cam3d / "data" / "kicker_metrics.csv"],
                       lambda: _kicker(cam3d, cam3d, cam3d / "poses_3d_on_field_players.csv",
-                                      _layout().data_dir(cam3d), video, kick_foot=kick_foot))  # fmt: skip
-        if report:
-            runner(f"report:{key}", {"run": cam3d.name},
-                   [cam3d / "report_tv" / "pt" / "relatorio_bola.html",
-                    cam3d / "report_tv" / "en" / "ball_report.html"],
-                   lambda: _module("freekiki_report").build_report(cam3d, lang="both", video=video))  # fmt: skip
+                                      _layout().data_dir(cam3d), video, kick_foot=kick_foot,
+                                      goal_x=goal_x))  # fmt: skip
+        runner(f"report:{key}", {"run": cam3d.name},
+               [cam3d / "report_tv" / "pt" / "relatorio_bola.html",
+                cam3d / "report_tv" / "en" / "ball_report.html"],
+               lambda: _module("freekiki_report").build_report(cam3d, lang="both", video=video))  # fmt: skip
     except Exception as exc:  # a monocular analysis may fail on its own
         entry["status"] = "failed"
         entry["error"] = f"{type(exc).__name__}: {exc}"
@@ -688,6 +867,9 @@ def _analyses(
     kind = (setpiece or {}).get("kind")
     # a penalty needs the ball at rest (the goal side): without it the run is a free kick analysis
     penalty = kind == "penalty" and (setpiece or {}).get("goal_x_m") is not None
+    goal_x = (setpiece or {}).get(
+        "goal_x_m"
+    )  # the attacked goal line: the side of the views from behind
     results: dict[str, dict] = {}
     kicker_values: dict[str, dict] = {}
     monos = [("mono-ref", ref3d, ref_video, ref_work, True)]
@@ -695,8 +877,9 @@ def _analyses(
         monos.append(("mono-other", other3d, other_video, other_work, False))
     for key, cam3d, video, work, is_ref in monos:
         entry, values = _mono_analysis(key, cam3d, video, work, is_ref, kick_foot=kick_foot,
-                                       team_a=team_a, runner=runner, report=not penalty,
-                                       sync=ref_sync if is_ref else None)  # fmt: skip
+                                       team_a=team_a, runner=runner,
+                                       sync=ref_sync if is_ref else None, penalty=penalty,
+                                       goal_x=goal_x)  # fmt: skip
         if setpiece is not None:
             _module("freekiki_setpiece").write(_layout().data_dir(cam3d), setpiece)
         results[key] = entry
@@ -720,20 +903,26 @@ def _analyses(
                      [bdata / "field_ball.c3d"],
                      lambda: _c3d_binocular(ref3d, other3d, ref_work, other_work, fit, bdata, ref_video))  # fmt: skip
         entry["field_kept"] = c3d["summary"]["field_kept"]
-        teams = runner("teams:binocular", {"poses": poses.name}, [bdata / "team_map.csv"],
-                       lambda: _teams_binocular(ref3d, other3d, ref_video, other_video, ref_work, other_work,
-                                                bino_dir, poses, ball_csv, team_a=team_a, fps=fps))  # fmt: skip
-        entry["counts"] = teams["counts"]
-        kick = runner("kicker:binocular", {"poses": poses.name, "kick_foot": kick_foot},
+        if (
+            penalty
+        ):  # no team or referee split: a penalty reads the keeper (ID0) and the kicker (ID1)
+            _penalty_others(ref3d / "player_map.csv", poses, "player_id", bdata)
+        else:
+            teams = runner("teams:binocular", {"poses": poses.name}, [bdata / "team_map.csv"],
+                           lambda: _teams_binocular(ref3d, other3d, ref_video, other_video, ref_work, other_work,
+                                                    bino_dir, poses, ball_csv, team_a=team_a, fps=fps))  # fmt: skip
+            entry["counts"] = teams["counts"]
+        kick = runner("kicker:binocular", {"poses": poses.name, "kick_foot": kick_foot,
+                                           "goal_x": goal_x, "model": KICKER_MODEL},
                       [bdata / "kicker_metrics.csv", bdata / "kicker_curves_pt.png"],
                       lambda: _kicker(ref3d, fit, poses, bdata, ref_video, kick_foot=kick_foot,
-                                      other3d=other3d, ref_work=ref_work, other_work=other_work))  # fmt: skip
+                                      other3d=other3d, ref_work=ref_work, other_work=other_work,
+                                      goal_x=goal_x))  # fmt: skip
         kicker_values["binocular"] = kick["values"]
-        if not penalty:
-            runner("report:binocular", {"binocular": bino_dir.name},
-                   [bino_dir / "report_tv" / "pt" / "relatorio_bola.html",
-                    bino_dir / "report_tv" / "en" / "ball_report.html"],
-                   lambda: _module("freekiki_report").build_report(bino_dir, lang="both", video=ref_video))  # fmt: skip
+        runner("report:binocular", {"binocular": bino_dir.name},
+               [bino_dir / "report_tv" / "pt" / "relatorio_bola.html",
+                bino_dir / "report_tv" / "en" / "ball_report.html"],
+               lambda: _module("freekiki_report").build_report(bino_dir, lang="both", video=ref_video))  # fmt: skip
         if setpiece is not None:
             _module("freekiki_setpiece").write(bdata, setpiece)
     if penalty and setpiece is not None and chosen in results:
@@ -746,10 +935,11 @@ def _analyses(
             folder, ball_csv = ref3d, ref3d / "ball_3d_on_field.csv"
         try:
             results[chosen]["penalty"] = runner(
-                f"penalty:{chosen}", {"ball": ball_csv.name, "goal_x_m": setpiece["goal_x_m"]},
+                f"penalty:{chosen}",
+                {"ball": ball_csv.name, "goal_x_m": setpiece["goal_x_m"], "model": PENALTY_MODEL},
                 [_layout().data_dir(folder) / "penalty_metrics.csv"],
-                lambda: _penalty(ref3d, ref_video, ref_work, folder, ball_csv,
-                                 goal_x=setpiece["goal_x_m"]))  # fmt: skip
+                lambda: _penalty(ref3d, ref_video, ref_work, folder, goal_x=setpiece["goal_x_m"],
+                                 track_csv=ball_csv if chosen == "binocular" else None))  # fmt: skip
         except Exception as exc:  # a penalty that cannot be measured is reported, the run goes on
             results[chosen]["penalty"] = {
                 "available": False,
@@ -770,13 +960,44 @@ def _analyses(
 def _penalty_lines(penalty: dict | None) -> list[str]:
     if penalty is None:
         return []
-    if not penalty.get("available"):
-        return [f"Penalty: pynalty metrics not available here ({penalty.get('reason', '')})", ""]
-    return [
-        "Penalty (pynalty metrics; data/penalty_metrics.csv; report in report_tv/penalty/):",
-        *[f"  {k}: {v}" for k, v in penalty.get("metrics", {}).items()],
-        "",
-    ]
+    if penalty.get("available"):
+        lines = [
+            "Penalty (pynalty metrics; data/penalty_metrics.csv; report in report_tv/penalty/):",
+            *[f"  {k}: {v}" for k, v in penalty.get("metrics", {}).items()],
+        ]
+    else:
+        lines = [f"Penalty: pynalty metrics not available here ({penalty.get('reason', '')})"]
+    path = penalty.get("path") or {}
+    if path.get("available"):
+        bend = "" if path["shape"] == "straight" else f" bowing {path['bow_side']}"
+        if path["goal_frame"] is None:
+            reach = f"does not reach the goal line in the clip (last frame {path['last_frame']})"
+        else:
+            mouth = "inside" if path["arrival_in_goal_mouth"] else "outside"
+            reach = f"crosses the goal line at frame {path['goal_frame']} ({mouth} the goal mouth)"
+        # the binocular ball is the verdict; the monocular fit is an estimate and says so
+        origin = (
+            "binocular ball" if path.get("source") == "binocular" else "monocular fit, provisional"
+        )
+        lines.append(
+            f"Ball path (data/penalty_path.csv, {origin}): {path['shape']}{bend}, max "
+            f"{path['max_dev_m']} m off the spot-arrival line on the ground, apex {path['apex_z_m']} m, "
+            f"{reach}; the ball at rest sits {path['spot_fit_offset_m']} m from the spot"
+        )
+    elif path:
+        lines.append(f"Ball path: not available ({path.get('reason', '')})")
+    gk = penalty.get("gk_partial") or {}
+    if gk.get("available") and gk.get("moved"):
+        lines.append(
+            f"Goalkeeper (partial, no goal line; data/penalty_metrics.csv): moves to the goalkeeper's {gk['direction']} "
+            f"{abs(gk['toward_right_m'])} m, starts {gk['onset_ms_after_kick']} ms after the kick, "
+            f"mean speed {gk['mean_speed_mps']} m/s up to frame {gk['last_frame']}"
+        )
+    elif gk.get("available"):
+        lines.append(f"Goalkeeper (partial, no goal line): {gk['reason']}")
+    elif gk:
+        lines.append(f"Goalkeeper: not available ({gk.get('reason', '')})")
+    return [*lines, ""]
 
 
 def _readme(out: Path, summary: dict) -> Path:

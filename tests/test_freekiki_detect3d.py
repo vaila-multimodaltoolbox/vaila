@@ -498,6 +498,21 @@ def test_overlay_draws_field_points_kept_poses_and_ball(
     assert first[16:25, 16:25].sum() > 0  # accepted field point
     assert first[86:95, 26:35].sum() == 0  # person 4 is not kept, so not drawn
 
+    # the id written beside a person is the player id when labels are given, else the track id
+    texts: list[str] = []
+    real_put_text = cv2.putText
+
+    def spy(img, text, *args, **kwargs):
+        texts.append(text)
+        return real_put_text(img, text, *args, **kwargs)
+
+    monkeypatch.setattr(cv2, "putText", spy)
+    module.write_3d_overlay(video, run, out, work.parent, kept={3}, labels={3: 1})
+    assert "ID 1" in texts and "ID 3" not in texts
+    texts.clear()
+    module.write_3d_overlay(video, run, out, work.parent, kept={3})
+    assert "ID 3" in texts and "ID 1" not in texts
+
 
 def test_track_ball_keeps_one_consistent_track_and_skips_gaps() -> None:
     from vaila import freekiki_ball as fb

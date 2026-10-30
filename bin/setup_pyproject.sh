@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # bin/setup_pyproject.sh
+# Updated: 29 October 2026; Version: 0.4.12.
 #
 # Unified interactive bootstrap for vailá: detects OS/arch/NVIDIA, picks the
 # PyTorch dependency group (`cpu` or `cuda`) and the optional extras, then runs
@@ -35,6 +36,7 @@
 #   --upgrade          Upgrade uv.lock, then sync the selected hardware/extras
 #   --no-lock          Skip `uv lock` (default)
 #   --no-sync          Skip `uv sync`
+#   --no-rife          Skip automatic RIFE code/model setup on CUDA
 #   --help, -h         Show this help and exit
 
 set -euo pipefail
@@ -50,6 +52,7 @@ ACCEPT_DEFAULTS=0
 RUN_LOCK=0
 UPGRADE=0
 RUN_SYNC=1
+RUN_RIFE=1
 
 # ---------- args ----------
 print_help() {
@@ -67,6 +70,7 @@ for arg in "$@"; do
         --upgrade)         RUN_LOCK=1; UPGRADE=1 ;;
         --no-lock)         RUN_LOCK=0; UPGRADE=0 ;;
         --no-sync)         RUN_SYNC=0 ;;
+        --no-rife)         RUN_RIFE=0 ;;
         --skip-worktree|--no-skip-worktree)
             # Kept for backward compatibility: pyproject.toml / uv.lock are now
             # identical on every machine, so there is nothing to hide from git.
@@ -395,6 +399,11 @@ if [[ "$RUN_SYNC" == 1 ]]; then
         else
             warn "Could not detect shell RC file; add 'export UV_NO_SYNC=1' to your shell profile manually."
         fi
+    fi
+
+    if [[ "$TARGET" == "cuda" && "$RUN_RIFE" == 1 ]]; then
+        info "Setting up RIFE 4.25 (event video interpolation)..."
+        uv run --no-sync python bin/setup_rife.py || warn "RIFE unavailable; retry: bash bin/setup_rife.sh (see Syncvid Help)."
     fi
 
     ok ""

@@ -4,6 +4,21 @@
 
 **Last updated:** 2026-10-29
 
+Syncvid **Equalize by events (RIFE)** opens a CUDA frame-interpolation tool on the
+reference camera's grid by default. **Output FPS** (including 60, 120 and exact
+fractions) and **Output frame count** define a common grid for both cameras.
+Click **Preview** to review durations, contact timing and original/generated counts,
+then **Run**. Enter start/contact/end for both cameras; for example,
+`c1: 1,9,19` and reference `c2: 1,9,22` produce 22 frames each with contact at frame 9.
+All three anchors remain original images; higher FPS adds visual estimates, and
+independent FPS/count choices change playback speed. CLI: `--output-fps` and
+`--output-frame-count`. CSV maps distinguish original and generated images. See the
+[RIFE setup and workflow](vaila/help/syncvid.md#equalize-by-events-rife).
+Linux/Windows CUDA installers and `setup_pyproject` now install the pinned RIFE
+4.25 code/model and verify CUDA inference. For an existing installation or to
+restore model files, run `bash bin/setup_rife.sh` (Windows: `pwsh bin/setup_rife.ps1`).
+Weights stay local in `vaila/models/rife/train_log/`; run setup on each computer.
+
 Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
 set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.
 Live remaining-frame counts help match lengths by hand. **Save all / Save current video**

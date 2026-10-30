@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 28 October 2026
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 
 Description:
     The penalty analysis of :mod:`pynalty_analysis` without the hand marking of the pynalty app. Every
@@ -21,8 +21,10 @@ Description:
     * the four goal-mouth corners in the image: the posts of the attacked goal, projected by the
       camera's DLT in ``field_kps_3d.csv`` at the frame nearest the kick, ordered as pynalty asks
       (bottom-left, top-left, top-right, bottom-right, as seen in the image);
-    * the kick frame (:func:`freekiki_auto_flight.kick_onset` on ``ball.csv``) and the goal frame (the
-      first frame after the kick in which the fitted ball is across the goal line);
+    * the kick frame (:func:`freekiki_auto_flight.kick_onset` on ``ball.csv``) and the ball path
+      (:func:`penalty_path`): the spot at the kick, the arrival on the goal line at the last frame the
+      ball is seen (the ray of that pixel in its camera), and the flight fitted between the two. The
+      goal frame is the arrival frame;
     * the goalkeeper's pose: the MHR70 keypoints of its SAM track, mapped to the 33 pynalty landmarks
       (the landmarks the model does not have stay missing); its SAM box centre is the keeper point.
 
@@ -41,15 +43,15 @@ import numpy as np
 
 try:
     from .freekiki_auto_flight import kick_onset
+    from .freekiki_physics import fit_flight
     from .freekiki_pose_binocular import Keypoints
-    from .freekiki_setpiece import GOAL_LINE_X_M
     from .pynalty_analysis import GoalGeometry, compute_penalty_metrics
     from .pynalty_report import ReportContext, write_html_reports
     from .pynalty_vision import LANDMARK_NAMES, PoseSequence, _first_movement_frame, gk_kinematics
 except ImportError:
     from freekiki_auto_flight import kick_onset  # ty: ignore[unresolved-import]
+    from freekiki_physics import fit_flight  # ty: ignore[unresolved-import]
     from freekiki_pose_binocular import Keypoints  # ty: ignore[unresolved-import]
-    from freekiki_setpiece import GOAL_LINE_X_M  # ty: ignore[unresolved-import]
     from pynalty_analysis import GoalGeometry, compute_penalty_metrics  # ty: ignore[unresolved-import]
     from pynalty_report import (  # ty: ignore[unresolved-import]
         ReportContext,
@@ -63,8 +65,14 @@ except ImportError:
     )
 
 GOAL_HEIGHT_M = 2.44
+GK_MOVE_M = (
+    0.10  # the goalkeeper has moved when the middle of his hips is this far from the kick position
+)
 MOVE_THRESHOLD_PX = 10.0  # operational: the keeper has moved when a shoulder or hip moves this much
 MOVE_INDICES = (11, 12, 23, 24)  # left/right shoulder and hip, in the 33 landmarks
+# a fitted point this far, on the ground, from the spot-arrival line is a curve
+PATH_STRAIGHT_LIMIT_M = 0.30
+SPOT_SIGMA_M = 0.05  # the penalty mark is fixed by the Laws of the Game: a tight anchor
 # MHR70 keypoint name -> pynalty landmark name (the 33 MediaPipe landmarks)
 MHR_TO_LANDMARK = {
     "nose": "nose",
@@ -161,14 +169,176 @@ def goal_corners_px(
     return corners, {"frame": chosen, "left_post_px": left, "right_post_px": right}
 
 
-def goal_frame(ball_xyz: np.ndarray, goal_x: float, after: int) -> int | None:
-    """The first frame after ``after`` in which the fitted ball is across the attacked goal line."""
-    side = math.copysign(1.0, goal_x)
-    x = ball_xyz[:, 0] * side
-    for f in range(max(after + 1, 0), len(x)):
-        if np.isfinite(x[f]) and x[f] >= GOAL_LINE_X_M:
-            return f
-    return None
+def arrival_on_goal_line(
+    P: np.ndarray, uv: tuple[float, float], goal_x: float
+) -> np.ndarray | None:
+    """Where the ray of one pixel meets the goal line ``x = goal_x``, as pitch metres ``(x, y, z)``.
+
+    ``P`` is the 3x4 projection of the frame (pitch metres -> pixels). With ``x`` fixed, the pixel gives
+    two linear equations in ``y`` and ``z``. None when the ray is parallel to the line or the meeting
+    point is behind the camera.
+    """
+    p = np.asarray(P, dtype=float)
+    u, v = float(uv[0]), float(uv[1])
+    a = np.array(
+        [
+            [u * p[2, 1] - p[0, 1], u * p[2, 2] - p[0, 2]],
+            [v * p[2, 1] - p[1, 1], v * p[2, 2] - p[1, 2]],
+        ]
+    )
+    b = -np.array(
+        [
+            (u * p[2, 0] - p[0, 0]) * goal_x + (u * p[2, 3] - p[0, 3]),
+            (v * p[2, 0] - p[1, 0]) * goal_x + (v * p[2, 3] - p[1, 3]),
+        ]
+    )
+    if abs(np.linalg.det(a)) < 1e-9:
+        return None
+    y, z = np.linalg.solve(a, b)
+    point = np.array([goal_x, y, z], dtype=float)
+    depth = p @ np.append(point, 1.0)
+    if not np.isfinite(depth).all() or depth[2] <= 1e-9:
+        return None
+    return point
+
+
+def penalty_path(
+    pixels: dict[int, tuple[float, float]],
+    cameras: dict[int, np.ndarray],
+    *,
+    kick: int,
+    goal_x: float,
+    fps: float,
+    n_frames: int,
+    track: dict[int, np.ndarray] | None = None,
+) -> dict:
+    """The ball path of a penalty: from the spot to the goal line, bent only where the flight is.
+
+    With ``track`` (frame -> the ball's 3D position in metres, from the binocular fit of two cameras)
+    the verdict is that track, the validated one. Without it, the flight of
+    :func:`freekiki_physics.fit_flight` (gravity, drag and Magnus spin) is fitted to ``pixels`` (frame ->
+    the ball's pixel, seen by ``cameras``, frame -> the 3x4 projection of that frame), with one anchor:
+    the spot where the ball rests before the kick (the penalty mark, known exactly, at the first frame of
+    the record). That verdict is provisional: a monocular track near the limit can flip with the model.
+    Either way the goal frame is the first frame in which the ball is across the goal line, when the clip
+    gets there, and the arrival is the ball's point of that frame. The path is straight when no point of
+    the flight is further than ``PATH_STRAIGHT_LIMIT_M``, on the ground, from the segment spot-arrival;
+    ``bow_side`` is the side the path bows to, seen by the kicker facing the goal. The vertical arc of a
+    lob is reported as ``apex_z_m`` and is not a curve.
+
+    The ray of the last pixel, met with the goal line in its camera, is reported as ``ray_arrival_m``
+    for comparison only: the ball is not on the goal line in that frame in general, so the ray is not an
+    anchor (a real penalty compared with the binocular fit showed the ray 2 m off the fitted ball).
+    """
+    if track is None:
+        # the fit indexes the clip's frames: rows past the clip (a longer ball.csv) are left out
+        pixels = {f: uv for f, uv in pixels.items() if f < n_frames}
+        cameras = {f: P for f, P in cameras.items() if f < n_frames}
+        seen = sorted(f for f in pixels if f in cameras)
+        if not seen or seen[-1] <= kick:
+            return {
+                "available": False,
+                "reason": "the ball is not seen after the kick with a camera",
+            }
+        rest, last = seen[0], seen[-1]  # the ball rests on the spot before the kick
+    else:
+        frames = sorted(f for f in track if f < n_frames)
+        if not frames or frames[-1] <= kick:
+            return {"available": False, "reason": "the binocular ball is not seen after the kick"}
+        rest, last = frames[0], frames[-1]
+    goal = GoalGeometry()
+    sign = math.copysign(1.0, goal_x)
+    spot = np.array([goal_x - sign * goal.penalty_distance, 0.0, goal.ball_radius], dtype=float)
+    ray = None
+    if last in pixels and last in cameras:
+        ray = arrival_on_goal_line(cameras[last], pixels[last], goal_x)
+    if track is None:
+        anchors = {"points": [{"frame": rest, "xyz": spot.tolist(), "sigma": SPOT_SIGMA_M}]}
+        # the contact is anywhere before the last frame; a window around the first visible movement
+        # failed on a real clip, where the hand-marked ball drifts a few frames before the kick
+        window = (0.0, (last - 1) / fps)
+        fit = fit_flight(pixels, cameras, fps, n_frames, anchors=anchors, kick_window=window)
+        positions = {f: np.asarray(fit["positions"][f], dtype=float) for f in range(n_frames)}
+        kick_time_s = fit["kick_time_s"]
+        source = "monocular fit"
+        fit_summary = {
+            "rms_px": fit["rms_px"],
+            "kick_time_s": fit["kick_time_s"],
+            "spin_rps": fit["spin_rps"],
+            "success": fit["success"],
+        }
+    else:
+        positions = {f: np.asarray(p, dtype=float) for f, p in track.items() if f < n_frames}
+        kick_time_s = kick / fps
+        source = "binocular"
+        fit_summary = {
+            "rms_px": None,
+            "kick_time_s": round(kick_time_s, 4),
+            "spin_rps": None,
+            "success": None,
+        }
+    across = [f for f in sorted(positions) if f >= rest and sign * positions[f][0] >= abs(goal_x)]
+    goal_frame = across[0] if across else None
+    arrival = positions[goal_frame] if goal_frame is not None else positions[last]
+    # how far the fit had to move the spot to meet the pixels at rest (calibration or ball placement)
+    spot_offset = float(np.linalg.norm(positions[rest] - spot))
+    # the bend is measured on the ground: the gravity arc of a lob is not curvature (no spin, no swerve)
+    ground = arrival[:2] - spot[:2]
+    length_sq = float(np.dot(ground, ground))
+    if length_sq < 1e-6:
+        return {"available": False, "reason": "the arrival is at the spot"}
+    # the kicker's left, on the ground
+    left = np.array([-ground[1], ground[0]]) / math.sqrt(length_sq)
+    rows = []
+    for f in range(kick, last + 1):
+        if f not in positions:
+            continue
+        point = positions[f]
+        t = float(np.clip(np.dot(point[:2] - spot[:2], ground) / length_sq, 0.0, 1.0))
+        offset = point[:2] - (spot[:2] + t * ground)
+        rows.append(
+            {
+                "frame": f,
+                "x_m": round(float(point[0]), 4),
+                "y_m": round(float(point[1]), 4),
+                "z_m": round(float(point[2]), 4),
+                "horiz_dev_m": round(float(np.linalg.norm(offset)), 4),
+                "bow_left_m": round(float(np.dot(offset, left)), 4),
+            }
+        )
+    # the bend is the flight's: the frames before the contact sit on the spot
+    flight = [r for r in rows if r["frame"] / fps >= kick_time_s] or rows
+    worst = max(flight, key=lambda r: r["horiz_dev_m"])
+    max_dev = float(worst["horiz_dev_m"])
+    shape = "straight" if max_dev <= PATH_STRAIGHT_LIMIT_M else "curved"
+    bow_side = "none"
+    if shape == "curved":
+        bow_side = "left" if worst["bow_left_m"] > 0 else "right"
+    inside = (
+        goal_frame is not None
+        and abs(arrival[1]) <= goal.width / 2
+        and 0.0 <= arrival[2] <= goal.height
+    )
+    return {
+        "available": True,
+        "reason": "",
+        "source": source,
+        "kick_frame": int(kick),
+        "last_frame": int(last),
+        "goal_frame": goal_frame,
+        "spot_m": [round(float(v), 3) for v in spot],
+        "arrival_m": [round(float(v), 3) for v in arrival],
+        "ray_arrival_m": None if ray is None else [round(float(v), 3) for v in ray],
+        "arrival_in_goal_mouth": bool(inside),
+        "shape": shape,
+        "bow_side": bow_side,
+        "max_dev_m": round(max_dev, 3),
+        "apex_z_m": round(max(r["z_m"] for r in flight), 3),
+        "straight_limit_m": PATH_STRAIGHT_LIMIT_M,
+        "spot_fit_offset_m": round(spot_offset, 3),
+        "fit": fit_summary,
+        "rows": rows,
+    }
 
 
 def landmark_array(kps: np.ndarray, names: list[str]) -> np.ndarray:
@@ -211,6 +381,53 @@ def _centre(box: tuple[float, float, float, float]) -> tuple[float, float]:
     return (box[0] + box[2]) / 2.0, (box[1] + box[3]) / 2.0
 
 
+def gk_partial(
+    points: dict[str, np.ndarray], *, kick: int, last: int, fps: float, goal_x: float
+) -> dict:
+    """The goalkeeper's move from the kick to the last frame, without the goal line: a partial measure.
+
+    ``points`` are the keeper's 3D joints per frame in metres (pitch frame, ``(n, 3)`` each). The move
+    starts at the first frame in which the middle of the hips is ``GK_MOVE_M`` away, on the ground, from
+    where it was at the kick. ``toward_right_m`` is the keeper's displacement at the last frame towards
+    his own right (he faces the kicker, so it is the kicker's left); ``direction`` names that side, as
+    the goalkeeper sees it. It is partial: a dive is only measured up to
+    the goal line, and the clip may end before it, so the dive itself is not reported here. The dive kinematics this move
+    is compared with in the literature: Monteiro et al. (2022, Scientific Reports, doi:10.1038/s41598-022-21508-6)
+    and Monteiro et al. (2024, Scientific Reports, doi:10.1038/s41598-024-60074-x) on goalkeepers' penalty dives;
+    Navarro et al. (2013, J Sports Sci, doi:10.1080/02640414.2012.762602) on the goalkeeper's presence and the kick.
+    """
+    left, right = points.get("left-hip"), points.get("right-hip")
+    if left is None or right is None:
+        return {"available": False, "reason": "the goalkeeper's hips are not in the poses"}
+    mid = (left + right) / 2.0
+    if not (0 <= kick <= last < len(mid)) or not np.isfinite(mid[kick]).all():
+        return {"available": False, "reason": "no goalkeeper pose at the kick"}
+    if not np.isfinite(mid[last]).all():
+        return {"available": False, "reason": "no goalkeeper pose at the last frame"}
+    start = mid[kick]
+    move = np.hypot(mid[:, 0] - start[0], mid[:, 1] - start[1])
+    base = {"partial": True, "kick_frame": int(kick), "last_frame": int(last)}
+    moved = [f for f in range(kick, last + 1) if np.isfinite(move[f]) and move[f] >= GK_MOVE_M]
+    if not moved:
+        reason = f"the goalkeeper stays within {GK_MOVE_M:.2f} m of the kick position"
+        return {**base, "available": True, "moved": False, "reason": reason}
+    sign = math.copysign(1.0, goal_x)
+    toward_right = sign * float(mid[last, 1] - start[1])  # the keeper's right, facing the kicker
+    elapsed = (last - kick) / fps
+    return {
+        **base,
+        "available": True,
+        "moved": True,
+        "reason": "",
+        "onset_frame": int(moved[0]),
+        "onset_ms_after_kick": round((moved[0] - kick) / fps * 1000.0, 1),
+        "toward_right_m": round(toward_right, 3),
+        "direction": "right" if toward_right > 0 else "left",
+        "displacement_m": round(float(move[last]), 3),
+        "mean_speed_mps": round(float(move[last]) / elapsed, 2) if elapsed > 0 else None,
+    }
+
+
 def _unavailable(reason: str, goal_x: float) -> dict:
     return {"available": False, "reason": reason, "goal_x_m": goal_x}
 
@@ -219,17 +436,23 @@ def penalty_metrics(
     *,
     field_rows: list[dict],
     ball_px: dict[int, tuple[float, float]],
-    ball_xyz: np.ndarray,
+    cameras: dict[int, np.ndarray] | None,
     keypoints: Keypoints,
     keeper_boxes: dict[int, tuple[float, float, float, float]],
     keeper_sam: int | None,
     fps: float,
+    n_frames: int,
     goal_x: float,
+    track: dict[int, np.ndarray] | None = None,
 ) -> dict:
     """The penalty metrics of one run (pynalty's keys), or the reason they cannot be computed.
 
-    ``ball_px``: the reference camera's ball (``ball.csv``); ``ball_xyz``: the fitted ball in metres,
-    ``(n, 3)``, from the ``ball_3d_on_field.csv`` of the analysis; ``goal_x``: the attacked goal line.
+    ``track``: the binocular ball in metres per frame when the run has two cameras; it sets the
+    verdict of the ball path (see :func:`penalty_path`). Without it the path is the monocular fit.
+
+    ``ball_px``: the reference camera's ball (``ball.csv``); ``cameras``: frame -> the 3x4 projection of
+    the reference camera (its per-frame DLT3D), needed by the ball path; ``n_frames``: the clip length;
+    ``goal_x``: the attacked goal line.
     """
     kick = kick_onset(ball_px)
     if kick is None:
@@ -238,11 +461,22 @@ def penalty_metrics(
     if corners is None:
         return _unavailable("the goal posts are not in the field model of this camera", goal_x)
     calib, posts = corners
-    goal = goal_frame(ball_xyz, goal_x, kick)
-    if goal is None:
-        return _unavailable(
-            "no crossing of the goal line in the fitted flight (a save or a miss)", goal_x
+    if cameras is None and track is None:
+        return _unavailable("no per-frame camera (DLT3D) of this run for the ball path", goal_x)
+    path = penalty_path(
+        ball_px, cameras or {}, kick=kick, goal_x=goal_x, fps=fps, n_frames=n_frames, track=track
+    )
+    if not path["available"]:
+        return _unavailable(path["reason"], goal_x)
+    if path["goal_frame"] is None:  # the ball path still stands: it is written and reported
+        result = _unavailable(
+            "the fitted flight does not reach the goal line within the clip "
+            f"(last frame {path['last_frame']}: the ball is short of the goal)",
+            goal_x,
         )
+        result["path"] = path
+        return result
+    goal = path["goal_frame"]
     if keeper_sam is None:
         return _unavailable("no goalkeeper in the player map", goal_x)
     seq = pose_sequence(keypoints, keeper_sam, keeper_boxes)
@@ -291,6 +525,7 @@ def penalty_metrics(
         "posts": posts,
         "metrics": metrics,
         "gk_dive": dive,
+        "path": path,
     }
 
 
@@ -309,11 +544,16 @@ def _flat(prefix: str, value, rows: list[tuple[str, object]]) -> None:
 
 
 def write(data_dir: Path | str, result: dict) -> dict[str, Path]:
-    """``penalty_metrics.csv`` (one row per value, the reason first when unavailable) and ``.json``."""
+    """``penalty_metrics.csv`` (one row per value, the reason first when unavailable), ``.json``, and
+    ``penalty_path.csv`` (the ball path frame by frame, when there is one)."""
     folder = Path(data_dir)
     folder.mkdir(parents=True, exist_ok=True)
+    path = result.get("path") or {}
+    summary = {k: v for k, v in result.items() if k != "path"}
+    if path.get("available"):
+        summary["path"] = {k: v for k, v in path.items() if k != "rows"}  # rows: penalty_path.csv
     rows: list[tuple[str, object]] = []
-    _flat("", result, rows)
+    _flat("", summary, rows)
     csv_path = folder / "penalty_metrics.csv"
     with csv_path.open("w", newline="", encoding="utf-8") as fh:
         writer = csv.writer(fh)
@@ -333,7 +573,17 @@ def write(data_dir: Path | str, result: dict) -> dict[str, Path]:
         return value
 
     json_path.write_text(json.dumps(plain(result), indent=2), encoding="utf-8")
-    return {"csv": csv_path, "json": json_path}
+    out: dict[str, Path] = {"csv": csv_path, "json": json_path}
+    path_csv = folder / "penalty_path.csv"
+    if path.get("rows"):
+        with path_csv.open("w", newline="", encoding="utf-8") as fh:
+            writer = csv.DictWriter(fh, fieldnames=list(path["rows"][0]))
+            writer.writeheader()
+            writer.writerows(path["rows"])
+        out["path_csv"] = path_csv
+    else:
+        path_csv.unlink(missing_ok=True)  # a path of an earlier run must not outlive this result
+    return out
 
 
 def report(out_dir: Path | str, video: Path | str, fps: float, result: dict) -> dict[str, str]:

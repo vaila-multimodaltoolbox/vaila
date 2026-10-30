@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Video Event Equalizer</title></head>
+<body><h1>Video Event Equalizer</h1>
+<p>Version: 0.4.12 · Updated: 2026-10-29 · Category: Tools</p>
+<p>GUI: Frame C → Make Sync file → Equalize by events (RIFE)</p>
+<p>CLI: <code>uv run --no-sync python -m vaila.video_event_equalizer --help</code></p>
+<p>Equalize two camera videos using three corresponding events and local CUDA RIFE.
+Outputs use a shared grid with configurable FPS and frame count; CSV maps identify
+original and generated images in both cameras, including the reference.</p>
+<p>See <a href="syncvid.html#equalize-by-events-rife">setup, fields, example and limitations</a>.</p>
+<h2>Output FPS and frame count</h2>
+<ul>
+<li>Leave <strong>Output FPS</strong> and <strong>Output frame count</strong> blank to keep the reference grid.</li>
+<li>FPS only: <code>N = round_half_up(reference anchor span × FPS) + 1</code>.
+Buttons <strong>60</strong> and <strong>120</strong> fill FPS. Decimal
+<code>29.970 = 2997/100</code>; <code>30000/1001</code> is the distinct NTSC rate.</li>
+<li>Count only: use that exact count at the reference FPS.</li>
+<li>Both: choose FPS and count independently, changing playback speed.</li>
+<li>FPS must be positive and finite; count must be an integer ≥3. FPS-only requests calculating fewer than 3 frames are rejected.</li>
+</ul>
+<p>Click <strong>Preview</strong>, review exact/decimal FPS, frame count, original/generated
+counts per camera, first-to-last duration <code>(N−1)/FPS</code>, file duration
+<code>N/FPS</code>, and change relative to the reference anchor span. Then click
+<strong>Run</strong>. Editing any field requires a new preview; probing uses a worker.</p>
+<p>Start/end occupy frames 1 and N. Contact is
+<code>1 + round_half_up((reference_contact − reference_start) / (reference_end − reference_start) × (N−1))</code>,
+clamped to 2…N−1. Preview shows its rounding/clamping adjustment in seconds and its total
+time change relative to the reference. Each camera maps its own two segments linearly
+onto these anchors. All three anchor images are copied exactly; fractional positions
+use installed CUDA RIFE. Higher FPS creates visual estimates, not acquired measurements.</p>
+<pre>uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c2.mp4 --source /path/to/c1.mp4 \
+  --reference-events 1,9,22 --source-events 1,9,19 \
+  --output-fps 120 --output-frame-count 85 --output-dir /path/to/results</pre>
+<p><code>--dry-run</code> prints the same plan and full maps as JSON, without loading RIFE
+or writing output. Export prints the preview first. GUI Run prints the equivalent CLI.</p>
+<p>The manifest keeps effective <code>output_fps / output_frame_count</code> and adds
+requested values, output anchors, rational durations and contact adjustments. CSV maps
+retain existing columns and add the output parameters and timing audit.
+<code>reference_frame</code> is an integer on the default grid and may be rational on a
+custom grid; <code>reference_position</code> always gives the exact rational position.
+<code>event</code> labels anchors. Counts appear in preview and manifest. Both cameras
+are preflighted at their own dimensions when interpolation is needed. These controls
+reuse the installed model without new dependencies or downloads.</p>
+<h2>Installation and reinstallation</h2>
+<p>Linux/Windows CUDA installers set up <strong>Practical-RIFE 4.25</strong> automatically.
+To install only RIFE in an existing vailá CUDA environment:</p>
+<pre>bash bin/setup_rife.sh
+# Windows:
+pwsh bin/setup_rife.ps1</pre>
+<p>Setup downloads pinned code and model, verifies SHA256 hashes and runs CUDA
+inference. No new extra, HF login or separate cuDNN installation is required.
+Run once per computer. Repeated setup reuses verified assets.</p>
+<ul><li>Code: <code>.local/third_party/Practical-RIFE/</code></li>
+<li>Model files: <code>vaila/models/rife/train_log/</code>, including <code>flownet.pkl</code></li>
+<li>Cached archive: <code>.local/downloads/rife425.zip</code></li></ul>
+<p>Assets remain outside Git. See <a href="syncvid.html#rife-setup">setup and recovery</a>
+for offline restore details.</p>
+</body></html>

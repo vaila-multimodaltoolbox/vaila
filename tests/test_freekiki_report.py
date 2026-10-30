@@ -358,3 +358,202 @@ def test_people_are_found_by_the_nearest_point_and_can_be_given(tmp_path: Path) 
     )  # fmt: skip
     manual_html = _html(manual, "en")
     assert "wall ids 3, 2" in manual_html and "Given by" in manual_html
+
+
+def test_a_penalty_has_no_wall_and_the_keeper_is_never_a_wall_player() -> None:
+    from vaila.freekiki_report_players import find_people
+
+    n = 30
+    ball = np.tile([10.0, 0.0], (n, 1))
+    tracks = {
+        0: np.tile([50.0, 0.0], (n, 1)),  # the keeper, at the goal
+        1: np.tile([10.0, 0.0], (n, 1)),  # the kicker, at the ball
+        2: np.tile([10.5, 0.5], (n, 1)),  # a player within 2 m of the ball at the wall frame
+    }
+    common = {
+        "kick_f": 5,
+        "barrier_f": 10,
+        "end_f": 20,
+        "keeper_xy": np.array([50.0, 0.0]),
+        "kicker_id": 1,
+        "keeper_id": 0,
+    }
+    penalty = find_people(tracks, ball, penalty=True, **common)
+    assert penalty.wall == []
+    assert penalty.kicker == 1 and penalty.keeper == 0
+    free_kick = find_people(tracks, ball, penalty=False, **common)
+    assert 2 in free_kick.wall and 0 not in free_kick.wall
+
+
+# --------------------------------------------------------------------------- #
+# Penalty kick: no wall, the goalkeeper's hands instead
+# --------------------------------------------------------------------------- #
+KEEPER_SAM, KICKER_SAM = 4, 1
+HANDS_START = np.array([-5.0, -1.0, 1.0])  # the keeper's hands at the kick (pitch metres)
+HANDS_END = np.array([-5.0, 0.5, 1.4])  # ... and in the last frame
+
+
+def _make_penalty(root: Path) -> Path:
+    """The synthetic run of a penalty: the anchors the pipeline writes (start, the wall plane, the
+    keeper's hand), ``data/setpiece.json``, the player map and the keeper's wrists in the poses."""
+    run = _make_run(root, with_people=True)
+    flight_path = run / "ball_flight.json"
+    flight = json.loads(flight_path.read_text(encoding="utf-8"))
+    flight["anchor_points"] = {
+        "p0": {"label": "start: contato do pé", "frame": 0, "xyz": [-30.0, -20.0, 0.11]},
+        "p_wall": {
+            "label": "barreira: plano a 9,15 m do chute (regra FIFA)",
+            "frame": 3,
+            "xyz": [-24.0, -12.0, 1.1],
+        },
+        "p_arrival": {
+            "label": "chegada: mão do goleiro no último quadro",
+            "frame": N - 1,
+            "xyz": [-5.0, 0.0, 1.5],
+        },
+    }
+    flight_path.write_text(json.dumps(flight), encoding="utf-8")
+    (run / "data").mkdir()
+    (run / "data" / "setpiece.json").write_text(
+        json.dumps({"kind": "penalty", "goal_x_m": 0.0, "wall_ids": []}), encoding="utf-8"
+    )
+    (run / "player_map.csv").write_text(
+        f"player_id,role,camera,sam_id\n0,keeper,cam,{KEEPER_SAM}\n1,kicker,cam,{KICKER_SAM}\n",
+        encoding="utf-8",
+    )
+    with (run / "poses_3d_on_field.csv").open("a", encoding="utf-8") as fh:
+        for f in range(N):
+            hands = HANDS_START + (HANDS_END - HANDS_START) * f / (N - 1)
+            for k, (name, dy) in enumerate((("left-wrist", 0.1), ("right-wrist", -0.1))):
+                x, y, z = hands + np.array([0.0, dy, 0.0])
+                fh.write(f"{f},{KEEPER_SAM},{9 + k},{name},{x:.4f},{y:.4f},{z:.4f}\n")
+    return run
+
+
+def test_the_penalty_is_read_from_the_setpiece_and_the_hands_from_the_wrists(
+    tmp_path: Path,
+) -> None:
+    run = rep.load_run(_make_penalty(tmp_path))
+    assert run.penalty and run.goal_x == 0.0
+    assert run.keeper_hands is not None and run.keeper_hands.shape == (N, 3)
+    np.testing.assert_allclose(run.keeper_hands[0], HANDS_START, atol=1e-3)  # the two wrists' mean
+
+
+def test_a_free_kick_is_not_a_penalty(tmp_path: Path) -> None:
+    run = rep.load_run(_make_run(tmp_path, with_people=True))
+    assert not run.penalty and run.keeper_hands is None
+    m = rep.compute_metrics(run)
+    assert not m["penalty"] and m["hands_start"] is None and m["hands_travel_m"] is None
+    assert set(m["anchors"]) == set(run.anchors)  # a free kick draws every anchor
+
+
+def test_penalty_metrics_drop_the_wall_and_measure_the_hands(tmp_path: Path) -> None:
+    run = rep.load_run(_make_penalty(tmp_path))
+    m = rep.compute_metrics(run)
+    assert m["penalty"] and m["barrier_f"] == m["end_frame"]
+    assert set(m["anchors"]) == {"p0", "keeper_hands_start", "keeper_hands"}  # no wall, no arrival
+    np.testing.assert_allclose(m["hands_start"], HANDS_START, atol=1e-3)
+    np.testing.assert_allclose(m["hands_end"], HANDS_END, atol=1e-3)
+    assert m["hands_travel_m"] == pytest.approx(np.linalg.norm(HANDS_END - HANDS_START), abs=1e-3)
+    assert m["keeper_gap_m"] == pytest.approx(
+        np.linalg.norm(HANDS_END - run.track[m["end_frame"]]), abs=1e-3
+    )
+    assert m["anchors"]["keeper_hands_start"]["frame"] == m["kick_frame"]
+    assert m["anchors"]["keeper_hands"]["frame"] == m["end_frame"]
+    for key in ("barrier_t", "barrier_kmh", "after_wall_s", "wall_z", "wall_clear_cm"):
+        assert np.isnan(m[key]), key
+
+
+def test_a_penalty_without_the_keepers_wrists_keeps_the_anchors_of_the_fit(tmp_path: Path) -> None:
+    run_dir = _make_penalty(tmp_path)
+    poses = run_dir / "poses_3d_on_field.csv"
+    poses.write_text(
+        "\n".join(ln for ln in poses.read_text(encoding="utf-8").splitlines() if "wrist" not in ln)
+        + "\n",
+        encoding="utf-8",
+    )
+    run = rep.load_run(run_dir)
+    assert run.penalty and run.keeper_hands is None
+    m = rep.compute_metrics(run)
+    assert m["hands_start"] is None and m["hands_end"] is None
+    assert set(m["anchors"]) == {"p0", "p_arrival"}  # only the wall is dropped
+    for lang in ("pt", "en"):
+        html = _html(rep.build_report(run_dir, animation=False, lang=lang), lang)
+        assert "{{" not in html
+    assert "In the last frame the hands were" in html  # the hand of the arrival anchor
+    flight_path = run_dir / "ball_flight.json"
+    flight = json.loads(flight_path.read_text(encoding="utf-8"))
+    del flight["anchor_points"]["p_arrival"]  # no hand at all now
+    flight_path.write_text(json.dumps(flight), encoding="utf-8")
+    html = _html(rep.build_report(run_dir, animation=False, lang="en"), "en")
+    assert "could not be measured" in html
+
+
+def test_hands_missing_on_a_frame_are_taken_from_the_nearest_one() -> None:
+    hands = np.full((8, 3), np.nan)
+    hands[2] = [1.0, 2.0, 3.0]
+    np.testing.assert_allclose(rep._hands_at(hands, 3), [1.0, 2.0, 3.0])  # one frame away
+    assert rep._hands_at(hands, 7) is None  # further than HANDS_REACH_FRAMES
+    assert rep._hands_at(None, 0) is None
+
+
+def test_keeper_wrists_of_an_unknown_person_is_none(tmp_path: Path) -> None:
+    run_dir = _make_penalty(tmp_path)
+    assert rep.keeper_wrists(run_dir, 99, N) is None
+    assert rep.keeper_wrists(tmp_path / "nothing", KEEPER_SAM, N) is None
+
+
+@pytest.mark.parametrize(
+    ("lang", "gone", "present"),
+    [
+        ("pt", ("Por cima da barreira", "O desafio da falta", "A altura da barreira"), ("As mãos do goleiro", "No pênalti não há barreira", "O voo da bola")),
+        ("en", ("Over the wall", "The free kick is a geometry problem", "The height of the wall"), ("The goalkeeper's hands", "A penalty kick has no wall", "The flight of the ball")),
+    ],
+)  # fmt: skip
+def test_the_penalty_report_has_no_wall_text_and_shows_the_hands(
+    tmp_path: Path, lang: str, gone: tuple[str, ...], present: tuple[str, ...]
+) -> None:
+    result = rep.build_report(_make_penalty(tmp_path), animation=False, lang=lang)
+    html = _html(result, lang)
+    assert "{{" not in html and "<!--pk" not in html and "<!--fk" not in html
+    for text in gone:
+        assert text not in html, text
+    for text in present:
+        assert text in html, text
+    assert "fig_wall" not in html
+    figs = Path(result["languages"][lang]["dir"]) / "figuras"
+    assert (figs / "fig_perfil.png").is_file() and (figs / "fig_vista_de_cima.png").is_file()
+
+
+def test_the_free_kick_report_keeps_the_wall_text(tmp_path: Path) -> None:
+    result = rep.build_report(_make_run(tmp_path), animation=False, lang="en")
+    html = _html(result, "en")
+    assert "Over the wall" in html and "The free kick is a geometry problem" in html
+    assert "The goalkeeper's hands" not in html and "<!--pk" not in html
+
+
+def test_the_penalty_animation_shows_the_hands_and_no_wall(tmp_path: Path) -> None:
+    from vaila.freekiki_report_video import _event, overlay_geometry
+
+    run = rep.load_run(_make_penalty(tmp_path))
+    m = rep.compute_metrics(run)
+    kf, ef = m["kick_frame"], m["end_frame"]
+    assert _event(kf, m, "en")[0] == "KICK"
+    assert _event(kf + 1, m, "en")[0] == "Ball in flight"
+    assert _event(ef, m, "en")[0] == "Last frame"
+    assert _event(ef, m, "pt")[0] == "Último quadro"
+    mid = overlay_geometry(run, m, kf + 1)["anchors"]
+    last = overlay_geometry(run, m, ef)["anchors"]
+    assert "p_wall" not in mid and mid["keeper_hands_start"] is not None
+    assert (
+        mid["keeper_hands"] is None and last["keeper_hands"] is not None
+    )  # the end appears at the end
+    result = rep.build_report(run.run_dir, animation=True, lang="en")
+    assert Path(result["languages"]["en"]["animation"]).is_file()
+
+
+def test_the_penalty_note_names_the_kicker_and_the_keeper_only(tmp_path: Path) -> None:
+    result = rep.build_report(_make_penalty(tmp_path), animation=False, lang="en")
+    html = _html(result, "en")
+    assert "penalty taker id 1 and goalkeeper id 0" in html  # ids of the player map
+    assert "wall ids" not in html

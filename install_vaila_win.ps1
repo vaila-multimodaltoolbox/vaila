@@ -28,8 +28,8 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 23 October 2026
-    Version: 0.4.11
+    Updated: 29 October 2026
+    Version: 0.4.12
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:
@@ -968,6 +968,15 @@ Try {
         & uv run python -c "import torch; print('torch', torch.__version__, '- CUDA available:', torch.cuda.is_available())"
         If ($LASTEXITCODE -ne 0) {
             Write-Warning "torch import still failing after CUDA wheel repair -- see errors above."
+        }
+    }
+
+    # Public RIFE 4.25 bundle; no HF token or dependency changes required.
+    if ($useGPU) {
+        Write-Host 'Setting up RIFE 4.25 for event video interpolation...' -ForegroundColor Cyan
+        & uv run --no-sync python bin/setup_rife.py
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning 'RIFE setup incomplete. Retry: pwsh bin/setup_rife.ps1 (see Syncvid Help).'
         }
     }
 

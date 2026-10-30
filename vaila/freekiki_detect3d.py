@@ -1670,8 +1670,13 @@ def _draw_field(frame, xy: np.ndarray, bones: list[tuple[int, int]]) -> None:
         cv2.circle(frame, (int(xy[i, 0]), int(xy[i, 1])), 4, (0, 255, 0), -1)
 
 
-def _draw_person(frame, pid: int, xy: np.ndarray, edges, colours, neck: int, nose: int) -> None:
-    """One person's skeleton; ``colours[i]`` is the BGR colour of keypoint ``i``."""
+def _draw_person(
+    frame, pid: int, xy: np.ndarray, edges, colours, neck: int, nose: int, label: int | None = None
+) -> None:
+    """One person's skeleton; ``colours[i]`` is the BGR colour of keypoint ``i``.
+
+    ``label`` is the id written beside the person (the track id ``pid`` when it is None).
+    """
     import cv2
 
     ok: np.ndarray = np.all(np.isfinite(xy), axis=1)
@@ -1684,7 +1689,8 @@ def _draw_person(frame, pid: int, xy: np.ndarray, edges, colours, neck: int, nos
     anchor = neck if ok[neck] else nose if ok[nose] else None
     if anchor is not None:
         x, y = int(xy[anchor, 0]), int(xy[anchor, 1])
-        cv2.putText(frame, f"ID {pid}", (x + 6, y - 6), 0, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
+        shown = pid if label is None else label
+        cv2.putText(frame, f"ID {shown}", (x + 6, y - 6), 0, 0.5, (0, 255, 255), 1, cv2.LINE_AA)
 
 
 def _draw_ball(frame, cx: float, cy: float, score: float) -> None:
@@ -1703,8 +1709,12 @@ def write_3d_overlay(
     work_dir: Path,
     *,
     kept: set[int] | None = None,
+    labels: dict[int, int] | None = None,
 ) -> Path:
     """One MP4 with the field keypoints, the kept people's poses and the ball, frame by frame.
+
+    ``labels`` maps a track id to the id written beside the person (the player id of a run with a
+    player map: ID0 is the keeper and ID1 the kicker of a penalty); the track id otherwise.
 
     Reads the detect run's accepted field points, the sam3dinov3 2D markers of the kept
     people (pixels, from ``work_dir``) and ``ball.csv`` (from ``out_dir``). The video
@@ -1765,7 +1775,8 @@ def write_3d_overlay(
                 _draw_field(frame, field[f], field_bones)
             for pid, frames in poses.items():
                 if f in frames:
-                    _draw_person(frame, pid, frames[f], edges, colours, neck, nose)
+                    shown = labels.get(pid, pid) if labels else None
+                    _draw_person(frame, pid, frames[f], edges, colours, neck, nose, shown)
             if f in balls:
                 _draw_ball(frame, *balls[f])
             cv2.putText(frame, f"frame {f}", (12, 28), 0, 0.7, (255, 255, 255), 2, cv2.LINE_AA)

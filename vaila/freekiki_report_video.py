@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 26 October 2026
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 
 Description:
     The broadcast video of the kick, every frame slowed down about five times, with the
@@ -26,6 +26,10 @@ Description:
     Each frame of the broadcast is drawn with matplotlib and repeated; the key moments
     (the kick, the wall, the end) are held longer. The crop is computed once from every
     projected point, so the ball and the players stay in the picture all the time.
+
+    A penalty kick has no wall: the banner reads preparation / kick / ball in flight / last frame,
+    the wall is not held, and the anchors are the ones of ``m["anchors"]`` (the keeper's hands at
+    the kick and in the last frame instead of the wall).
 """
 
 from __future__ import annotations
@@ -38,7 +42,7 @@ import numpy as np
 try:
     from .freekiki_detect3d import _project_point
     from .freekiki_report_i18n import fmt_num, localize_anchor_label, tr
-    from .freekiki_report_players import draw_goal_area, draw_people, people_extent
+    from .freekiki_report_players import draw_goal_area, draw_hands, draw_people, people_extent
 except ImportError:
     from freekiki_detect3d import _project_point  # ty: ignore[unresolved-import]
     from freekiki_report_i18n import (  # ty: ignore[unresolved-import]
@@ -48,6 +52,7 @@ except ImportError:
     )
     from freekiki_report_players import (  # ty: ignore[unresolved-import]
         draw_goal_area,
+        draw_hands,
         draw_people,
         people_extent,
     )
@@ -91,6 +96,10 @@ def _event(f: int, m: dict, lang: str) -> tuple[str, str]:
         return tr(lang, "vid_prep"), "#333333"
     if f == kf:
         return tr(lang, "vid_kick"), "#1664a0"
+    if m.get("penalty"):  # no wall: the ball flies until the last frame
+        if f < ef:
+            return tr(lang, "vid_flight"), "#5b6577"
+        return tr(lang, "vid_last"), "#d62246"
     if f < bf:
         return tr(lang, "vid_rising"), "#5b6577"
     if f < ef:
@@ -126,8 +135,8 @@ def overlay_geometry(run: Any, m: dict, f: int) -> dict:
             if s is not None:
                 shadow.append(s)
     anchors = {
-        key: proj(spec["xyz"])
-        for key, spec in run.anchors.items()
+        key: proj(spec["xyz"]) if f >= int(spec.get("show_from", 0)) else None
+        for key, spec in m.get("anchors", run.anchors).items()
         if isinstance(spec, dict) and "xyz" in spec
     }
     return {"trail": trail, "rest": rest, "shadow": shadow, "anchors": anchors,
@@ -196,9 +205,10 @@ def _render(
         "barrier_shoulder": (tr(lang, "vid_anchor_shoulder"), "#ff4fd8", -120, -30),
         "barrier_target": (tr(lang, "vid_anchor_wall"), "#ff9f1a", 14, -26),
         "keeper_hands": (tr(lang, "vid_anchor_keeper"), "#3cff6b", 14, 18),
+        "keeper_hands_start": (tr(lang, "vid_anchor_hands_start"), "#ffe066", 14, -18),
     }
     palette = ["#ffe066", "#ff4fd8", "#ff9f1a", "#3cff6b", "#ffffff"]
-    for j, (key, spec) in enumerate(run.anchors.items()):
+    for j, (key, spec) in enumerate(m.get("anchors", run.anchors).items()):
         if not isinstance(spec, dict) or "xyz" not in spec:
             continue
         label, color, dx, dy = legacy.get(
@@ -210,6 +220,10 @@ def _render(
                 -18,
             ),
         )
+        if spec.get("i18n"):
+            label = tr(lang, spec["i18n"])
+        if spec.get("label_offset"):
+            dx, dy = spec["label_offset"]
         p = shifted(geo["anchors"].get(key))
         if p is None:
             continue
@@ -354,7 +368,11 @@ def _minimap(fig, run: Any, m: dict, f: int, lang: str, people: Any = None) -> N
     ax.plot(*run.track[kf, :2], "o", color="#14213d", ms=5, zorder=6)
     draw_people(ax, people, kick_f=kf, barrier_f=m["barrier_f"], end_f=ef, frame=f,
                 lang=lang, labels=False)  # fmt: skip
-    extent = np.vstack([xy, people_extent(people, kf, ef)])
+    hands = [m.get("hands_start"), m.get("hands_end")]
+    draw_hands(ax, hands[0], hands[1], lang, labels=False)
+    extent = np.vstack(
+        [xy, people_extent(people, kf, ef), *[h[:2][None] for h in hands if h is not None]]
+    )
     pad = 2.5
     ax.set_xlim(extent[:, 0].min() - pad, extent[:, 0].max() + pad)
     ax.set_ylim(extent[:, 1].min() - pad, extent[:, 1].max() + pad)
@@ -377,7 +395,7 @@ def write_lance_video(
     width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     anchor_px = []  # every anchor, in the camera of every frame (the camera moves)
-    for spec in run.anchors.values():
+    for spec in m.get("anchors", run.anchors).values():
         for P in run.projections.values():
             uv = _project_point(P, spec["xyz"])
             if uv is not None:
@@ -385,11 +403,10 @@ def write_lance_video(
     box = _crop_box(run, anchor_px + list(run.pixels.values()), width, height)
     x0, y0, w, h = box
     last = min(m["end_frame"], run.n - 1)
-    holds = {
-        m["kick_frame"]: int(HOLD_S["kick"] * OUT_FPS),
-        m["barrier_f"]: int(HOLD_S["wall"] * OUT_FPS),
-        last: int(HOLD_S["end"] * OUT_FPS),
-    }
+    holds = {m["kick_frame"]: int(HOLD_S["kick"] * OUT_FPS)}
+    if not m.get("penalty"):  # a penalty has no wall to hold on
+        holds[m["barrier_f"]] = int(HOLD_S["wall"] * OUT_FPS)
+    holds[last] = int(HOLD_S["end"] * OUT_FPS)
     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), OUT_FPS, (w, h))  # ty: ignore[unresolved-attribute]
     written = 0
     try:

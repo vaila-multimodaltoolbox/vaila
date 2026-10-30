@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 23 October 2026
-# Version: 0.4.11
+# Updated: 29 October 2026
+# Version: 0.4.12
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)               #
 #########################################################################################
 
@@ -749,6 +749,14 @@ fi
 # ============================================================================
 # AI FOUNDATION MODELS SETUP & VERIFICATION
 # ============================================================================
+
+# RIFE is public, needs no HF token, and uses the existing CUDA environment.
+if [[ "$USE_GPU" == true ]]; then
+    echo "Setting up RIFE 4.25 for event video interpolation..."
+    (cd "$VAILA_HOME" && uv run --no-sync python bin/setup_rife.py) || {
+        echo "Warning: RIFE setup incomplete. Retry: bash bin/setup_rife.sh (see Syncvid Help)."
+    }
+fi
 
 # 1. Hugging Face Authentication
 if [[ "$USE_SAM_EXTRA" == true || "$USE_FIFA_EXTRA" == true || "$USE_SAPIENS_EXTRA" == true ]]; then

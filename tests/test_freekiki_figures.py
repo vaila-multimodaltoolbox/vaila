@@ -251,3 +251,109 @@ def test_a_missing_point_is_a_gap_not_a_zero() -> None:
     assert segs["kick"] == []  # hip to knee needs both points
     assert figs._limits(points, np.full((n, 3), np.nan), range(n), (0, 2)) is not None
     assert figs._limits({}, np.full((n, 3), np.nan), range(n), (0, 2)) is None
+
+
+def _keeper_rows() -> list[dict]:
+    """The kicker's rows copied as a goalkeeper standing 1.5 m to the side (ID0)."""
+    return [{**row, "player_id": 0, "y_m": row["y_m"] - 1.5} for row in _rows()]
+
+
+def test_the_goalkeeper_is_drawn_and_the_front_views_mirror_the_lateral_axis(
+    tmp_path: Path,
+) -> None:
+    result = kk.analyze_kicker(
+        _rows() + _keeper_rows(), _ball(), _pixels(), kicker_id=KICKER, keeper_id=0, fps=FPS
+    )
+    assert "left-hip" in result["context"]["keeper_points"]
+    paths = kk.write_outputs(result, tmp_path / "kicker")
+    for lang in ("pt", "en"):
+        for key in ("sticks_front_goal", "sticks_front_kicker"):
+            assert paths[f"{key}_{lang}"].is_file() and paths[f"{key}_{lang}"].stat().st_size > 0
+
+
+def test_the_goal_sign_comes_from_the_goal_line_then_the_ball_and_is_never_guessed() -> None:
+    assert figs._goal_sign({"kick_dir": np.array([1.0, 0.0])}) == 1.0
+    assert figs._goal_sign({"kick_dir": np.array([-1.0, 0.0])}) == -1.0
+    assert figs._goal_sign({"kick_dir": np.array([1.0, 0.0]), "goal_x": -52.45}) == -1.0
+    assert figs._goal_sign({"kick_dir": None}) is None  # a wrong side would mirror the views
+    assert figs._goal_sign({}) is None
+
+
+def test_the_two_front_views_are_mirror_images() -> None:
+    ctx = {
+        "points": {"left-hip": np.array([[10.0, 1.0, 0.9]])},
+        "keeper_points": {},
+        "ball": np.zeros((1, 3)),
+    }
+    goal = figs._front_view(ctx, 1.0)["points"]["left-hip"][0]
+    kicker = figs._front_view(ctx, -1.0)["points"]["left-hip"][0]
+    np.testing.assert_allclose(goal, [1.0, 0.9, 10.0])  # horizontal, height, depth (x)
+    np.testing.assert_allclose(kicker, [-1.0, 0.9, 10.0])
+
+
+def test_a_goalkeeper_diving_to_his_right_goes_to_the_right_of_the_view_from_behind_the_goal() -> (
+    None
+):
+    # the goal is at -x: the keeper faces +x, so his right is -y, and so is the right of an observer
+    # behind the goal, who faces +x too
+    ctx = {
+        "points": {"left-hip": np.array([[-40.0, 0.0, 1.0], [-40.0, 0.0, 1.0]])},
+        "keeper_points": {"left-hip": np.array([[-51.5, -0.2, 1.0], [-51.5, -0.8, 1.0]])},
+        "ball": np.zeros((2, 3)),
+        "goal_x": -52.45,
+    }
+    s = figs._goal_sign(ctx)
+    behind_goal = figs._front_view(ctx, s)["keeper_points"]["left-hip"]
+    behind_kicker = figs._front_view(ctx, -s)["keeper_points"]["left-hip"]
+    assert behind_goal[1, 0] > behind_goal[0, 0]  # to the right of the observer behind the goal
+    assert (
+        behind_kicker[1, 0] < behind_kicker[0, 0]
+    )  # the same move, from behind the kicker, goes left
+
+
+def test_the_views_from_behind_are_left_out_when_the_goal_side_is_unknown() -> None:
+    ctx = {"points": {}, "keeper_points": {}, "ball": np.zeros((1, 3)), "kick_dir": None}
+    assert len(figs._panels(ctx, figs.LABELS["en"])) == 2  # side and top only
+    assert len(figs._panels({**ctx, "goal_x": 52.45}, figs.LABELS["en"])) == 4
+
+
+def test_the_kick_direction_is_found_when_the_ball_has_not_left_its_spot_at_the_contact() -> None:
+    n = 19
+    ball = np.zeros((n, 3))
+    ball[:, 0] = -41.5  # at rest until frame 8, then towards -x, 1 m per frame
+    ball[9:, 0] = -41.5 - np.arange(1, n - 8)
+    contact = 5  # the marker drifted: the ball is still at rest in the window after it
+    vel = kk.local_velocity(ball, FPS)
+    assert kk._kick_direction(vel, contact, 1) is None
+    direction = kk._kick_direction(vel, contact, 1, ball)
+    assert direction is not None and direction[0] < -0.99
+
+
+def test_the_contact_of_the_fitted_flight_replaces_the_marker_and_says_so() -> None:
+    marker = kk.analyze_kicker(_rows(), _ball(), _pixels(), kicker_id=KICKER, fps=FPS)
+    assert marker["events"]["contact_source"] == "marker"
+    assert marker["events"]["contact_frame"] == CONTACT
+    fit = kk.analyze_kicker(
+        _rows(), _ball(), _pixels(), kicker_id=KICKER, fps=FPS, contact_override=CONTACT + 3
+    )
+    assert fit["events"]["contact_source"] == "fit"
+    assert fit["events"]["contact_frame"] == CONTACT + 3
+    assert fit["events"]["marker_contact_frame"] == CONTACT
+    row = next(m for m in fit["metrics"] if m["metric"] == "contact_frame")
+    assert row["source"] == "ajustado" and str(CONTACT) in row["reason"]
+
+
+def test_the_centre_of_mass_of_both_players_is_written_frame_by_frame(tmp_path: Path) -> None:
+    ctx = {
+        "kicker_id": 1,
+        "keeper_id": 0,
+        "com": np.array([[1.0, 2.0, 0.9], [np.nan, np.nan, np.nan], [1.2, 2.0, 0.9]]),
+        "keeper_com": np.array([[9.0, 0.0, 1.0]] * 3),
+    }
+    path = kk._write_com(ctx, tmp_path / "com_players.csv")
+    assert path is not None
+    lines = path.read_text(encoding="utf-8").splitlines()
+    assert lines[0] == "frame,role,player_id,x_m,y_m,z_m"
+    assert len(lines) == 1 + 2 + 3  # the kicker's frame without a CoM is not written
+    assert "1,kicker" not in lines[1:] and "1,kicker,1" not in "\n".join(lines)  # frame 1: NaN
+    assert any(line.startswith("1,keeper") for line in lines)  # the keeper has frame 1

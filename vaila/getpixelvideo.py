@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 28 October 2026
+Update: 29 October 2026
 Version: 0.4.12
 Python Version: 3.12.15
 
@@ -290,7 +290,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.11"
+GETPIXELVIDEO_VERSION = "0.4.12"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 

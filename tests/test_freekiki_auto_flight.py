@@ -172,3 +172,21 @@ def test_no_movement_means_no_automatic_flight() -> None:
     cameras = dict.fromkeys(range(N), L)
     ball_all = ball_3d(_ball_rows(still), cameras)
     assert af.auto_flight(ball_all, still, cameras, [], FPS, N) is None
+
+
+def test_a_drifting_marker_before_the_contact_does_not_fix_the_kick_time() -> None:
+    # the hand-marked ball slides a few pixels before the real contact (frame 12), so the first frame
+    # that moves 5 px is early (frame 8): the flight must still start at the contact, not at the drift
+    theta = [30.0, 0.0, 22.0, 0.0, 7.0, 0.4, 0.0, 0.0, 0.0]
+    positions = _flight(theta)
+    pixels = _pixels(positions)
+    for f in range(4, 12):
+        u, v = pixels[f]
+        pixels[f] = (u + (f - 3) * 1.0, v)
+    cameras = dict.fromkeys(range(N), L)
+    ball_all = ball_3d(_ball_rows(pixels), cameras)
+    result = af.auto_flight(ball_all, pixels, cameras, [], FPS, N)
+    assert result is not None
+    assert result["onset_frame"] < 12  # the drift makes the first moved frame early
+    assert result["fit"]["kick_time_s"] == pytest.approx(0.4, abs=1.5 / FPS)
+    assert result["fit"]["rms_px"] < 3.0

@@ -263,6 +263,9 @@ tests/Train_yolo/processed_sam_20260614_121915/
 # Local third-party clones and caches (bin/setup_*.sh; not committed)
 .local/
 
+# RIFE model bundles contain weights and matching upstream Python model code.
+vaila/models/rife/
+
 # Legacy Sapiens2 path at repo root (pre-0.3.76; use .local/third_party/sapiens2/)
 sapiens2/
 

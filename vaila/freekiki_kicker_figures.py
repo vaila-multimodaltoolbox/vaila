@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.12
 Created: 28 October 2026
-Update Date: 28 October 2026
+Update Date: 29 October 2026
 
 Description:
     The figures of the kicker, built from the ``context`` that :func:`freekiki_kicker.analyze_kicker`
@@ -21,6 +21,10 @@ Description:
     * ``kicker_sticks_side_{pt,en}.png``: stick figure of the side view (x = direction of the kick,
       z = height) at six instants around the contact;
     * ``kicker_sticks_top_{pt,en}.png``: the same instants from above (x, y);
+    * ``kicker_sticks_front_{goal,kicker}_{pt,en}.png``: the same instants from behind the goal (the
+      goalkeeper's view) and from behind the kicker, on the plane (y, z) with the observer's right as
+      +y in the first and the opposite in the second. The goalkeeper is drawn in every stick view, in
+      its own colour, from ``ctx["keeper_points"]`` (see :func:`freekiki_kicker.analyze_kicker`);
     * ``kicker_curves_{pt,en}.png``: speeds, knee angle and extension, segment angular speeds, pelvis
       and limb angles, and the knee's share of the foot speed, all aligned to the contact, in the
       layout of Levanon & Dapena (1998);
@@ -44,6 +48,7 @@ import numpy as np
 LANGS = ("pt", "en")
 SIX_INSTANTS = (-3, -2, -1, 0, 1, 2)  # frames from the contact: about -50 to +33 ms at 59.94 Hz
 GROUP_COLORS = {"kick": "#c0392b", "support": "#1664a0", "trunk": "#555555"}
+KEEPER_COLOR = "#16a085"  # the goalkeeper, in every stick view
 
 
 def _leg(side: str) -> tuple[tuple[str, str], ...]:
@@ -119,6 +124,13 @@ LABELS = {
         "no_residual": "sem resíduo registrado neste quadro",
         "no_frame": "quadro do vídeo não disponível",
         "interactive_title": "Chutador: palito e curvas (interativo)",
+        "goal_title": "Vista de trás do gol",
+        "kicker_title": "Vista de trás do chutador",
+        "front_xlabel": "y: lateral, pela direita do observador (m)",
+        "kicker_name": "chutador",
+        "keeper_name": "goleiro",
+        "com_kicker": "CoM do chutador",
+        "com_keeper": "CoM do goleiro",
     },
     "en": {
         "contact": "contact",
@@ -165,6 +177,13 @@ LABELS = {
         "no_residual": "no residual recorded on this frame",
         "no_frame": "video frame not available",
         "interactive_title": "Kicker: stick figure and curves (interactive)",
+        "goal_title": "View from behind the goal",
+        "kicker_title": "View from behind the kicker",
+        "front_xlabel": "y: lateral, observer's right (m)",
+        "kicker_name": "kicker",
+        "keeper_name": "goalkeeper",
+        "com_kicker": "kicker CoM",
+        "com_keeper": "goalkeeper CoM",
     },
 }
 
@@ -236,7 +255,68 @@ def _moment(k: int, fps: float, L: dict) -> str:
     return L["contact"] if k == 0 else f"{k / fps * 1000.0:+.0f} ms"
 
 
-def _sticks_png(ctx: dict, path: Path, lang: str, dims: tuple[int, int], *, top: bool) -> Path:
+def _with_keeper(ctx: dict) -> dict:
+    """The kicker's points and the goalkeeper's under names that cannot collide, for the plot box."""
+    out = dict(ctx["points"])
+    out.update({f"keeper:{name}": arr for name, arr in ctx.get("keeper_points", {}).items()})
+    return out
+
+
+def _goal_sign(ctx: dict) -> float | None:
+    """+1 when the attacked goal is towards +x, -1 towards -x, None when it is not known.
+
+    The goal line given by the analysis (``goal_x``, from the set piece) comes first, then the
+    direction of the ball after the contact. It is never guessed: the wrong side mirrors the two
+    front views, so they are left out when it is unknown.
+    """
+    goal_x = ctx.get("goal_x")
+    if goal_x is not None and float(goal_x) != 0.0:
+        return 1.0 if float(goal_x) > 0 else -1.0
+    direction = ctx.get("kick_dir")
+    if direction is None:
+        return None
+    x = float(np.asarray(direction, dtype=float)[0])
+    return None if x == 0.0 else (1.0 if x > 0 else -1.0)
+
+
+def _front(arr: np.ndarray, horizontal: float) -> np.ndarray:
+    """Pitch metres (x, y, z) as a front view (horizontal, height, depth): the depth is x."""
+    return np.column_stack([horizontal * arr[:, 1], arr[:, 2], arr[:, 0]])
+
+
+def _front_track(track: np.ndarray | None, horizontal: float) -> np.ndarray:
+    """A (n, 3) track as a front view; an empty track stays empty."""
+    if track is None or len(track) == 0:
+        return np.empty((0, 3))
+    return _front(np.asarray(track, dtype=float), horizontal)
+
+
+def _front_view(ctx: dict, horizontal: float) -> dict:
+    """The points, the goalkeeper's points and the ball as a front view (see :func:`_front`).
+
+    ``horizontal`` is +1 or -1: the sign of the lateral axis as the observer sees it. Behind the goal
+    (facing the kicker) it is the goal sign; behind the kicker (facing the goal) it is the opposite.
+    """
+    return {
+        "com": _front_track(ctx.get("com"), horizontal),
+        "keeper_com": _front_track(ctx.get("keeper_com"), horizontal),
+        "points": {k: _front(v, horizontal) for k, v in ctx["points"].items()},
+        "keeper_points": {
+            k: _front(v, horizontal) for k, v in ctx.get("keeper_points", {}).items()
+        },
+        "ball": _front(np.asarray(ctx["ball"], dtype=float), horizontal),
+    }
+
+
+def _sticks_png(
+    ctx: dict,
+    path: Path,
+    lang: str,
+    dims: tuple[int, int],
+    *,
+    top: bool,
+    labels: dict | None = None,
+) -> Path:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -245,28 +325,44 @@ def _sticks_png(ctx: dict, path: Path, lang: str, dims: tuple[int, int], *, top:
     L = LABELS[lang]
     contact, fps = ctx["contact"], ctx["fps"]
     kick, support, points, ball = ctx["kick_foot"], ctx["support_foot"], ctx["points"], ctx["ball"]
+    keeper = ctx.get("keeper_points", {})
     frames = [contact + k for k in SIX_INSTANTS]
-    box = _limits(points, ball, frames, dims)
+    box = _limits(_with_keeper(ctx), ball, frames, dims)
     path_xy = [ball[f] for f in range(contact - 3, contact + 3) if 0 <= f < len(ball)]
     fig, axes = plt.subplots(1, len(frames), figsize=(2.6 * len(frames), 3.6), sharex=True,
                              sharey=True)  # fmt: skip
     for ax, k, f in zip(axes, SIX_INSTANTS, frames, strict=True):
         segs = _segments(points, f, dims, kick, support)
+        keeper_segs = _segments(keeper, f, dims, "", "")["trunk"]
         for group, color in GROUP_COLORS.items():
             for p, q in segs[group]:
                 ax.plot([p[0], q[0]], [p[1], q[1]], color=color, lw=2.2, solid_capstyle="round")
+        for p, q in keeper_segs:
+            ax.plot([p[0], q[0]], [p[1], q[1]], color=KEEPER_COLOR, lw=2.2, solid_capstyle="round")
         joints = [_point(points, name, f) for name in JOINTS]
         joints = [j for j in joints if j is not None]
         if joints:
             ax.scatter([j[dims[0]] for j in joints], [j[dims[1]] for j in joints], s=8, color="#222222",
                        zorder=3)  # fmt: skip
+        keeper_joints = [j for j in (_point(keeper, name, f) for name in JOINTS) if j is not None]
+        if keeper_joints:
+            ax.scatter([j[dims[0]] for j in keeper_joints], [j[dims[1]] for j in keeper_joints],
+                       s=8, color=KEEPER_COLOR, zorder=3)  # fmt: skip
+        for track, colour in (
+            (ctx.get("com"), GROUP_COLORS["kick"]),
+            (ctx.get("keeper_com"), KEEPER_COLOR),
+        ):
+            centre = _ball_at(track, f) if track is not None and len(track) else None
+            if centre is not None:
+                ax.scatter([centre[dims[0]]], [centre[dims[1]]], marker="D", s=46, facecolor=colour,
+                           edgecolor="black", linewidth=1.0, zorder=5)  # fmt: skip
         if path_xy:
             ax.plot([p[dims[0]] for p in path_xy], [p[dims[1]] for p in path_xy], ls=":",
                     color="#999999", lw=1)  # fmt: skip
         bp = _ball_at(ball, f)
         if bp is not None:
             ax.scatter([bp[dims[0]]], [bp[dims[1]]], s=50, color="#e67e22", zorder=4)
-        if not any(segs.values()):
+        if not any(segs.values()) and not keeper_segs:
             ax.text(0.5, 0.5, L["no_points"], ha="center", va="center", transform=ax.transAxes)
         ax.set_title(_moment(k, fps, L), fontsize=9)
         ax.grid(alpha=0.3)
@@ -274,12 +370,22 @@ def _sticks_png(ctx: dict, path: Path, lang: str, dims: tuple[int, int], *, top:
         if box is not None:
             ax.set_xlim(box[0], box[1])
             ax.set_ylim(box[2], box[3])
-    fig.supxlabel(L["top_xlabel"] if top else L["side_xlabel"])
-    fig.supylabel(L["top_ylabel"] if top else L["side_ylabel"])
-    fig.suptitle(
-        f"{L['top_title'] if top else L['side_title']}: {L['sticks_suptitle']}", fontsize=10
-    )
-    fig.tight_layout(rect=(0.04, 0.05, 1.0, 0.93))  # room on the left for the axis label
+    axes[0].plot([], [], color=GROUP_COLORS["kick"], lw=2.2, label=L["kicker_name"])
+    axes[0].plot([], [], color=KEEPER_COLOR, lw=2.2, label=L["keeper_name"])
+    for colour, key in ((GROUP_COLORS["kick"], "com_kicker"), (KEEPER_COLOR, "com_keeper")):
+        axes[0].scatter([], [], marker="D", s=40, facecolor=colour, edgecolor="black", label=L[key])
+    handles, names = axes[0].get_legend_handles_labels()
+    fig.legend(handles, names, fontsize=7, loc="center right")  # outside the panels: nothing hidden
+    if labels is None:
+        labels = {
+            "title": L["top_title"] if top else L["side_title"],
+            "xlabel": L["top_xlabel"] if top else L["side_xlabel"],
+            "ylabel": L["top_ylabel"] if top else L["side_ylabel"],
+        }
+    fig.supxlabel(labels["xlabel"])
+    fig.supylabel(labels["ylabel"])
+    fig.suptitle(f"{labels['title']}: {L['sticks_suptitle']}", fontsize=10)
+    fig.tight_layout(rect=(0.04, 0.05, 0.88, 0.93))  # room for the axis label and the legend
     fig.savefig(path, dpi=130)
     plt.close(fig)
     return path
@@ -421,21 +527,74 @@ def _overlay_png(ctx: dict, ref_view, entry: dict, path: Path, lang: str) -> Pat
     return path
 
 
+def _panels(ctx: dict, L: dict) -> list[dict]:
+    """The panels of the first row: side and top, then the two views from behind (when the goal side is known)."""
+    side = {
+        "points": ctx["points"],
+        "keeper_points": ctx.get("keeper_points", {}),
+        "ball": ctx["ball"],
+        "com": ctx.get("com"),
+        "keeper_com": ctx.get("keeper_com"),
+    }
+    s = _goal_sign(ctx)
+    panels = [
+        {
+            "title": L["side_title"],
+            "xlabel": L["side_xlabel"],
+            "ylabel": L["side_ylabel"],
+            "dims": (0, 2),
+            "view": side,
+        },  # fmt: skip
+        {
+            "title": L["top_title"],
+            "xlabel": L["top_xlabel"],
+            "ylabel": L["top_ylabel"],
+            "dims": (0, 1),
+            "view": side,
+        },  # fmt: skip
+    ]
+    if s is None:  # a wrong side would mirror the two views from behind: leave them out
+        return panels
+    return panels + [
+        {
+            "title": L["goal_title"],
+            "xlabel": L["front_xlabel"],
+            "ylabel": L["side_ylabel"],
+            "dims": (0, 1),
+            "view": _front_view(ctx, s),
+        },  # fmt: skip
+        {
+            "title": L["kicker_title"],
+            "xlabel": L["front_xlabel"],
+            "ylabel": L["side_ylabel"],
+            "dims": (0, 1),
+            "view": _front_view(ctx, -s),
+        },  # fmt: skip
+    ]
+
+
 def _interactive_html(ctx: dict, series: list[dict], path: Path, lang: str) -> Path:
     import plotly.graph_objects as go
     from plotly.subplots import make_subplots
 
     L = LABELS[lang]
-    contact, points, ball = ctx["contact"], ctx["points"], ctx["ball"]
+    contact = ctx["contact"]
     kick, support = ctx["kick_foot"], ctx["support_foot"]
     frames = [int(r["frame"]) for r in series]
     t = _col(series, "time_rel_s")
-    side_dims, top_dims = (0, 2), (0, 1)
-    side_box = _limits(points, ball, frames, side_dims) or (-1, 1, -1, 1)
-    top_box = _limits(points, ball, frames, top_dims) or (-1, 1, -1, 1)
+    panels = _panels(ctx, L)
+    for panel in panels:
+        view = panel["view"]
+        panel["box"] = _limits(_with_keeper(view), view["ball"], frames, panel["dims"]) or (
+            -1,
+            1,
+            -1,
+            1,
+        )
 
-    def stick(f: int, dims) -> list:
-        segs = _segments(points, f, dims, kick, support)
+    def stick(f: int, panel: dict) -> list:
+        view, dims = panel["view"], panel["dims"]
+        segs = _segments(view["points"], f, dims, kick, support)
         out = []
         for group, color in GROUP_COLORS.items():
             xs, ys = [], []
@@ -444,29 +603,43 @@ def _interactive_html(ctx: dict, series: list[dict], path: Path, lang: str) -> P
                 ys += [p[1], q[1], None]
             out.append(go.Scatter(x=xs, y=ys, mode="lines", line={"color": color, "width": 4},
                                   showlegend=False))  # fmt: skip
-        joints = [j for j in (_point(points, name, f) for name in JOINTS) if j is not None]
+        kxs, kys = [], []
+        for p, q in _segments(view["keeper_points"], f, dims, "", "")["trunk"]:
+            kxs += [p[0], q[0], None]
+            kys += [p[1], q[1], None]
+        out.append(go.Scatter(x=kxs, y=kys, mode="lines", line={"color": KEEPER_COLOR, "width": 4},
+                              showlegend=False))  # fmt: skip
+        joints = [j for j in (_point(view["points"], name, f) for name in JOINTS) if j is not None]
         out.append(go.Scatter(x=[j[dims[0]] for j in joints], y=[j[dims[1]] for j in joints],
                               mode="markers", marker={"size": 6, "color": "#222222"},
                               showlegend=False))  # fmt: skip
-        bp = _ball_at(ball, f)
+        keeper_joints = [j for j in (_point(view["keeper_points"], name, f) for name in JOINTS)
+                         if j is not None]  # fmt: skip
+        out.append(go.Scatter(x=[j[dims[0]] for j in keeper_joints],
+                              y=[j[dims[1]] for j in keeper_joints], mode="markers",
+                              marker={"size": 6, "color": KEEPER_COLOR}, showlegend=False))  # fmt: skip
+        for key, colour in (("com", GROUP_COLORS["kick"]), ("keeper_com", KEEPER_COLOR)):
+            track = view.get(key)
+            centre = _ball_at(track, f) if track is not None and len(track) else None
+            out.append(go.Scatter(x=[] if centre is None else [centre[dims[0]]],
+                                  y=[] if centre is None else [centre[dims[1]]], mode="markers",
+                                  marker={"size": 11, "symbol": "diamond", "color": colour,
+                                          "line": {"color": "black", "width": 1}},
+                                  showlegend=False))  # fmt: skip
+        bp = _ball_at(view["ball"], f)
         out.append(go.Scatter(x=[] if bp is None else [bp[dims[0]]],
                               y=[] if bp is None else [bp[dims[1]]], mode="markers",
                               marker={"size": 12, "color": "#e67e22"}, showlegend=False))  # fmt: skip
         return out
 
+    cols = len(panels)
+    wide = [{"colspan": cols}] + [None] * (cols - 1)
     fig = make_subplots(
         rows=5,
-        cols=2,
-        specs=[
-            [{}, {}],
-            [{"colspan": 2}, None],
-            [{"colspan": 2}, None],
-            [{"colspan": 2}, None],
-            [{"colspan": 2}, None],
-        ],  # fmt: skip
+        cols=cols,
+        specs=[[{}] * cols, wide, wide, wide, wide],
         subplot_titles=(
-            L["side_title"],
-            L["top_title"],
+            *[panel["title"] for panel in panels],
             L["speeds"],
             L["angles"],
             L["angular"],
@@ -476,17 +649,18 @@ def _interactive_html(ctx: dict, series: list[dict], path: Path, lang: str) -> P
     )
     f0 = contact if contact in frames else frames[0]
     dynamic: list[int] = []
-    for dims, col in ((side_dims, 1), (top_dims, 2)):
-        for trace in stick(f0, dims):
+    for col, panel in enumerate(panels, start=1):
+        for trace in stick(f0, panel):
             fig.add_trace(trace, row=1, col=col)
             dynamic.append(len(fig.data) - 1)
-    bp_all = [ball[f] for f in frames if 0 <= f < len(ball) and np.isfinite(ball[f]).all()]
-    if bp_all:
-        arr = np.array(bp_all)
-        fig.add_trace(go.Scatter(x=arr[:, 0], y=arr[:, 2], mode="lines", showlegend=False,
-                                 line={"color": "#999999", "dash": "dot"}), row=1, col=1)  # fmt: skip
-        fig.add_trace(go.Scatter(x=arr[:, 0], y=arr[:, 1], mode="lines", showlegend=False,
-                                 line={"color": "#999999", "dash": "dot"}), row=1, col=2)  # fmt: skip
+    for col, panel in enumerate(panels, start=1):
+        ball = panel["view"]["ball"]
+        bp_all = [ball[f] for f in frames if 0 <= f < len(ball) and np.isfinite(ball[f]).all()]
+        if bp_all:
+            arr = np.array(bp_all)
+            dx, dy = panel["dims"]
+            fig.add_trace(go.Scatter(x=arr[:, dx], y=arr[:, dy], mode="lines", showlegend=False,
+                                     line={"color": "#999999", "dash": "dot"}), row=1, col=col)  # fmt: skip
 
     curve_rows = {
         2: [
@@ -527,7 +701,7 @@ def _interactive_html(ctx: dict, series: list[dict], path: Path, lang: str) -> P
     dynamic_all = dynamic + list(cursors.values())
     frame_objs = []
     for i, f in enumerate(frames):
-        data = stick(f, side_dims) + stick(f, top_dims)
+        data = [trace for panel in panels for trace in stick(f, panel)]
         for idx in cursors.values():
             data.append(go.Scatter(x=[t[i], t[i]], y=[fig.data[idx].y[0], fig.data[idx].y[1]],
                                    mode="lines"))  # fmt: skip
@@ -575,14 +749,12 @@ def _interactive_html(ctx: dict, series: list[dict], path: Path, lang: str) -> P
             }
         ],  # fmt: skip
     )
-    fig.update_xaxes(range=[side_box[0], side_box[1]], row=1, col=1)
-    fig.update_yaxes(range=[side_box[2], side_box[3]], scaleanchor="x", row=1, col=1)
-    fig.update_xaxes(range=[top_box[0], top_box[1]], row=1, col=2)
-    fig.update_yaxes(range=[top_box[2], top_box[3]], scaleanchor="x2", row=1, col=2)
-    fig.update_xaxes(title_text=L["side_xlabel"], row=1, col=1)
-    fig.update_yaxes(title_text=L["side_ylabel"], row=1, col=1)
-    fig.update_xaxes(title_text=L["top_xlabel"], row=1, col=2)
-    fig.update_yaxes(title_text=L["top_ylabel"], row=1, col=2)
+    for col, panel in enumerate(panels, start=1):
+        x0, x1, y0, y1 = panel["box"]
+        fig.update_xaxes(range=[x0, x1], row=1, col=col)
+        fig.update_yaxes(range=[y0, y1], scaleanchor="x" if col == 1 else f"x{col}", row=1, col=col)
+        fig.update_xaxes(title_text=panel["xlabel"], row=1, col=col)
+        fig.update_yaxes(title_text=panel["ylabel"], row=1, col=col)
     fig.update_xaxes(title_text=L["time_s"], row=5, col=1)
     fig.write_html(str(path), include_plotlyjs=True, full_html=True)
     return path
@@ -609,6 +781,21 @@ def write_figures(
         paths[f"sticks_top{suffix}"] = _sticks_png(
             ctx, out / f"kicker_sticks_top{suffix}.png", lang, (0, 1), top=True
         )
+        s = _goal_sign(ctx)
+        fronts = () if s is None else (("goal", s, "goal_title"), ("kicker", -s, "kicker_title"))
+        for key, horizontal, title in fronts:  # no goal side, no views from behind
+            paths[f"sticks_front_{key}{suffix}"] = _sticks_png(
+                {**ctx, **_front_view(ctx, horizontal)},
+                out / f"kicker_sticks_front_{key}{suffix}.png",
+                lang,
+                (0, 1),
+                top=False,
+                labels={
+                    "title": LABELS[lang][title],
+                    "xlabel": LABELS[lang]["front_xlabel"],
+                    "ylabel": LABELS[lang]["side_ylabel"],
+                },
+            )
         paths[f"curves{suffix}"] = _curves_png(
             ctx, series, out / f"kicker_curves{suffix}.png", lang
         )
