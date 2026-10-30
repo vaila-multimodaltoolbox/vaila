@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.9
 Created: 04 October 2026
-Update Date: 17 October 2026
+Update Date: 30 October 2026
 
 Description:
     The pitch is a known 3D object (``vaila/models/soccerfield_kiki.csv``,
@@ -604,9 +604,7 @@ def _refine_pinhole(
             try:
                 r0 = _pnl_cam_res(p0)
                 if np.isfinite(r0).all() and float(r0 @ r0) < 1e7:
-                    sol = least_squares(
-                        _pnl_cam_res, p0, method="trf", loss="soft_l1", max_nfev=20
-                    )
+                    sol = least_squares(_pnl_cam_res, p0, method="trf", loss="soft_l1", max_nfev=20)
                     r1_vec = _pnl_cam_res(sol.x)
                     if np.isfinite(r1_vec).all() and float(r1_vec @ r1_vec) <= float(r0 @ r0):
                         R_opt, _ = cv2.Rodrigues(sol.x[:3])

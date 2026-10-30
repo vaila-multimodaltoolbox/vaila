@@ -1,7 +1,7 @@
 """Independent side-by-side editing and exact exported frame identities.
 
 Update Date: 28 October 2026
-Version: 0.4.12
+Version: 0.4.13
 """
 
 import csv

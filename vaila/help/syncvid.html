@@ -21,7 +21,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.4.12 · <strong>Updated:</strong> 2026-10-29<br>
+<strong>Version:</strong> 0.4.13 · <strong>Updated:</strong> 2026-10-30<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
@@ -92,33 +92,62 @@ freely changes playback speed. Preview records contact shifts caused by rounding
 <a href="https://github.com/hzwer/Practical-RIFE">Practical-RIFE</a> with the matching
 <strong>4.25</strong> model bundle. The CUDA environment supplies cuDNN; avoid replacing
 torch through upstream's full requirements file.</p>
-<p><strong>Automatic installation:</strong> Linux and Windows installers run RIFE
-setup when the CUDA/GPU profile is selected. The unified bootstraps
-<code>bin/setup_pyproject.sh --target=cuda</code> and
-<code>bin/setup_pyproject.ps1 -Target cuda</code> run it after dependency sync.
-CPU/macOS profiles skip RIFE. <code>--no-sync / -NoSync</code> skip this step too;
-<code>--no-rife / -NoRife</code> skip only RIFE in the unified bootstrap.
-Optional setup failure prints a retry command and leaves vailá available.</p>
+<p><strong>RIFE is optional and its folder is yours to choose.</strong> The installers
+no longer install it by default (about 50&nbsp;MB, so nothing lands on a disk you did
+not pick). Ask for it on the CUDA/GPU profile with <code>--rife</code> (Linux installer and
+<code>bin/setup_pyproject.sh</code>) or <code>-Rife</code> (<code>install_vaila_win.ps1</code>,
+<code>bin/setup_pyproject.ps1</code>), and choose the folder with
+<code>--rife-home=DIR</code> / <code>-RifeHome DIR</code>. Without them the installers
+print how to add it later. <code>--no-rife / -NoRife</code> are still accepted by old
+command lines. CPU/macOS profiles never install RIFE. A failed optional setup prints a
+retry command and leaves <i>vailá</i> available.</p>
 <p><strong>Install/reinstall only RIFE</strong> from the vailá root after installing
 the CUDA environment:</p>
-<pre># Linux / WSL / Git Bash
+<pre># Linux / WSL / Git Bash: into the vailá folder (legacy layout) ...
 bash bin/setup_rife.sh
+# ... or into any folder / disk you choose (portable layout, see below)
+bash bin/setup_rife.sh --home /big/disk/rife
 # Windows PowerShell
-pwsh bin/setup_rife.ps1</pre>
+pwsh bin/setup_rife.ps1
+pwsh bin/setup_rife.ps1 --home D:\rife</pre>
 <p>Both call <code>bin/setup_rife.py</code> with the existing environment using
-<code>uv run --no-sync</code>. Setup clones the pinned revision, downloads the
+<code>uv run --no-sync</code>; a relative <code>--home</code> / <code>--export</code> path is
+relative to the folder you ran the command from. Setup clones the pinned revision, downloads the
 official 4.25 ZIP (~23 MB), verifies archive/model SHA256 hashes and runs CUDA
 inference. Repeated setup reuses verified assets. No HF login, separate cuDNN
 installation or Python extra is required. The NVIDIA driver must support the
 CUDA PyTorch build selected by vailá.</p>
+<p><strong>Portable RIFE folder</strong> (recommended when the <i>vailá</i> disk is small):
+<code>--home DIR</code> puts everything in one folder that can be copied to another disk or computer.</p>
+<table><tr><th>In <code>DIR/</code></th><th>Contents</th></tr>
+<tr><td><code>Practical-RIFE/</code></td><td>Pinned official code (with <code>.git</code>)</td></tr>
+<tr><td><code>train_log/</code></td><td><code>flownet.pkl</code> and its matching Python files</td></tr>
+<tr><td><code>setup_manifest.json</code></td><td>Identity and CUDA verification</td></tr>
+<tr><td><code>downloads/rife425.zip</code></td><td>Verified download cache</td></tr></table>
+<p><strong>Choosing the folder.</strong> The equalizer uses, in this order:
+<code>--rife-home DIR</code>; the environment variable <code>VAILA_RIFE_HOME</code>
+(<code>export VAILA_RIFE_HOME=DIR</code>, inherited by the Syncvid button and the equalizer
+window); the legacy folders below. <code>--rife-dir</code> / <code>--weights</code> override just
+the code or the weights folder. A chosen folder without RIFE is an error that says how to
+fix it, never a silent fallback to another copy. <code>setup_rife.py</code> also installs into
+<code>VAILA_RIFE_HOME</code> when it is set and neither <code>--home</code> nor <code>--root</code> is given.</p>
+<p><strong>Copy an installed RIFE with no network:</strong></p>
+<pre>bash bin/setup_rife.sh --export /other/disk/rife</pre>
+<p><code>--export DEST</code> takes the install that setup would use (<code>--home</code> /
+<code>VAILA_RIFE_HOME</code> / legacy folders), checks the pinned revision and all SHA256 hashes,
+copies code and weights into <code>DEST</code> (portable layout) through a staging folder and
+runs one real CUDA inference <em>on the copy</em>. It never overwrites: a weight file in
+<code>DEST</code> with another hash stops the copy, and a <code>DEST</code> overlapping the
+source is refused. Repeating it is safe.</p>
+<p>Legacy layout (no <code>--home</code>; <code>--root DIR</code> uses another root):</p>
 <table><tr><th>Relative path</th><th>Contents</th></tr>
 <tr><td><code>.local/third_party/Practical-RIFE/</code></td><td>Pinned official code</td></tr>
 <tr><td><code>vaila/models/rife/train_log/</code></td><td>Weights and matching Python files</td></tr>
 <tr><td><code>.local/downloads/rife425.zip</code></td><td>Verified download cache</td></tr>
 <tr><td><code>vaila/models/rife/setup_manifest.json</code></td><td>Identity and CUDA verification</td></tr></table>
-<p>Assets are ignored by Git: <strong>run setup on each computer</strong>. Offline
-transfer requires the complete pinned checkout (including <code>.git</code>) and
-model directory at these relative paths; re-run setup to test the destination GPU.</p>
+<p>Assets are ignored by Git: <strong>run setup on each computer or copy with
+<code>--export</code></strong>. A hand-made offline transfer requires the complete pinned
+checkout (including <code>.git</code>) and the model directory; re-run setup to test the destination GPU.</p>
 <pre>uv run --no-sync python bin/setup_rife.py --archive /path/to/rife425.zip</pre>
 <p>The local ZIP avoids the weight download; an absent checkout still needs network.
 <code>--skip-check</code> stages assets without claiming CUDA readiness. Modified or
@@ -140,7 +169,8 @@ Python ≤3.11; this adapter was functionally validated with vailá's Python 3.1
   --reference /path/to/c2_16mm_left.mp4 --source /path/to/c1_main.mp4 \
   --reference-events 1,9,22 --source-events 1,9,19 \
   --output-dir /path/to/results</pre>
-<p><code>--rife-dir</code> and <code>--weights</code> select local locations.
+<p><code>--rife-home DIR</code> (or <code>VAILA_RIFE_HOME</code>) selects a portable RIFE folder;
+<code>--rife-dir</code> and <code>--weights</code> select the two folders separately.
 <code>--dry-run</code> probes/decode-counts and prints maps without RIFE or writes.
 <code>--gui</code> opens the window directly.</p>
 <p>Use <code>--output-fps 60</code>, <code>--output-fps 120</code> or
@@ -421,5 +451,5 @@ uv run vaila/syncvid.py -i /path/to/cameras --dry-run
 uv run vaila/syncvid.py -i /path/to/cameras --remove-repeated</pre>
 
 <div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
-<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 29 October 2026 (v0.4.12)</div>
+<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 30 October 2026 (v0.4.13)</div>
 </div></body></html>

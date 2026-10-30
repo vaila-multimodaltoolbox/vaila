@@ -1,7 +1,7 @@
 """Pinned RIFE installer integrity, safe extraction and idempotence.
 
 Update Date: 29 October 2026
-Version: 0.4.12
+Version: 0.4.13
 """
 
 import hashlib

@@ -1,8 +1,8 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.12 (see `vaila.py`). **Package version:** 0.4.12 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.13 (see `vaila.py`). **Package version:** 0.4.13 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-10-29
+**Last updated:** 2026-10-30
 
 Syncvid **Equalize by events (RIFE)** opens a CUDA frame-interpolation tool on the
 reference camera's grid by default. **Output FPS** (including 60, 120 and exact
@@ -14,10 +14,14 @@ All three anchors remain original images; higher FPS adds visual estimates, and
 independent FPS/count choices change playback speed. CLI: `--output-fps` and
 `--output-frame-count`. CSV maps distinguish original and generated images. See the
 [RIFE setup and workflow](vaila/help/syncvid.md#equalize-by-events-rife).
-Linux/Windows CUDA installers and `setup_pyproject` now install the pinned RIFE
-4.25 code/model and verify CUDA inference. For an existing installation or to
-restore model files, run `bash bin/setup_rife.sh` (Windows: `pwsh bin/setup_rife.ps1`).
-Weights stay local in `vaila/models/rife/train_log/`; run setup on each computer.
+RIFE is **optional and no longer installed by default** (about 50 MB). Install the pinned
+RIFE 4.25 code/model, with a CUDA inference check, into a folder you choose:
+`bash bin/setup_rife.sh --home /big/disk/rife` (Windows: `pwsh bin/setup_rife.ps1 --home D:\rife`),
+or add `--rife` / `--rife-home=DIR` to the Linux installer and `setup_pyproject.sh`
+(`-Rife` / `-RifeHome DIR` on Windows). Select the folder with `--rife-home DIR` or
+`VAILA_RIFE_HOME`, and copy an installed one to another disk or computer, offline, with
+`bash bin/setup_rife.sh --export DIR`. Without `--home` the legacy folders
+`vaila/models/rife/train_log/` and `.local/third_party/Practical-RIFE/` are used.
 
 Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
 set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.
@@ -230,7 +234,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 29.Oct.2026 v0.4.12 (Python 3.12.15)
+vailá - 30.Oct.2026 v0.4.13 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -1010,7 +1014,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.12`** (29 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.13`** (30 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

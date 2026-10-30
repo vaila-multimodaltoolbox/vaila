@@ -21,8 +21,8 @@
 #                                                                                       #
 # Author: Prof. Dr. Paulo R. P. Santiago                                                #
 # Creation: September 17, 2024                                                          #
-# Updated: 29 October 2026
-# Version: 0.4.12
+# Updated: 30 October 2026
+# Version: 0.4.13
 # OS: Ubuntu, Kubuntu, Linux Mint, Pop_OS!, Zorin OS, etc. (Debian-based)               #
 #########################################################################################
 
@@ -31,8 +31,13 @@ set -e  # Exit on error
 # Parse CLI arguments
 CLI_PROFILE=""
 CLI_YES=false
+CLI_RIFE=false
+CLI_RIFE_HOME=""
 for arg in "$@"; do
     case "$arg" in
+        --rife)                            CLI_RIFE=true ;;
+        --rife-home=*)                     CLI_RIFE=true; CLI_RIFE_HOME="${arg#*=}" ;;
+        --no-rife)                         CLI_RIFE=false ;;
         --full|--cuda-full|--profile=full) CLI_PROFILE="full" ;;
         --standard|--profile=standard)     CLI_PROFILE="standard" ;;
         --custom|--profile=custom)         CLI_PROFILE="custom" ;;
@@ -44,6 +49,8 @@ for arg in "$@"; do
             echo "  --full, --profile=full     Full Multimodal AI Workstation (CUDA + SAM 3 + Sapiens2 + SAM 3D Body + HF)"
             echo "  --standard                 Standard Biomechanics (Core + YOLO + IMU + MoCap + Force Plates)"
             echo "  --custom                   Custom / Interactive Component Selection"
+            echo "  --rife                     Also install RIFE 4.25 (CUDA only; optional, ~50 MB, not default)"
+            echo "  --rife-home=DIR            Install RIFE into DIR (any disk) instead of the vailá folder; implies --rife"
             echo "  -y, --yes                  Accept recommended defaults without prompting"
             echo "  -h, --help                 Show this help and exit"
             exit 0
@@ -750,12 +757,18 @@ fi
 # AI FOUNDATION MODELS SETUP & VERIFICATION
 # ============================================================================
 
-# RIFE is public, needs no HF token, and uses the existing CUDA environment.
-if [[ "$USE_GPU" == true ]]; then
+# RIFE (event video interpolation) is optional: it is installed only on request, and its folder
+# is yours to choose (--rife-home=DIR), so nothing is placed on a disk you did not pick.
+# It is public, needs no HF token, and uses the existing CUDA environment.
+if [[ "$USE_GPU" == true && "$CLI_RIFE" == true ]]; then
     echo "Setting up RIFE 4.25 for event video interpolation..."
-    (cd "$VAILA_HOME" && uv run --no-sync python bin/setup_rife.py) || {
-        echo "Warning: RIFE setup incomplete. Retry: bash bin/setup_rife.sh (see Syncvid Help)."
+    RIFE_ARGS=()
+    [[ -n "$CLI_RIFE_HOME" ]] && RIFE_ARGS=(--home "$CLI_RIFE_HOME")
+    (cd "$VAILA_HOME" && uv run --no-sync python bin/setup_rife.py "${RIFE_ARGS[@]}") || {
+        echo "Warning: RIFE setup incomplete. Retry: bash bin/setup_rife.sh [--home DIR] (see Syncvid Help)."
     }
+elif [[ "$USE_GPU" == true ]]; then
+    echo "RIFE (event equalizer) not installed. To add it on any disk: bash bin/setup_rife.sh --home DIR"
 fi
 
 # 1. Hugging Face Authentication

@@ -1,7 +1,7 @@
 # Video Event Equalizer
 
-- **Version:** 0.4.12
-- **Updated:** 2026-10-29
+- **Version:** 0.4.13
+- **Updated:** 2026-10-30
 - **Category:** Tools
 - **GUI:** Frame C → Make Sync file → Equalize by events (RIFE)
 - **CLI:** `uv run --no-sync python -m vaila.video_event_equalizer --help`
@@ -58,21 +58,32 @@ No new dependency or model download is used for these controls.
 
 ## Installation and reinstallation
 
-Linux/Windows CUDA installers now set up **Practical-RIFE 4.25** automatically.
-To install only the model and verify CUDA in an existing vailá environment:
+**Practical-RIFE 4.25 is optional and is no longer installed by default.** Install it
+(about 50 MB) in a folder you choose, then verify CUDA, in an existing *vailá* environment:
 
 ```bash
-bash bin/setup_rife.sh
+bash bin/setup_rife.sh --home /big/disk/rife   # portable folder on any disk
+bash bin/setup_rife.sh                         # or inside the vailá folder (legacy layout)
 ```
 
-On Windows: `pwsh bin/setup_rife.ps1`. Setup downloads the pinned official code
-and model, verifies SHA256 hashes and runs CUDA inference. No new extra, HF login
-or separate cuDNN installation is required. Run once on each computer.
+On Windows: `pwsh bin/setup_rife.ps1 --home D:\rife`. Setup downloads the pinned
+official code and model, verifies SHA256 hashes and runs CUDA inference. No new
+extra, HF login or separate cuDNN installation is required.
 
-- Code: `.local/third_party/Practical-RIFE/`
-- Weights and matching model files: `vaila/models/rife/train_log/`
-- Weight file: `flownet.pkl`
-- Cached archive: `.local/downloads/rife425.zip`
+**Choosing and moving the folder.** The equalizer reads RIFE from `--rife-home DIR`,
+else from the environment variable `VAILA_RIFE_HOME`, else from the legacy folders
+in the *vailá* checkout (`.local/third_party/Practical-RIFE/` and
+`vaila/models/rife/train_log/`). `--rife-dir` and `--weights` override one folder
+each. A chosen folder without RIFE is an error, never a silent fallback.
+To copy an installed RIFE to another disk or computer with no network, hashes
+verified and a real CUDA test on the copy:
 
-Assets remain outside Git. Re-running setup reuses verified files; see the
-[full setup instructions](syncvid.md#rife-setup) for offline restore and recovery.
+```bash
+bash bin/setup_rife.sh --export /other/disk/rife
+uv run --no-sync python -m vaila.video_event_equalizer --gui --rife-home /other/disk/rife
+```
+
+A portable folder holds `Practical-RIFE/`, `train_log/` (with `flownet.pkl`) and
+`setup_manifest.json`. Assets remain outside Git. Re-running setup reuses verified
+files; see the [full setup instructions](syncvid.md#rife-setup) for offline restore
+and recovery.

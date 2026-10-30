@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.12
+Version: 0.4.13
 Created: 26 October 2026
-Update Date: 27 October 2026
+Update Date: 30 October 2026
 
 Description:
     A track of pitch positions (metres, one point per frame) cannot jump: a ball does
@@ -36,6 +36,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
+
+# Version of the flight fit (anchors, kick time, weighting). Written to every ball_flight.json and
+# part of the inputs of the one-click 3D stage: change it with the fit, so that an older fit is
+# recomputed (stage) or reported (kick-figures) instead of being reused. A file without the tag is
+# older than v2 (the v1 fit could send a one-camera penalty to the side: 28 px RMS on a real clip).
+FLIGHT_MODEL = "flight-v2"
 
 
 @dataclass(frozen=True)
@@ -483,6 +489,7 @@ def fit_flight_views(
         anchor_res[f"p{j}_m"] = round(float(np.linalg.norm(tail[i : i + 3]) * s_p), 3)
         i += 3
     return {
+        "flight_model": FLIGHT_MODEL,
         "theta": [round(float(v), 4) for v in theta],
         "kick_time_s": round(float(theta[5]), 4),
         "spin_rps": round(omega_norm / (2 * np.pi), 2),

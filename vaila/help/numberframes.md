@@ -4,7 +4,7 @@
 
 - **Category:** Tools
 - **File:** `vaila/numberframes.py`
-- **Version:** 0.4.12
+- **Version:** 0.4.13
 - **Updated:** 27 October 2026
 - **Author:** Paulo R. P. Santiago
 - **Email:** paulosantiago@usp.br

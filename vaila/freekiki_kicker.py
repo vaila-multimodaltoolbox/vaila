@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.12
+Version: 0.4.13
 Created: 28 October 2026
-Update Date: 29 October 2026
+Update Date: 30 October 2026
 
 Description:
     The core kick metrics of one kicker, from ``poses_3d_binocular.csv`` (the triangulated
@@ -578,8 +578,11 @@ def analyze_kicker(
         metrics.append(_metric("d_support_ball_m", None, "m", "observado", "missing",
                                "support foot or ball missing at contact"))  # fmt: skip
 
-    hip = np.nanmean(np.stack([points[f"{s}-hip"] for s in SIDES if f"{s}-hip" in points]), axis=0) \
-        if any(f"{s}-hip" in points for s in SIDES) else np.full((n, 3), np.nan)  # fmt: skip
+    hips = np.stack(
+        [points[f"{s}-hip"] for s in SIDES if f"{s}-hip" in points] or [np.full((n, 3), np.nan)]
+    )
+    found = np.isfinite(hips)  # mean of the hips found in each frame; NaN where neither is
+    hip = np.where(found.any(axis=0), np.where(found, hips, 0.0).sum(axis=0) / np.maximum(found.sum(axis=0), 1), np.nan)  # fmt: skip
     if contact - APPROACH_FRAMES >= 0 and np.isfinite(hip[contact - 1]).all() and np.isfinite(hip[contact - APPROACH_FRAMES]).all() and np.isfinite(ball_vel[contact:contact + nw, :2]).all():  # fmt: skip
         d_hip = hip[contact - 1, :2] - hip[contact - APPROACH_FRAMES, :2]
         v_post = np.nanmean(ball_vel[contact : contact + nw, :2], axis=0)

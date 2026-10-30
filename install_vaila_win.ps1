@@ -28,8 +28,8 @@
         - Can run without administrator privileges (some features may be skipped).
     Author: Prof. Dr. Paulo R. P. Santiago
     Creation: 17 December 2024
-    Updated: 29 October 2026
-    Version: 0.4.12
+    Updated: 30 October 2026
+    Version: 0.4.13
     OS: Windows 11
     Reference: https://docs.astral.sh/uv/
     Parameters:
@@ -37,6 +37,8 @@
           prompt   = ask interactively (default for manual runs)
           portable = current script/cwd directory (Local/Portable; used by Inno Setup)
           profile  = Program Files (admin) or %USERPROFILE%\vaila
+        -Rife        Also install RIFE 4.25 (CUDA only; optional, ~50 MB, not default)
+        -RifeHome DIR  Install RIFE into DIR (any disk) instead of the vaila folder; implies -Rife
 #>
 
 param(
@@ -44,10 +46,17 @@ param(
     [string]$InstallLocation = "prompt",
     [switch]$Full,
     [switch]$Standard,
-    [switch]$Yes
+    [switch]$Yes,
+    [switch]$Rife,
+    [string]$RifeHome = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+# A relative -RifeHome is relative to where this was run (the script changes directory later).
+If ($RifeHome -and -not $RifeHome.StartsWith('~') -and -not [System.IO.Path]::IsPathRooted($RifeHome)) {
+    $RifeHome = Join-Path (Get-Location).Path $RifeHome
+}
 
 function Repair-GitLfsCheckoutIfNeeded {
     param([string]$RepoRoot)
@@ -971,13 +980,18 @@ Try {
         }
     }
 
-    # Public RIFE 4.25 bundle; no HF token or dependency changes required.
-    if ($useGPU) {
+    # RIFE (event video interpolation) is optional: installed only on request, in a folder you
+    # choose (-RifeHome DIR). Public bundle; no HF token or dependency changes required.
+    if ($useGPU -and ($Rife -or $RifeHome)) {
         Write-Host 'Setting up RIFE 4.25 for event video interpolation...' -ForegroundColor Cyan
-        & uv run --no-sync python bin/setup_rife.py
+        $rifeArgs = @()
+        If ($RifeHome) { $rifeArgs = @('--home', $RifeHome) }
+        & uv run --no-sync python bin/setup_rife.py @rifeArgs
         if ($LASTEXITCODE -ne 0) {
-            Write-Warning 'RIFE setup incomplete. Retry: pwsh bin/setup_rife.ps1 (see Syncvid Help).'
+            Write-Warning 'RIFE setup incomplete. Retry: pwsh bin/setup_rife.ps1 [--home DIR] (see Syncvid Help).'
         }
+    } elseif ($useGPU) {
+        Write-Host 'RIFE (event equalizer) not installed. To add it on any disk: pwsh bin/setup_rife.ps1 --home DIR'
     }
 
     # Verify + repair the Sapiens2 editable install.
