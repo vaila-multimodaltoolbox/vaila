@@ -1,6 +1,6 @@
 # Manual Video Cuts
 
-- **Version:** 0.4.13
+- **Version:** 0.4.14
 - **Updated:** 2026-10-28
 - **Category:** Tools → Video and Image
 - **File:** `vaila/manual_video_cuts.py` (export backend)

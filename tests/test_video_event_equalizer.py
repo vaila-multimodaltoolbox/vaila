@@ -1,7 +1,7 @@
 """Common event grid, exact FPS, export provenance and Syncvid launcher regressions.
 
-Update Date: 30 October 2026
-Version: 0.4.13
+Update Date: 01 November 2026
+Version: 0.4.14
 """
 
 import argparse
@@ -508,8 +508,9 @@ def test_gui_reviews_current_settings_before_run(video_args, monkeypatch, change
 
     monkeypatch.setattr(tk, "Tk", lambda: root)
     monkeypatch.setattr(tk, "Text", lambda *_args, **_kw: preview)
+    monkeypatch.setattr(tk, "Canvas", MagicMock())
     monkeypatch.setattr(tk, "StringVar", Variable)
-    for name in ("Label", "Entry", "Frame", "Progressbar"):
+    for name in ("Label", "Entry", "Frame", "LabelFrame", "Progressbar", "Scrollbar"):
         monkeypatch.setattr(ttk, name, MagicMock())
     monkeypatch.setattr(ttk, "Button", button)
     monkeypatch.setattr(messagebox, "showinfo", MagicMock())
@@ -519,12 +520,12 @@ def test_gui_reviews_current_settings_before_run(video_args, monkeypatch, change
     def interact():
         assert buttons["Run"]["state"] == "disabled"
         buttons["120"]["command"]()
-        assert variables[4].get() == "120"
+        assert variables[2].get() == "120"  # reference, reference events, then output fps
         buttons["Preview"]["command"]()
         assert buttons["Run"]["state"] == "disabled"
         assert "--dry-run" in launches[-1]
         if change_during_preview:
-            variables[5].set("31")
+            variables[3].set("31")
         callbacks.pop(0)()
         if change_during_preview:
             assert buttons["Run"]["state"] == "disabled"
@@ -532,7 +533,7 @@ def test_gui_reviews_current_settings_before_run(video_args, monkeypatch, change
             callbacks.pop(0)()
         else:
             assert "85 frames per camera" in preview.insert.call_args.args[1]
-            variables[5].set("31")
+            variables[3].set("31")
             assert buttons["Run"]["state"] == "disabled"
             buttons["Preview"]["command"]()
             callbacks.pop(0)()
@@ -572,3 +573,91 @@ def test_syncvid_button_launches_prefilled_gui(monkeypatch, tmp_path):
     assert command[command.index("--reference") + 1] == str(tmp_path / "c2.mp4")
     assert command[command.index("--reference-events") + 1] == "1,9,22"
     assert command[command.index("--source-events") + 1] == "1,9,19"
+
+
+@pytest.fixture
+def three_args(video_args, tmp_path):
+    """Reference plus two other cameras; the third is a 20-frame video of its own."""
+    write_video(tmp_path / "third.mp4", 20)
+    video_args.source = [video_args.source, tmp_path / "third.mp4"]
+    video_args.source_events = ["1,9,19", "1,8,20"]
+    return video_args
+
+
+def test_three_cameras_each_get_a_plan_on_the_common_grid(three_args):
+    manifest = equalizer.prepare(three_args)
+    assert list(manifest["cameras"]) == ["reference", "source", "source_2"]
+    for camera in manifest["cameras"].values():
+        assert len(camera["rows"]) == manifest["output_frame_count"]
+        assert (
+            camera["original_output_count"] + camera["generated_output_count"]
+            == manifest["output_frame_count"]
+        )
+    assert manifest["cameras"]["source_2"]["events"] == [1, 8, 20]
+
+
+def test_each_source_needs_its_own_events_in_the_same_order(three_args):
+    three_args.source_events = ["1,9,19"]
+    with pytest.raises(equalizer.EventSyncError, match="own --source-events"):
+        equalizer.prepare(three_args)
+
+
+def test_the_same_video_twice_is_refused(three_args):
+    three_args.source = [three_args.reference, three_args.reference]
+    three_args.source_events = ["1,9,22", "1,9,22"]
+    with pytest.raises(equalizer.EventSyncError, match="different camera videos"):
+        equalizer.prepare(three_args)
+
+
+def test_cli_command_repeats_every_camera_and_round_trips(three_args, capsys):
+    command = equalizer.cli_command(three_args)
+    assert command.count("--source") == 2 and command.count("--source-events") == 2
+    assert command[command.index("--source-events") + 1] == "1,9,19"
+    assert equalizer.main(command[3:] + ["--dry-run"]) == 0
+    manifest = json.loads(capsys.readouterr().out)
+    assert list(manifest["cameras"]) == ["reference", "source", "source_2"]
+    assert not three_args.output_dir.exists()  # a dry run writes nothing
+
+
+def test_export_writes_one_video_per_camera(three_args, monkeypatch):
+    monkeypatch.setattr(equalizer, "RifeInterpolator", StandInRife)
+    destination = equalizer.export(three_args)
+    manifest = json.loads((destination / "event_equalizer.json").read_text(encoding="utf-8"))
+    assert list(manifest["cameras"]) == ["reference", "source", "source_2"]
+    for role, camera in manifest["cameras"].items():
+        assert (destination / camera["video"]).is_file(), role
+        assert camera["video"].startswith(f"{role}_")
+        assert (destination / f"{role}_frames.csv").is_file()
+
+
+def test_syncvid_passes_every_video_and_prints_the_run_without_the_window(
+    monkeypatch, tmp_path, capsys
+):
+    from vaila import syncvid
+
+    player = object.__new__(syncvid.PygameSyncPlayer)
+    player.video_infos = [
+        syncvid.VideoInfo(tmp_path / name, count, 29.97, 1920, 1080)
+        for name, count in (("c1.mp4", 19), ("c2.mp4", 22), ("c3.mp4", 20))
+    ]
+    player.sync_fields = {
+        info.name: syncvid.PygameTextField(info.name, "9") for info in player.video_infos
+    }
+    monkeypatch.setattr(player, "_reference_name_or_none", lambda: "c2.mp4")
+    monkeypatch.setattr(player, "_set_status", lambda *_args, **_kwargs: None)
+    captured = []
+    monkeypatch.setattr(syncvid.subprocess, "Popen", lambda cmd, **kw: captured.append(cmd))
+    player._handle_button("side:equalize_rife")
+    command = captured[0]
+    assert "--gui" in command
+    assert command.count("--source") == 2
+    sources = [command[i + 1] for i, flag in enumerate(command) if flag == "--source"]
+    assert sources == [str(tmp_path / "c1.mp4"), str(tmp_path / "c3.mp4")]
+    events = [command[i + 1] for i, flag in enumerate(command) if flag == "--source-events"]
+    assert events == ["1,9,19", "1,9,20"]
+    out = capsys.readouterr().out
+    assert "3 cameras" in out
+    assert ">> vaila/video_event_equalizer: Equivalent CLI, no window" in out
+    terminal = next(line for line in out.splitlines() if "vaila/video_event_equalizer.py" in line)
+    assert terminal.startswith(">>   uv run --no-sync vaila/video_event_equalizer.py --reference")
+    assert "--gui" not in terminal and "--dry-run" not in terminal

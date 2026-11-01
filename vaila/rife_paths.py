@@ -1,7 +1,7 @@
 """Where the Practical-RIFE code and weights live: portable and chosen by the user.
 
 Update Date: 30 October 2026
-Version: 0.4.13
+Version: 0.4.14
 
 The RIFE assets are ~50 MB. They are not forced into one place: a RIFE *home* is any
 folder holding ``Practical-RIFE/`` (the pinned upstream code) and ``train_log/`` (the

@@ -1,7 +1,7 @@
-"""Equalize two videos on a configurable common event grid using local CUDA RIFE.
+"""Equalize two or more videos on a configurable common event grid using local CUDA RIFE.
 
-Update Date: 30 October 2026
-Version: 0.4.13
+Update Date: 01 November 2026
+Version: 0.4.14
 
 Frames are 1-based and inclusive. Generated images are estimates, not acquired
 measurements. Linear spacing between events is assumed; output FPS/count can
@@ -18,7 +18,6 @@ import importlib
 import inspect
 import json
 import math
-import shlex
 import signal
 import subprocess
 import sys
@@ -26,6 +25,7 @@ import tempfile
 import types
 from collections.abc import Callable, Iterator, Sequence
 from fractions import Fraction
+from itertools import zip_longest
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +33,7 @@ import cv2
 import numpy as np
 
 try:
+    from .cli_highlight import print_gui_cli_mirror
     from .ffmpeg_utils import get_ffprobe_path
     from .rife_paths import RifePaths, missing_message, resolve_paths
     from .sync_events import (
@@ -43,6 +44,7 @@ try:
         rational_rate,
     )
 except ImportError:
+    from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
     from ffmpeg_utils import get_ffprobe_path  # ty: ignore[unresolved-import]
     from rife_paths import (  # ty: ignore[unresolved-import]
         RifePaths,
@@ -106,6 +108,18 @@ def probe(path: str | Path) -> dict[str, Any]:
 
 def _optional_text(value: Any) -> str | None:
     return None if value is None or not str(value).strip() else str(value).strip()
+
+
+def _as_list(value: Any) -> list[Any]:
+    """One value, a list of values, or None as a list: ``--source`` and ``--source-events`` repeat."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return []
+    return list(value) if isinstance(value, (list, tuple)) else [value]
+
+
+def source_roles(count: int) -> list[str]:
+    """Role names of the cameras after the reference: ``source`` first (as before), then ``source_2``."""
+    return ["source" if index == 0 else f"source_{index + 1}" for index in range(count)]
 
 
 def _round_half_up(value: Fraction) -> int:
@@ -241,11 +255,24 @@ def frame_map(
 
 
 def prepare(args: argparse.Namespace) -> dict[str, Any]:
-    reference, source = probe(args.reference), probe(args.source)
-    if reference["path"] == source["path"]:
-        raise EventSyncError("Choose two different camera videos")
+    """The plan of every camera: the reference (first) and each ``--source`` (in order)."""
+    sources, source_events = _as_list(args.source), _as_list(args.source_events)
+    if not sources:
+        raise EventSyncError("Choose at least two camera videos: --reference and --source")
+    if len(source_events) != len(sources):
+        raise EventSyncError(
+            f"Each --source needs its own --source-events, in the same order "
+            f"({len(sources)} video(s), {len(source_events)} event row(s))"
+        )
+    probed = [probe(args.reference)] + [probe(path) for path in sources]
+    if len({camera["path"] for camera in probed}) != len(probed):
+        raise EventSyncError("Choose different camera videos")
     ref_events = parse_event_frames(args.reference_events, "Reference events")
-    src_events = parse_event_frames(args.source_events, "Source events")
+    src_events = [
+        parse_event_frames(events, f"{role} events")
+        for role, events in zip(source_roles(len(sources)), source_events, strict=True)
+    ]
+    reference = probed[0]
     grid = output_grid(
         ref_events,
         reference["frame_count"],
@@ -253,11 +280,9 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         getattr(args, "output_fps", None),
         getattr(args, "output_frame_count", None),
     )
+    roles = ["reference", *source_roles(len(sources))]
     cameras = {}
-    for role, camera, events in (
-        ("reference", reference, ref_events),
-        ("source", source, src_events),
-    ):
+    for role, camera, events in zip(roles, probed, [ref_events, *src_events], strict=True):
         rows = _camera_map(ref_events, events, camera["frame_count"], grid)
         originals = sum(row["kind"] == "original" for row in rows)
         cameras[role] = dict(
@@ -505,17 +530,21 @@ def export(args: argparse.Namespace) -> Path:
 
 
 def cli_command(args: argparse.Namespace, python: str = "python") -> list[str]:
+    """The terminal command that runs the same export (no window), one flag per camera."""
     command = [python, "-m", "vaila.video_event_equalizer"]
-    for key in (
-        "reference",
-        "source",
-        "reference_events",
-        "source_events",
-        "rife_dir",
-        "weights",
-        "output_dir",
-    ):
-        command.extend(["--" + key.replace("_", "-"), str(getattr(args, key))])
+    command.extend(
+        ["--reference", str(args.reference), "--reference-events", str(args.reference_events)]
+    )
+    # Each camera's video next to its events (zip_longest keeps a mismatch for prepare to report).
+    for path, events in zip_longest(_as_list(args.source), _as_list(args.source_events)):
+        if path is not None:
+            command.extend(["--source", str(path)])
+        if events is not None:
+            command.extend(["--source-events", str(events)])
+    for key in ("rife_dir", "weights", "output_dir"):
+        value = _optional_text(getattr(args, key, None))
+        if value is not None:
+            command.extend(["--" + key.replace("_", "-"), value])
     for key in ("output_fps", "output_frame_count"):
         value = _optional_text(getattr(args, key, None))
         if value is not None:
@@ -523,27 +552,59 @@ def cli_command(args: argparse.Namespace, python: str = "python") -> list[str]:
     return command
 
 
+def mirror_command(args: argparse.Namespace) -> list[str]:
+    """The copy-paste command in the vailá GUI→CLI mirror style (``uv run --no-sync vaila/...``)."""
+    return ["uv", "run", "--no-sync", "vaila/video_event_equalizer.py", *cli_command(args)[3:]]
+
+
 def show_gui(args: argparse.Namespace) -> None:
-    """Dedicated subprocess GUI keeps Tk and the Syncvid SDL loop independent."""
+    """Dedicated subprocess GUI keeps Tk and the Syncvid SDL loop independent.
+
+    One block per camera: the reference first (it sets the output grid), then any number of
+    other cameras (Add camera / Remove). Preview and Run use the same CLI as the terminal.
+    """
     import tkinter as tk
     from tkinter import filedialog, messagebox, ttk
 
     root = tk.Tk()
     root.title("Equalize by events (RIFE)")
-    root.columnconfigure(1, weight=1)
-    values: dict[str, Any] = {}
+    # Everything sits on a canvas with both scrollbars, so any number of cameras fits any screen.
+    root.geometry(
+        f"{min(1180, int(root.winfo_screenwidth()) - 60)}x{min(860, int(root.winfo_screenheight()) - 100)}"
+    )
+    root.rowconfigure(0, weight=1)
+    root.columnconfigure(0, weight=1)
+    canvas = tk.Canvas(root, highlightthickness=0)
+    yscroll = ttk.Scrollbar(root, orient="vertical", command=canvas.yview)
+    xscroll = ttk.Scrollbar(root, orient="horizontal", command=canvas.xview)
+    canvas.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
+    canvas.grid(row=0, column=0, sticky="nsew")
+    yscroll.grid(row=0, column=1, sticky="ns")
+    xscroll.grid(row=1, column=0, sticky="ew")
+    body = ttk.Frame(canvas, padding=6)
+    canvas.create_window((0, 0), window=body, anchor="nw")
+    body.bind("<Configure>", lambda _event: canvas.configure(scrollregion=canvas.bbox("all")))
+    body.columnconfigure(1, weight=1)
+
+    def scroll(event: Any) -> None:
+        """Wheel scrolls vertically; Shift+wheel horizontally (Linux buttons 4/5 too)."""
+        up = getattr(event, "num", 0) == 4 or getattr(event, "delta", 0) > 0
+        horizontal = bool(int(getattr(event, "state", 0)) & 0x1)
+        (canvas.xview_scroll if horizontal else canvas.yview_scroll)(-3 if up else 3, "units")
+
+    for sequence in ("<MouseWheel>", "<Shift-MouseWheel>", "<Button-4>", "<Button-5>",
+                     "<Shift-Button-4>", "<Shift-Button-5>"):  # fmt: skip
+        root.bind_all(sequence, scroll)
+    values: dict[str, tk.StringVar] = {}
+    extra: list[dict[str, Any]] = []  # the cameras after the reference: box, path, events
     process: subprocess.Popen[Any] | None = None
     log_file: Any = None
     log_position = 0
     cancelled = False
     previewing = False
-    worker_values: dict[str, str] = {}
-    validated_values: dict[str, str] | None = None
-    labels = {
-        "reference": "Reference video",
-        "source": "Source video",
-        "reference_events": "Reference: start, contact, end",
-        "source_events": "Source: start, contact, end",
+    worker_values: dict[str, Any] = {}
+    validated_values: dict[str, Any] | None = None
+    settings = {
         "output_fps": "Output FPS (optional)",
         "output_frame_count": "Output frame count (optional)",
         "rife_dir": "Practical-RIFE checkout",
@@ -551,35 +612,65 @@ def show_gui(args: argparse.Namespace) -> None:
         "output_dir": "Output parent directory",
     }
 
-    def fill_events(key: str) -> None:
+    def fill_events(path: tk.StringVar, events: tk.StringVar) -> None:
         try:
-            info = probe(values[key].get())
-            event_key = key + "_events"
-            old = values[event_key].get().replace(",", " ").split()
+            info = probe(path.get())
+            old = events.get().replace(",", " ").split()
             contact = old[1] if len(old) == 3 else ""
-            values[event_key].set(f"1, {contact}, {info['frame_count']}")
+            events.set(f"1, {contact}, {info['frame_count']}")
         except (OSError, ValueError, subprocess.SubprocessError) as exc:
             messagebox.showerror("Video", str(exc), parent=root)
 
+    def browse_video(path: tk.StringVar, events: tk.StringVar, title: str) -> None:
+        selected = filedialog.askopenfilename(parent=root, title=title)
+        if selected:
+            path.set(selected)
+            fill_events(path, events)
+
     def browse(key: str) -> None:
-        selected = (
-            filedialog.askopenfilename(parent=root, title=labels[key])
-            if key in ("reference", "source")
-            else filedialog.askdirectory(parent=root, title=labels[key])
-        )
+        selected = filedialog.askdirectory(parent=root, title=settings[key])
         if selected:
             values[key].set(selected)
-            if key in ("reference", "source"):
-                fill_events(key)
 
-    for row, (key, label) in enumerate(labels.items()):
+    values["reference"] = tk.StringVar(root, str(getattr(args, "reference", None) or ""))
+    values["reference_events"] = tk.StringVar(
+        root, str(getattr(args, "reference_events", None) or "")
+    )
+    # One table row per camera; camera 1 is the reference and sets the output grid.
+    cameras_box = ttk.LabelFrame(body, text="Cameras (1 = reference: its events set the grid)")
+    cameras_box.grid(row=0, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
+    cameras_box.columnconfigure(1, weight=1)
+    for column, heading in enumerate(("Camera", "Video", "start, contact, end")):
+        ttk.Label(cameras_box, text=heading).grid(row=0, column=column, sticky="w", padx=6)
+    next_row = [2]  # the reference uses row 1; removed rows simply stay empty
+
+    def camera_row(row: int, label: str, path: Any, events: Any) -> list[Any]:
+        widgets = [
+            ttk.Label(cameras_box, text=label, width=12),
+            ttk.Entry(cameras_box, textvariable=path, width=60),
+            ttk.Entry(cameras_box, textvariable=events, width=16),
+            ttk.Button(
+                cameras_box,
+                text="Browse",
+                command=lambda: browse_video(path, events, f"Camera {widgets[0].cget('text')}"),
+            ),
+        ]
+        for column, widget in enumerate(widgets):
+            widget.grid(row=row, column=column, sticky="ew" if column == 1 else "w", padx=4, pady=2)
+        return widgets
+
+    camera_row(1, "1 reference", values["reference"], values["reference_events"])
+    ttk.Button(body, text="Add camera", command=lambda: add_camera()).grid(
+        row=1, column=0, sticky="w", padx=6, pady=4
+    )
+    for row, (key, label) in enumerate(settings.items(), start=2):
         values[key] = tk.StringVar(root, str(getattr(args, key, None) or ""))
-        ttk.Label(root, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=5)
-        ttk.Entry(root, textvariable=values[key], width=64).grid(
+        ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=5)
+        ttk.Entry(body, textvariable=values[key], width=64).grid(
             row=row, column=1, sticky="ew", padx=4
         )
         if key == "output_fps":
-            presets = ttk.Frame(root)
+            presets = ttk.Frame(body)
             presets.grid(row=row, column=2, padx=8)
             for fps in (60, 120):
                 ttk.Button(
@@ -588,39 +679,68 @@ def show_gui(args: argparse.Namespace) -> None:
                     width=5,
                     command=lambda fps=fps: values["output_fps"].set(str(fps)),
                 ).pack(side="left")
-        elif key not in ("reference_events", "source_events", "output_frame_count"):
-            ttk.Button(root, text="Browse", command=lambda key=key: browse(key)).grid(
+        elif key != "output_frame_count":
+            ttk.Button(body, text="Browse", command=lambda key=key: browse(key)).grid(
                 row=row, column=2, padx=8
             )
-    for key in ("reference", "source"):
-        if values[key].get() and not values[key + "_events"].get():
-            fill_events(key)
-    offset = len(labels)
+    offset = 2 + len(settings)
+
+    def renumber() -> None:
+        for index, entry in enumerate(extra, start=2):
+            entry["widgets"][0].configure(text=str(index))
+
+    def add_camera(path: str = "", events: str = "") -> None:
+        entry: dict[str, Any] = {
+            "path": tk.StringVar(root, path),
+            "events": tk.StringVar(root, events),
+        }
+        entry["widgets"] = camera_row(
+            next_row[0], str(len(extra) + 2), entry["path"], entry["events"]
+        )
+        remove = ttk.Button(cameras_box, text="Remove", command=lambda: remove_camera(entry))
+        remove.grid(row=next_row[0], column=4, padx=4, pady=2)
+        entry["widgets"].append(remove)
+        next_row[0] += 1
+        extra.append(entry)
+        entry["path"].trace_add("write", invalidate)
+        entry["events"].trace_add("write", invalidate)
+        invalidate()
+
+    def remove_camera(entry: dict[str, Any]) -> None:
+        extra[:] = [other for other in extra if other is not entry]
+        for widget in entry["widgets"]:
+            widget.destroy()
+        renumber()
+        invalidate()
+
     ttk.Label(
-        root,
+        body,
         text=(
             "Leave both blank for the reference grid. FPS only calculates count; count only uses reference FPS. "
             "FPS accepts 29.970 or 30000/1001. Both values set playback speed independently."
         ),
         wraplength=780,
     ).grid(row=offset, column=0, columnspan=3, padx=8, pady=4)
-    ttk.Label(root, text=WARNING, wraplength=780).grid(
+    ttk.Label(body, text=WARNING, wraplength=780).grid(
         row=offset + 1, column=0, columnspan=3, padx=8, pady=8
     )
-    preview = tk.Text(root, height=11, width=100, wrap="word", state="disabled")
+    preview = tk.Text(body, height=11, width=100, wrap="word", state="disabled")
     preview.grid(row=offset + 2, column=0, columnspan=3, sticky="nsew", padx=8)
-    root.rowconfigure(offset + 2, weight=1)
+    body.rowconfigure(offset + 2, weight=1)
     status = tk.StringVar(
-        root, "Choose both videos and enter the contact frame for each camera (1-based)."
+        root, "Choose every video and enter the contact frame of each camera (1-based)."
     )
-    ttk.Label(root, textvariable=status, wraplength=780).grid(
+    ttk.Label(body, textvariable=status, wraplength=780).grid(
         row=offset + 3, column=0, columnspan=3, padx=8
     )
-    progress = ttk.Progressbar(root, mode="indeterminate")
+    progress = ttk.Progressbar(body, mode="indeterminate")
     progress.grid(row=offset + 4, column=0, columnspan=3, sticky="ew", padx=8, pady=8)
 
-    def current_values() -> dict[str, str]:
-        return {key: value.get() for key, value in values.items()}
+    def current_values() -> dict[str, Any]:
+        out: dict[str, Any] = {key: var.get() for key, var in values.items()}
+        out["source"] = [entry["path"].get() for entry in extra]
+        out["source_events"] = [entry["events"].get() for entry in extra]
+        return out
 
     def set_preview(text: str) -> None:
         preview.configure(state="normal")
@@ -700,13 +820,19 @@ def show_gui(args: argparse.Namespace) -> None:
         worker_values = current_values()
         selected = argparse.Namespace(**worker_values)
         # The worker validates/decode-probes everything; no blocking scan on Tk.
-        if any(
-            not value.strip()
+        blank = [
+            key
             for key, value in worker_values.items()
-            if key not in ("output_fps", "output_frame_count")
-        ):
+            if isinstance(value, str)
+            and key not in ("output_fps", "output_frame_count")
+            and not value.strip()
+        ]
+        cameras_text = worker_values["source"] + worker_values["source_events"]
+        if blank or not worker_values["source"] or not all(text.strip() for text in cameras_text):
             messagebox.showerror(
-                "Missing values", "Fill all fields, including all three events.", parent=root
+                "Missing values",
+                "Fill the reference and every camera, each with its video and three events.",
+                parent=root,
             )
             return
         if not dry_run and validated_values != worker_values:
@@ -717,7 +843,7 @@ def show_gui(args: argparse.Namespace) -> None:
         if dry_run:
             command.append("--dry-run")
         else:
-            print(">> Equivalent CLI\n" + shlex.join(cli_command(selected)), flush=True)
+            print_gui_cli_mirror("vaila/video_event_equalizer", mirror_command(selected))
         # Lifetime spans Tk callbacks; closed by poll() after the worker exits.
         log_file = tempfile.NamedTemporaryFile(mode="w+t", encoding="utf-8", delete=False)  # noqa: SIM115
         log_position, cancelled = 0, False
@@ -747,7 +873,7 @@ def show_gui(args: argparse.Namespace) -> None:
             return
         root.destroy()
 
-    controls = ttk.Frame(root)
+    controls = ttk.Frame(body)
     controls.grid(row=offset + 5, column=0, columnspan=3, pady=10)
     preview_button = ttk.Button(controls, text="Preview", command=lambda: run(True))
     preview_button.pack(side="left", padx=8)
@@ -757,18 +883,59 @@ def show_gui(args: argparse.Namespace) -> None:
     ttk.Button(controls, text="Close", command=close).pack(side="left", padx=8)
     for value in values.values():
         value.trace_add("write", invalidate)
+    # Cameras from the command line, after every widget and trace exists.
+    if values["reference"].get() and not values["reference_events"].get():
+        fill_events(values["reference"], values["reference_events"])
+    given_events = _as_list(getattr(args, "source_events", None))
+    for index, path in enumerate(_as_list(getattr(args, "source", None))):
+        events = str(given_events[index]) if index < len(given_events) else ""
+        add_camera(str(path), events)
+        if not events:
+            fill_events(extra[-1]["path"], extra[-1]["events"])
     set_preview("Click Preview to calculate FPS, frame counts, durations and contact timing.")
     root.protocol("WM_DELETE_WINDOW", close)
     root.mainloop()
 
 
+CLI_EXAMPLES = """examples (no window; RIFE needs CUDA):
+  two cameras:
+    uv run --no-sync vaila/video_event_equalizer.py \\
+      --reference c2_16mm_left.mp4 --reference-events 1,9,22 \\
+      --source c1_main.mp4 --source-events 1,9,19 \\
+      --output-dir results/
+  three or more cameras: repeat --source and --source-events, in the same order:
+    uv run --no-sync vaila/video_event_equalizer.py \\
+      --reference c2_16mm_left.mp4 --reference-events 1,9,22 \\
+      --source c1_main.mp4 --source-events 1,9,19 \\
+      --source c3_top.mp4 --source-events 1,8,20 \\
+      --output-dir results/
+  check the plan first (no RIFE, no output):  add --dry-run
+  open the window instead:                    add --gui
+"""
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=CLI_EXAMPLES,
+    )
     parser.add_argument("--gui", action="store_true", help="Open the event equalizer window")
-    parser.add_argument("--reference", type=Path)
-    parser.add_argument("--source", type=Path)
+    parser.add_argument("--reference", type=Path, help="Reference camera: its events set the grid")
+    parser.add_argument(
+        "--source",
+        type=Path,
+        action="append",
+        default=[],
+        help="Another camera; repeat for more (each with its --source-events)",
+    )
     parser.add_argument("--reference-events", default="", help="1-based start,contact,end")
-    parser.add_argument("--source-events", default="", help="1-based start,contact,end")
+    parser.add_argument(
+        "--source-events",
+        action="append",
+        default=[],
+        help="1-based start,contact,end of the --source in the same position",
+    )
     parser.add_argument(
         "--output-fps",
         default="",
@@ -801,7 +968,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         show_gui(args)
         return 0
     if not args.reference or not args.source:
-        parser.error("--reference and --source are required without --gui")
+        parser.error("--reference and at least one --source are required without --gui")
 
     def cancel(_signum: int, _frame: Any) -> None:
         raise KeyboardInterrupt

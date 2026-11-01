@@ -21,7 +21,7 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <body><div class="container">
 <h1>Pygame Multi-Video Synchronization</h1>
 <div class="card"><strong>File:</strong> <code>vaila/syncvid.py</code><br>
-<strong>Version:</strong> 0.4.13 · <strong>Updated:</strong> 2026-10-30<br>
+<strong>Version:</strong> 0.4.14 · <strong>Updated:</strong> 2026-11-01<br>
 <strong>GUI:</strong> Frame C → Make Sync file</div>
 
 <h2>Purpose</h2>
@@ -30,13 +30,13 @@ th, td { border: 1px solid #ccd5dd; padding: 7px; text-align: left; }
 <h2 id="equalize-by-events-rife">Equalize by events (RIFE)</h2>
 <p>Open <strong>Frame C → Make Sync file</strong>, select the folder, then click
 <strong>Equalize by events (RIFE)</strong> at the bottom of the synchronization panel.
-A separate Tkinter window opens; Syncvid remains available. Outputs use the reference
+A separate Tkinter window opens with <strong>every</strong> video of the folder (two, three or more cameras); Syncvid remains available. Outputs use the reference
 camera's count and exact rational FPS by default. <strong>Output FPS</strong> and
 <strong>Output frame count</strong> can select a different common grid. The existing Events: interpolate mode still uses
 Farnebäck and its grid that preserves every original.</p>
 <ol>
-<li>Choose <strong>Reference video</strong> (the output timeline) and <strong>Source video</strong>.</li>
-<li>Enter <strong>Reference: start, contact, end</strong> and <strong>Source: start, contact, end</strong>:
+<li>Choose <strong>Reference video</strong> (the output timeline). Every other camera is a row of the <strong>Cameras</strong> table (2, 3, ...); <strong>Add camera</strong> and <strong>Remove</strong> change that list.</li>
+<li>Enter <strong>Reference: start, contact, end</strong> and the same three values for every camera:
 original, 1-based, inclusive frames. Browse initializes start/end from counts; review contact.
 The Syncvid launcher prefills sync-frame values. Use Browse to refresh bounds when changing videos.
 Syncvid removal marks and FPS overrides do not apply.</li>
@@ -87,6 +87,7 @@ the reference clock are assumptions. Generated ball, feet and occlusion pixels m
 artifacts and are not acquired measurements. Retain measured source coordinates and provenance
 for quantitative 3D work. Increasing FPS creates visual estimates. Choosing FPS and count
 freely changes playback speed. Preview records contact shifts caused by rounding.</p>
+<p><strong>Terminal run (no window).</strong> Like the other <i>vailá</i> tools, the button prints the highlighted <code>&gt;&gt; vaila/video_event_equalizer: Equivalent CLI</code> banner with the exact command (<code>uv run --no-sync vaila/video_event_equalizer.py ...</code>), every camera's <code>--source</code> next to its <code>--source-events</code>. Copy it as it is; add <code>--dry-run</code> to check the plan first. A camera without a sync (contact) frame is named on the terminal. The window lists the cameras as a table and scrolls vertically and horizontally (mouse wheel; Shift + wheel for horizontal), so four or more cameras fit. <code>uv run --no-sync python -m vaila.video_event_equalizer --help</code> lists all options and examples.</p>
 <h3 id="rife-setup">RIFE setup</h3>
 <p>Requires NVIDIA CUDA, CUDA-enabled PyTorch, FFmpeg and official
 <a href="https://github.com/hzwer/Practical-RIFE">Practical-RIFE</a> with the matching
@@ -451,5 +452,5 @@ uv run vaila/syncvid.py -i /path/to/cameras --dry-run
 uv run vaila/syncvid.py -i /path/to/cameras --remove-repeated</pre>
 
 <div class="card warn"><strong>Safety:</strong> every typed frame is range checked; ambiguous reference text, traversal, absolute paths, external symlinks, duplicates, oversized files and invalid ranges are rejected. Handoff uses <code>shell=False</code>.</div>
-<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 30 October 2026 (v0.4.13)</div>
+<div class="footer">Part of <i>vailá</i> — Multimodal Toolbox · Updated 01 November 2026 (v0.4.14)</div>
 </div></body></html>

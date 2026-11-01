@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 29 October 2026
-Version: 0.4.13
+Update Date: 01 November 2026
+Version: 0.4.14
 
 Description:
 Create a frame-accurate synchronization plan with a fast Pygame player. Every
@@ -57,6 +57,7 @@ Frame convention:
 from __future__ import annotations
 
 import argparse
+import builtins
 import contextlib
 import csv
 import datetime as dt
@@ -3893,28 +3894,59 @@ class PygameSyncPlayer:
                 self._zoom_at(mouse_pos, factor)
 
     def _launch_event_equalizer(self) -> None:
-        """Open a separate Tk process, prefilled from reviewed sync frames."""
+        """Open the RIFE equalizer window for every video, prefilled from the reviewed sync frames.
+
+        The terminal also gets the same run without a window, so the export can be repeated or
+        scripted; both use the flags of ``video_event_equalizer.cli_command``.
+        """
+        from vaila.cli_highlight import print_gui_cli_mirror
+        from vaila.video_event_equalizer import cli_command, mirror_command
+
         self.playing = False
         reference = self._reference_name_or_none() or self.current_info.name
-        source = next((info for info in self.video_infos if info.name != reference), None)
-        if source is None:
-            self._set_status("Equalize by events requires two camera videos", error=True)
-            return
         ref = next(info for info in self.video_infos if info.name == reference)
-        command = [sys.executable, "-m", "vaila.video_event_equalizer", "--gui"]
-        for role, info in (("reference", ref), ("source", source)):
-            command.extend([f"--{role}", str(info.path)])
-            command.extend(
-                [
-                    f"--{role}-events",
-                    f"1,{self.sync_fields[info.name].text},{info.frame_count}",
-                ]
+        sources = [info for info in self.video_infos if info.name != reference]
+        if not sources:
+            self._set_status("Equalize by events requires at least two camera videos", error=True)
+            return
+
+        def events(info: VideoInfo) -> str:
+            return f"1,{self.sync_fields[info.name].text},{info.frame_count}"
+
+        args = argparse.Namespace(
+            reference=str(ref.path),
+            reference_events=events(ref),
+            source=[str(info.path) for info in sources],
+            source_events=[events(info) for info in sources],
+            output_dir=str(ref.path.parent),
+            rife_dir=None,
+            weights=None,
+        )
+        cli_flags = cli_command(args, sys.executable)[3:]  # after "-m vaila.video_event_equalizer"
+        window = [sys.executable, "-m", "vaila.video_event_equalizer", "--gui", *cli_flags]
+        missing = [
+            info.name for info in [ref, *sources] if not self.sync_fields[info.name].text.strip()
+        ]
+        builtins.print(
+            f">> vaila/syncvid: opening the event equalizer window ({len(sources) + 1} cameras)"
+        )
+        if missing:
+            builtins.print(
+                ">> vaila/syncvid: no sync (contact) frame yet for "
+                + ", ".join(missing)
+                + "; fill it in the window, or in the events of the command below"
             )
-        command.extend(["--output-dir", str(ref.path.parent)])
-        print(">> Event equalizer launcher\n" + shlex.join(command))
+        print_gui_cli_mirror(
+            "vaila/video_event_equalizer",
+            mirror_command(args),
+            note="Equivalent CLI, no window (add --dry-run to check the plan first):",
+        )
         try:
-            subprocess.Popen(command, cwd=Path(__file__).resolve().parents[1])
-            self._set_status("Opened Equalize by events (RIFE); review both event rows before Run")
+            subprocess.Popen(window, cwd=Path(__file__).resolve().parents[1])
+            self._set_status(
+                f"Opened Equalize by events (RIFE) with {len(sources) + 1} cameras; "
+                "review every event row before Run"
+            )
         except OSError as exc:
             self._set_status(f"Cannot launch event equalizer: {exc}", error=True)
 
