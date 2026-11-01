@@ -4,8 +4,8 @@
 
 - **Category:** Tools → Video and Image
 - **File:** `vaila/syncvid.py`
-- **Version:** 0.4.13
-- **Updated:** 2026-10-30
+- **Version:** 0.4.14
+- **Updated:** 2026-11-01
 - **GUI:** Frame C → **Make Sync file**
 - **CLI:** `uv run vaila/syncvid.py`
 
@@ -19,13 +19,17 @@ The generated versioned TXT maps one inclusive reference-camera interval into eq
 
 Open **Frame C → Make Sync file**, select the video folder, then click
 **Equalize by events (RIFE)** at the bottom of the synchronization panel. A separate
-Tkinter window opens; Syncvid remains available. This action uses the reference
+Tkinter window opens with **every** video of the folder: the reference and each other
+video as its own camera, so two, three or more videos work. Syncvid remains available.
+The terminal prints the same export without the window (see **Terminal run** below). This action uses the reference
 camera's frame count and exact rational FPS by default. **Output FPS** and
 **Output frame count** can define a different common grid. The existing **Events: interpolate**
 mode still uses Farnebäck and its grid that preserves every original.
 
-1. Choose **Reference video** (the desired output timeline) and **Source video**.
-2. Enter **Reference: start, contact, end** and **Source: start, contact, end**.
+1. Choose **Reference video** (the desired output timeline). Every other camera is
+   a row of the **Cameras** table (2, 3, ...); **Add camera** and **Remove** change
+   that list.
+2. Enter **Reference: start, contact, end** and the same three values for every camera.
    Values are original, 1-based, inclusive frames. Start/end initialize from the
    video counts when browsing; contact must be entered or reviewed. Syncvid's
    launcher prefills the current sync-frame values. Use Browse after changing videos
@@ -42,6 +46,26 @@ mode still uses Farnebäck and its grid that preserves every original.
    reference anchor span, and contact timing adjustments. Click **Run** after review;
    editing settings requires another preview. Progress appears in the window and terminal, including the equivalent
    CLI. **Cancel export** stops the worker; partial directories remain marked INCOMPLETE.
+
+**Terminal run (no window).** Like the other vailá tools, the button prints the highlighted
+`>> vaila/video_event_equalizer: Equivalent CLI` banner with the exact command
+(`uv run --no-sync vaila/video_event_equalizer.py ...`), every camera's `--source` next to its
+`--source-events`. Copy it as it is; add `--dry-run` to check the plan first. A camera without
+a sync (contact) frame is named on the terminal; fill it in the window or in the command.
+The window lists the cameras as a table (one row each) and scrolls vertically and
+horizontally (mouse wheel; Shift + wheel for horizontal), so four or more cameras fit.
+The same flags work by hand:
+
+```bash
+uv run --no-sync vaila/video_event_equalizer.py \
+  --reference /path/to/c2_16mm_left.mp4 --reference-events 1,9,22 \
+  --source /path/to/c1_main.mp4 --source-events 1,9,19 \
+  --source /path/to/c3_top.mp4 --source-events 1,8,20 \
+  --output-dir /path/to/results --dry-run
+```
+
+Run `uv run --no-sync python -m vaila.video_event_equalizer --help` for all the options
+and examples.
 
 The output anchors are start=1 and end=N. Contact follows the reference interval
 proportion, rounded to nearest with ties up, then clamped to 2…N−1. Each camera's
@@ -675,4 +699,4 @@ uv run vaila/syncvid.py -i /path/to/camera_directory --remove-repeated
 
 ---
 
-Part of *vailá* — Multimodal Toolbox. Updated 30 October 2026 (v0.4.13).
+Part of *vailá* — Multimodal Toolbox. Updated 01 November 2026 (v0.4.14).

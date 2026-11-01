@@ -1,12 +1,13 @@
 # Video Event Equalizer
 
-- **Version:** 0.4.13
-- **Updated:** 2026-10-30
+- **Version:** 0.4.14
+- **Updated:** 2026-11-01
 - **Category:** Tools
 - **GUI:** Frame C → Make Sync file → Equalize by events (RIFE)
 - **CLI:** `uv run --no-sync python -m vaila.video_event_equalizer --help`
 
-Equalize two camera videos using three corresponding events and local CUDA RIFE.
+Equalize two or more camera videos using three corresponding events each and local CUDA RIFE.
+The first (reference) camera sets the grid; every other camera is aligned to it.
 Outputs use a shared grid with configurable FPS and frame count; CSV maps identify
 original and generated images in both cameras, including the reference.
 See [setup, fields, example and limitations](syncvid.md#equalize-by-events-rife).
@@ -45,6 +46,28 @@ uv run --no-sync python -m vaila.video_event_equalizer \
 Add `--dry-run` for the same plan and full maps as JSON without loading RIFE or
 writing outputs. Without `--dry-run`, the CLI prints the preview before export.
 GUI Run prints the equivalent command with the selected output parameters.
+
+### Three or more cameras
+
+Repeat `--source` and `--source-events` together, in the same order. Each camera
+gets its own three events (1-based start, contact, end) and its own video in the
+output folder, named `<role>_<video>_equalized.mp4`:
+
+```bash
+uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c2_16mm_left.mp4 --reference-events 1,9,22 \
+  --source /path/to/c1_main.mp4 --source-events 1,9,19 \
+  --source /path/to/c3_top.mp4 --source-events 1,8,20 \
+  --output-dir /path/to/results
+```
+
+The manifest lists the cameras as `reference`, `source`, `source_2`, `source_3`,
+and so on. Each camera has its own `*_frames.csv` map. The FreeKiki one-click reads
+only `reference` and `source`. The GUI has **Add camera** and **Remove** for the
+same cameras, one table row each; the window scrolls vertically and horizontally (wheel;
+Shift + wheel). GUI Run prints the standard `>> vaila/video_event_equalizer: Equivalent CLI`
+banner (`uv run --no-sync vaila/video_event_equalizer.py ...`). Two different files are
+required; the same video twice is refused.
 
 The manifest keeps the existing effective `output_fps` / `output_frame_count`
 fields and records requested values, output anchors, rational durations and contact

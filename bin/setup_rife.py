@@ -1,7 +1,7 @@
 """Install, copy or move the pinned Practical-RIFE 4.25 code/model and verify CUDA inference.
 
 Update Date: 30 October 2026
-Version: 0.4.13
+Version: 0.4.14
 
 Uses the existing vailá Python environment; never installs upstream requirements
 or changes torch, CUDA groups, extras, pyproject.toml or uv.lock.
@@ -84,7 +84,7 @@ def download_archive(destination: Path) -> None:
         print(f">> Reusing verified download: {destination}", flush=True)
         return
     print(">> Downloading official RIFE 4.25 bundle (~23 MB)…", flush=True)
-    request = urllib.request.Request(MODEL_URL, headers={"User-Agent": "vaila-rife-setup/0.4.13"})
+    request = urllib.request.Request(MODEL_URL, headers={"User-Agent": "vaila-rife-setup/0.4.14"})
     with tempfile.TemporaryDirectory(dir=destination.parent, prefix="rife_download_") as temporary:
         staged = Path(temporary) / "rife425.zip"
         with urllib.request.urlopen(request, timeout=120) as response, staged.open("wb") as handle:

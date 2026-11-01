@@ -1,7 +1,7 @@
 """Physical-time synchronization from reviewed events and retained samples.
 
 Update Date: 29 October 2026
-Version: 0.4.13
+Version: 0.4.14
 
 All public frame numbers are 1-based. Fractions preserve the reference clock,
 piecewise calibration, output grid and earlier-sample tie breaking exactly.

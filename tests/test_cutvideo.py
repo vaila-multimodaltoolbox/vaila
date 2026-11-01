@@ -1,7 +1,7 @@
 """Focused tests for cutvideo timeline, sync handoff, and render helpers.
 
 Update Date: 27 October 2026
-Version: 0.4.13
+Version: 0.4.14
 """
 
 from pathlib import Path

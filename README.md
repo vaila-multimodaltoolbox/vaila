@@ -1,15 +1,18 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.13 (see `vaila.py`). **Package version:** 0.4.13 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.14 (see `vaila.py`). **Package version:** 0.4.14 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-10-30
+**Last updated:** 2026-11-01
 
 Syncvid **Equalize by events (RIFE)** opens a CUDA frame-interpolation tool on the
 reference camera's grid by default. **Output FPS** (including 60, 120 and exact
 fractions) and **Output frame count** define a common grid for both cameras.
 Click **Preview** to review durations, contact timing and original/generated counts,
-then **Run**. Enter start/contact/end for both cameras; for example,
+then **Run**. Enter start/contact/end for every camera (two, three or more); for example,
 `c1: 1,9,19` and reference `c2: 1,9,22` produce 22 frames each with contact at frame 9.
+The window lists the cameras as a scrollable table (vertical and horizontal), and the terminal
+prints the standard `>> vaila/video_event_equalizer: Equivalent CLI` banner to repeat the run
+without the window.
 All three anchors remain original images; higher FPS adds visual estimates, and
 independent FPS/count choices change playback speed. CLI: `--output-fps` and
 `--output-frame-count`. CSV maps distinguish original and generated images. See the
@@ -234,7 +237,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 30.Oct.2026 v0.4.13 (Python 3.12.15)
+vailá - 30.Oct.2026 v0.4.14 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -1014,7 +1017,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.13`** (30 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.14`** (30 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

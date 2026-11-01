@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Practical-RIFE 4.25 installer. Updated: 30 October 2026; Version: 0.4.13.
+# Practical-RIFE 4.25 installer. Updated: 30 October 2026; Version: 0.4.14.
 # Uses the current vailá environment without changing CUDA groups or extras.
 # Optional and relocatable: --home DIR installs into DIR, --export DIR copies it (no network).
 set -euo pipefail

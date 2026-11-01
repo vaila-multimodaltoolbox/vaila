@@ -1,7 +1,7 @@
 """Event timing, GUI persistence and lossless end-to-end export regression proof.
 
 Update Date: 28 October 2026
-Version: 0.4.13
+Version: 0.4.14
 """
 
 import csv

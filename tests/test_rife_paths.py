@@ -1,7 +1,7 @@
 """Where RIFE lives: chosen by the user, portable, never silently another copy.
 
 Update Date: 30 October 2026
-Version: 0.4.13
+Version: 0.4.14
 """
 
 import hashlib
