@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.5
+Version: 0.4.14
 Created: August 03, 2025
-Last Updated: 24 September 2026
+Last Updated: 05 November 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
@@ -39,7 +39,14 @@ Description:
 
     Output: one reconstructed 3D result (CSV + .3d + BVH + a Blender
     companion script) in a timestamped vaila_rec3d_<timestamp>/ subfolder —
-    not one output per input file.
+    not one output per input file. ``rec3d_<timestamp>_nviews.csv`` records how
+    many cameras reconstructed each marker in each frame.
+
+    Missing views (v0.4.14): each marker is triangulated from the cameras that see
+    it (finite pixel and finite DLT row for that frame); a NaN in one camera no
+    longer discards the marker when at least two other cameras see it.
+    ``rec3d_multicam(..., weights=...)`` accepts optional per-camera weights
+    (weighted linear least squares) for callers that have keypoint confidences.
 
     Blender alignment (v0.3.99): --swap-yz is now the DEFAULT (use
     --no-swap-yz to keep raw DLT axes), so height ends up vertical (Z-up) in
@@ -72,13 +79,19 @@ except ImportError:
     from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 
-def rec3d_multicam(dlt_list, pixel_list):
+MIN_VIEWS = 2  # a 3D point needs at least two cameras that see it
+
+
+def rec3d_multicam(dlt_list, pixel_list, weights=None):
     """
     Reconstructs a 3D point using multiple camera observations and their corresponding DLT3D parameters.
 
     Args:
         dlt_list (list of np.array): List of DLT3D parameter arrays (each of 11 elements) for each camera.
         pixel_list (list of tuple): List of observed pixel coordinates (x, y) for each camera.
+        weights (list of float | None): Optional non-negative weight per camera (for example a
+            keypoint confidence). Both equations of camera i are scaled by sqrt(weights[i]), i.e.
+            weighted linear least squares. ``None`` (default) keeps the unweighted solution.
 
     Returns:
         np.array: Reconstructed 3D point [X, Y, Z] using a least squares solution.
@@ -99,8 +112,63 @@ def rec3d_multicam(dlt_list, pixel_list):
         b_vector[row_idx] = x - a4
         b_vector[row_idx + 1] = y - a8
 
+    if weights is not None:
+        w = np.sqrt(np.repeat(np.asarray(weights, dtype=float), 2))
+        A_matrix = A_matrix * w[:, None]
+        b_vector = b_vector * w
+
     solution, residuals, rank, s = lstsq(A_matrix, b_vector, rcond=None)
     return solution  # [X, Y, Z]
+
+
+def rec3d_available_views(dlt_list, pixel_list, weights=None, min_views=MIN_VIEWS):
+    """Triangulate one point from the cameras that actually see it.
+
+    A camera is used only when its DLT parameters are present and finite, its (x, y) is finite
+    and, if ``weights`` is given, its weight is finite and positive. Cameras that miss the point
+    (occlusion, tracker gap, no DLT for this frame) are skipped instead of discarding the whole
+    point, so a third or fourth camera can still rescue it.
+
+    Args:
+        dlt_list: DLT3D parameters per camera (11 values each); ``None`` marks a camera without
+            calibration for this frame.
+        pixel_list: (x, y) per camera, NaN when the camera did not observe the point.
+        weights: optional per-camera weight, passed to :func:`rec3d_multicam`.
+        min_views: minimum number of usable cameras (default 2).
+
+    Returns:
+        (xyz, n_views): the 3D point (NaN when fewer than ``min_views`` cameras are usable) and
+        the number of cameras used.
+    """
+    dlts, pixels, used_weights = [], [], []
+    for i, (params, xy) in enumerate(zip(dlt_list, pixel_list, strict=True)):
+        if params is None:
+            continue
+        params = np.asarray(params, dtype=float)
+        x, y = float(xy[0]), float(xy[1])
+        if not (np.isfinite(params).all() and np.isfinite(x) and np.isfinite(y)):
+            continue
+        if weights is not None:
+            w = float(weights[i])
+            if not np.isfinite(w) or w <= 0:
+                continue
+            used_weights.append(w)
+        dlts.append(params)
+        pixels.append((x, y))
+    n_views = len(dlts)
+    if n_views < min_views:
+        return np.full(3, np.nan), n_views
+    point = rec3d_multicam(dlts, pixels, weights=used_weights if weights is not None else None)
+    return np.asarray(point, dtype=float), n_views
+
+
+def write_nviews_csv(frames, n_views, num_markers, path):
+    """Save how many cameras reconstructed each marker in each frame (0 = not reconstructed)."""
+    columns = ["frame"] + [f"p{m}_nviews" for m in range(num_markers)]
+    table = pd.DataFrame(np.column_stack([np.asarray(frames), n_views]), columns=columns)  # type: ignore
+    table = table.astype(int)
+    table.to_csv(path, index=False)
+    return path
 
 
 def load_pixel_csv_positional(file_path):
@@ -1108,6 +1176,7 @@ def process_files_in_directory(
 
     pixel_frame_to_row = [{int(f): i for i, f in enumerate(frames)} for frames in pixel_frames_list]
     dlt_frame_to_row = [{int(f): i for i, f in enumerate(frames)} for frames in dlt_frames_list]
+    n_views = np.zeros((total_frames, num_markers), dtype=int)
 
     progress_step = max(1, total_frames // 20)
     for frame_idx, frame in enumerate(common_frames):
@@ -1117,37 +1186,26 @@ def process_files_in_directory(
 
         frame_int = int(frame)
 
-        # Per-camera DLT3D parameters for THIS frame (the "DLT matrix" lookup)
+        # Per-camera DLT3D parameters for THIS frame (the "DLT matrix" lookup).
+        # A camera without a finite DLT row for this frame is simply not used for it;
+        # the other cameras can still reconstruct the frame.
         dlt_params_for_frame = []
-        frame_ok = True
         for cam_idx in range(num_cameras):
             dlt_row = 0 if dlt_single_mode[cam_idx] else dlt_frame_to_row[cam_idx].get(frame_int)
-            if dlt_row is None:
-                frame_ok = False
-                break
-            A = dlt_values_list[cam_idx][dlt_row]
-            if np.isnan(A).any():
-                frame_ok = False
-                break
-            dlt_params_for_frame.append(A)
-        if not frame_ok:
+            A = None if dlt_row is None else dlt_values_list[cam_idx][dlt_row]
+            dlt_params_for_frame.append(None if A is None or np.isnan(A).any() else A)
+        if sum(A is not None for A in dlt_params_for_frame) < MIN_VIEWS:
             continue
 
         pixel_row_for_cam = [pixel_frame_to_row[c][frame_int] for c in range(num_cameras)]
 
         for marker in range(num_markers):
-            pixel_obs_list = []
-            valid_marker = True
-            for cam_idx in range(num_cameras):
-                x_obs, y_obs = pixel_xy_list[cam_idx][pixel_row_for_cam[cam_idx], marker]
-                if np.isnan(x_obs) or np.isnan(y_obs):
-                    valid_marker = False
-                    break
-                pixel_obs_list.append((float(x_obs), float(y_obs)))
-            if not valid_marker:
-                continue
-
-            point3d = rec3d_multicam(dlt_params_for_frame, pixel_obs_list)
+            pixel_obs_list = [
+                pixel_xy_list[cam_idx][pixel_row_for_cam[cam_idx], marker]
+                for cam_idx in range(num_cameras)
+            ]
+            point3d, used = rec3d_available_views(dlt_params_for_frame, pixel_obs_list)
+            n_views[frame_idx, marker] = used if np.isfinite(point3d).all() else 0
             col_start = 1 + marker * 3
             reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
 
@@ -1165,6 +1223,18 @@ def process_files_in_directory(
     output_file_csv = os.path.join(output_dir, f"rec3d_{timestamp}.csv")
     _write_rec3d_output(rec_coords_df, output_file_3d)
     _write_rec3d_output(rec_coords_df, output_file_csv)
+    write_nviews_csv(
+        common_frames,
+        n_views,
+        num_markers,
+        os.path.join(output_dir, f"rec3d_{timestamp}_nviews.csv"),
+    )
+    partial = int(np.count_nonzero((n_views >= MIN_VIEWS) & (n_views < num_cameras)))
+    if partial:
+        print(
+            f"{partial} marker-frame(s) reconstructed from fewer than all {num_cameras} cameras "
+            f"(at least {MIN_VIEWS}); see rec3d_{timestamp}_nviews.csv"
+        )
 
     file_base = f"rec3d_{timestamp}"
     save_rec3d_as_bvh(rec_coords_df, output_dir, file_base, data_rate, gui=gui, swap_yz=swap_yz)

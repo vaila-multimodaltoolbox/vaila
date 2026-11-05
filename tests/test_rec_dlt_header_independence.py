@@ -99,7 +99,11 @@ def test_rec3d_one_dlt3d_header_independent(tmp_path):
 
     subfolders = [f for f in out_dir.iterdir() if f.is_dir() and "vaila_rec3d" in f.name]
     assert len(subfolders) == 1
-    csv_files = [f for f in subfolders[0].glob("*.csv") if not f.name.endswith("_labels.csv")]
+    csv_files = [
+        f
+        for f in subfolders[0].glob("*.csv")
+        if not f.name.endswith(("_labels.csv", "_nviews.csv"))
+    ]
     assert len(csv_files) == 1
 
     rows = _read_csv_by_row(csv_files[0])
@@ -197,7 +201,11 @@ def test_rec3d_multicam_correlation_with_per_frame_dlt(tmp_path):
 
     subfolders = [f for f in out_dir.iterdir() if f.is_dir() and "vaila_rec" in f.name]
     assert len(subfolders) == 1
-    csv_files = [f for f in subfolders[0].glob("*.csv") if not f.name.endswith("_labels.csv")]
+    csv_files = [
+        f
+        for f in subfolders[0].glob("*.csv")
+        if not f.name.endswith(("_labels.csv", "_nviews.csv"))
+    ]
     assert len(csv_files) == 1
 
     rows = _read_csv_by_row(csv_files[0])

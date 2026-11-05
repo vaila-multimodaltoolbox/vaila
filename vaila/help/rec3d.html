@@ -31,8 +31,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d.py</p>
-            <p><strong>Version:</strong> 0.4.5</p>
-            <p><strong>Updated:</strong> 24 September 2026</p>
+            <p><strong>Version:</strong> 0.4.14</p>
+            <p><strong>Updated:</strong> 05 November 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -57,10 +57,11 @@
 
         <h2>Input file formats</h2>
         <h3>DLT3D file (per camera)</h3>
-        <p>CSV with <strong>one row per frame</strong>: <code>frame</code>, then 11 DLT coefficients. <strong>One file per camera</strong>, passed to <code>--dlt-files</code> in the same order the pixel CSVs will sort alphabetically. If a frame is missing from a camera's DLT3D file (or its coefficients contain NaN), that frame is skipped.</p>
+        <p>CSV with <strong>one row per frame</strong>: <code>frame</code>, then 11 DLT coefficients. <strong>One file per camera</strong>, passed to <code>--dlt-files</code> in the same order the pixel CSVs will sort alphabetically. If a frame is missing from a camera's DLT3D file (or its coefficients contain NaN), <strong>that camera</strong> is left out of that frame; the other cameras still reconstruct it (at least two are needed).</p>
+        <p><strong>Since 0.4.14</strong> each marker is triangulated from the cameras that see it: a camera whose pixel is NaN (occlusion, tracker gap) is skipped, and the marker is reconstructed whenever at least <strong>two</strong> cameras remain (before, one missing camera discarded the marker). <code>rec3d_*_nviews.csv</code> records how many cameras were used.</p>
         <h3>Pixel CSV (per camera)</h3>
         <p><strong>Column labels are not inspected — only column order matters.</strong> Column 0 is the frame identifier and every pair of columns after that is one marker's (x, y), regardless of header text (vailá <code>p0_x</code>/<code>p0_y</code>, SAM3, YOLO, MediaPipe named joints, etc.). Exactly <strong>one CSV per camera</strong> must be placed in <code>--input-dir</code>, matching <code>--dlt-files</code> in count, paired by <strong>sorted filename</strong> (e.g. <code>cam1_pixels.csv</code>, <code>cam2_pixels.csv</code>, ...).</p>
-        <p>Only frames present in <strong>every</strong> camera's pixel file, with valid DLT parameters for that frame in every camera, are reconstructed.</p>
+        <p>Only frames present in <strong>every</strong> camera's pixel file are reconstructed; within a frame, each marker uses the cameras that see it (at least two).</p>
 
         <h2>Output files</h2>
         <p>A single reconstruction result is written inside a new subfolder: <code>vaila_rec3d_YYYYMMDD_HHMMSS/</code>.</p>
@@ -68,6 +69,7 @@
             <tr><th>File</th><th>Description</th></tr>
             <tr><td><code>rec3d_*.csv</code></td><td>3D points: frame, p0_x, p0_y, p0_z, p1_x, ... (<strong>0-based since 0.4.3</strong>, matching the <code>p0_x/p0_y</code> pixel columns written by <code>getpixelvideo.py</code>)</td></tr>
             <tr><td><code>rec3d_*.3d</code></td><td>Same data as CSV (duplicate format).</td></tr>
+            <tr><td><code>rec3d_*_nviews.csv</code></td><td>Cameras used per marker and frame (frame, p0_nviews, ...; 0 = not reconstructed).</td></tr>
             <tr><td><code>rec3d_*.bvh</code></td><td>Mocap format for Blender (each marker as an independent ROOT node).</td></tr>
             <tr><td><code>rec3d_*_blender_skeleton_viz.py</code></td><td>Companion script (see "Skeleton visualization" below).</td></tr>
         </table>

@@ -30,8 +30,8 @@
             <h3>Module information</h3>
             <p><strong>Category:</strong> Processing</p>
             <p><strong>File:</strong> vaila/rec3d_one_dlt3d.py</p>
-            <p><strong>Version:</strong> 0.4.5</p>
-            <p><strong>Updated:</strong> 24 September 2026</p>
+            <p><strong>Version:</strong> 0.4.14</p>
+            <p><strong>Updated:</strong> 05 November 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI:</strong> Yes &nbsp; <strong>CLI:</strong> Yes</p>
         </div>
@@ -58,7 +58,9 @@
             <tr><td><code>rec3d_*.3d</code></td><td>Same data as CSV (duplicate format).</td></tr>
             <tr><td><code>rec3d_*_m.c3d</code></td><td>C3D in <strong>meters</strong> (POINT:UNITS=m, POINT:FRAMES set).</td></tr>
             <tr><td><code>rec3d_*_mm.c3d</code></td><td>C3D in <strong>millimeters</strong> (POINT:UNITS=mm).</td></tr>
+            <tr><td><code>rec3d_*_nviews.csv</code></td><td>Cameras used per marker and frame (frame, p0_nviews, ...; 0 = not reconstructed).</td></tr>
         </table>
+        <p><strong>Since 0.4.14</strong> each marker is triangulated from the cameras that see it: a NaN pixel in one camera only drops that camera, and the marker is reconstructed whenever at least <strong>two</strong> cameras see it (before, one missing camera discarded the marker).</p>
         <p>C3D files are compatible with <strong>viewc3d</strong>, <strong>viewc3d_pyvista</strong>, <strong>readc3d_export</strong> (inspect/convert), and standard C3D tools.</p>
 
         <h2>Optional: mesh-for-Blender export</h2>
