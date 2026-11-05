@@ -32,7 +32,9 @@ Both files are gitignored (place locally; `*.mp4` is in `.gitignore`).
 The resolver auto-detects checkpoint files under `vaila/models/sam3/` in this order:
 
 1. `sam3.pt` (original SAM 3)
-2. `sam3.1_multiplex.pt` (SAM 3.1 Multiplex)
+
+`sam3.1_multiplex.pt` (SAM 3.1) is not supported: the pinned `sam3==0.1.3` package cannot build the
+multiplex model, so `vaila_sam.py` refuses it with an explanatory error.
 
 Both flat (`vaila/models/sam3/<name>`) and nested (`vaila/models/sam3/sam3_weights/<name>`) layouts are supported. Legacy repo root `./sam3_weights/` is still a fallback but deprecated.
 
@@ -67,7 +69,7 @@ Or pass the full checkpoint path explicitly:
 uv run vaila/vaila_sam.py \
   -i tests/SAM/BRA_KOR_230503_frame_1_to_61_h264.mp4 \
   -o tests/SAM/ \
-  -w vaila/models/sam3/sam3.1_multiplex.pt \
+  -w vaila/models/sam3/sam3.pt \
   -t person
 ```
 

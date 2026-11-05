@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 24 September 2026
-Version: 0.4.5
+Update Date: 05 November 2026
+Version: 0.4.14
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -151,11 +151,14 @@ except ImportError:
     from dialogsuser import ask_output_directory  # ty: ignore[unresolved-import]
 
 SAM3_DEFAULT_CKPT_NAME = "sam3.pt"
+# SAM 3.1 multiplex weights (facebook/sam3.1). The pinned PyPI ``sam3`` (0.1.3, and 0.1.4)
+# cannot build the multiplex model: it exists only in the GitHub sources since 27 March 2026
+# (``sam3/model/multiplex_utils.py``). These weights are refused with a clear message.
 SAM3_MULTIPLEX_CKPT_NAME = "sam3.1_multiplex.pt"
 SAM3_HF_REPO_ID = "facebook/sam3"
 
-# All recognised checkpoint file names (tried in order during auto-detection)
-SAM3_CKPT_CANDIDATES: tuple[str, ...] = (SAM3_DEFAULT_CKPT_NAME, SAM3_MULTIPLEX_CKPT_NAME)
+# Checkpoint file names tried in order during auto-detection
+SAM3_CKPT_CANDIDATES: tuple[str, ...] = (SAM3_DEFAULT_CKPT_NAME,)
 
 _SAM3_PERPETUAL_TRACKER_AUTOCAST_PATCHED = False
 _SAM3_BACKBONE_FPN_FP32_PATCHED = False
@@ -382,7 +385,7 @@ uv run vaila/sam_postprocess.py path/to/processed_sam_…/video_stem --mode all
 uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t person --dry-run
 uv run vaila/vaila_sam.py -i clips_dir/ --preflight -o out/
 uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t player \\
-  -w vaila/models/sam3/sam3.1_multiplex.pt
+  -w vaila/models/sam3/sam3.pt
 
 # FIFA Skeletal Tracking Light (needs --extra fifa, CUDA, SAM 3D Body weights)
 uv run vaila/vaila_sam.py fifa --help
@@ -670,16 +673,34 @@ def _assert_sam3_video_checkpoint_not_3d_body_weights(path: Path) -> None:
         )
 
 
+def _assert_not_sam3_multiplex_checkpoint(path: Path) -> None:
+    """Refuse SAM 3.1 multiplex weights, which the pinned ``sam3`` package cannot build.
+
+    ``build_sam3_video_predictor`` in ``sam3`` 0.1.3/0.1.4 always builds the SAM 3 video
+    architecture; a multiplex checkpoint then fails in ``load_state_dict`` with a long list
+    of missing/unexpected keys. Fail early with the reason instead.
+    """
+    if "multiplex" in path.name.lower():
+        raise ValueError(
+            "SAM 3.1 multiplex weights are not supported by the installed sam3 package.\n"
+            f"Refused: {path}\n"
+            "PyPI sam3 (0.1.3, 0.1.4) does not include the multiplex model; it is only in the "
+            "facebookresearch/sam3 GitHub sources. Use the SAM 3 video weights instead: "
+            f"{SAM3_DEFAULT_CKPT_NAME} from https://huggingface.co/{SAM3_HF_REPO_ID}"
+        )
+
+
 def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
     """
-    Return path to sam3.pt / sam3.1_multiplex.pt, or None to let sam3 download from Hub.
+    Return path to sam3.pt, or None to let sam3 download from Hub.
 
     Order: argument → env SAM3_CHECKPOINT / VAILA_SAM3_CHECKPOINT →
-    ``vaila/models/sam3/{sam3.pt, sam3.1_multiplex.pt}`` →
-    ``vaila/models/sam3/sam3_weights/{sam3.pt, sam3.1_multiplex.pt}`` →
-    ``models/sam3/{sam3.pt, sam3.1_multiplex.pt}`` (repo root) →
-    ``models/sam3/sam3_weights/{sam3.pt, sam3.1_multiplex.pt}`` (repo root) →
+    ``vaila/models/sam3/sam3.pt`` → ``vaila/models/sam3/sam3_weights/sam3.pt`` →
+    ``models/sam3/sam3.pt`` (repo root) → ``models/sam3/sam3_weights/sam3.pt`` (repo root) →
     legacy ``<repo>/sam3_weights/sam3.pt``.
+
+    SAM 3.1 multiplex weights (``sam3.1_multiplex.pt``) are not auto-detected, and passing
+    them explicitly raises ``ValueError`` (see ``_assert_not_sam3_multiplex_checkpoint``).
     """
     raw: str | None = None
     if checkpoint is not None:
@@ -721,6 +742,8 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
             if candidate.is_file():
                 _assert_sam3_video_checkpoint_not_3d_body_weights(candidate)
                 return candidate
+        if (p / SAM3_MULTIPLEX_CKPT_NAME).is_file():
+            _assert_not_sam3_multiplex_checkpoint(p / SAM3_MULTIPLEX_CKPT_NAME)
         raise FileNotFoundError(
             f"SAM3 checkpoint not found in directory: {p}\n"
             f"Expected one of: {', '.join(SAM3_CKPT_CANDIDATES)}"
@@ -728,9 +751,9 @@ def _resolve_sam3_checkpoint_file(checkpoint: Path | None) -> Path | None:
     if not p.is_file():
         raise FileNotFoundError(
             f"SAM3 checkpoint not found: {p}\n"
-            f"Expected a file named {SAM3_DEFAULT_CKPT_NAME} or {SAM3_MULTIPLEX_CKPT_NAME} "
-            f"(or pass the full path)."
+            f"Expected a file named {SAM3_DEFAULT_CKPT_NAME} (or pass the full path)."
         )
+    _assert_not_sam3_multiplex_checkpoint(p)
     _assert_sam3_video_checkpoint_not_3d_body_weights(p)
     return p
 
@@ -4806,7 +4829,7 @@ class SamVideoDialog(tk.Toplevel):
             text=(
                 "Select an input directory with videos (batch) or a single video file.\n"
                 "Requires: uv sync --extra sam  |  NVIDIA CUDA  |  HF: accept facebook/sam3 + hf auth login\n"
-                "Checkpoint: video weights only (facebook/sam3 → sam3.pt / sam3.1_multiplex.pt).\n"
+                "Checkpoint: video weights only (facebook/sam3 → sam3.pt; SAM 3.1 multiplex not supported).\n"
                 "Not FIFA / sam-3d-dinov3. CLI equivalent: -w / --weights / --checkpoint.\n"
                 "Results folder: <output>/processed_sam_YYYYMMDD_HHMMSS/ (created under Output folder).\n"
                 "VRAM: optional Max frames — 0 = every frame to SAM (best mask sync); "
@@ -5985,11 +6008,11 @@ def main() -> None:
         dest="checkpoint",
         type=Path,
         default=None,
-        help="Path to SAM 3 video weights (sam3.pt or sam3.1_multiplex.pt), or a "
-        "folder containing them. Skips Hub download. "
+        help="Path to SAM 3 video weights (sam3.pt), or a folder containing it. "
+        "Skips Hub download. SAM 3.1 multiplex weights are refused (the pinned sam3 "
+        "package cannot build that model). "
         "Default: env SAM3_CHECKPOINT / VAILA_SAM3_CHECKPOINT, else "
-        "vaila/models/sam3/{sam3.pt,sam3.1_multiplex.pt} "
-        "(legacy: repo sam3_weights/sam3.pt).",
+        "vaila/models/sam3/sam3.pt (legacy: repo sam3_weights/sam3.pt).",
     )
     parser.add_argument(
         "--max-frames",

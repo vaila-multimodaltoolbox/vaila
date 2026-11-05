@@ -202,3 +202,23 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
 - **Gotcha:** `filter_utils.butter_filter(padding=True)` reflects evenly → zero speed at the clip edges; use
   `sosfiltfilt(..., padtype="odd")` for positions you differentiate. The GUI width test (≤ 900 px) fails if
   section 5 rows grow; new widgets go on a second line inside `bar_op2`.
+
+### AI stack check, Ultralytics 8.4.202, SAM 3.1 multiplex refused (5 November 2026)
+
+- **Checked against upstream (PyPI, GitHub, Hugging Face):** MediaPipe 1.2.2 and mhr 1.0.1 are the latest; the Sapiens2
+  clone (`7e5bae88`), the SAM 3D Body clone (`b5c765a0`) and every local weight snapshot (`facebook/sam3` `3c879f39`,
+  `sapiens2-pose-*`, `detr-resnet-101-dc5`, `sam-3d-body-dinov3` `11aaa346`) match upstream; the DINOv3 torch.hub cache
+  is newer than its last upstream commit.
+- **Ultralytics 8.4.183 → 8.4.202** (`uv lock --upgrade-package ultralytics`; only ultralytics, ultralytics-platform,
+  ultralytics-thop changed). YOLO26n-pose on `tests/markerless_2d_analysis` (2 × 257 frames) and 120 frames of a lifting
+  clip gave identical detections and keypoints with both versions. 8.4.197 drops PyYAML from its base deps; vailá
+  declares `pyyaml` directly.
+- **sam3 stays at 0.1.3** (reason in `pyproject.toml`): 0.1.4 has the same code but drops `decord`, which
+  `sam3.model.utils.sam2_utils` still imports for mp4 input.
+- **SAM 3.1 multiplex:** no PyPI sam3 (≤ 0.1.4) can build it (GitHub sources only, since 27 March 2026). `vaila_sam.py`
+  no longer auto-detects `sam3.1_multiplex.pt` and refuses it with an explanatory `ValueError`
+  (`_assert_not_sam3_multiplex_checkpoint`); `tests/test_vaila_sam.py::test_installed_sam3_has_no_multiplex_model` is the
+  tripwire for a future sam3 that ships the multiplex model.
+- **Gotcha:** sync this CUDA machine with `uv sync --no-group cpu --group cuda --extra sam --extra fifa --extra sapiens
+  --extra upscaler --frozen --inexact`; without the extras uv removes them, and without `--inexact` it removes the
+  editable Sapiens2 install.

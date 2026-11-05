@@ -95,15 +95,15 @@ The resolver tries these locations in order:
 1. CLI `-w` / `--checkpoint` argument
 2. Environment: `SAM3_CHECKPOINT` or `VAILA_SAM3_CHECKPOINT`
 3. `vaila/models/sam3/sam3.pt`
-4. `vaila/models/sam3/sam3.1_multiplex.pt`
-5. `vaila/models/sam3/sam3_weights/sam3.pt` (nested HF layout)
-6. `models/sam3/sam3.pt` (repo-root models layout)
-7. `models/sam3/sam3.1_multiplex.pt` (repo-root models layout)
-8. `models/sam3/sam3_weights/sam3.pt` (repo-root nested HF layout)
-9. Legacy: `<repo>/sam3_weights/sam3.pt`
-10. Auto-download from Hugging Face Hub
+4. `vaila/models/sam3/sam3_weights/sam3.pt` (nested HF layout)
+5. `models/sam3/sam3.pt` (repo-root models layout)
+6. `models/sam3/sam3_weights/sam3.pt` (repo-root nested HF layout)
+7. Legacy: `<repo>/sam3_weights/sam3.pt`
+8. Auto-download from Hugging Face Hub
 
-Supported checkpoints: `sam3.pt` (original) and `sam3.1_multiplex.pt` (SAM 3.1 Multiplex).
+Supported checkpoint: `sam3.pt`. `sam3.1_multiplex.pt` (SAM 3.1) is refused with an explanatory
+error since 05 November 2026: the pinned `sam3==0.1.3` (and PyPI 0.1.4) cannot build the multiplex
+model, which exists only in the `facebookresearch/sam3` GitHub sources.
 
 **Important:** `vaila/models/sam-3d-dinov3/` contains SAM 3D Body / FIFA weights — these are **not** SAM 3 video. Passing them will raise `ValueError`.
 
@@ -450,7 +450,7 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 | File | Role |
 |------|------|
 | `vaila/vaila_sam.py` | All SAM 3 video logic + CLI + GUI + FIFA dispatch |
-| `vaila/models/sam3/` and `models/sam3/` | Checkpoint directories (sam3.pt, sam3.1_multiplex.pt) |
+| `vaila/models/sam3/` and `models/sam3/` | Checkpoint directories (sam3.pt) |
 | `vaila/models/sam3/merges.txt` | BPE fallback vocabulary |
 | `vaila/help/vaila_sam.html` | Browser help page |
 | `vaila/help/vaila_sam.md` | Markdown help source |

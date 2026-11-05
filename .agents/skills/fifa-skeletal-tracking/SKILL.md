@@ -352,7 +352,7 @@ Same process with `--split test` and the [Test Portal](https://www.codabench.org
 | `bin/setup_fifa_sam3d.sh` / `.ps1` | Clones sam_3d_body + installs its runtime deps (`--no-deps`) + downloads gated weights |
 | `sam_3d_body/` | Cloned by the setup script (NOT committed); no packaging metadata, so it is never `pip install`'d — see `ensure_sam3d_importable()` in `vaila/sam3dinov3.py` |
 | `vaila/models/sam-3d-dinov3/` | SAM 3D Body weights (model.ckpt, mhr_model.pt) |
-| `vaila/models/sam3/` | SAM 3 video weights (sam3.pt, sam3.1_multiplex.pt) |
+| `vaila/models/sam3/` | SAM 3 video weights (sam3.pt; SAM 3.1 multiplex not supported by sam3==0.1.3) |
 | `tests/test_vaila_sam.py` | SAM helpers + GUI Help smoke test |
 | `tests/test_fifa_skeletal_pipeline.py` | FIFA layout/packaging unit tests (no GPU) |
 | `tests/test_fifa_bootstrap.py` | Bootstrap layout tests (symlinks + sequences) |

@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.4.5
-- **Updated:** 24 September 2026
+- **Version:** 0.4.14
+- **Updated:** 05 November 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -19,7 +19,7 @@
 
 ### Main features:
 
-- Text-prompt video segmentation with SAM 3 / SAM 3.1 Multiplex
+- Text-prompt video segmentation with SAM 3 (`sam3.pt`)
 - Automatic VRAM management (auto `max_frames` scales with GPU size; `--max-frames 0` = full clip for correct overlay timing)
 - Batch processing (directory of videos or single file)
 - Overlay MP4 output with coloured masks (temporally nearest SAM keyframe when `--max-frames` subsamples input)
@@ -97,13 +97,17 @@ The resolver auto-detects checkpoints in this priority:
 1. CLI `-w` / `--checkpoint` argument
 2. Environment: `SAM3_CHECKPOINT` or `VAILA_SAM3_CHECKPOINT`
 3. `vaila/models/sam3/sam3.pt` (flat layout)
-4. `vaila/models/sam3/sam3.1_multiplex.pt` (SAM 3.1)
-5. `vaila/models/sam3/sam3_weights/sam3.pt` (nested HF local-dir layout)
-6. `models/sam3/sam3.pt` (repo-root models layout)
-7. `models/sam3/sam3.1_multiplex.pt` (repo-root models layout)
-8. `models/sam3/sam3_weights/sam3.pt` (repo-root nested HF layout)
-9. Legacy: `<repo>/sam3_weights/sam3.pt` (deprecated)
-10. If none found: auto-download from Hugging Face Hub at runtime
+4. `vaila/models/sam3/sam3_weights/sam3.pt` (nested HF local-dir layout)
+5. `models/sam3/sam3.pt` (repo-root models layout)
+6. `models/sam3/sam3_weights/sam3.pt` (repo-root nested HF layout)
+7. Legacy: `<repo>/sam3_weights/sam3.pt` (deprecated)
+8. If none found: auto-download from Hugging Face Hub at runtime
+
+> **SAM 3.1 multiplex is not supported.** `sam3.1_multiplex.pt` (`facebook/sam3.1`) is not
+> auto-detected, and passing it with `-w` stops with an explanatory error. The pinned PyPI
+> package `sam3==0.1.3` (and 0.1.4) cannot build the multiplex model, which exists only in the
+> `facebookresearch/sam3` GitHub sources (since 27 March 2026). Without this check the run
+> would fail later inside `load_state_dict` with a long list of missing keys.
 
 > **SAM 3D Body weights are different!** `vaila/models/sam-3d-dinov3/` is for the FIFA Skeletal pipeline, **not** SAM 3 video. Passing a SAM 3D Body checkpoint to SAM 3 video will be rejected.
 
@@ -331,7 +335,7 @@ uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t person --dry-run   # smoke / c
 uv run vaila/vaila_sam.py -i clips_dir/ --preflight -o out/          # SAM3_PREFLIGHT.csv
 uv run vaila/vaila_sam.py --download-weights                        # HF sam3.pt
 uv run vaila/vaila_sam.py -i video.mp4 -o out/ -t player \
-  -w vaila/models/sam3/sam3.1_multiplex.pt                           # SAM 3.1 weights
+  -w vaila/models/sam3/sam3.pt                                       # explicit SAM 3 weights
 ```
 
 > Equivalent GUI: launch `vaila.py`, **Frame B → Markerless 2D → SAM 3 video**, fill **Input**, **Output**, **Text prompt**, **Max frames** and click **Run**. The terminal prints `>> vaila/vaila_sam: Equivalent CLI` with the full copy-paste command; the progress window also logs the subprocess argv.
@@ -1026,6 +1030,7 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 
 ## Version History
 
+- **v0.4.14 (05 November 2026):** `sam3.1_multiplex.pt` is no longer auto-detected and is refused with an explanatory error: the pinned `sam3==0.1.3` (and PyPI 0.1.4) cannot build the SAM 3.1 multiplex model.
 - **v0.3.70 (05 July 2026):** Set H.264/H.265 MP4 formats as the default output videos, keeping AVI only as a legacy fallback option to save disk space.
 - **v0.3.69 (05 July 2026):** Help expanded with **Re-ID CLI workflows** (`--stabilize-ids`, `--overlap-frames`, scenario recipes A–H), chunked post-process repair via `sam_postprocess.py`, and AVI overlay / `source=` README support in post-process frame-size detection.
 - **v0.3.47 (05 June 2026):** Subprocess-exit diagnostics (SIGKILL/SIGSEGV/SIGABRT/SIGBUS/EXIT_NEEDS_CHUNKING shown by name + actionable hint) in both CLI batch and GUI poller; runtime banner at startup (VRAM, host RAM, effective config, video queue); host-RAM heads-up for long broadcast clips; new `--print-examples` CLI flag + argparse epilog with copy/paste recipes; updated help with **Common errors** matrix.
