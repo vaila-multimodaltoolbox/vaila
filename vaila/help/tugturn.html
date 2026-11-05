@@ -205,7 +205,8 @@
         <div class="meta">
           <strong>Module:</strong> <code>vaila/tugturn.py</code><br />
           <strong>Authors:</strong> Paulo R. P. Santiago, Abel G. Chinaglia<br />
-          <strong>Updated:</strong> 24 September 2026 &middot;
+          <strong>Version:</strong> 0.4.14 &middot;
+          <strong>Updated:</strong> 05 November 2026 &middot;
           <strong>Python:</strong> 3.12 &middot;
           <strong>License:</strong> AGPL-3.0<br />
           <strong>Reference (preprint):</strong>
@@ -369,6 +370,39 @@ omega_0 = sqrt(g / l)</code></pre>
         </p>
       </section>
 
+      <section id="cadence">
+        <h2>Cadence and Velocity: Global vs Gait Window</h2>
+        <p>Two definitions are reported side by side.</p>
+        <table>
+          <thead>
+            <tr><th>Field (JSON <code>Global</code> / <code>_bd_results.csv</code>)</th><th>Interval</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>Cadence_steps_per_min</code> / <code>Cadence</code>,
+                    <code>Velocity_m_s</code></td>
+                <td>First to last heel strike of the whole trial. The pause before
+                    the turn and the turn are inside the interval, so both values are
+                    lower than during walking. Kept unchanged for comparison with
+                    earlier results (arXiv:2602.21425).</td></tr>
+            <tr><td><code>Cadence_First_Gait_steps_per_min</code> / <code>Cadence_First_Gait</code>,
+                    <code>Cadence_Second_Gait_steps_per_min</code> / <code>Cadence_Second_Gait</code></td>
+                <td>First to last kept heel strike inside one straight-gait phase:
+                    <code>(n_HS − 1) / (t_last − t_first) × 60</code>.</td></tr>
+            <tr><td><code>Velocity_First_Gait_m_s</code>, <code>Velocity_Second_Gait_m_s</code></td>
+                <td>Horizontal CoM path over the same interval divided by its duration.</td></tr>
+            <tr><td><code>Cadence_Gait_steps_per_min</code> / <code>Cadence_Gait</code>,
+                    <code>Velocity_Gait_m_s</code></td>
+                <td>Both gait phases pooled, weighted by their duration.</td></tr>
+          </tbody>
+        </table>
+        <p>
+          A phase with fewer than two heel strikes gives an empty value. For the
+          reference trial <code>s26_m1_t1</code>, the global cadence is 67.9 steps/min
+          and 0.347 m/s, whereas the gait-window values are 117.0 (first gait) and
+          113.1 (second gait) steps/min and 0.59 m/s.
+        </p>
+      </section>
+
       <section id="config">
         <h2>Configuration (TOML)</h2>
         <p>
@@ -411,7 +445,7 @@ y_chair_tol = 0.2     # m — tolerance before y_chair to count steps inside zon
             <tr><td><code>*_tugturn_data.json</code></td>
                 <td>Full structured report (metadata, phases, spatiotemporal, VC, XcoM)</td></tr>
             <tr><td><code>*_bd_results.csv</code></td>
-                <td>One-row global summary (cadence, velocity, phase durations, VC summary)</td></tr>
+                <td>One-row global summary (cadence and velocity, global and per gait phase; phase durations; VC summary)</td></tr>
             <tr><td><code>*_bd_steps.csv</code></td>
                 <td>One row per detected step (Time_s, Y_m, Side, Phase, Step/Stride/Width, Stance/Swing)</td></tr>
             <tr><td><code>*_bd_kinematics.csv</code></td>

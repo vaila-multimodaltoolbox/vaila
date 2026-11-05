@@ -6,8 +6,8 @@ Authors:
     - Paulo R. P. Santiago
     - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 24 September 2026
-Version: 0.4.5
+Updated: 05 November 2026
+Version: 0.4.14
 Python Version: 3.12.14
 
 Description:
@@ -3178,6 +3178,86 @@ def calculate_limb_vector_coding_y(
     return result
 
 
+def gait_phase_cadence_velocity(step_times_s, com_xy, fps: float) -> dict:
+    """Step rate and CoM speed between the first and last heel strike of one gait phase.
+
+    cadence = (n_HS - 1) / (t_last - t_first) * 60                     [steps/min]
+    speed   = horizontal CoM path over [t_first, t_last] / (t_last - t_first)   [m/s]
+
+    The global ``Cadence_steps_per_min`` / ``Velocity_m_s`` span the first to the last heel
+    strike of the whole trial, so the pause before the turn and the turn itself sit in the
+    denominator. This function uses one straight-gait window only. ``com_xy`` is the
+    per-frame CoM in the horizontal plane (N x 2, metres); a NaN inside the window yields a
+    NaN speed. Fewer than two heel strikes yield NaN cadence and speed.
+    """
+    times = np.sort(np.asarray(step_times_s, dtype=float))
+    out = {
+        "n_heel_strikes": int(times.size),
+        "span_s": float("nan"),
+        "path_m": float("nan"),
+        "cadence_steps_per_min": float("nan"),
+        "velocity_m_s": float("nan"),
+    }
+    if times.size < 2 or fps <= 0:
+        return out
+    span = float(times[-1] - times[0])
+    if span <= 0:
+        return out
+    out["span_s"] = span
+    out["cadence_steps_per_min"] = (times.size - 1) / span * 60.0
+    if com_xy is None:
+        return out
+    xy = np.asarray(com_xy, dtype=float)
+    i0 = max(round(float(times[0]) * fps), 0)
+    i1 = min(round(float(times[-1]) * fps), len(xy) - 1)
+    if i1 > i0:
+        path = float(np.sum(np.linalg.norm(np.diff(xy[i0 : i1 + 1], axis=0), axis=1)))
+        out["path_m"] = path
+        out["velocity_m_s"] = path / span
+    return out
+
+
+def gait_phase_metrics(steps_list, com_xy, fps: float) -> dict:
+    """Per-phase and pooled cadence/speed for the first and second straight-gait phases.
+
+    ``steps_list`` holds the heel strikes kept by ``process_tug_file`` (keys ``Time_s`` and
+    ``Phase``). The pooled values weight each phase by its duration: total step intervals
+    (or CoM path) over the summed first-to-last heel-strike spans. Missing values are
+    ``None`` so that JSON and CSV outputs stay valid.
+    """
+
+    def _finite_or_none(value):
+        return float(value) if value is not None and np.isfinite(value) else None
+
+    parts = {}
+    for phase in ("first_gait", "second_gait"):
+        times = [s["Time_s"] for s in steps_list if s.get("Phase") == phase]
+        parts[phase] = gait_phase_cadence_velocity(times, com_xy, fps)
+
+    valid = [p for p in parts.values() if np.isfinite(p["span_s"])]
+    span_total = sum(p["span_s"] for p in valid)
+    cadence_gait = (
+        sum(p["n_heel_strikes"] - 1 for p in valid) / span_total * 60.0 if span_total > 0 else None
+    )
+    with_path = [p for p in valid if np.isfinite(p["path_m"])]
+    span_path = sum(p["span_s"] for p in with_path)
+    velocity_gait = (
+        sum(p["path_m"] for p in with_path) / span_path
+        if with_path and len(with_path) == len(valid) and span_path > 0
+        else None
+    )
+
+    first, second = parts["first_gait"], parts["second_gait"]
+    return {
+        "Cadence_First_Gait_steps_per_min": _finite_or_none(first["cadence_steps_per_min"]),
+        "Cadence_Second_Gait_steps_per_min": _finite_or_none(second["cadence_steps_per_min"]),
+        "Cadence_Gait_steps_per_min": _finite_or_none(cadence_gait),
+        "Velocity_First_Gait_m_s": _finite_or_none(first["velocity_m_s"]),
+        "Velocity_Second_Gait_m_s": _finite_or_none(second["velocity_m_s"]),
+        "Velocity_Gait_m_s": _finite_or_none(velocity_gait),
+    }
+
+
 def process_tug_file(
     csv_path: Path, out_dir: Path, config_file: Path | None = None, y_chair_tol: float = 0.2
 ):
@@ -3442,6 +3522,13 @@ def process_tug_file(
         stats["Global"] = {}
     stats["Global"]["Steps_First_Gait"] = wf_steps
     stats["Global"]["Steps_Second_Gait"] = wb_steps
+    # Gait-window cadence/speed (the global values above also span the pause and the turn)
+    com_xy = (
+        analyzer.df[["CoM_x", "CoM_y"]].to_numpy()
+        if {"CoM_x", "CoM_y"}.issubset(analyzer.df.columns)
+        else None
+    )
+    stats["Global"].update(gait_phase_metrics(steps_list, com_xy, fps))
 
     fwd_seq = [s["Side"][0] for s in steps_list if s["Phase"] == "first_gait"]
     bck_seq = [s["Side"][0] for s in steps_list if s["Phase"] == "second_gait"]
@@ -3568,6 +3655,18 @@ def process_tug_file(
                     f"{prefix}_CAV_deg": res.get("CAV_deg", 0),
                 }
             )
+        # Appended at the end so existing column positions do not change
+        g = stats.get("Global", {})
+        results_data.update(
+            {
+                "Cadence_First_Gait": g.get("Cadence_First_Gait_steps_per_min"),
+                "Cadence_Second_Gait": g.get("Cadence_Second_Gait_steps_per_min"),
+                "Cadence_Gait": g.get("Cadence_Gait_steps_per_min"),
+                "Velocity_First_Gait_m_s": g.get("Velocity_First_Gait_m_s"),
+                "Velocity_Second_Gait_m_s": g.get("Velocity_Second_Gait_m_s"),
+                "Velocity_Gait_m_s": g.get("Velocity_Gait_m_s"),
+            }
+        )
     write_single_row_csv(out_dir / f"{csv_path.stem}_bd_results.csv", results_data)
 
     # Kinematics summary (Max/Mean ranges)

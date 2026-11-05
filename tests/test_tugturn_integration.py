@@ -228,6 +228,12 @@ def test_results_csv_has_known_columns(sample_data):
         "VCStand_Dominant",
         "VCFirstGait_Dominant",
         "VCSecondGait_Dominant",
+        "Cadence_First_Gait",
+        "Cadence_Second_Gait",
+        "Cadence_Gait",
+        "Velocity_First_Gait_m_s",
+        "Velocity_Second_Gait_m_s",
+        "Velocity_Gait_m_s",
     }
     missing = expected - set(df.columns)
     assert not missing, f"Missing columns in bd_results.csv: {missing}"
@@ -280,6 +286,23 @@ def test_regression_global_metrics(reference_report):
     for key, (ref, tol) in REGRESSION_GLOBAL.items():
         actual = g[key]
         assert abs(actual - ref) <= tol, f"{key} drifted: {actual} vs {ref}±{tol}"
+
+
+def test_regression_gait_window_cadence_and_velocity(reference_report):
+    """Gait-window values (first to last heel strike inside each straight-gait phase).
+
+    The global ``Cadence_steps_per_min``/``Velocity_m_s`` above keep their published values
+    (arXiv:2602.21425) but include the pause and the turn; the gait-window values must
+    exceed them for this trial.
+    """
+    g = reference_report["report"]["Spatiotemporal"]["Global"]
+    assert abs(g["Cadence_First_Gait_steps_per_min"] - 117.04) < 1.0
+    assert abs(g["Cadence_Second_Gait_steps_per_min"] - 113.09) < 1.0
+    assert abs(g["Cadence_Gait_steps_per_min"] - 115.13) < 1.0
+    assert abs(g["Velocity_First_Gait_m_s"] - 0.591) < 0.05
+    assert abs(g["Velocity_Second_Gait_m_s"] - 0.592) < 0.05
+    assert g["Cadence_Gait_steps_per_min"] > g["Cadence_steps_per_min"]
+    assert g["Velocity_Gait_m_s"] > g["Velocity_m_s"]
 
 
 def test_regression_total_tug_time(reference_report):
