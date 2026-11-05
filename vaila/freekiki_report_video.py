@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 26 October 2026
-Update Date: 29 October 2026
+Update Date: 01 November 2026
 
 Description:
     The broadcast video of the kick, every frame slowed down about five times, with the
@@ -96,7 +96,7 @@ def _event(f: int, m: dict, lang: str) -> tuple[str, str]:
         return tr(lang, "vid_prep"), "#333333"
     if f == kf:
         return tr(lang, "vid_kick"), "#1664a0"
-    if m.get("penalty"):  # no wall: the ball flies until the last frame
+    if not m.get("wall", not m.get("penalty")):  # no wall: the ball flies until the last frame
         if f < ef:
             return tr(lang, "vid_flight"), "#5b6577"
         return tr(lang, "vid_last"), "#d62246"
@@ -404,7 +404,7 @@ def write_lance_video(
     x0, y0, w, h = box
     last = min(m["end_frame"], run.n - 1)
     holds = {m["kick_frame"]: int(HOLD_S["kick"] * OUT_FPS)}
-    if not m.get("penalty"):  # a penalty has no wall to hold on
+    if m.get("wall", not m.get("penalty")):  # a penalty or an open-play kick has no wall
         holds[m["barrier_f"]] = int(HOLD_S["wall"] * OUT_FPS)
     holds[last] = int(HOLD_S["end"] * OUT_FPS)
     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), OUT_FPS, (w, h))  # ty: ignore[unresolved-attribute]

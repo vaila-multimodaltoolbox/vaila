@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 28 October 2026
-Update Date: 30 October 2026
+Update Date: 01 November 2026
 
 Description:
     The core kick metrics of one kicker, from ``poses_3d_binocular.csv`` (the triangulated
@@ -91,7 +91,11 @@ SENSITIVE_METRICS = {  # metric -> the key of the sensitivity table it comes fro
 }
 
 DEFINITIONS = {
-    "contact_frame": "first frame in which the ball leaves its rest pixel (5 px), reference camera",
+    "contact_frame": "kick contact, reference camera: the first frame a still ball leaves its rest "
+    "pixel (5 px); for a ball not at rest, the break of its rolling track or a frame given by hand",
+    "v_ball_pre_mps": "speed of the ball that came in (open play): its straight ground track before "
+    "the contact",
+    "ball_turn_deg": "angle between the incoming ball and the fitted launch, in the pitch plane",
     "kick_time_check_s": "fit kick time minus the contact time (positive: the fit starts later)",
     "kick_foot": "side whose foot centre is nearest the ball at contact (or the one requested)",
     "v_foot_pre_mps": "mean 3D speed of the kicking foot marker over the frames before contact",
@@ -464,6 +468,8 @@ def analyze_kicker(
     keeper_id: int | None = None,
     contact_override: int | None = None,
     goal_x: float | None = None,
+    override_source: str | None = None,
+    incoming: dict | None = None,
 ) -> dict:
     """The metrics of one kicker. Returns ``metrics`` (rows), ``events``, ``series`` and ``sensitivity``.
 
@@ -471,6 +477,10 @@ def analyze_kicker(
     the kicker's metrics. ``contact_override`` is the contact frame of the fitted flight: when given it
     replaces the first frame in which the hand-marked ball moves, which can drift a few frames early.
     ``goal_x`` is the attacked goal line (metres, signed), which sets the side of the front views.
+    ``override_source`` names where ``contact_override`` comes from: ``fit`` (default; it needs a
+    marker contact to replace), or the contact the flight decided for a ball not at rest
+    (``manual``, ``kink``, ``first_frame``), which stands on its own. ``incoming`` (the flight's
+    ``incoming`` record) adds the ball that came in: ``v_ball_pre_mps`` and ``ball_turn_deg``.
     """
     n = len(ball)
     warnings: list[str] = []
@@ -479,8 +489,9 @@ def analyze_kicker(
     marker_contact = contact_frame(ball_pixels)
     contact = marker_contact
     contact_source = "marker"
-    if contact_override is not None and marker_contact is not None:
-        contact, contact_source = int(contact_override), "fit"
+    given = override_source or "fit"
+    if contact_override is not None and (marker_contact is not None or given != "fit"):
+        contact, contact_source = int(contact_override), given
     events: dict = {
         "kicker_id": kicker_id,
         "fps": fps,
@@ -510,13 +521,14 @@ def analyze_kicker(
         if abs(check) > 1.0 / fps:
             warnings.append(f"fit kick time differs from the contact by {check * fps:+.1f} frames")
         metrics.append(_metric("kick_time_check_s", check, "s", "inferido", "ok"))
-    from_fit = contact_source == "fit"
-    contact_source_label = "ajustado" if from_fit else "observado"
-    contact_reason = (
-        f"contact of the fitted flight; the hand-marked ball moved at frame {marker_contact}"
-        if from_fit
-        else ""
-    )
+    contact_source_label = {"fit": "ajustado", "manual": "informado", "kink": "inferido",
+                            "first_frame": "inferido"}.get(contact_source, "observado")  # fmt: skip
+    contact_reason = {
+        "fit": f"contact of the fitted flight; the hand-marked ball moved at frame {marker_contact}",
+        "manual": "contact frame given by hand",
+        "kink": "break of the rolling ball's ground track: the ball came in rolling",
+        "first_frame": "the ball already flies in the first frame: the kick is at or before it",
+    }.get(contact_source, "")
     metrics.append(
         _metric("contact_frame", contact, "frame", contact_source_label, "ok", contact_reason)
     )
@@ -564,9 +576,19 @@ def analyze_kicker(
         if math.isfinite(v_ball) and math.isfinite(v_foot) and v_foot > 0
         else math.nan
     )
+    came_in = incoming is not None and incoming.get("speed_mps") is not None
+    ratio_reason = "" if math.isfinite(ratio) else "needs both speeds"
+    if came_in and math.isfinite(ratio):
+        ratio_reason = f"the ball already came in at {float(incoming['speed_mps']):.1f} m/s"
     metrics.append(_metric("ratio_vball_vfoot", ratio, "a.u.", "inferido",
-                           "ok" if math.isfinite(ratio) else "missing",
-                           "" if math.isfinite(ratio) else "needs both speeds"))  # fmt: skip
+                           "ok" if math.isfinite(ratio) else "missing", ratio_reason))  # fmt: skip
+    if came_in:
+        events["incoming"] = incoming
+        metrics.append(_metric("v_ball_pre_mps", float(incoming["speed_mps"]), "m/s", "inferido",
+                               "ok"))  # fmt: skip
+        turn = incoming.get("turn_deg")
+        metrics.append(_metric("ball_turn_deg", None if turn is None else float(turn), "deg",
+                               "ajustado", "ok" if turn is not None else "missing"))  # fmt: skip
 
     centroid, n_pts = _centroid(points, other, contact)
     if centroid is not None and np.isfinite(ball[contact]).all():

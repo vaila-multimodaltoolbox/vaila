@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 27 October 2026
-Update Date: 29 October 2026
+Update Date: 01 November 2026
 
 Description:
     The top view of the report (figure and animation minimap) shows, besides the ball, the
@@ -64,6 +64,7 @@ class People:
     names: dict[int, int] = field(default_factory=dict)  # SAM id -> player_id (the player map)
     source: str = "nearest"  # how the roles were found: "nearest", "manual" or "map"
     penalty: bool = False  # a penalty kick: no wall, the note names only the kicker and the keeper
+    open_play: bool = False  # a kick in open play: no wall either
 
 
 def load_camera_roles(run_dir) -> dict:
@@ -142,16 +143,18 @@ def find_people(
     wall_ids: list[int] | None = None,
     keeper_id: int | None = None,
     penalty: bool = False,
+    wall: bool = True,
 ) -> People:
     """The roles: the kicker is the person nearest the ball at the kick, the wall the two
     persons nearest the ball at the wall frame (not the kicker), the keeper the person nearest
     the entry point at the last frame. A penalty has no wall: nobody is searched for it, and the
-    keeper is never counted as a wall player. The arguments given by the user replace the search."""
+    keeper is never counted as a wall player; nor has a kick in open play (``wall`` False). The
+    arguments given by the user replace the search."""
     manual = kicker_id is not None or wall_ids is not None or keeper_id is not None
     if kicker_id is None and tracks:
         near = _nearest(tracks, kick_f, _at(ball_xy, kick_f), ROLE_RADIUS_M["kicker"])
         kicker_id = near[0][1] if near else None
-    if wall_ids is None and penalty:
+    if wall_ids is None and (penalty or not wall):
         wall_ids = []
     if wall_ids is None:
         near = _nearest(
@@ -180,7 +183,7 @@ def people_note(people: People | None, lang: str) -> str:
         how = tr(lang, "top_how_manual" if people.manual else "top_how_auto")
     return tr(
         lang,
-        "top_note_pk" if people.penalty else "top_note",
+        "top_note_pk" if people.penalty else ("top_note_op" if people.open_play else "top_note"),
         kicker="—" if people.kicker is None else str(_name(people, people.kicker)),
         wall=wall,
         keeper="—" if people.keeper is None else str(_name(people, people.keeper)),
@@ -233,7 +236,7 @@ def draw_people(
         now = min(max(frame, kick_f), end_f)
         if np.isfinite(arr[now]).all():
             _mark(ax, arr[now], KEEPER, tr(lang, "top_keeper", id=_name(people, people.keeper)), lang,
-                  labels=labels, dx=10, dy=10 if people.penalty else -16)  # fmt: skip
+                  labels=labels, dx=10, dy=10 if people.penalty or people.open_play else -16)  # fmt: skip
     if people.kicker is not None and people.kicker in tracks:
         arr = tracks[people.kicker]
         if np.isfinite(arr[kick_f]).all():

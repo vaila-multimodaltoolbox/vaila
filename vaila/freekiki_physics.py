@@ -11,7 +11,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 26 October 2026
-Update Date: 30 October 2026
+Update Date: 02 November 2026
 
 Description:
     A track of pitch positions (metres, one point per frame) cannot jump: a ball does
@@ -41,7 +41,7 @@ import numpy as np
 # part of the inputs of the one-click 3D stage: change it with the fit, so that an older fit is
 # recomputed (stage) or reported (kick-figures) instead of being reused. A file without the tag is
 # older than v2 (the v1 fit could send a one-camera penalty to the side: 28 px RMS on a real clip).
-FLIGHT_MODEL = "flight-v2"
+FLIGHT_MODEL = "flight-v3"
 
 
 @dataclass(frozen=True)
@@ -334,7 +334,8 @@ def fit_flight_views(
     """Fit one flight to the pixels of one or more calibrated cameras (see :func:`fit_flight`).
 
     ``kick_window`` (seconds, optional) bounds the kick time: the flight cannot start before the
-    ball was seen to move, so a fit on the frames after the contact keeps its start there.
+    ball was seen to move, so a fit on the frames after the contact keeps its start there. Its
+    start may be negative (the kick just before the first frame of the clip).
 
     ``views`` is a list of ``(pixels, cameras)``, one pair per camera: ``pixels`` maps frame ->
     ``(u, v)`` and ``cameras`` maps frame -> that camera's 3x4 projection on the same frame clock.
@@ -408,7 +409,8 @@ def fit_flight_views(
     lo = [-80, -60, -80, -80, -80, 0.0, -omega_max, -omega_max, -omega_max]
     hi = [80, 60, 80, 80, 80, (n_frames - 1) / fps, omega_max, omega_max, omega_max]
     if kick_window is not None:
-        lo[5] = max(lo[5], float(kick_window[0]))
+        # the window may start before frame 0: a clip cut just after the kick
+        lo[5] = float(kick_window[0])
         hi[5] = min(hi[5], float(kick_window[1]))
     starts: list[np.ndarray] = []
     if theta0 is not None:

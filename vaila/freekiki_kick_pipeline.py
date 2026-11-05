@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 28 October 2026
-Update Date: 30 October 2026
+Update Date: 02 November 2026
 
 Description:
     ``freekiki.py kick-analysis`` (and the One-click button of section 5) turns two cut videos of
@@ -40,6 +40,7 @@ import csv
 import importlib
 import json
 import math
+import shutil
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -65,6 +66,8 @@ PENALTY_KEEP = ("shot_outcome", "vel_kmh", "dist", "coord_x", "coord_z", "gk_res
 # the ball path of a penalty (freekiki_penalty.penalty_path); a change here reruns the penalty stage
 PENALTY_MODEL = "gk-partial-v9"
 # the kicker stage: a change here reruns it (the contact of the fitted flight, the goal side)
+PLANAR_KINDS = ("open_play", "dribble", "pass")  # no shot at goal: no goal (flight) report
+REPORT_SKIPPED = "skipped: no shot at goal (dribble / pass: freekiki.py openplay-report)"
 KICKER_MODEL = "contact-fit-v1"
 # the only people a penalty reads: ID0 (the goalkeeper) and ID1 (the kicker), as in player_map.csv
 PENALTY_PLAYERS = ("keeper", "kicker")
@@ -287,14 +290,19 @@ class _State:
         fn: Callable[[], dict],
         *,
         reuse: bool,
+        legacy: tuple[str, ...] = (),
     ) -> dict:
-        """Run ``fn`` unless this stage finished with the same inputs and its outputs exist."""
+        """Run ``fn`` unless this stage finished with the same inputs and its outputs exist.
+
+        ``legacy`` names inputs this stage no longer takes: a record of an older run that still
+        holds them matches when they are left out (the ball left the detect and 3D stages).
+        """
         record = self.data["stages"].get(key)
-        same = (
-            bool(record)
-            and record.get("status") == "ok"
-            and record.get("inputs") == _jsonable(inputs)
-        )
+        wanted = _jsonable(inputs)
+        old = record.get("inputs") if record else None
+        if legacy and isinstance(old, dict):
+            old = {k: v for k, v in old.items() if k not in legacy}
+        same = bool(record) and record.get("status") == "ok" and old == wanted
         if (
             reuse
             and same
@@ -646,7 +654,15 @@ def _kicker(
     n = int(nominal_clock(ref_video).size)
     flight = json.loads((binocular / "ball_flight.json").read_text(encoding="utf-8"))
     ball_pixels = kicker.read_ball_pixels(ref3d / "ball.csv")
-    contact_override = _fit_contact(flight, kicker.contact_frame(ball_pixels), fps)
+    # a ball not at rest (open play) or a contact given by hand: the reference flight decided it
+    decided = _module("freekiki_auto_flight").flight_contact(ref3d)
+    incoming = None
+    if decided is not None and decided.get("source") in ("manual", "kink", "first_frame"):
+        contact_override, override_source = int(decided["frame"]), str(decided["source"])
+        incoming = decided.get("incoming")
+    else:
+        contact_override = _fit_contact(flight, kicker.contact_frame(ball_pixels), fps)
+        override_source = "fit"
     result = kicker.analyze_kicker(
         kicker.read_poses(poses_csv),
         kicker.read_ball_xyz(binocular / "ball_3d_on_field.csv", n),
@@ -660,6 +676,8 @@ def _kicker(
         fit_spin_rps=flight.get("spin_rps"),
         contact_override=contact_override,
         goal_x=goal_x,
+        override_source=override_source,
+        incoming=incoming,
     )
     views = None
     if other3d is not None and ref_work is not None and other_work is not None:
@@ -669,6 +687,8 @@ def _kicker(
     keep = ("contact_frame", "kick_foot", "v_foot_pre_mps", "v_ball_post_mps", "ratio_vball_vfoot",
             "d_support_ball_m", "approach_angle_deg", "knee_ext_peak_deg_s",
             "proximal_distal_order", "goal_error_m")  # fmt: skip
+    if incoming is not None:  # open play: the ball that came in
+        keep += ("v_ball_pre_mps", "ball_turn_deg")
     return {
         "fps": fps,
         "values": {k: values.get(k, "") for k in keep},
@@ -753,12 +773,14 @@ def _penalty(
 
 def _mono_analysis(
     key, cam3d, video, work, is_ref, *, kick_foot, team_a, runner, sync=None, penalty=False,
-    goal_x=None,
+    goal_x=None, report=True,
 ):  # fmt: skip
     """One camera alone: its teams, its kicker and its report. Returns the entry and the kicker values.
 
     A failure is recorded in the entry; the other analyses still run. A penalty has no team split
     (``penalty``). ``sync`` is the ``(sync_frame, cut_start)`` of a video whose name has none.
+    ``report=False`` skips the goal report (open play, dribble and pass have no shot at goal; the
+    planar report is ``freekiki.py openplay-report``).
     """
     entry: dict = {"folder": str(cam3d), "status": "ok"}
     fps = _module("freekiki_detect3d")._video_fps(video)
@@ -782,10 +804,13 @@ def _mono_analysis(
                       lambda: _kicker(cam3d, cam3d, cam3d / "poses_3d_on_field_players.csv",
                                       _layout().data_dir(cam3d), video, kick_foot=kick_foot,
                                       goal_x=goal_x))  # fmt: skip
-        runner(f"report:{key}", {"run": cam3d.name},
-               [cam3d / "report_tv" / "pt" / "relatorio_bola.html",
-                cam3d / "report_tv" / "en" / "ball_report.html"],
-               lambda: _module("freekiki_report").build_report(cam3d, lang="both", video=video))  # fmt: skip
+        if report:
+            runner(f"report:{key}", {"run": cam3d.name},
+                   [cam3d / "report_tv" / "pt" / "relatorio_bola.html",
+                    cam3d / "report_tv" / "en" / "ball_report.html"],
+                   lambda: _module("freekiki_report").build_report(cam3d, lang="both", video=video))  # fmt: skip
+        else:
+            entry["report"] = REPORT_SKIPPED
     except Exception as exc:  # a monocular analysis may fail on its own
         entry["status"] = "failed"
         entry["error"] = f"{type(exc).__name__}: {exc}"
@@ -867,6 +892,12 @@ def _analyses(
             f"--analysis {chosen} is not available here (choose: {', '.join(available)})"
         )
     kind = (setpiece or {}).get("kind")
+    flight_report = kind not in PLANAR_KINDS
+    if not flight_report:
+        _log(
+            f"set piece {kind}: no goal report; use freekiki.py openplay-report --folder <3D folder> "
+            "--kind dribble|pass for the planar report"
+        )
     # a penalty needs the ball at rest (the goal side): without it the run is a free kick analysis
     penalty = kind == "penalty" and (setpiece or {}).get("goal_x_m") is not None
     goal_x = (setpiece or {}).get(
@@ -881,7 +912,7 @@ def _analyses(
         entry, values = _mono_analysis(key, cam3d, video, work, is_ref, kick_foot=kick_foot,
                                        team_a=team_a, runner=runner,
                                        sync=ref_sync if is_ref else None, penalty=penalty,
-                                       goal_x=goal_x)  # fmt: skip
+                                       goal_x=goal_x, report=flight_report)  # fmt: skip
         if setpiece is not None:
             _module("freekiki_setpiece").write(_layout().data_dir(cam3d), setpiece)
         results[key] = entry
@@ -921,10 +952,13 @@ def _analyses(
                                       other3d=other3d, ref_work=ref_work, other_work=other_work,
                                       goal_x=goal_x))  # fmt: skip
         kicker_values["binocular"] = kick["values"]
-        runner("report:binocular", {"binocular": bino_dir.name},
-               [bino_dir / "report_tv" / "pt" / "relatorio_bola.html",
-                bino_dir / "report_tv" / "en" / "ball_report.html"],
-               lambda: _module("freekiki_report").build_report(bino_dir, lang="both", video=ref_video))  # fmt: skip
+        if flight_report:
+            runner("report:binocular", {"binocular": bino_dir.name},
+                   [bino_dir / "report_tv" / "pt" / "relatorio_bola.html",
+                    bino_dir / "report_tv" / "en" / "ball_report.html"],
+                   lambda: _module("freekiki_report").build_report(bino_dir, lang="both", video=ref_video))  # fmt: skip
+        else:
+            entry["report"] = REPORT_SKIPPED
         if setpiece is not None:
             _module("freekiki_setpiece").write(bdata, setpiece)
     if penalty and setpiece is not None and chosen in results:
@@ -1002,6 +1036,38 @@ def _penalty_lines(penalty: dict | None) -> list[str]:
     return [*lines, ""]
 
 
+def _contact_lines(contact: dict | None) -> list[str]:
+    """The kick contact of the reference flight, and how it was found."""
+    if not contact:
+        return []
+    how = {
+        "rest": "the still ball leaves its rest pixel",
+        "kink": "break of the rolling ball's ground track (open play)",
+        "first_frame": "the ball already flies in the first frame (the kick is at or before it)",
+        "manual": "given by hand (--contact-frame)",
+    }.get(str(contact.get("source")), str(contact.get("source")))
+    line = f"contact: frame {contact.get('frame')} (0-based, reference camera): {how}"
+    incoming = contact.get("incoming") or {}
+    if incoming.get("speed_mps") is not None:
+        line += f"; the ball came in at {incoming['speed_mps']} m/s" + (
+            f", turned {incoming['turn_deg']} deg" if incoming.get("turn_deg") is not None else ""
+        )
+    return [line]
+
+
+def _correction_lines(inputs: dict | None) -> list[str]:
+    """The hand-corrected files next to the reference video, with their time (to correct again:
+    freekiki.py kick-correct, then kick-analysis --resume)."""
+    if not inputs:
+        return []
+    lines = []
+    for label, path in (("ball", inputs.get("ball")), ("field keypoints", inputs.get("field"))):
+        if path and Path(path).is_file():
+            stamp = datetime.fromtimestamp(Path(path).stat().st_mtime).isoformat(timespec="seconds")
+            lines.append(f"{label} (by hand): {path} (saved {stamp})")
+    return lines
+
+
 def _readme(out: Path, summary: dict) -> Path:
     analyses = summary.get("analyses", {})
     setpiece = summary.get("setpiece") or {}
@@ -1013,6 +1079,8 @@ def _readme(out: Path, summary: dict) -> Path:
         f"other camera: {summary.get('other_video') or 'none (monocular only)'}",
         f"fps: {summary['fps']}  |  kicker id: {summary.get('kicker_id', '')}",
         f"set piece: {setpiece.get('kind', 'unknown')} ({setpiece.get('reason', '')})",
+        *_contact_lines(summary.get("contact")),
+        *_correction_lines(summary.get("inputs")),
         "",
         "Analyses (each one has its own folder; the chosen one is the result):",
         *[
@@ -1032,7 +1100,8 @@ def _readme(out: Path, summary: dict) -> Path:
         *[f"  {k}: {v}" for k, v in summary.get("kicker_values", {}).items()],
         "",
         *_penalty_lines(penalty),
-        "Limits: at 59.94 fps the contact lasts about 1 ms, so the speed at impact is not measured;",
+        f"Limits: at {float(summary['fps']):.2f} fps the contact (about 1 ms) falls between two "
+        "frames, so the speed at impact is not measured;",
         "Vfoot is the mean over the frames before contact and Vball over the frames after it.",
         "The 2D keypoints are reprojections of each camera's SAM 3D Body mesh, so the triangulated points",
         "fuse two models: the residuals in data/poses_3d_binocular.csv are the quality control.",
@@ -1119,6 +1188,68 @@ def regenerate_figures(
     }
 
 
+SUPERSEDED = "superseded"  # the run's folder for the outputs a new detection replaced
+
+
+def _supersede(out: Path, cam_work: Path, stem: str) -> Path | None:
+    """Move the old detect runs and SAM 3D Body output of one camera to ``superseded/<time>/<stem>/``.
+
+    Nothing is deleted. Returns the folder they went to, or None when there was nothing to move
+    (the first detection of the camera).
+    """
+    old = [p for p in sorted(cam_work.glob(f"freekiki_predict_{stem}_*")) if p.is_dir()]
+    if (cam_work / "sam3dinov3").is_dir():
+        old.append(cam_work / "sam3dinov3")
+    if not old:
+        return None
+    dest = out / SUPERSEDED / datetime.now().strftime("%Y%m%d_%H%M%S") / stem
+    dest.mkdir(parents=True, exist_ok=True)
+    for path in old:
+        shutil.move(str(path), str(dest / path.name))
+    _log(f"{stem}: earlier detection moved to {dest} (a new one replaces it)")
+    return dest
+
+
+def _backup_derived(out: Path, folder: Path) -> None:
+    """Retain the replaced trajectory, C3Ds, figures and reports before rebuilding them."""
+    if folder.is_dir():
+        dest = out / SUPERSEDED / datetime.now().strftime("%Y%m%d_%H%M%S_%f") / folder.name
+        shutil.copytree(folder, dest)
+        _log(f"earlier derived results copied to {dest}")
+
+
+def resume_options(kick_dir: Path | str) -> dict:
+    """The options of a finished or interrupted kick run, to run it again in the same folder.
+
+    A run made by this version stores them (``options`` of ``pipeline_status.json``). An older run
+    gives back what it recorded: the videos of its detect stages (the reference first), its sync
+    and the set piece the user chose.
+    """
+    out = Path(kick_dir).expanduser().resolve()
+    path = out / STATUS_NAME
+    if not path.is_file():
+        raise KickInputError(f"{out} is not a kick analysis folder (no {STATUS_NAME})")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    options = dict(data.get("options") or {})
+    if not options.get("videos"):
+        stages = data.get("stages", {})
+        options["videos"] = [
+            stages[key]["inputs"]["video"]["path"]
+            for key in stages
+            if key.startswith("detect:") and "video" in stages[key].get("inputs", {})
+        ]
+    if not options["videos"]:
+        raise KickInputError(f"no video recorded in {path}")
+    if options.get("sync") is None and data.get("sync"):
+        options["sync"] = data["sync"]
+    if "set_piece" not in options:
+        ts = data.get("ts")
+        stem = Path(options["videos"][0]).stem
+        ref3d = out / f"{stem}_3d_{ts}"
+        options["set_piece"] = _stored_choice(ref3d) if ref3d.is_dir() else "auto"
+    return options
+
+
 def run_kick_analysis(
     ws,
     videos,
@@ -1135,11 +1266,21 @@ def run_kick_analysis(
     analysis: str | None = None,
     sync: tuple[int, int] | None = None,
     set_piece: str = "auto",
+    contact_frame: int | None = None,
+    arrival_observation=None,
 ) -> dict:
     """The one-click kick analysis. ``videos``: a folder with one or two cut videos, or the files.
 
     ``sync`` is ``(sync_frame, cut_start)`` for one video whose name has no sync numbers.
-    ``set_piece`` is ``auto`` (the ball rule decides) or the kind the user chose: ``penalty`` or ``free_kick``.
+    ``set_piece`` is ``auto`` (the ball rule decides; rolling/unseen → ``kick``) or the kind the
+    user chose: ``penalty``, ``free_kick``, ``kick``, ``open_play``, ``dribble`` or ``pass``.
+    ``contact_frame`` (0-based, reference camera) is a kick contact
+    given by hand; without it the flight finds it (:func:`vaila.freekiki_auto_flight.find_contact`).
+
+    The ball is a stage of its own (``ball:<camera>``): a corrected ``<video>_markers.csv`` or a new
+    contact redoes the ball, the flight and the stages after them, not the detection nor SAM 3D Body.
+    A corrected ``<video>_kiki49.csv`` redoes the detection (marked by hand, no network) and the 3D;
+    the outputs it replaces are moved to ``superseded/<time>/`` of the run, never deleted.
 
     Two videos give three analyses (the monocular of each camera and the binocular); one video gives
     the monocular analysis of that camera. ``analysis`` marks the result in the README. ``out_dir``
@@ -1151,18 +1292,43 @@ def run_kick_analysis(
     set_piece_choices = _module("freekiki_setpiece").SET_PIECE_CHOICES
     if set_piece not in set_piece_choices:
         raise KickInputError(f"--set-piece must be one of {', '.join(set_piece_choices)}")
+    if contact_frame is not None and int(contact_frame) < 0:
+        raise KickInputError("--contact-frame is a 0-based frame of the reference video (>= 0)")
     picked = pick_videos(videos) if isinstance(videos, (str, Path)) else [Path(v) for v in videos]
     cams = validate_inputs(picked, reference, sync=sync)
     ref = cams[0]
+    arrivals = _module("freekiki_arrival")
+    try:
+        observation = arrivals.load_observation(arrival_observation, ref.n_frames)
+    except (ValueError, OSError) as exc:
+        raise KickInputError(f"arrival observation: {exc}") from exc
     other = cams[1] if len(cams) == 2 else None
     if out_dir is None:
         out = ref.video.parent / f"kick_analysis_{datetime.now():%Y%m%d_%H%M%S}"
     else:
         out = Path(out_dir).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
+    observation_path = out / "corrections" / ref.stem / "arrival_observation.json"
+    if observation is not None and (
+        not observation_path.is_file() or arrivals.load_observation(observation_path) != observation
+    ):
+        arrivals.save_observation(observation_path, observation)
     state = _State(out, datetime.now().strftime("%Y%m%d_%H%M%S"))
     # the sync given for a clip whose name has none: a figures rewrite needs it again
     state.data["sync"] = list(sync) if sync is not None else None
+    # what this run was asked for: kick-analysis --resume repeats it on the same folder
+    state.data["options"] = {
+        "videos": [str(c.video) for c in cams],  # the reference first
+        "analysis": analysis,
+        "set_piece": set_piece,
+        "contact_frame": contact_frame,
+        "arrival_observation": str(observation_path) if observation is not None else None,
+        "kick_foot": kick_foot,
+        "team_a": team_a,
+        "model": model,
+        "min_camera_ok": min_camera_ok,
+        "sync": list(sync) if sync is not None else None,
+    }
     state.save()
     ts = state.ts
     work = out / "work"
@@ -1171,16 +1337,29 @@ def run_kick_analysis(
     _log(f"reference {ref.video.name} | other {other.video.name if other else 'none'} | fps {ref.fps:.3f} "
          f"| out {out}")  # fmt: skip
 
-    def camera_stages(cam: CameraInput) -> tuple[Path, Path, dict]:
+    def camera_stages(
+        cam: CameraInput, contact: int | None, arrival=None
+    ) -> tuple[Path, Path, dict]:
         runs_before = state.runs
         detect_key = f"detect:{cam.stem}"
-        inputs = {"video": _file_key(cam.video), "markers": _file_key(cam.markers), "model": model}
+        inputs = {"video": _file_key(cam.video), "model": model}
+        if arrivals.calibration_key(arrival) is not None:
+            inputs["goal_calibration"] = arrivals.calibration_key(arrival)
         if cam.keypoints is not None:
             inputs["keypoints"] = _file_key(cam.keypoints)  # a new mark invalidates the stage
         cam_work = work / cam.stem
 
+        def refit(predict):
+            if arrivals.calibration_key(arrival) is not None:
+                _, width, height = _module("freekiki_detect3d")._video_info(cam.video)
+                arrivals.refit_goal_calibration(Path(predict), arrival, width, height)
+            return Path(predict)
+
         def detect() -> dict:
             detect_video = _module("freekiki").detect_video
+            # a new detection replaces the camera: its old detect run and SAM 3D Body output move
+            # aside, so every lookup finds one of each and SAM 3D Body sees the new focal
+            _supersede(out, cam_work, cam.stem)
             cam_work.mkdir(parents=True, exist_ok=True)
             if cam.keypoints is not None:
                 predict = detect_video(
@@ -1191,34 +1370,60 @@ def run_kick_analysis(
                     device=device,
                     keypoints_csv=cam.keypoints,
                 )
-                return {"predict": Path(predict), "screen": {"manual": cam.keypoints.name}}
+                return {"predict": refit(predict), "screen": {"manual": cam.keypoints.name}}
             screen = _screen_or_raise(ws, cam.video, model, min_camera_ok)
             predict = detect_video(ws, cam.video, model=model, output_dir=cam_work, device=device)
-            return {"predict": Path(predict), "screen": screen}
+            return {"predict": refit(predict), "screen": screen}
 
-        found = state.stage(
-            detect_key, inputs, lambda r: [Path(r["predict"]) / "quality.json"], detect, reuse=reuse
-        )
+        found = state.stage(detect_key, inputs, lambda r: [Path(r["predict"]) / "quality.json"],
+                            detect, reuse=reuse, legacy=("markers",))  # fmt: skip
         predict = Path(found["predict"])
+        detect_ran = state.runs != runs_before
         threed_key = f"3d:{cam.stem}"
         threed_dir = out / f"{cam.stem}_3d_{ts}"
+        ball_inputs = _jsonable({"markers": _file_key(cam.markers), "contact_frame": contact,
+                                 "flight_model": _module("freekiki_physics").FLIGHT_MODEL})  # fmt: skip
+        if arrival is not None:
+            ball_inputs["arrival_observation"] = arrival
+        d3 = _module("freekiki_detect3d")
 
         def threed() -> dict:
-            return _module("freekiki_detect3d").detect_3d_run(predict, cam.video, threed_dir, work_dir=cam_work,
-                                 device=sam_device, ball_csv=cam.markers,
-                                 players_on_field=True)  # fmt: skip
+            _backup_derived(out, threed_dir)
+            result = d3.detect_3d_run(predict, cam.video, threed_dir, work_dir=cam_work,
+                                      device=sam_device, ball_csv=cam.markers, players_on_field=True,
+                                      contact_frame=contact, fresh_sam=detect_ran,
+                                      **({"arrival_observation": arrival} if arrival is not None else {}))  # fmt: skip
+            result["ball_inputs"] = ball_inputs  # the ball this 3D run already wrote
+            return result
 
-        res = state.stage(threed_key, {"predict": str(predict), **inputs, "sam_device": sam_device, "players_on_field": True,
-                                       "flight_model": _module("freekiki_physics").FLIGHT_MODEL},
+        runs_3d = state.runs
+        res = state.stage(threed_key, {"predict": str(predict), **inputs, "sam_device": sam_device, "players_on_field": True},
                           [threed_dir / "poses_3d_on_field.csv", threed_dir / "ball.csv"], threed,
-                          reuse=reuse and state.runs == runs_before)  # fmt: skip  # a new detect redoes the 3D
+                          reuse=reuse and not detect_ran, legacy=("markers", "flight_model"))  # fmt: skip
+        threed_ran = state.runs != runs_3d
+
+        def ball() -> dict:
+            if threed_ran and res.get("ball_inputs") == ball_inputs:
+                return {"from": "3d"}  # the 3D stage has just written this very ball
+            _backup_derived(out, threed_dir)
+            summary = d3.rebuild_ball_in_place(threed_dir, cam.video, cam_work, cam.markers,
+                                               contact_frame=contact,
+                                               **({"arrival_observation": arrival} if arrival is not None else {}))  # fmt: skip
+            return {
+                "from": "ball",
+                "ball_flight": (summary.get("field3d") or {}).get("ball_flight"),
+            }
+
+        state.stage(f"ball:{cam.stem}", ball_inputs,
+                    [threed_dir / "ball.csv", threed_dir / "ball_3d_on_field.csv"], ball,
+                    reuse=reuse and not threed_ran)  # fmt: skip
         return threed_dir, cam_work, res
 
     runs_at_start = state.runs
-    ref3d, ref_work, _ = camera_stages(ref)
+    ref3d, ref_work, _ = camera_stages(ref, contact_frame, observation)  # reference frame
     other3d, other_work = None, None
     if other is not None:
-        other3d, other_work, _ = camera_stages(other)
+        other3d, other_work, _ = camera_stages(other, None)
     if reuse and state.runs != runs_at_start:
         # The later stages only name the 3D folders, not their content: a camera stage that ran
         # again (a new fit, new ball marks, a new video) makes every stage built from it stale.
@@ -1282,6 +1487,12 @@ def run_kick_analysis(
     )
     run["kicker_id"] = _kicker_id(ref3d / "player_map.csv")
     run["setpiece"] = setpiece
+    run["contact"] = _module("freekiki_auto_flight").flight_contact(ref3d)
+    run["inputs"] = {
+        "ball": str(ref.markers),
+        "field": str(ref.keypoints) if ref.keypoints else None,
+        "arrival_observation": str(observation_path) if observation is not None else None,
+    }
     run["stages"] = {key: rec.get("status", "") for key, rec in state.data["stages"].items()}
     _readme(out, run)
     _log(f"done: {out}")

@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.11
+Version: 0.4.14
 Created: 26 October 2026
-Update Date: 26 October 2026
+Update Date: 02 November 2026
 
 Description:
     The ground track of every kept person (the bottom centre of the box, smoothed in
@@ -187,8 +187,11 @@ def _read_ball(path: Path) -> dict[int, tuple[float, float]]:
         return ball
     with path.open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
-            if row["on_field"] == "True" and row["x_m"] != "":
-                ball[int(row["frame"])] = (float(row["x_m"]), float(row["y_m"]))
+            if row["x_m"] != "" and row["y_m"] != "":
+                xy = (float(row["x_m"]), float(row["y_m"]))
+                # on_field describes pitch bounds; a valid flight can cross the goal line.
+                if np.isfinite(xy).all():
+                    ball[int(row["frame"])] = xy
     return ball
 
 

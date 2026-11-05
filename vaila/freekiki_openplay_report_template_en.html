@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<style>
+  :root { --ink:#14213d; --muted:#5b6577; --line:#d9dee7; --soft:#f3f5f9; --ball:#d62246; --wall:#14934b; --mark:#3d5a80; }
+  @page { size: A4; margin: 13mm 14mm; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin:0; color:var(--ink); background:#fff; font-family: Inter, "Segoe UI", Roboto, system-ui, sans-serif; font-size:15px; line-height:1.55; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px; }
+  header { border-bottom: 3px solid var(--ink); padding-bottom: 14px; margin-bottom: 22px; }
+  .kicker { text-transform: uppercase; letter-spacing: .08em; font-size: 12px; color: var(--ball); font-weight: 700; }
+  h1 { font-size: 32px; line-height: 1.1; margin: 6px 0 8px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0; }
+  h2 { font-size: 21px; margin: 30px 0 8px; break-after: avoid; }
+  p { margin: 0 0 10px; }
+  .lead { font-size: 17px; background: var(--soft); border-left: 5px solid var(--ball); padding: 14px 16px; border-radius: 4px; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0 6px; }
+  .card { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; break-inside: avoid; }
+  .card .n { font-size: 26px; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .card .n small { font-size: 15px; font-weight: 600; color: var(--muted); }
+  .card .l { font-size: 13px; color: var(--muted); }
+  .card.hi { border-color: var(--ball); background: #fff5f7; }
+  figure { margin: 12px 0 6px; break-inside: avoid; }
+  figure img { width: 100%; height: auto; display: block; border-radius: 6px; border: 1px solid var(--line); }
+  figcaption { font-size: 12.5px; color: var(--muted); margin-top: 5px; }
+  .note { border-left: 3px solid var(--wall); padding: 4px 12px; color: var(--muted); font-size: 14px; }
+  ol.refs { font-size: 13.5px; color: var(--muted); padding-left: 20px; }
+  ol.refs li { margin-bottom: 4px; }
+  footer { margin-top: 30px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  table.metrics { width:100%; border-collapse:collapse; font-size:14px; margin:10px 0; }
+  table.metrics th, table.metrics td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+  .tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 10px; vertical-align: 2px; margin-left: 4px; }
+  .tag.solid { background: #e3f4ea; color: #0d6b36; }
+  .tag.est { background: #fdeccf; color: #8a5300; }
+  .card.recv { border-color: var(--wall); background: #f1faf4; }
+  table.metrics.key { font-size: 13px; font-variant-numeric: tabular-nums; }
+  table.metrics.key td:first-child { font-weight: 700; }
+  .tablewrap { overflow-x: auto; }
+  @media (max-width: 640px) { h1 { font-size: 26px; } .cards { grid-template-columns: repeat(2, 1fr); } }
+  @media print { figure img { max-height: 80mm; width: auto; max-width: 100%; margin: 0 auto; } main { padding: 0; max-width: none; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="kicker">{{kicker}}</div>
+  <h1>{{title}}</h1>
+  <p class="sub">{{subtitle}}</p>
+  <p class="sub">{{authors}}</p>
+</header>
+
+<p class="lead">{{lead}}</p>
+
+
+<!--dr-->
+<div class="cards">
+  <div class="card hi"><div class="n">{{ball_path}} <small>m</small></div><div class="l">{{card_ball_path}}</div></div>
+  <div class="card"><div class="n">{{ball_vmax}} <small>km/h</small></div><div class="l">{{card_ball_vmax}}</div></div>
+  <div class="card"><div class="n">{{ball_amean}}</div><div class="l">{{card_ball_accel}}</div></div>
+</div>
+<div class="cards">
+  <div class="card"><div class="n">{{drib_path}} <small>m</small></div><div class="l">{{card_drib_path}}</div></div>
+  <div class="card"><div class="n">{{drib_vmax}} <small>km/h</small></div><div class="l">{{card_drib_vmax}}</div></div>
+  <div class="card"><div class="n">{{drib_cod}}</div><div class="l">{{card_drib_cod}}</div></div>
+</div>
+<div class="cards">
+  <div class="card"><div class="n">{{drib_curv}}</div><div class="l">{{card_drib_curv}}</div></div>
+  <div class="card"><div class="n">{{drib_accel}}</div><div class="l">{{card_drib_accel}}</div></div>
+  <div class="card"><div class="n">{{drib_decel}}</div><div class="l">{{card_drib_decel}}</div></div>
+</div>
+<h2>{{h_markers}}</h2>
+{{markers_table}}
+<!--/dr-->
+
+<!--pa-->
+{{pass_body}}
+<!--/pa-->
+
+<h2>{{h_top}}</h2>
+<figure>
+  <img src="{{img_top}}" alt="top view">
+  <figcaption>{{cap_top}}</figcaption>
+</figure>
+
+<h2>{{h_speed}}</h2>
+<figure>
+  <img src="{{img_speed}}" alt="speed">
+  <figcaption>{{cap_speed}}</figcaption>
+</figure>
+
+<h2>{{h_dist}}</h2>
+<figure>
+  <img src="{{img_dist}}" alt="distances">
+  <figcaption>{{cap_dist}}</figcaption>
+</figure>
+
+<h2>{{h_science}}</h2>
+<p>{{science_text}}</p>
+<p class="note">{{limit_text}}</p>
+<ol class="refs">
+  <li>{{ref1}}</li>
+  <li>{{ref2}}</li>
+  <li>{{ref3}}</li>
+</ol>
+
+<footer>{{generated}} · FreeKiki / <i>vailá</i></footer>
+</main>
+</body>
+</html>

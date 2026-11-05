@@ -38,7 +38,6 @@ def test_19_to_22_exact_mapping():
     [
         ([1, 9], [1, 9, 19]),
         ([1, 9, 23], [1, 9, 19]),
-        ([1, 1, 22], [1, 9, 19]),
         ([1, 9, 22], [0, 9, 19]),
         ([1, 9, 22], [1, 19, 9]),
     ],
@@ -510,7 +509,16 @@ def test_gui_reviews_current_settings_before_run(video_args, monkeypatch, change
     monkeypatch.setattr(tk, "Text", lambda *_args, **_kw: preview)
     monkeypatch.setattr(tk, "Canvas", MagicMock())
     monkeypatch.setattr(tk, "StringVar", Variable)
-    for name in ("Label", "Entry", "Frame", "LabelFrame", "Progressbar", "Scrollbar"):
+    monkeypatch.setattr(tk, "IntVar", Variable)
+    for name in (
+        "Label",
+        "Entry",
+        "Frame",
+        "LabelFrame",
+        "Progressbar",
+        "Scrollbar",
+        "Radiobutton",
+    ):
         monkeypatch.setattr(ttk, name, MagicMock())
     monkeypatch.setattr(ttk, "Button", button)
     monkeypatch.setattr(messagebox, "showinfo", MagicMock())
@@ -520,7 +528,7 @@ def test_gui_reviews_current_settings_before_run(video_args, monkeypatch, change
     def interact():
         assert buttons["Run"]["state"] == "disabled"
         buttons["120"]["command"]()
-        assert variables[2].get() == "120"  # reference, reference events, then output fps
+        assert variables[2].get() == "120"  # main choice, frame-count mode, then output fps
         buttons["Preview"]["command"]()
         assert buttons["Run"]["state"] == "disabled"
         assert "--dry-run" in launches[-1]
@@ -661,3 +669,209 @@ def test_syncvid_passes_every_video_and_prints_the_run_without_the_window(
     terminal = next(line for line in out.splitlines() if "vaila/video_event_equalizer.py" in line)
     assert terminal.startswith(">>   uv run --no-sync vaila/video_event_equalizer.py --reference")
     assert "--gui" not in terminal and "--dry-run" not in terminal
+
+
+@pytest.mark.parametrize("events", [[1, 1, 1], [5, 3, 9], [1, 9, 5]])
+def test_impossible_event_triples_are_refused(events):
+    with pytest.raises(equalizer.EventSyncError, match="contact must lie between"):
+        equalizer.output_grid(events, 22, "2997/100")
+
+
+def test_event_beyond_the_video_is_refused_even_with_a_repeated_contact():
+    with pytest.raises(equalizer.EventSyncError, match="exceeds"):
+        equalizer.output_grid([1, 1, 30], 22, "2997/100")
+
+
+@pytest.mark.parametrize(
+    "ref,src", [([1, 1, 22], [1, 9, 19]), ([1, 9, 22], [1, 19, 19]), ([1, 9, 22], [1, 1, 19])]
+)
+def test_every_camera_must_share_the_reference_contact_pattern(ref, src):
+    with pytest.raises(equalizer.EventSyncError, match="same contact pattern"):
+        equalizer.frame_map(ref, src, 22, 19, "2997/100")
+
+
+def test_contact_on_the_start_uses_the_outer_frames_of_the_grid():
+    grid = equalizer.output_grid([1, 1, 22], 22, "2997/100", "60")
+    count = grid["output_frame_count"]
+    assert grid["output_event_frames"] == [1, 1, count]
+    assert grid["contact_rounding_adjustment_rational"] == "0"
+
+
+def test_contact_on_the_end_uses_the_outer_frames_of_the_grid():
+    grid = equalizer.output_grid([1, 22, 22], 22, "2997/100", "60")
+    count = grid["output_frame_count"]
+    assert grid["output_event_frames"] == [1, count, count]
+    assert grid["contact_rounding_adjustment_rational"] == "0"
+
+
+def test_start_contact_maps_both_cameras_from_their_first_frame():
+    # 23.976 fps reference of 26 frames; the other camera has 39 frames at the same rate.
+    rows = equalizer.frame_map([1, 1, 26], [1, 1, 39], 26, 39, "991001/41333")
+    assert len(rows) == 26
+    assert (rows[0]["source_position"], rows[0]["event"]) == ("1", "start/contact")
+    assert (rows[-1]["source_position"], rows[-1]["event"]) == ("39", "end")
+    assert rows[0]["kind"] == rows[-1]["kind"] == "original"
+    positions = [Fraction(row["source_position"]) for row in rows]
+    assert positions == sorted(positions)
+    assert rows[1]["reference_position"] == str(Fraction(1) + Fraction(25, 25))
+
+
+def test_end_contact_maps_both_cameras_to_their_last_frame():
+    rows = equalizer.frame_map([1, 26, 26], [1, 39, 39], 26, 39, "991001/41333")
+    assert (rows[0]["source_position"], rows[0]["event"]) == ("1", "start")
+    assert (rows[-1]["source_position"], rows[-1]["event"]) == ("39", "contact/end")
+    positions = [Fraction(row["source_position"]) for row in rows]
+    assert positions == sorted(positions)
+
+
+def test_cli_dry_run_accepts_a_contact_on_the_start(video_args, capsys):
+    video_args.reference_events = "1,1,22"
+    video_args.source_events = "1,1,19"
+    assert equalizer.main(equalizer.cli_command(video_args)[3:] + ["--dry-run"]) == 0
+    manifest = json.loads(capsys.readouterr().out)
+    assert manifest["output_event_frames"][:2] == [1, 1]
+    assert manifest["cameras"]["source"]["events"] == [1, 1, 19]
+    assert not video_args.output_dir.exists()
+
+
+def test_export_with_a_contact_on_the_start_keeps_the_reference_grid(video_args, monkeypatch):
+    monkeypatch.setattr(equalizer, "RifeInterpolator", StandInRife)
+    video_args.reference_events = "1,1,22"
+    video_args.source_events = "1,1,19"
+    destination = equalizer.export(video_args)
+    manifest = json.loads((destination / "event_equalizer.json").read_text(encoding="utf-8"))
+    count = manifest["output_frame_count"]
+    assert manifest["output_event_frames"] == [1, 1, count]
+    for role in ("reference", "source"):
+        assert (destination / manifest["cameras"][role]["video"]).is_file()
+        assert (destination / f"{role}_frames.csv").is_file()
+
+
+@pytest.mark.parametrize("mode,expected", [("reference", 22), ("reduce", 19), ("increase", 22)])
+def test_mode_sets_the_frame_count_from_the_main_or_the_shortest_or_longest(
+    video_args, mode, expected
+):
+    video_args.mode = mode
+    manifest = equalizer.prepare(video_args)
+    assert manifest["output_frame_count"] == expected
+    assert manifest["grid_mode"] == mode
+
+
+@pytest.mark.parametrize("mode,expected", [("reference", 19), ("reduce", 19), ("increase", 22)])
+def test_any_camera_can_be_the_main_one(video_args, mode, expected):
+    main, other = video_args.reference, video_args.source
+    video_args.reference, video_args.source = other, main
+    video_args.reference_events, video_args.source_events = "1,9,19", "1,9,22"
+    video_args.mode = mode
+    manifest = equalizer.prepare(video_args)
+    assert manifest["output_frame_count"] == expected
+    assert manifest["cameras"]["reference"]["events"] == [1, 9, 19]
+
+
+def test_an_explicit_frame_count_overrides_the_mode(video_args):
+    video_args.mode, video_args.output_frame_count = "reduce", "30"
+    assert equalizer.prepare(video_args)["output_frame_count"] == 30
+
+
+def test_unknown_mode_is_refused(video_args):
+    video_args.mode = "stretch"
+    with pytest.raises(equalizer.EventSyncError, match="Mode"):
+        equalizer.prepare(video_args)
+
+
+def test_cli_mode_is_in_the_terminal_command_and_round_trips(video_args, capsys):
+    video_args.mode = "increase"
+    command = equalizer.cli_command(video_args)
+    assert command[command.index("--mode") + 1] == "increase"
+    assert equalizer.main(command[3:] + ["--dry-run"]) == 0
+    assert json.loads(capsys.readouterr().out)["grid_mode"] == "increase"
+
+
+def test_preview_names_the_camera_the_frame_count_comes_from(video_args):
+    video_args.mode = "reduce"
+    text = equalizer.preview_text(equalizer.prepare(video_args))
+    assert "shortest camera" in text and "19 frames per camera" in text
+
+
+def test_gui_main_radio_button_becomes_the_reference_of_the_run(video_args, monkeypatch):
+    """Picking the second camera's Main button makes it the --reference of the command."""
+    import tkinter as tk
+    from tkinter import messagebox, ttk
+
+    variables, buttons, callbacks, launches, camera_radios = [], {}, [], [], []
+    root, preview = MagicMock(), MagicMock()
+    root.after.side_effect = lambda _delay, callback: callbacks.append(callback)
+
+    class Variable:
+        def __init__(self, _root, value):
+            self.value, self.traces = value, []
+            variables.append(self)
+
+        def get(self):
+            return self.value
+
+        def set(self, value):
+            self.value = value
+            for callback in self.traces:
+                callback()
+
+        def trace_add(self, _mode, callback):
+            self.traces.append(callback)
+
+    def button(_parent, **options):
+        buttons[options["text"]] = options
+        widget = MagicMock()
+        widget.configure.side_effect = lambda **kw: options.update(kw)
+        return widget
+
+    def radiobutton(_parent, **options):
+        if isinstance(options.get("value"), int):  # a camera's Main button, not a mode button
+            camera_radios.append(options)
+        return MagicMock()
+
+    manifest = equalizer.prepare(video_args)
+    infos = {
+        camera["path"]: {k: camera[k] for k in ("path", "frame_count", "width", "height", "fps")}
+        for camera in manifest["cameras"].values()
+    }
+    monkeypatch.setattr(equalizer, "probe", lambda path: infos[str(path)])
+
+    def worker(command, *, stdout, **_kwargs):
+        launches.append(command)
+        parsed = dict(zip(command[3::2], command[4::2], strict=False))
+        args = argparse.Namespace(**{k[2:].replace("-", "_"): v for k, v in parsed.items()})
+        stdout.write(json.dumps(equalizer.prepare(args)))
+        stdout.flush()
+        result = MagicMock()
+        result.poll.return_value = 0
+        return result
+
+    monkeypatch.setattr(tk, "Tk", lambda: root)
+    monkeypatch.setattr(tk, "Text", lambda *_args, **_kw: preview)
+    monkeypatch.setattr(tk, "Canvas", MagicMock())
+    monkeypatch.setattr(tk, "StringVar", Variable)
+    monkeypatch.setattr(tk, "IntVar", Variable)
+    for name in ("Label", "Entry", "Frame", "LabelFrame", "Progressbar", "Scrollbar"):
+        monkeypatch.setattr(ttk, name, MagicMock())
+    monkeypatch.setattr(ttk, "Button", button)
+    monkeypatch.setattr(ttk, "Radiobutton", radiobutton)
+    showerror = MagicMock()
+    monkeypatch.setattr(messagebox, "showinfo", MagicMock())
+    monkeypatch.setattr(messagebox, "showerror", showerror)
+    monkeypatch.setattr(equalizer.subprocess, "Popen", worker)
+
+    def interact():
+        assert len(camera_radios) == 2
+        variables[0].set(camera_radios[1]["value"])  # main choice: the second camera's row
+        buttons["Preview"]["command"]()
+        command = launches[-1]
+        assert command[command.index("--reference") + 1] == str(video_args.source)
+        assert command[command.index("--reference-events") + 1] == "1,9,19"
+        assert command[command.index("--mode") + 1] == "reference"
+        callbacks.pop(0)()
+        assert "19 frames per camera" in preview.insert.call_args.args[1]
+        showerror.assert_not_called()
+
+    root.mainloop.side_effect = interact
+    video_args.mode = "reference"
+    equalizer.show_gui(video_args)

@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 27 October 2026
-Update Date: 29 October 2026
+Update Date: 02 November 2026
 
 Description:
     Every text the report, its figures, its animation and its interactive editor show outside
@@ -46,6 +46,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "kicker_of": "do pé de {name}",
         "kicker_default": "do pé do jogador que bateu a falta",
         "kicker_default_pk": "do pé do cobrador do pênalti",
+        "kicker_default_op": "do pé do jogador que chutou",
         "kicker_name_default": "o jogador que bateu a falta",
         "wall_above": "acima",
         "wall_below": "abaixo",
@@ -54,6 +55,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "date_format": "{d:02d}/{m:02d}/{y}",
         "default_title": "A física de um chute de falta",
         "default_title_pk": "A física de um pênalti",
+        "default_title_op": "A física de um chute a gol",
         "default_subtitle": "Reconstrução 3D a partir de transmissão, feita com software livre vailá",
         "fig_top_title": "Vista de cima: {d} m em {t} s",
         "fig_top_x": "x no campo (m)",
@@ -157,6 +159,25 @@ _STRINGS: dict[str, dict[str, str]] = {
             "cada punho vem de uma só câmera, com erro de algumas dezenas de centímetros."
         ),
         "quote_measured": "Tudo isso foi medido a partir de uma única transmissão, usando as linhas do campo como régua.",
+        "incoming_lead": "A bola chegava rolando a cerca de <b>{speed} km/h</b>.",
+        "incoming_text": (
+            "Antes do chute, a bola chegava rolando a cerca de <b>{speed} km/h</b>. O chute mudou a "
+            "direção dela em <b>{turn}°</b> (vista de cima) e a lançou a cerca de {launch} km/h."
+        ),
+        "incoming_unseen": (
+            "A bola já voava no primeiro quadro do vídeo: o chute aconteceu nele ou logo antes, e a "
+            "bola que chegou não aparece na imagem."
+        ),
+        "contact_limit_kink": (
+            "<b>O contato foi achado na quebra da trajetória da bola rolando</b>: duas retas no chão, "
+            "antes e depois do chute. A incerteza é de um quadro."
+        ),
+        "contact_limit_first_frame": (
+            "<b>O chute é o primeiro quadro do vídeo ou acontece logo antes.</b> A saída da bola tem "
+            "até um quadro de incerteza, e não há bola antes do contato para medir."
+        ),
+        "contact_limit_manual": "<b>O quadro do contato foi informado à mão.</b>",
+        "contact_limit_rest": "<b>O contato é o primeiro quadro em que a bola deixa o repouso.</b>",
         "quote_curve": "A bola fez uma curva de até {dev} metro para o lado da linha reta do chute.",
         "footer_generated": "Gerado em {date}. Animação em câmera lenta: {animation}.",
         "footer_tier": "Confiança do ajuste: {tier} · erro médio na imagem {rms} px · pior desvio nas referências {worst} m.",
@@ -171,6 +192,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "top_note_pk": (
             "Jogadores no chão (média dos tornozelos): cobrador id {kicker} e goleiro id {keeper}. "
             "Pênalti: sem barreira. {how}"
+        ),
+        "top_note_op": (
+            "Jogadores no chão (média dos tornozelos): chutador id {kicker} e goleiro id {keeper}. "
+            "Lance de jogo: sem barreira. {how}"
         ),
         "top_how_auto": "Identificados pelo ponto mais próximo; --kicker-id, --wall-ids e --keeper-id trocam.",
         "top_how_manual": "Informados por --kicker-id, --wall-ids e --keeper-id.",
@@ -213,14 +238,15 @@ _STRINGS: dict[str, dict[str, str]] = {
             "pelas duas câmeras, mas isso não diz se ela passou sobre a barreira real."
         ),
         "ed_disabled": "Editor indisponível para a reconstrução com duas câmeras.",
-        "ed_disabled_auto": "Editor indisponível: o lance foi ajustado automaticamente (contato e chegada detectados).",
+        "ed_disabled_auto": "Editor indisponível: ajuste do contato e da chegada pela GUI/CLI do FreeKiki.",
         "method_auto": (
             "Cada quadro da transmissão tem uma calibração da câmera, obtida pelas linhas pintadas do campo. Com "
             "ela, a bola vira uma posição no campo. Uma só câmera não mede a profundidade, então a altura da bola "
             "vem da física: a trajetória (gravidade, arrasto e Magnus) é ajustada aos pixels, com erro médio de "
             "<b>{rms} pixel</b>. O lance começa no <b>contato do pé</b>, quando a bola sai do repouso; antes disso "
-            "ela está parada e não entra no cálculo. O lance termina na <b>entrada no gol</b>, pela homografia do "
-            "plano da baliza, ou nas <b>mãos do goleiro</b>, no último quadro."
+            "ela está parada e não entra no cálculo. Uma entrada marcada usa a homografia dos quatro cantos confirmados da baliza. "
+            "A chegada à mão do goleiro exige confirmação explícita; sem observação ou cruzamento "
+            "reconhecido, a chegada permanece indeterminada."
         ),
         "refs_auto": (
             "<b>Os pontos de referência vêm da própria imagem.</b> O repouso é a bola parada antes do contato, e a "
@@ -269,6 +295,205 @@ _STRINGS: dict[str, dict[str, str]] = {
             "Os pontos antigos (sem σ) entram com σ 0,3 m. A distância usa o quadro inicial do chute e o "
             "último quadro com marcação."
         ),
+        # --- open-play dribble / pass report ---
+        "op_kicker": "Biomecânica no futebol · relatório para imprensa",
+        "op_title_dribble": "A física de um drible 1 contra N",
+        "op_title_pass": "A física de um passe",
+        "op_subtitle": "Cinemática no plano do campo a partir de transmissão, feita com software livre vailá",
+        "op_lead_dribble": (
+            "O driblador (id {dribbler}) percorreu <b>{path} m</b> com <b>{cod}</b> mudanças de direção "
+            "e curvatura média de <b>{curv} rad/m</b>, diante de {n} marcador(es)."
+        ),
+        "op_lead_pass": (
+            "Passe do id {passer} ao id {receiver}: a bola percorreu cerca de <b>{length} m</b> "
+            "em <b>{flight} s</b> entre o toque de saída e a recepção (heurística)."
+        ),
+        "op_card_ball_path": "caminho da bola no plano",
+        "op_card_ball_vmax": "velocidade máxima da bola",
+        "op_card_ball_accel": "pico de aceleração (m/s²)",
+        "op_card_drib_path": "caminho do driblador",
+        "op_card_drib_vmax": "velocidade máxima do driblador",
+        "op_card_drib_cod": "mudanças de direção (COD)",
+        "op_card_drib_curv": "curvatura média (rad/m)",
+        "op_card_drib_accel": "pico de aceleração (m/s²)",
+        "op_card_drib_decel": "pico de desaceleração (m/s²)",
+        "op_card_pass_len": "caminho da bola no passe",
+        "op_card_pass_flight": "tempo saída → recepção",
+        "op_card_pass_pair": "distância entre jogadores na saída",
+        "op_h_top": "Vista de cima",
+        "op_h_speed": "Velocidades no tempo",
+        "op_h_dist": "Distâncias no tempo",
+        "op_h_science": "Leitura científica",
+        "op_h_markers": "Marcadores",
+        "op_cap_top": "Trajetórias no plano do campo (metros).",
+        "op_cap_speed": "Velocidade instantânea (km/h) a partir das posições no plano.",
+        "op_cap_dist": "Distâncias interpessoais ou bola–jogador (m).",
+        "op_fig_top_title": "Vista de cima: trajetórias no campo",
+        "op_fig_x": "x no campo (m)",
+        "op_fig_y": "y no campo (m)",
+        "op_fig_t": "tempo (s)",
+        "op_fig_speed": "velocidade (km/h)",
+        "op_fig_speed_title": "Velocidade no plano",
+        "op_fig_dist": "distância (m)",
+        "op_fig_dist_drib_title": "Distância driblador–marcador",
+        "op_fig_dist_pass_title": "Distâncias do passe",
+        "op_legend_ball": "bola",
+        "op_legend_dribbler": "driblador",
+        "op_legend_marker": "marcador {id}",
+        "op_legend_passer": "passador",
+        "op_legend_receiver": "recebedor",
+        "op_legend_passer_ball": "passador–bola",
+        "op_legend_receiver_ball": "recebedor–bola",
+        "op_legend_passer_receiver": "passador–recebedor",
+        "op_th_id": "id",
+        "op_th_min_d": "mín. (m)",
+        "op_th_rel_v": "v rel. no mín. (m/s)",
+        "op_th_cod": "COD",
+        "op_th_path": "caminho (m)",
+        "op_no_markers": "Nenhum marcador informado.",
+        "op_science_dribble": (
+            "No enquadramento predador–presa de Wilson e Santiago, o sucesso no um-contra-um depende "
+            "mais da capacidade de mudar de direção e manter velocidade em trajetórias curvas do que "
+            "do sprint em linha reta. Distância interpessoal e velocidade relativa (Corrêa / Duarte) "
+            "descrevem a pressão do marcador sobre o driblador."
+        ),
+        "op_science_pass": (
+            "A linha de Wilson–Santiago sobre passe e controle trata a combinação de velocidade, "
+            "precisão e agilidade no passe como preditora de desempenho em jogos reduzidos. Aqui "
+            "medimos o clip: caminho da bola, distâncias entre os dois jogadores e a bola, e a "
+            "janela heurística entre toque de saída e recepção."
+        ),
+        "op_limit": (
+            "Métricas operacionais no plano do campo a partir de tracks FreeKiki; não substituem "
+            "testes de skill fechada em circuito (curvatura 0–1,37 rad/m) nem baterias de passe em "
+            "rebound board."
+        ),
+        "op_ref1": "Wilson et al. (2018). J Sports Sci — dribbling speed along curved paths (PMID 30470166).",
+        "op_ref2": "Wilson, Santiago et al. (2026). Int J Sports Sci Coach — dribbling and passing vs 3v3 success.",
+        "op_ref3": "Corrêa et al. / Duarte et al. — distância interpessoal e velocidade relativa no 1v1.",
+        # --- pass report: timing, receiver run, shot link ---
+        "op_lead_pass_main": (
+            "Passe do id {passer} para o id {receiver}: a bola saiu a cerca de <b>{v0} km/h</b> e "
+            "chegou ao pé do recebedor <b>{flight} s</b> depois, a <b>{dist} m</b> de onde estava "
+            "o passador."
+        ),
+        "op_lead_pass_run_before": (
+            " Quando a bola saiu, o id {receiver} já corria a <b>{vr} km/h</b>: a corrida começou "
+            "antes do passe, pelo menos <b>{lead} s</b> antes (estimativa)."
+        ),
+        "op_lead_pass_run_onset": (
+            " O id {receiver} começou a correr <b>{lead} s</b> {when} da saída da bola."
+        ),
+        "op_when_before": "antes",
+        "op_when_after": "depois",
+        "op_lead_shot": (
+            " Em seguida, o id {receiver} finalizou a <b>{goal} m</b> da linha do gol, com a bola "
+            "saindo do pé a cerca de <b>{launch} km/h</b>."
+        ),
+        "op_tag_measured": "medido",
+        "op_tag_estimate": "estimativa",
+        "op_card_pass_dist": "do passador até o ponto de chegada",
+        "op_card_pass_v0": "velocidade da bola na saída",
+        "op_card_pass_time": "tempo da saída ao 1º toque",
+        "op_card_pass_v1": "velocidade da bola na chegada",
+        "op_card_pass_vmean": "velocidade média da bola no passe",
+        "op_card_pair_release": "passador–recebedor na saída",
+        "op_card_recv_v0": "recebedor quando a bola saiu",
+        "op_card_recv_lead": "o recebedor começou a correr antes do passe (pelo menos)",
+        "op_card_recv_onset": "início da corrida em relação à saída da bola",
+        "op_card_recv_peak": "velocidade máxima do recebedor",
+        "op_card_recv_disp": "deslocamento do recebedor durante o passe",
+        "op_card_recv_v1": "recebedor no 1º toque",
+        "op_card_passer_v0": "passador na hora do passe",
+        "op_h_pass_ball": "A bola",
+        "op_h_pass_receiver": "O recebedor",
+        "op_h_table": "Posição, velocidade e tempo nos instantes-chave",
+        "op_table_note": (
+            "Posições em metros no sistema do campo (x ao longo do campo, y na largura; o centro "
+            "do campo é a origem). t = 0 na saída da bola."
+        ),
+        "op_th_instant": "instante",
+        "op_th_t": "t (s)",
+        "op_th_ball_xy": "bola (x, y)",
+        "op_th_vball": "bola (km/h)",
+        "op_th_player_xy": "id {id} (x, y)",
+        "op_th_vplayer": "id {id} (km/h)",
+        "op_row_release": "saída da bola",
+        "op_row_first": "1º quadro (logo após a saída)",
+        "op_science_pass_timed": (
+            "A linha de Wilson–Santiago sobre passe e controle trata a combinação de velocidade, "
+            "precisão e agilidade no passe como preditora de desempenho em jogos reduzidos. Aqui "
+            "medimos o lance: a velocidade da bola na saída e na chegada, a distância do passador "
+            "até o ponto de chegada e o deslocamento do recebedor enquanto a bola viaja."
+        ),
+        "op_row_mid": "meio do passe",
+        "op_row_arrival": "1º toque do recebedor",
+        "op_row_shot": "chute (outro trecho)",
+        "op_h_shot": "Depois do passe: o chute",
+        "op_card_shot_launch": "velocidade na saída do pé (arredondada)",
+        "op_card_shot_goal": "distância do chute à linha do gol",
+        "op_card_shot_from_arrival": "do 1º toque até o ponto do chute",
+        "op_card_shot_from_passer": "do passador até o ponto do chute",
+        "op_card_shot_mean": "velocidade média do chute",
+        "op_card_shot_height": "altura máxima da bola no chute",
+        "op_shot_text": (
+            "O chute foi filmado em outro trecho do vídeo, por outra câmera: o tempo entre a "
+            "recepção e o chute não é medido. Pela distância de {d} m entre o 1º toque e o ponto "
+            "do chute, e pelas velocidades da bola e do recebedor no 1º toque, esse tempo fica "
+            "entre {g0} e {g1} s (estimativa). Do chute até o último quadro analisado, a bola "
+            "percorreu {path} m em {fl} s. Velocidade: {launch} km/h na saída do pé (modelo de voo) "
+            "e {mean} km/h em média até o último quadro, pois a bola só perde velocidade depois "
+            "do chute; na TV, cerca de {head} km/h."
+        ),
+        "op_cap_top_pass": (
+            "Vista de cima, em metros. Quadrados: posições na saída da bola. Círculos: no 1º toque. "
+            "Estrela: ponto de chegada. Tracejado preto: distância do passador até a chegada."
+        ),
+        "op_cap_top_shot": " Triângulo vermelho: ponto do chute, com a direção da bola.",
+        "op_cap_speed_pass": (
+            "Velocidade no plano (km/h). t = 0 na saída da bola; linha verde no 1º toque."
+        ),
+        "op_cap_dist_pass": "Distâncias bola–jogador e entre os jogadores (m); t = 0 na saída da bola.",
+        "op_fig_t_rel": "tempo desde a saída da bola (s)",
+        "op_legend_release": "saída da bola",
+        "op_legend_arrival": "1º toque",
+        "op_legend_arrival_pt": "chegada",
+        "op_legend_shot": "chute",
+        "op_legend_passer_id": "passador (id {id})",
+        "op_legend_receiver_id": "recebedor (id {id})",
+        "op_fig_already_running": "id {id} já corria a {v} km/h",
+        "op_science_pass_run": (
+            " O momento em que o recebedor começa a correr, em relação à saída da bola, é uma "
+            "leitura de antecipação: quem corre antes do passe ganha metros sobre o marcador, e o "
+            "passe precisa ser forte e preciso o bastante para chegar ao espaço para onde ele corre."
+        ),
+        "op_limit_pass_fps": "Vídeo a {fps} quadros por segundo (um quadro a cada {dt} ms).",
+        "op_limit_pass_release_fit": (
+            "A bola já estava em movimento no primeiro quadro: o instante da saída ({rel} s antes do "
+            "primeiro quadro) vem do ajuste do voo da bola e confere com a extrapolação para trás "
+            "({back} s)."
+        ),
+        "op_limit_pass_release_heur": (
+            "O instante da saída é estimado pela menor distância passador–bola seguida do aumento "
+            "da velocidade da bola."
+        ),
+        "op_limit_pass_arrival_user": "O 1º toque do recebedor foi marcado no vídeo (quadro {f}).",
+        "op_limit_pass_arrival_auto": (
+            "O 1º toque é a menor distância entre o recebedor e a bola (quadro {f}); confira no vídeo."
+        ),
+        "op_limit_pass_tracks": (
+            "A bola é a trajetória no chão (raio da câmera cortado na altura da bola). As posições "
+            "dos jogadores são o ponto no chão sob a caixa de detecção, não o pé, com remoção de "
+            "pontos fora da curva e filtro passa-baixa de 2 Hz."
+        ),
+        "op_limit_pass_run_bound": (
+            "Como o recebedor já corria no primeiro quadro, o início da corrida não aparece no "
+            "vídeo: o valor mostrado é um limite inferior, supondo aceleração máxima de {a} m/s² "
+            "(fica entre {l0} s, com {ahi} m/s², e {l1} s, com {alo} m/s²)."
+        ),
+        "op_limit_pass_shot": (
+            "O passe e o chute são trechos diferentes do vídeo; o tempo entre eles não foi medido."
+        ),
     },
     "en": {
         "tier_alta": "high",
@@ -287,6 +512,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "kicker_of": "from the foot of {name}",
         "kicker_default": "from the foot of the kicker",
         "kicker_default_pk": "from the foot of the penalty taker",
+        "kicker_default_op": "from the foot of the player who shot",
         "kicker_name_default": "the kicker",
         "wall_above": "above",
         "wall_below": "below",
@@ -295,6 +521,7 @@ _STRINGS: dict[str, dict[str, str]] = {
         "date_format": "{m:02d}/{d:02d}/{y}",
         "default_title": "The physics of a free kick",
         "default_title_pk": "The physics of a penalty kick",
+        "default_title_op": "The physics of a shot at goal",
         "default_subtitle": "3D reconstruction from broadcast footage, made with free software vailá",
         "fig_top_title": "Top view: {d} m in {t} s",
         "fig_top_x": "x on the pitch (m)",
@@ -398,6 +625,25 @@ _STRINGS: dict[str, dict[str, str]] = {
             "of each wrist comes from a single camera, with an error of a few tens of centimetres."
         ),
         "quote_measured": "All of this was measured from a single broadcast, using the pitch lines as a ruler.",
+        "incoming_lead": "The ball came in rolling at about <b>{speed} km/h</b>.",
+        "incoming_text": (
+            "Before the kick, the ball came in rolling at about <b>{speed} km/h</b>. The kick turned it "
+            "by <b>{turn}°</b> (seen from above) and launched it at about {launch} km/h."
+        ),
+        "incoming_unseen": (
+            "The ball was already flying in the first frame of the video: the kick happened in it or "
+            "just before, and the incoming ball is not in the picture."
+        ),
+        "contact_limit_kink": (
+            "<b>The contact was found at the break of the rolling ball's path</b>: two straight lines on "
+            "the ground, before and after the kick. It is uncertain by one frame."
+        ),
+        "contact_limit_first_frame": (
+            "<b>The kick is the first frame of the video or just before it.</b> The launch is uncertain "
+            "by up to one frame, and there is no ball before the contact to measure."
+        ),
+        "contact_limit_manual": "<b>The contact frame was given by hand.</b>",
+        "contact_limit_rest": "<b>The contact is the first frame in which the ball leaves its rest.</b>",
         "quote_curve": "The ball curved up to {dev} metre to the side of the straight line of the kick.",
         "footer_generated": "Generated on {date}. Slow-motion animation: {animation}.",
         "footer_tier": "Fit confidence: {tier} · mean error in the image {rms} px · worst deviation from the references {worst} m.",
@@ -412,6 +658,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "top_note_pk": (
             "People on the ground (mean of the ankles): penalty taker id {kicker} and goalkeeper id {keeper}. "
             "Penalty kick: no wall. {how}"
+        ),
+        "top_note_op": (
+            "People on the ground (mean of the ankles): kicker id {kicker} and goalkeeper id {keeper}. "
+            "Open play: no wall. {how}"
         ),
         "top_how_auto": "Found by the nearest point; --kicker-id, --wall-ids and --keeper-id replace them.",
         "top_how_manual": "Given by --kicker-id, --wall-ids and --keeper-id.",
@@ -454,15 +704,15 @@ _STRINGS: dict[str, dict[str, str]] = {
             "is measured by the two cameras, but that does not say whether it passed over the real wall."
         ),
         "ed_disabled": "Editor unavailable for the two-camera reconstruction.",
-        "ed_disabled_auto": "Editor unavailable: the kick was fitted automatically (contact and arrival detected).",
+        "ed_disabled_auto": "Editor unavailable: edit contact and arrival through the FreeKiki GUI/CLI.",
         "method_auto": (
             "Each frame of the broadcast has a camera calibration, obtained from the painted lines of the pitch. "
             "With it, the ball becomes a position on the pitch. A single camera does not measure depth, so the "
             "height of the ball comes from the physics: the trajectory (gravity, drag and Magnus) is fitted to the "
             "pixels, with a mean error of <b>{rms} pixel</b>. The kick starts at the <b>foot contact</b>, when the "
-            "ball leaves rest; before that the ball is still and is not part of the calculation. The kick ends at "
-            "the <b>goal entry</b>, by the homography of the goal plane, or at the <b>keeper's hands</b>, in the last "
-            "frame."
+            "ball leaves rest; before that the ball is still and is not part of the calculation. A marked entry uses the homography of the four confirmed goal corners. "
+            "A keeper-hand arrival requires explicit confirmation; without an observation or "
+            "recognized crossing, the arrival remains undetermined."
         ),
         "refs_auto": (
             "<b>The reference points come from the image itself.</b> The rest point is the still ball before the "
@@ -510,6 +760,203 @@ _STRINGS: dict[str, dict[str, str]] = {
         "ed_note": (
             "Older points (without σ) use σ 0.3 m. The distance runs from the kick frame to the last "
             "frame with a marker."
+        ),
+        # --- open-play dribble / pass report ---
+        "op_kicker": "Football biomechanics · press report",
+        "op_title_dribble": "The physics of a 1-vs-N dribble",
+        "op_title_pass": "The physics of a pass",
+        "op_subtitle": "Planar pitch kinematics from broadcast footage, made with free software vailá",
+        "op_lead_dribble": (
+            "The dribbler (id {dribbler}) covered <b>{path} m</b> with <b>{cod}</b> changes of direction "
+            "and mean curvature <b>{curv} rad/m</b>, against {n} marker(s)."
+        ),
+        "op_lead_pass": (
+            "Pass from id {passer} to id {receiver}: the ball covered about <b>{length} m</b> "
+            "in <b>{flight} s</b> between release and reception (heuristic)."
+        ),
+        "op_card_ball_path": "ball path on the plane",
+        "op_card_ball_vmax": "ball peak speed",
+        "op_card_ball_accel": "peak acceleration (m/s²)",
+        "op_card_drib_path": "dribbler path",
+        "op_card_drib_vmax": "dribbler peak speed",
+        "op_card_drib_cod": "changes of direction (COD)",
+        "op_card_drib_curv": "mean curvature (rad/m)",
+        "op_card_drib_accel": "peak acceleration (m/s²)",
+        "op_card_drib_decel": "peak deceleration (m/s²)",
+        "op_card_pass_len": "ball path of the pass",
+        "op_card_pass_flight": "release → reception time",
+        "op_card_pass_pair": "player–player distance at release",
+        "op_h_top": "Top view",
+        "op_h_speed": "Speeds over time",
+        "op_h_dist": "Distances over time",
+        "op_h_science": "Scientific reading",
+        "op_h_markers": "Markers",
+        "op_cap_top": "Trajectories on the pitch plane (metres).",
+        "op_cap_speed": "Instantaneous speed (km/h) from planar positions.",
+        "op_cap_dist": "Interpersonal or ball–player distances (m).",
+        "op_fig_top_title": "Top view: pitch trajectories",
+        "op_fig_x": "x on the pitch (m)",
+        "op_fig_y": "y on the pitch (m)",
+        "op_fig_t": "time (s)",
+        "op_fig_speed": "speed (km/h)",
+        "op_fig_speed_title": "Planar speed",
+        "op_fig_dist": "distance (m)",
+        "op_fig_dist_drib_title": "Dribbler–marker distance",
+        "op_fig_dist_pass_title": "Pass distances",
+        "op_legend_ball": "ball",
+        "op_legend_dribbler": "dribbler",
+        "op_legend_marker": "marker {id}",
+        "op_legend_passer": "passer",
+        "op_legend_receiver": "receiver",
+        "op_legend_passer_ball": "passer–ball",
+        "op_legend_receiver_ball": "receiver–ball",
+        "op_legend_passer_receiver": "passer–receiver",
+        "op_th_id": "id",
+        "op_th_min_d": "min (m)",
+        "op_th_rel_v": "rel. v at min (m/s)",
+        "op_th_cod": "COD",
+        "op_th_path": "path (m)",
+        "op_no_markers": "No markers given.",
+        "op_science_dribble": (
+            "In the Wilson–Santiago predator–prey framing, one-versus-one success depends more on "
+            "change of direction and speed along curved paths than on straight-line sprinting. "
+            "Interpersonal distance and relative velocity (Corrêa / Duarte) describe the marker’s "
+            "pressure on the dribbler."
+        ),
+        "op_science_pass": (
+            "The Wilson–Santiago passing and control line treats the mix of speed, accuracy and "
+            "agility in the pass as a predictor of small-sided success. Here we measure the clip: "
+            "ball path, pairwise distances, and the heuristic release→reception window."
+        ),
+        "op_limit": (
+            "Operational planar metrics from FreeKiki tracks; they do not replace closed-skill "
+            "curved-path circuits (0–1.37 rad/m) or rebound-board passing batteries."
+        ),
+        "op_ref1": "Wilson et al. (2018). J Sports Sci — dribbling speed along curved paths (PMID 30470166).",
+        "op_ref2": "Wilson, Santiago et al. (2026). Int J Sports Sci Coach — dribbling and passing vs 3v3 success.",
+        "op_ref3": "Corrêa et al. / Duarte et al. — interpersonal distance and relative velocity in 1v1.",
+        # --- pass report: timing, receiver run, shot link ---
+        "op_lead_pass_main": (
+            "Pass from id {passer} to id {receiver}: the ball left at about <b>{v0} km/h</b> and "
+            "reached the receiver's foot <b>{flight} s</b> later, <b>{dist} m</b> from where the "
+            "passer stood."
+        ),
+        "op_lead_pass_run_before": (
+            " When the ball left, id {receiver} was already running at <b>{vr} km/h</b>: the run "
+            "began before the pass, at least <b>{lead} s</b> earlier (estimate)."
+        ),
+        "op_lead_pass_run_onset": (
+            " Id {receiver} started to run <b>{lead} s</b> {when} the ball left."
+        ),
+        "op_when_before": "before",
+        "op_when_after": "after",
+        "op_lead_shot": (
+            " Then id {receiver} shot from <b>{goal} m</b> off the goal line, the ball leaving the "
+            "foot at about <b>{launch} km/h</b>."
+        ),
+        "op_tag_measured": "measured",
+        "op_tag_estimate": "estimate",
+        "op_card_pass_dist": "from the passer to the arrival point",
+        "op_card_pass_v0": "ball speed at release",
+        "op_card_pass_time": "release to first touch",
+        "op_card_pass_v1": "ball speed at arrival",
+        "op_card_pass_vmean": "mean ball speed of the pass",
+        "op_card_pair_release": "passer–receiver at release",
+        "op_card_recv_v0": "receiver when the ball left",
+        "op_card_recv_lead": "the receiver started running before the pass (at least)",
+        "op_card_recv_onset": "run onset relative to the release",
+        "op_card_recv_peak": "receiver peak speed",
+        "op_card_recv_disp": "receiver displacement during the pass",
+        "op_card_recv_v1": "receiver at the first touch",
+        "op_card_passer_v0": "passer at the moment of the pass",
+        "op_h_pass_ball": "The ball",
+        "op_h_pass_receiver": "The receiver",
+        "op_h_table": "Position, speed and time at the key instants",
+        "op_table_note": (
+            "Positions in metres in the pitch frame (x along the pitch, y across it; the centre "
+            "spot is the origin). t = 0 at the ball release."
+        ),
+        "op_th_instant": "instant",
+        "op_th_t": "t (s)",
+        "op_th_ball_xy": "ball (x, y)",
+        "op_th_vball": "ball (km/h)",
+        "op_th_player_xy": "id {id} (x, y)",
+        "op_th_vplayer": "id {id} (km/h)",
+        "op_row_release": "ball release",
+        "op_row_first": "first frame (just after release)",
+        "op_science_pass_timed": (
+            "The Wilson–Santiago line on passing and control treats the combination of speed, "
+            "accuracy and agility in passing as a predictor of small-sided game performance. Here "
+            "we measure the play: ball speed at release and at arrival, the distance from the "
+            "passer to the arrival point and the receiver's displacement while the ball travels."
+        ),
+        "op_row_mid": "mid-pass",
+        "op_row_arrival": "receiver's first touch",
+        "op_row_shot": "shot (separate clip)",
+        "op_h_shot": "After the pass: the shot",
+        "op_card_shot_launch": "speed off the foot (rounded)",
+        "op_card_shot_goal": "shot distance to the goal line",
+        "op_card_shot_from_arrival": "from the first touch to the shot point",
+        "op_card_shot_from_passer": "from the passer to the shot point",
+        "op_card_shot_mean": "mean speed of the shot",
+        "op_card_shot_height": "peak ball height of the shot",
+        "op_shot_text": (
+            "The shot was filmed in another part of the footage, by another camera: the time "
+            "between the reception and the shot is not measured. From the {d} m between the first "
+            "touch and the shot point, and the ball and receiver speeds at the first touch, it lies "
+            "between {g0} and {g1} s (estimate). From the shot to the last analysed frame, the ball "
+            "covered {path} m in {fl} s. Speed: {launch} km/h off the foot (flight fit) and {mean} "
+            "km/h on average to the last frame, since the ball only slows after the kick; on air, "
+            "about {head} km/h."
+        ),
+        "op_cap_top_pass": (
+            "Top view, in metres. Squares: positions at the ball release. Circles: at the first "
+            "touch. Star: arrival point. Black dashes: distance from the passer to the arrival."
+        ),
+        "op_cap_top_shot": " Red triangle: shot point, with the ball direction.",
+        "op_cap_speed_pass": (
+            "Planar speed (km/h). t = 0 at the ball release; green line at the first touch."
+        ),
+        "op_cap_dist_pass": "Ball–player and player–player distances (m); t = 0 at the ball release.",
+        "op_fig_t_rel": "time since the ball release (s)",
+        "op_legend_release": "ball release",
+        "op_legend_arrival": "first touch",
+        "op_legend_arrival_pt": "arrival",
+        "op_legend_shot": "shot",
+        "op_legend_passer_id": "passer (id {id})",
+        "op_legend_receiver_id": "receiver (id {id})",
+        "op_fig_already_running": "id {id} already at {v} km/h",
+        "op_science_pass_run": (
+            " When the receiver starts to run, relative to the ball release, is a reading of "
+            "anticipation: running before the pass gains metres on the marker, and the pass must be "
+            "firm and accurate enough to reach the space he runs into."
+        ),
+        "op_limit_pass_fps": "Video at {fps} frames per second (one frame every {dt} ms).",
+        "op_limit_pass_release_fit": (
+            "The ball already moved in the first frame: the release instant ({rel} s before the "
+            "first frame) comes from the ball flight fit and agrees with the backward "
+            "extrapolation ({back} s)."
+        ),
+        "op_limit_pass_release_heur": (
+            "The release instant is estimated from the closest passer–ball distance followed by a "
+            "rise in ball speed."
+        ),
+        "op_limit_pass_arrival_user": "The receiver's first touch was marked in the video (frame {f}).",
+        "op_limit_pass_arrival_auto": (
+            "The first touch is the closest receiver–ball approach (frame {f}); check it in the video."
+        ),
+        "op_limit_pass_tracks": (
+            "The ball is the ground track (camera ray cut at ball height). Player positions are the "
+            "ground point under the detection box, not the foot, with outlier removal and a 2 Hz "
+            "low-pass filter."
+        ),
+        "op_limit_pass_run_bound": (
+            "Because the receiver was already running in the first frame, the run onset is not in "
+            "the footage: the value shown is a lower bound assuming a peak acceleration of "
+            "{a} m/s² ({l0} s with {ahi} m/s², {l1} s with {alo} m/s²)."
+        ),
+        "op_limit_pass_shot": (
+            "The pass and the shot are separate clips; the time between them was not measured."
         ),
     },
 }

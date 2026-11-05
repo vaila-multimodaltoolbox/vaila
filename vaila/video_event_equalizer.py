@@ -117,9 +117,61 @@ def _as_list(value: Any) -> list[Any]:
     return list(value) if isinstance(value, (list, tuple)) else [value]
 
 
+GRID_MODES = ("reference", "reduce", "increase")
+MODE_TEXT = {
+    "reference": "main camera (its own span, as before)",
+    "reduce": "shortest camera (reduce)",
+    "increase": "longest camera (increase)",
+}
+
+
+def _grid_mode(args: Any) -> str:
+    """How many output frames: the main camera's span (default), the shortest or the longest."""
+    mode = _optional_text(getattr(args, "mode", None)) or "reference"
+    if mode not in GRID_MODES:
+        raise EventSyncError(f"Mode: choose one of {', '.join(GRID_MODES)}")
+    return mode
+
+
 def source_roles(count: int) -> list[str]:
     """Role names of the cameras after the reference: ``source`` first (as before), then ``source_2``."""
     return ["source" if index == 0 else f"source_{index + 1}" for index in range(count)]
+
+
+def contact_pattern(events: Sequence[int]) -> str | None:
+    """``"start"`` or ``"end"`` when the contact repeats that event, else None (own frame)."""
+    _start, contact, _end = events
+    if contact == events[0]:
+        return "start"
+    return "end" if contact == events[2] else None
+
+
+def check_events(name: str, events: Sequence[int], count: int) -> str | None:
+    """Validate ``[start, contact, end]`` of one camera and return its contact pattern.
+
+    The contact may repeat the start or the end (when only those two are known), but not both,
+    so ``1,1,39`` and ``1,26,26`` are valid while ``1,1,1`` is not.
+    """
+    if len(events) != 3:
+        raise EventSyncError("Enter exactly three events: start, contact, end")
+    start, contact, end = events
+    if start == end or not start <= contact <= end:
+        raise EventSyncError(
+            f"{name}: contact must lie between start and end, and start must differ from end "
+            f"(got {start},{contact},{end})"
+        )
+    # Only distinct frames are real events; calibrate_camera checks bounds and ordering.
+    distinct = sorted({start, contact, end})
+    calibrate_camera(
+        name,
+        {"events": distinct, "frame_count": count},
+        [Fraction(index) for index in range(len(distinct))],
+    )
+    return contact_pattern(events)
+
+
+def _describe_pattern(pattern: str | None) -> str:
+    return {"start": "on the start frame", "end": "on the end frame"}.get(pattern, "its own frame")
 
 
 def _round_half_up(value: Fraction) -> int:
@@ -132,17 +184,16 @@ def output_grid(
     rate: str,
     output_fps: Any = None,
     output_frame_count: Any = None,
+    target_duration: Fraction | None = None,
 ) -> dict[str, Any]:
-    """One exact grid policy for preview, CLI and both camera maps."""
+    """One exact grid policy for preview, CLI and both camera maps.
+
+    ``target_duration`` (seconds of event span) sets the default frame count; it defaults to the
+    reference's own span. An explicit output frame count always wins over it.
+    """
     ref_fps = rational_rate(rate, "Reference FPS")
-    if len(reference_events) != 3:
-        raise EventSyncError("Enter exactly three events: start, contact, end")
     # Validate before deriving intervals or dividing by their lengths.
-    calibrate_camera(
-        "Reference",
-        {"events": list(reference_events), "frame_count": reference_count},
-        [Fraction(0), Fraction(1), Fraction(2)],
-    )
+    pattern = check_events("Reference", reference_events, reference_count)
     requested_fps = _optional_text(output_fps)
     requested_count = _optional_text(output_frame_count)
     try:
@@ -156,17 +207,21 @@ def output_grid(
     try:
         if requested_count is not None and not requested_count.removeprefix("+").isdecimal():
             raise ValueError
+        grid_duration = reference_duration if target_duration is None else target_duration
         count = (
             int(requested_count)
             if requested_count is not None
-            else _round_half_up(reference_duration * fps) + 1
+            else _round_half_up(grid_duration * fps) + 1
         )
         if count < 3:
             raise ValueError
     except ValueError as exc:
         raise EventSyncError("Output frame count: use an integer of at least 3 frames") from exc
     ideal_contact = Fraction(reference_events[1] - reference_events[0], span) * (count - 1)
-    contact = min(count - 1, max(2, _round_half_up(ideal_contact) + 1))
+    if pattern is None:
+        contact = min(count - 1, max(2, _round_half_up(ideal_contact) + 1))
+    else:  # a contact on the start or end has no interval to round
+        contact = 1 if pattern == "start" else count
     duration = Fraction(count - 1) / fps
     ref_contact_time = Fraction(reference_events[1] - reference_events[0]) / ref_fps
     contact_time = Fraction(contact - 1) / fps
@@ -176,6 +231,7 @@ def output_grid(
         "output_fps": str(fps),
         "output_frame_count": count,
         "output_event_frames": [1, contact, count],
+        "grid_duration_rational": str(grid_duration),
         "reference_duration_rational": str(reference_duration),
         "output_duration_rational": str(duration),
         "output_file_duration_rational": str(Fraction(count) / fps),
@@ -194,17 +250,22 @@ def _camera_map(
     source_events: Sequence[int],
     source_count: int,
     grid: dict[str, Any],
+    name: str = "Source",
 ) -> list[dict[str, Any]]:
-    if len(source_events) != 3:
-        raise EventSyncError("Enter exactly three events: start, contact, end")
-    calibrate_camera(
-        "Source",
-        {"events": list(source_events), "frame_count": source_count},
-        [Fraction(0), Fraction(1), Fraction(2)],
-    )
+    pattern = check_events(name, source_events, source_count)
+    reference_pattern = contact_pattern(reference_events)
+    if pattern != reference_pattern:
+        raise EventSyncError(
+            f"{name}: contact is {_describe_pattern(pattern)}, but the reference's is "
+            f"{_describe_pattern(reference_pattern)}. Every camera needs the same contact "
+            "pattern: on the start, on the end, or its own frame."
+        )
     fps = Fraction(grid["output_fps"])
     anchors = grid["output_event_frames"]
-    event_names = dict(zip(anchors, ("start", "contact", "end"), strict=True))
+    # Several events can share one output frame (start/contact or contact/end).
+    event_names: dict[int, list[str]] = {}
+    for label, anchor in zip(("start", "contact", "end"), anchors, strict=True):
+        event_names.setdefault(anchor, []).append(label)
     audit = {key: value for key, value in grid.items() if key not in ("output_event_frames",)}
     audit.update(
         zip(
@@ -213,7 +274,8 @@ def _camera_map(
     )
     rows = []
     for output in range(1, grid["output_frame_count"] + 1):
-        segment = int(output > anchors[1])
+        # A contact on the start leaves segment 0 with zero length: use segment 1 throughout.
+        segment = 1 if anchors[0] == anchors[1] else int(output > anchors[1])
         o0, o1 = anchors[segment : segment + 2]
         r0, r1 = reference_events[segment : segment + 2]
         s0, s1 = source_events[segment : segment + 2]
@@ -232,7 +294,7 @@ def _camera_map(
                 "interpolation_fraction": str(position - lo),
                 "kind": "original" if lo == hi else "generated",
                 "reference_position": str(ref),
-                "event": event_names.get(output, ""),
+                "event": "/".join(event_names.get(output, [])),
                 **audit,
             }
         )
@@ -273,17 +335,25 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         for role, events in zip(source_roles(len(sources)), source_events, strict=True)
     ]
     reference = probed[0]
+    roles = ["reference", *source_roles(len(sources))]
+    mode = _grid_mode(args)
+    # Each camera's event span in seconds: the reduce/increase modes pick the shortest/longest.
+    durations = []
+    for role, camera, events in zip(roles, probed, [ref_events, *src_events], strict=True):
+        check_events(role, events, camera["frame_count"])
+        durations.append(Fraction(events[2] - events[0]) / Fraction(camera["fps"]))
+    target = {"reference": None, "reduce": min, "increase": max}[mode]
     grid = output_grid(
         ref_events,
         reference["frame_count"],
         reference["fps"],
         getattr(args, "output_fps", None),
         getattr(args, "output_frame_count", None),
+        target_duration=None if target is None else target(durations),
     )
-    roles = ["reference", *source_roles(len(sources))]
     cameras = {}
     for role, camera, events in zip(roles, probed, [ref_events, *src_events], strict=True):
-        rows = _camera_map(ref_events, events, camera["frame_count"], grid)
+        rows = _camera_map(ref_events, events, camera["frame_count"], grid, name=role)
         originals = sum(row["kind"] == "original" for row in rows)
         cameras[role] = dict(
             camera,
@@ -295,8 +365,11 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "vaila_event_equalizer": 1,
         "method": "rife_reference_grid"
-        if grid["requested_output_fps"] is None and grid["requested_output_frame_count"] is None
+        if mode == "reference"
+        and grid["requested_output_fps"] is None
+        and grid["requested_output_frame_count"] is None
         else "rife_common_event_grid",
+        "grid_mode": mode,
         "frame_base": 1,
         "audio": False,
         "warning": WARNING,
@@ -313,8 +386,10 @@ def preview_text(manifest: dict[str, Any]) -> str:
         return f"{value} s ({float(value):.6f} s)"
 
     fps = Fraction(manifest["output_fps"])
+    mode = manifest.get("grid_mode", "reference")
     lines = [
         f"Output: {fps} FPS ({float(fps):.6f}); {manifest['output_frame_count']} frames per camera",
+        f"Frame count from the {MODE_TEXT[mode]}; target span {seconds('grid_duration_rational')}",
         f"First-to-last frame: {seconds('output_duration_rational')}",
         f"File duration: {seconds('output_file_duration_rational')}",
         f"Reference first-to-last: {seconds('reference_duration_rational')}",
@@ -535,6 +610,7 @@ def cli_command(args: argparse.Namespace, python: str = "python") -> list[str]:
     command.extend(
         ["--reference", str(args.reference), "--reference-events", str(args.reference_events)]
     )
+    command.extend(["--mode", _optional_text(getattr(args, "mode", None)) or "reference"])
     # Each camera's video next to its events (zip_longest keeps a mismatch for prepare to report).
     for path, events in zip_longest(_as_list(args.source), _as_list(args.source_events)):
         if path is not None:
@@ -596,7 +672,7 @@ def show_gui(args: argparse.Namespace) -> None:
                      "<Shift-Button-4>", "<Shift-Button-5>"):  # fmt: skip
         root.bind_all(sequence, scroll)
     values: dict[str, tk.StringVar] = {}
-    extra: list[dict[str, Any]] = []  # the cameras after the reference: box, path, events
+    cameras: list[dict[str, Any]] = []  # one entry per table row, in table order
     process: subprocess.Popen[Any] | None = None
     log_file: Any = None
     log_position = 0
@@ -632,38 +708,69 @@ def show_gui(args: argparse.Namespace) -> None:
         if selected:
             values[key].set(selected)
 
-    values["reference"] = tk.StringVar(root, str(getattr(args, "reference", None) or ""))
-    values["reference_events"] = tk.StringVar(
-        root, str(getattr(args, "reference_events", None) or "")
+    # One table row per camera. The one picked as Main is the reference: its events set the
+    # contact and the timing, and its video is the --reference of the command.
+    main_choice = tk.IntVar(root, 0)
+    cameras_box = ttk.LabelFrame(
+        body,
+        text="Cameras (Main = reference: its events set the contact; contact may repeat start or end)",
     )
-    # One table row per camera; camera 1 is the reference and sets the output grid.
-    cameras_box = ttk.LabelFrame(body, text="Cameras (1 = reference: its events set the grid)")
     cameras_box.grid(row=0, column=0, columnspan=3, sticky="ew", padx=4, pady=4)
-    cameras_box.columnconfigure(1, weight=1)
-    for column, heading in enumerate(("Camera", "Video", "start, contact, end")):
+    cameras_box.columnconfigure(2, weight=1)
+    for column, heading in enumerate(("Main", "Camera", "Video", "start, contact, end")):
         ttk.Label(cameras_box, text=heading).grid(row=0, column=column, sticky="w", padx=6)
-    next_row = [2]  # the reference uses row 1; removed rows simply stay empty
+    next_row = [1]  # removed rows simply stay empty
 
-    def camera_row(row: int, label: str, path: Any, events: Any) -> list[Any]:
+    def renumber() -> None:
+        for index, entry in enumerate(cameras, start=1):
+            entry["number"].configure(text=str(index))
+
+    def camera_row(path: str, events: str) -> dict[str, Any]:
+        path_var, events_var = tk.StringVar(root, path), tk.StringVar(root, events)
+        entry: dict[str, Any] = {"path": path_var, "events": events_var}
+        key = id(entry)  # unique while the row exists; the radio button stores it
+        entry["key"] = key
+        row = next_row[0]
+        next_row[0] += 1
+        entry["number"] = ttk.Label(cameras_box, width=4)
         widgets = [
-            ttk.Label(cameras_box, text=label, width=12),
-            ttk.Entry(cameras_box, textvariable=path, width=60),
-            ttk.Entry(cameras_box, textvariable=events, width=16),
+            ttk.Radiobutton(cameras_box, text="", value=key, variable=main_choice),
+            entry["number"],
+            ttk.Entry(cameras_box, textvariable=path_var, width=60),
+            ttk.Entry(cameras_box, textvariable=events_var, width=16),
             ttk.Button(
                 cameras_box,
                 text="Browse",
-                command=lambda: browse_video(path, events, f"Camera {widgets[0].cget('text')}"),
+                command=lambda: browse_video(
+                    path_var, events_var, f"Camera {entry['number'].cget('text')}"
+                ),
             ),
+            ttk.Button(cameras_box, text="Remove", command=lambda: remove_camera(entry)),
         ]
         for column, widget in enumerate(widgets):
-            widget.grid(row=row, column=column, sticky="ew" if column == 1 else "w", padx=4, pady=2)
-        return widgets
+            widget.grid(row=row, column=column, sticky="ew" if column == 2 else "w", padx=4, pady=2)
+        entry["widgets"] = widgets
+        if not cameras:
+            main_choice.set(key)  # the first camera is Main until the user picks another
+        cameras.append(entry)
+        path_var.trace_add("write", invalidate)
+        events_var.trace_add("write", invalidate)
+        renumber()
+        return entry
 
-    camera_row(1, "1 reference", values["reference"], values["reference_events"])
     ttk.Button(body, text="Add camera", command=lambda: add_camera()).grid(
         row=1, column=0, sticky="w", padx=6, pady=4
     )
-    for row, (key, label) in enumerate(settings.items(), start=2):
+    # How many output frames: the main camera's span (as before), or the shortest/longest camera.
+    values["mode"] = tk.StringVar(root, str(getattr(args, "mode", None) or "reference"))
+    mode_frame = ttk.Frame(body)
+    mode_frame.grid(row=2, column=0, columnspan=3, sticky="w", padx=8, pady=4)
+    ttk.Label(mode_frame, text="Frame count from:").pack(side="left", padx=(0, 8))
+    for mode in GRID_MODES:
+        ttk.Radiobutton(
+            mode_frame, text=MODE_TEXT[mode].capitalize(), value=mode, variable=values["mode"]
+        ).pack(side="left", padx=6)
+    for row, (key, label) in enumerate(settings.items(), start=3):
         values[key] = tk.StringVar(root, str(getattr(args, key, None) or ""))
         ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", padx=8, pady=5)
         ttk.Entry(body, textvariable=values[key], width=64).grid(
@@ -683,41 +790,26 @@ def show_gui(args: argparse.Namespace) -> None:
             ttk.Button(body, text="Browse", command=lambda key=key: browse(key)).grid(
                 row=row, column=2, padx=8
             )
-    offset = 2 + len(settings)
-
-    def renumber() -> None:
-        for index, entry in enumerate(extra, start=2):
-            entry["widgets"][0].configure(text=str(index))
+    offset = 3 + len(settings)
 
     def add_camera(path: str = "", events: str = "") -> None:
-        entry: dict[str, Any] = {
-            "path": tk.StringVar(root, path),
-            "events": tk.StringVar(root, events),
-        }
-        entry["widgets"] = camera_row(
-            next_row[0], str(len(extra) + 2), entry["path"], entry["events"]
-        )
-        remove = ttk.Button(cameras_box, text="Remove", command=lambda: remove_camera(entry))
-        remove.grid(row=next_row[0], column=4, padx=4, pady=2)
-        entry["widgets"].append(remove)
-        next_row[0] += 1
-        extra.append(entry)
-        entry["path"].trace_add("write", invalidate)
-        entry["events"].trace_add("write", invalidate)
+        camera_row(path, events)
         invalidate()
 
     def remove_camera(entry: dict[str, Any]) -> None:
-        extra[:] = [other for other in extra if other is not entry]
+        cameras[:] = [other for other in cameras if other is not entry]
         for widget in entry["widgets"]:
             widget.destroy()
+        if main_choice.get() == entry["key"] and cameras:
+            main_choice.set(cameras[0]["key"])  # removing the main hands it to the first camera
         renumber()
         invalidate()
 
     ttk.Label(
         body,
         text=(
-            "Leave both blank for the reference grid. FPS only calculates count; count only uses reference FPS. "
-            "FPS accepts 29.970 or 30000/1001. Both values set playback speed independently."
+            "Leave both blank to use the chosen frame count. FPS only calculates count; count only uses "
+            "the main camera's FPS. FPS accepts 29.970 or 30000/1001. Both values set playback speed independently."
         ),
         wraplength=780,
     ).grid(row=offset, column=0, columnspan=3, padx=8, pady=4)
@@ -738,8 +830,14 @@ def show_gui(args: argparse.Namespace) -> None:
 
     def current_values() -> dict[str, Any]:
         out: dict[str, Any] = {key: var.get() for key, var in values.items()}
-        out["source"] = [entry["path"].get() for entry in extra]
-        out["source_events"] = [entry["events"].get() for entry in extra]
+        main = next((entry for entry in cameras if entry["key"] == main_choice.get()), None)
+        if main is None and cameras:
+            main = cameras[0]
+        others = [entry for entry in cameras if entry is not main]
+        out["reference"] = main["path"].get() if main else ""
+        out["reference_events"] = main["events"].get() if main else ""
+        out["source"] = [entry["path"].get() for entry in others]
+        out["source_events"] = [entry["events"].get() for entry in others]
         return out
 
     def set_preview(text: str) -> None:
@@ -883,15 +981,20 @@ def show_gui(args: argparse.Namespace) -> None:
     ttk.Button(controls, text="Close", command=close).pack(side="left", padx=8)
     for value in values.values():
         value.trace_add("write", invalidate)
-    # Cameras from the command line, after every widget and trace exists.
-    if values["reference"].get() and not values["reference_events"].get():
-        fill_events(values["reference"], values["reference_events"])
+    main_choice.trace_add("write", invalidate)
+    # Cameras from the command line, after every widget and trace exists: the reference first.
+    first = camera_row(
+        str(getattr(args, "reference", None) or ""),
+        str(getattr(args, "reference_events", None) or ""),
+    )
+    if first["path"].get() and not first["events"].get():
+        fill_events(first["path"], first["events"])
     given_events = _as_list(getattr(args, "source_events", None))
     for index, path in enumerate(_as_list(getattr(args, "source", None))):
         events = str(given_events[index]) if index < len(given_events) else ""
         add_camera(str(path), events)
         if not events:
-            fill_events(extra[-1]["path"], extra[-1]["events"])
+            fill_events(cameras[-1]["path"], cameras[-1]["events"])
     set_preview("Click Preview to calculate FPS, frame counts, durations and contact timing.")
     root.protocol("WM_DELETE_WINDOW", close)
     root.mainloop()
@@ -909,6 +1012,16 @@ CLI_EXAMPLES = """examples (no window; RIFE needs CUDA):
       --source c1_main.mp4 --source-events 1,9,19 \\
       --source c3_top.mp4 --source-events 1,8,20 \\
       --output-dir results/
+  only the sync start and end known (contact on the start, or on the end; every camera the same):
+    uv run --no-sync vaila/video_event_equalizer.py \\
+      --reference c2_passe_16mm.mp4 --reference-events 1,1,39 \\
+      --source c1_passe_main.mp4 --source-events 1,1,26 \\
+      --output-dir results/
+  any camera as main, and the frame count from the shortest or longest camera:
+    uv run --no-sync vaila/video_event_equalizer.py \\
+      --reference c1_passe_main.mp4 --reference-events 1,1,26 \\
+      --source c2_passe_16mm.mp4 --source-events 1,1,39 \\
+      --mode increase --output-dir results/
   check the plan first (no RIFE, no output):  add --dry-run
   open the window instead:                    add --gui
 """
@@ -921,7 +1034,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         epilog=CLI_EXAMPLES,
     )
     parser.add_argument("--gui", action="store_true", help="Open the event equalizer window")
-    parser.add_argument("--reference", type=Path, help="Reference camera: its events set the grid")
+    parser.add_argument(
+        "--reference", type=Path, help="Main camera: its events set the contact and the timing"
+    )
+    parser.add_argument(
+        "--mode",
+        choices=GRID_MODES,
+        default="reference",
+        help="Output frame count: reference = the main camera's span (default); reduce = the "
+        "shortest camera's duration; increase = the longest camera's duration. "
+        "--output-frame-count overrides it.",
+    )
     parser.add_argument(
         "--source",
         type=Path,
@@ -929,7 +1052,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=[],
         help="Another camera; repeat for more (each with its --source-events)",
     )
-    parser.add_argument("--reference-events", default="", help="1-based start,contact,end")
+    parser.add_argument(
+        "--reference-events",
+        default="",
+        help="1-based start,contact,end; contact may repeat start or end (e.g. 1,1,26)",
+    )
     parser.add_argument(
         "--source-events",
         action="append",

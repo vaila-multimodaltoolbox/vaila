@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 27 October 2026
-Update Date: 29 October 2026
+Update Date: 01 November 2026
 
 Description:
     Each camera numbers its people with the SAM 3 object id, so the same player can carry
@@ -51,12 +51,13 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from .freekiki_auto_flight import GOAL_X_M, kick_onset, rest_point
+    from .freekiki_auto_flight import GOAL_X_M, flight_contact, kick_onset, rest_point
     from .freekiki_field3d import FEET_NAMES
     from .freekiki_report_players import ROLE_RADIUS_M
 except ImportError:
     from freekiki_auto_flight import (  # ty: ignore[unresolved-import]
         GOAL_X_M,
+        flight_contact,
         kick_onset,
         rest_point,
     )
@@ -459,12 +460,18 @@ def run_player_ids(folders: list[Path]) -> dict:
     ball_m = read_ball_metres(folders[0] / "ball_3d.csv")
     if len(ball_px) < 2 or len(ball_m) < 2:
         raise ValueError(f"no ball track in {folders[0]}: the kick cannot be located")
-    contact = kick_onset(ball_px)
+    # the contact the automatic flight decided (a rolling ball has no still frames); older folders
+    # fall back to the first frame the hand-marked ball leaves its rest pixel
+    decided = flight_contact(folders[0])
+    contact = decided["frame"] if decided is not None else kick_onset(ball_px)
     if contact is None:
         raise ValueError(f"the ball does not move in {folders[0]}")
     if contact not in ball_m:
         raise ValueError(f"no ball position at the contact frame {contact} in {folders[0]}")
-    rest = rest_point(ball_m, contact)  # the still frames before the contact, or the contact itself
+    if decided is not None and decided.get("kick_xy") is not None:
+        rest = np.asarray(decided["kick_xy"], dtype=float)  # the ball where it was kicked
+    else:
+        rest = rest_point(ball_m, contact)  # the still frames before the contact, or the contact
     last = max(ball_m)
     side = 1.0 if ball_m[last]["x_m"] - float(rest[0]) >= 0 else -1.0
     ball_xy = {f: (r["x_m"], r["y_m"]) for f, r in ball_m.items()}
@@ -480,7 +487,10 @@ def run_player_ids(folders: list[Path]) -> dict:
             feet[(name, pid)] = frames
         if name != names[0]:
             px = read_ball_pixels(folder / "ball.csv")
-            onsets[name] = kick_onset(px) if len(px) >= 2 else None
+            other = flight_contact(folder)
+            onsets[name] = (
+                other["frame"] if other is not None else (kick_onset(px) if len(px) >= 2 else None)
+            )
 
     return _finish(
         folders=folders,

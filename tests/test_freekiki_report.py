@@ -12,6 +12,7 @@ import re
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import cv2
 import numpy as np
@@ -370,7 +371,7 @@ def test_a_penalty_has_no_wall_and_the_keeper_is_never_a_wall_player() -> None:
         1: np.tile([10.0, 0.0], (n, 1)),  # the kicker, at the ball
         2: np.tile([10.5, 0.5], (n, 1)),  # a player within 2 m of the ball at the wall frame
     }
-    common = {
+    common: dict[str, Any] = {
         "kick_f": 5,
         "barrier_f": 10,
         "end_f": 20,
@@ -560,3 +561,67 @@ def test_the_penalty_note_names_the_kicker_and_the_keeper_only(tmp_path: Path) -
     html = _html(result, "en")
     assert "penalty taker id 1 and goalkeeper id 0" in html  # ids of the player map
     assert "wall ids" not in html
+
+
+def test_the_kick_chute_a_gol_text_has_its_blocks_and_no_wall_or_hands() -> None:
+    from vaila import freekiki_report as rep
+
+    for lang, path in rep.TEMPLATES.items():
+        html = rep._select_blocks(path.read_text(encoding="utf-8"), "kick")
+        assert "{{incoming_text}}" in html and "{{contact_limit}}" in html, lang
+        for absent in ("{{hands", "{{wall", "<!--fk", "<!--pk", "<!--op", "<!--nw"):
+            assert absent not in html, (lang, absent)
+        penalty = rep._select_blocks(path.read_text(encoding="utf-8"), "penalty")
+        assert "{{hands_text}}" in penalty and "{{incoming_text}}" not in penalty
+
+
+def test_the_incoming_ball_and_the_contact_are_told_in_words() -> None:
+    from vaila import freekiki_report as rep
+
+    m = {"incoming": {"speed_mps": 5.0, "turn_deg": 80.0}, "launch_kmh": 90.0,
+         "contact_source": "kink"}  # fmt: skip
+    lead, text, limit = rep._incoming_texts(m, "pt")
+    assert "18 km/h" in lead and "80°" in text and "rolando" in limit
+    lead, text, limit = rep._incoming_texts(
+        {"incoming": None, "launch_kmh": 90.0, "contact_source": "first_frame"}, "en"
+    )
+    assert lead == "" and "already flying" in text and "first frame" in limit
+
+
+def test_open_play_draws_no_wall_and_reads_the_keeper_like_a_penalty() -> None:
+    from vaila import freekiki_report as rep
+
+    anchors = {
+        "p0": {"frame": 0, "xyz": [30.0, 0.0, 0.11], "label": "start"},
+        "p_wall": {"frame": 5, "xyz": [39.0, 0.0, 2.0], "label": "barreira: plano a 9,15 m"},
+        "p_arrival": {"frame": 20, "xyz": [52.0, 1.0, 1.5], "label": "chegada: mão do goleiro"},
+    }
+    shown = rep.display_anchors(anchors, False, 0, 20, None, None, wall=False)
+    assert "p_wall" not in shown and {"p0", "p_arrival"} <= set(shown)
+    wall_f, keeper_f, keeper = rep.event_frames(anchors, 20, wall=False)
+    assert (wall_f, keeper_f) == (20, 20) and keeper.tolist() == [52.0, 1.0, 1.5]
+    assert rep.display_anchors(anchors, False, 0, 20, None, None) == anchors  # a free kick
+
+
+def test_every_text_built_with_the_kind_suffix_exists_for_kick() -> None:
+    """build_report adds ``_op`` to these keys for a chute a gol (``kick``): each must exist."""
+    import re
+
+    from vaila import freekiki_report as rep
+    from vaila.freekiki_report_i18n import tr
+
+    source = Path(rep.__file__).read_text(encoding="utf-8")
+    keys = set(re.findall(r'tr\(\w+, "(\w+)" \+ sfx', source))
+    assert {"default_title", "kicker_default"} <= keys
+    for lang in ("pt", "en"):
+        for key in keys - {"quote_mean", "quote_height"}:  # _quotes uses "" or "_pk", never "_op"
+            assert tr(lang, key + "_op"), (lang, key)
+
+
+def test_the_low_confidence_warning_names_no_wall_when_there_is_none() -> None:
+    from vaila import freekiki_report as rep
+
+    m = {"tier": "baixa", "worst_anchor_m": 1.2, "method": "monocular_auto", "anchor_mode": "auto"}
+    for kind, wall in (("kick", False), ("penalty", False), ("free_kick", True)):
+        text = rep._warn_block({**m, "kind": kind, "wall": wall, "penalty": kind == "penalty"}, "pt")
+        assert ("barreira" in text) is wall, kind
