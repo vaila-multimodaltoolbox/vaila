@@ -32,7 +32,7 @@ vaila/soccerfield_calib.py            — Companion DLT2D homography (29 FIFA ke
 bin/setup_fifa_sam3d.sh/ps1           — Clones sam_3d_body + downloads gated weights
 sam_3d_body/                          — Cloned by setup script (NOT committed)
 vaila/models/sam-3d-dinov3/           — SAM 3D Body weights (model.ckpt, mhr_model.pt)
-vaila/models/sam3/ and models/sam3/   — SAM 3 video weights (sam3.pt, sam3.1_multiplex.pt)
+vaila/models/sam3/ and models/sam3/   — SAM 3 video weights (sam3.pt; SAM 3.1 multiplex not supported)
 tests/test_fifa_skeletal_pipeline.py  — Pipeline unit tests (no GPU)
 tests/test_fifa_bootstrap.py          — Bootstrap layout tests
 tests/test_soccerfield_calib.py       — DLT2D calibration tests

@@ -39,7 +39,7 @@ Continue from a known-good baseline and execute the improvement path:
 
 - `pyproject.toml` (portable, one file for every OS) synced with the `cuda` dependency group (PyTorch cu128).
 - `uv sync --no-group cpu --group cuda --extra sam` succeeded.
-- `vaila/models/sam3/sam3.pt` and `sam3.1_multiplex.pt` present.
+- `vaila/models/sam3/sam3.pt` present (`sam3.1_multiplex.pt` is refused: sam3==0.1.3 cannot build it).
 - `cv2.VideoCapture` is back after `uv pip install --reinstall opencv-python==4.10.0.84`.
 - SAM 3 smoke test: 32 frames of `ARG_CRO_000737.mp4` written to
   `~/data/FIFA/outputs_sam3_smoke/processed_sam_20260425_183925/`.

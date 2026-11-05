@@ -2322,7 +2322,7 @@ wheels = [
 
 [[package]]
 name = "mediapipe"
-version = "1.1.1"
+version = "1.2.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "absl-py" },
@@ -2334,11 +2334,11 @@ dependencies = [
     { name = "sounddevice" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/22/d113d29c97a4c9459ece90d9b70e81e790550f4ee7d0574042b0b9306ff9/mediapipe-1.1.1-py3-none-macosx_11_0_arm64.whl", hash = "sha256:b22892847fbc6201959d20b2b9a1c9c34cda991e072f58ab0c38008dc789d4b1", size = 37215496, upload-time = "2026-10-14T18:18:11.28Z" },
-    { url = "https://files.pythonhosted.org/packages/f8/1b/adf5e8271339b3b85bfcf924615de04b167ffb9dee8137712b780a31e8af/mediapipe-1.1.1-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:24696a4bc54554821067b7cc4f7a347c4384ddee7ff0025bff02592b1497d7e7", size = 39028305, upload-time = "2026-10-14T18:18:15.327Z" },
-    { url = "https://files.pythonhosted.org/packages/ee/97/927a27bcd244e390a26e1f8f000ff2a5c6d65b325200eae550ef4d7a7290/mediapipe-1.1.1-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:cbb54f6411d8d254f7151ff92cbfea29413be92f802be46a520cc7316319c3cc", size = 41497300, upload-time = "2026-10-14T18:18:18.851Z" },
-    { url = "https://files.pythonhosted.org/packages/ae/49/600556ec6305f28c13ea917c9222cb6de84f5f587312979835e7fedc6677/mediapipe-1.1.1-py3-none-win_amd64.whl", hash = "sha256:a4b27829e808cd659e7cf481cbbbfc31917092a1ebcb7eafed2395dbabcd2499", size = 22764009, upload-time = "2026-10-14T18:18:22.015Z" },
-    { url = "https://files.pythonhosted.org/packages/27/6b/2e09a5aab429cc77492ad6cbce7a89c13dd9f81bfc077169a5cf6a9d84cc/mediapipe-1.1.1-py3-none-win_arm64.whl", hash = "sha256:d3226908bd2ee2b4962f9cb77b9fdad5b10ff86945e7664f9da80780d67d11c2", size = 20104540, upload-time = "2026-10-14T18:18:24.586Z" },
+    { url = "https://files.pythonhosted.org/packages/a3/5c/ce8750cfe2de42ab2433b2d6445f4a16225a63412d991b2970204b047d73/mediapipe-1.2.2-py3-none-macosx_11_0_arm64.whl", hash = "sha256:d3bb50923652182344ad31cfd2a09697e52952bd4bca2384ecabc90e21db9a5f", size = 39597352, upload-time = "2026-11-03T17:51:55.173Z" },
+    { url = "https://files.pythonhosted.org/packages/50/0d/02afdfe0e2c4c1d9a80b7a2d65951cdb82438a22ea76bb0a65e0c3d8a36f/mediapipe-1.2.2-py3-none-manylinux_2_28_aarch64.whl", hash = "sha256:9837dc18ac903a34b4e46aa56eadbdb2648a8b66ab9d73202118e77e893edcb8", size = 40251116, upload-time = "2026-11-03T17:51:59.185Z" },
+    { url = "https://files.pythonhosted.org/packages/86/67/717b257855c5550a3449907e110954506a306bf3e127717f7ab45450f0da/mediapipe-1.2.2-py3-none-manylinux_2_28_x86_64.whl", hash = "sha256:c0b641bf1515dd186036da711df597a514466c0ba97a138f35b698ecc0411a61", size = 42910755, upload-time = "2026-11-03T17:52:02.721Z" },
+    { url = "https://files.pythonhosted.org/packages/6a/b0/6d1cb31a04f1726cdcd86cf0ea3eb1e9304e59de03bb083571dcab4ac227/mediapipe-1.2.2-py3-none-win_amd64.whl", hash = "sha256:71f44832fdd32b6270bc4379bcdd934287fb9eab974c3e74ef3fa76c7e79b54a", size = 25297951, upload-time = "2026-11-03T17:52:05.348Z" },
+    { url = "https://files.pythonhosted.org/packages/70/38/6e937a1a825b0d8c75bc1078c82a6869217e274cce80b183172b0693f10c/mediapipe-1.2.2-py3-none-win_arm64.whl", hash = "sha256:78bd5622ebc062cfb2279408ece683c3ad9ede2a24bb92c21d1d520a6dc2e049", size = 22017674, upload-time = "2026-11-03T17:52:08.126Z" },
 ]
 
 [[package]]
@@ -7527,7 +7527,7 @@ wheels = [
 
 [[package]]
 name = "ultralytics"
-version = "8.4.183"
+version = "8.4.202"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "matplotlib" },
@@ -7537,7 +7537,6 @@ dependencies = [
     { name = "pillow" },
     { name = "polars" },
     { name = "psutil" },
-    { name = "pyyaml" },
     { name = "requests" },
     { name = "torch", version = "2.13.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin' or (extra != 'group-5-vaila-cpu' and extra != 'group-5-vaila-cuda') or (extra == 'group-5-vaila-cpu' and extra == 'group-5-vaila-cuda')" },
     { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-5-vaila-cpu') or (extra == 'group-5-vaila-cpu' and extra == 'group-5-vaila-cuda')" },
@@ -7548,26 +7547,26 @@ dependencies = [
     { name = "ultralytics-platform" },
     { name = "ultralytics-thop" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f4/63/8c65a1d6bd342e8039980bc0f25da6d8a4d2058d6b7055d8bd74d4d82de0/ultralytics-8.4.183.tar.gz", hash = "sha256:2719ab5cf4c67fb5ae01cc3c46aa6394ac392ddf4a320a24b568397d26d20f6d", size = 1278353, upload-time = "2026-10-20T00:24:43.062Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ec/46/7242e49c4811f9c27dba8c3d98d118cba209ea42a395b3921777678fc8d8/ultralytics-8.4.202.tar.gz", hash = "sha256:46b454e84dc96459178bcca3deecdf2e9548804bea76af92c392fae1307417d1", size = 1300481, upload-time = "2026-11-03T23:32:38.722Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5b/4a/e29f91208f783d4e372bd3bc65e2d550618dedd8af6fd10ccd00e48f843d/ultralytics-8.4.183-py3-none-any.whl", hash = "sha256:0826261c54f80c18c0fa0db4afd728f581c78db49cf2d9d6f254a2ce7c10576b", size = 1428426, upload-time = "2026-10-20T00:24:38.981Z" },
+    { url = "https://files.pythonhosted.org/packages/02/b3/d8a3d0d0b4d209659a8ea0bd9dec2171f329823f3baa5344eedb349fb24d/ultralytics-8.4.202-py3-none-any.whl", hash = "sha256:ae71dc5bb1024010fbdef5bd9281984ddd8c70885bddcfdd6aff0801b7015fb4", size = 1440905, upload-time = "2026-11-03T23:32:33.231Z" },
 ]
 
 [[package]]
 name = "ultralytics-platform"
-version = "0.1.90"
+version = "0.1.102"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/73/53/fd4505e2aed7ec82aaea075d0adfcc4f457b587c476ab226c00c31649002/ultralytics_platform-0.1.90.tar.gz", hash = "sha256:73ff5062e8e86ab6e7dbfb0fa6556e6beb5bd5cb8a76c997af0d4128dc356d9b", size = 89301, upload-time = "2026-10-17T00:37:55.018Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/bb/43/39ab437ac03d6a3343a0d58d20b7633a4c6ae551b5d670a76e0d629d1206/ultralytics_platform-0.1.102.tar.gz", hash = "sha256:df989a548370875fa163a3715ca2bf0f46fe2460769d0271ef4f98555bea3c86", size = 91466, upload-time = "2026-10-30T16:53:59.528Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b5/00/7039121555d332a34663ac8502d92565192fefc0f78e888a75ea106bed7a/ultralytics_platform-0.1.90-py3-none-any.whl", hash = "sha256:59c9cb727af2fb5f2497e4392f73fc0043d8485d021ee4e19016b99fb71b4562", size = 97613, upload-time = "2026-10-17T00:37:53.379Z" },
+    { url = "https://files.pythonhosted.org/packages/bc/8c/7561a597f291ecce0a919d6e0bb0878b61eea54334dd9db59ea94f1bcfb5/ultralytics_platform-0.1.102-py3-none-any.whl", hash = "sha256:6acfe3f9304a8fa47ce0aef85085e7d97a2d9b78f3fbccdb1df714eaa3b6769b", size = 100127, upload-time = "2026-10-30T16:53:57.944Z" },
 ]
 
 [[package]]
 name = "ultralytics-thop"
-version = "2.2.3"
+version = "2.2.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -7575,9 +7574,9 @@ dependencies = [
     { name = "torch", version = "2.13.0+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform != 'darwin' and extra == 'group-5-vaila-cpu') or (extra == 'group-5-vaila-cpu' and extra == 'group-5-vaila-cuda')" },
     { name = "torch", version = "2.13.0+cu129", source = { registry = "https://download.pytorch.org/whl/cu129" }, marker = "(sys_platform != 'darwin' and extra == 'group-5-vaila-cuda') or (extra == 'group-5-vaila-cpu' and extra == 'group-5-vaila-cuda')" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f9/6f/f7dd1959a3f0d3d7417800f6c54112a0bdc9f0529470bb0558c326cd19f3/ultralytics_thop-2.2.3.tar.gz", hash = "sha256:141cea7d1af7fda04b135b5070d19d84f2272c76c5401de9e47581c23e7c5c60", size = 39816, upload-time = "2026-10-19T20:36:33.461Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/af/36/d7fdbcd8b19a78fc7f8d8c5398af9c7049d3faa1a0a7c08c377f5af2fdfa/ultralytics_thop-2.2.5.tar.gz", hash = "sha256:ad2ed5b829497b541cdf3b1aaa0dc82c468ad5eb77ba8a999f84e31da1b70984", size = 40247, upload-time = "2026-11-04T09:49:45.809Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0e/9f/5246244e2674210549e8b6247bf28a6b586878c2e744d2c82b4d4f872bf7/ultralytics_thop-2.2.3-py3-none-any.whl", hash = "sha256:d56c860b9422b6abfd7e9d7afdd8af3b1242a854c17305bd60ad05cbc7f4b5b6", size = 32807, upload-time = "2026-10-19T20:36:32.167Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/6b/4c47d97cc649ca0e04f2a30f099e9a7d28e9f2145c8e11dcac5e16f2cd46/ultralytics_thop-2.2.5-py3-none-any.whl", hash = "sha256:a698003b42de578731ba51c747031914bba8775f47fe675dbbf28510f0c2654d", size = 32859, upload-time = "2026-11-04T09:49:44.237Z" },
 ]
 
 [[package]]

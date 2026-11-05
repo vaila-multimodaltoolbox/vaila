@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.14 (see `vaila.py`). **Package version:** 0.4.14 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-02
+**Last updated:** 2026-11-05
 
 FreeKiki `openplay-report` also accepts a two-camera dribble manifest:
 `--manifest MANIFEST.json --output RESULTS --kind dribble --lang pt --animation`.

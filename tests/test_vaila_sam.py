@@ -1,7 +1,7 @@
 """Light tests for vaila_sam helpers (no GPU / no HF download).
 
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 05 November 2026
+Version: 0.4.14
 """
 
 from __future__ import annotations
@@ -34,6 +34,59 @@ def test_resolve_checkpoint_rejects_sam3d_body_path(tmp_path: Path) -> None:
     p.write_bytes(b"")
     with pytest.raises(ValueError, match="SAM 3D Body"):
         _resolve_sam3_checkpoint_file(p)
+
+
+def test_resolve_checkpoint_rejects_sam31_multiplex_file(tmp_path: Path) -> None:
+    from vaila.vaila_sam import _resolve_sam3_checkpoint_file
+
+    p = tmp_path / "sam3.1_multiplex.pt"
+    p.write_bytes(b"")
+    with pytest.raises(ValueError, match="multiplex"):
+        _resolve_sam3_checkpoint_file(p)
+
+
+def test_resolve_checkpoint_dir_with_only_multiplex_is_refused(tmp_path: Path) -> None:
+    from vaila.vaila_sam import _resolve_sam3_checkpoint_file
+
+    (tmp_path / "sam3.1_multiplex.pt").write_bytes(b"")
+    with pytest.raises(ValueError, match="multiplex"):
+        _resolve_sam3_checkpoint_file(tmp_path)
+
+
+def test_resolve_checkpoint_dir_prefers_sam3_over_multiplex(tmp_path: Path) -> None:
+    from vaila.vaila_sam import _resolve_sam3_checkpoint_file
+
+    (tmp_path / "sam3.1_multiplex.pt").write_bytes(b"")
+    (tmp_path / "sam3.pt").write_bytes(b"")
+    assert _resolve_sam3_checkpoint_file(tmp_path) == (tmp_path / "sam3.pt").resolve()
+
+
+def test_autodetect_ignores_multiplex_weights(tmp_path: Path, monkeypatch) -> None:
+    import vaila.vaila_sam as vs
+
+    pkg = tmp_path / "pkg_sam3"
+    repo_models = tmp_path / "repo_models_sam3"
+    for d in (pkg, pkg / "sam3_weights", repo_models, repo_models / "sam3_weights"):
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "sam3.1_multiplex.pt").write_bytes(b"")
+    monkeypatch.delenv("SAM3_CHECKPOINT", raising=False)
+    monkeypatch.delenv("VAILA_SAM3_CHECKPOINT", raising=False)
+    monkeypatch.setattr(vs, "_package_sam3_dir", lambda: pkg)
+    monkeypatch.setattr(vs, "_repo_models_sam3_dir", lambda: repo_models)
+    monkeypatch.setattr(vs, "_repo_root", lambda: tmp_path / "repo_root")
+    assert vs._resolve_sam3_checkpoint_file(None) is None
+    (pkg / "sam3.pt").write_bytes(b"")
+    assert vs._resolve_sam3_checkpoint_file(None) == pkg / "sam3.pt"
+
+
+@pytest.mark.skipif(sam3_spec is None, reason="sam3 optional extra not installed")
+def test_installed_sam3_has_no_multiplex_model() -> None:
+    """Tripwire for the sam3 pin in pyproject.toml.
+
+    If a newer sam3 ships ``sam3.model.multiplex_utils``, revisit the refusal of
+    ``sam3.1_multiplex.pt`` in ``vaila_sam._assert_not_sam3_multiplex_checkpoint``.
+    """
+    assert importlib.util.find_spec("sam3.model.multiplex_utils") is None
 
 
 def test_composite_masks_bgr_empty() -> None:
