@@ -1651,7 +1651,9 @@ def test_missing_toml_warns_and_uses_automatic_defaults(tmp_path, monkeypatch, c
         == 0
     )
     assert calls[0]["analysis_windows"] == {}
-    terminal_output = capsys.readouterr().out
+    # Rich wraps console text at 80 columns, so where the line breaks depends on the length
+    # of tmp_path; compare with whitespace collapsed.
+    terminal_output = " ".join(capsys.readouterr().out.split())
     assert "TOML not found" in terminal_output
     assert "Using built-in defaults and automatic analysis windows" in terminal_output
 

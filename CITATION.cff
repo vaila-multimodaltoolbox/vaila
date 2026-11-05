@@ -1,0 +1,63 @@
+# Citation metadata for vailá. GitHub shows a "Cite this repository" button from this file.
+# TODO (authors): confirm the software author list and add ORCID iDs; add the Zenodo
+# concept DOI under `identifiers` once the GitHub-Zenodo integration archives a release.
+cff-version: 1.2.0
+message: "If you use vailá, please cite the software and the preprint below."
+title: "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox"
+type: software
+version: 0.4.14
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/vaila-multimodaltoolbox/vaila"
+abstract: >-
+  Open-source Python toolbox for multimodal biomechanics: video preprocessing and
+  synchronization, markerless 2D pose estimation, DLT calibration and 3D reconstruction,
+  C3D/CSV export, and analysis of motion capture, IMU, force plate, EMG and GNSS data,
+  with matching graphical and command-line interfaces.
+keywords:
+  - biomechanics
+  - motion analysis
+  - markerless motion capture
+  - direct linear transformation
+  - multimodal data
+  - open-source software
+authors:
+  - given-names: Paulo Roberto Pereira
+    family-names: Santiago
+    affiliation: "University of São Paulo"
+  - given-names: Guilherme Manna
+    family-names: Cesar
+    affiliation: "University of North Florida"
+  - given-names: Ligia Yumi
+    family-names: Mochida
+    affiliation: "University of North Florida"
+  - given-names: Bruno L. S.
+    family-names: Bedo
+    affiliation: "University of São Paulo"
+identifiers:
+  - type: doi
+    value: 10.48550/arXiv.2410.07238
+    description: "arXiv preprint (2024)"
+preferred-citation:
+  type: article
+  title: "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox"
+  authors:
+    - given-names: Paulo Roberto Pereira
+      family-names: Santiago
+    - given-names: Abel Gonçalves
+      family-names: Chinaglia
+    - given-names: Kira
+      family-names: Flanagan
+    - given-names: Bruno L. S.
+      family-names: Bedo
+    - given-names: Ligia Yumi
+      family-names: Mochida
+    - given-names: Juan
+      family-names: Aceros
+    - given-names: Aline
+      family-names: Bononi
+    - given-names: Guilherme Manna
+      family-names: Cesar
+  year: 2024
+  journal: "arXiv"
+  doi: 10.48550/arXiv.2410.07238
+  url: "https://arxiv.org/abs/2410.07238"
