@@ -177,3 +177,60 @@ def test_apply_choice_auto_keeps_the_rule_and_a_bad_choice_is_refused() -> None:
     assert kept["auto_kind"] == "free_kick"
     with pytest.raises(ValueError, match="set piece must be one of"):
         sp.apply_choice(rule, "corner")
+
+
+def test_a_ball_that_was_not_at_rest_is_kick_before_any_set_piece_rule() -> None:
+    from vaila import freekiki_setpiece as sp
+
+    on_the_mark = (sp.GOAL_LINE_X_M - sp.PENALTY_DISTANCE_M, 0.0)
+    assert sp.classify(on_the_mark, {}, "still")["kind"] == "penalty"
+    for pre in ("rolling", "unseen"):
+        result = sp.classify(on_the_mark, {}, pre)
+        assert result["kind"] == "kick" and "kick" in result["reason"]
+        assert sp.is_goal_kick(result["kind"]) and not sp.has_wall(result["kind"])
+    assert sp.classify(on_the_mark, {})["kind"] == "penalty"  # no flight contact: as before
+
+
+def test_classify_run_takes_a_moving_ball_at_the_contact(tmp_path) -> None:
+    import json
+
+    from vaila import freekiki_setpiece as sp
+
+    (tmp_path / "ball_3d_on_field.csv").write_text(
+        "frame,x_m,y_m,z_m,on_field\n0,41.45,0.0,0.11,True\n", encoding="utf-8"
+    )  # on the penalty mark in the first frame
+    flight = {"contact_frame": 4, "contact_source": "first_frame", "pre_contact": "unseen",
+              "anchor_points": {"p0": {"frame": 4, "xyz": [30.0, 5.0, 0.11]}}}  # fmt: skip
+    (tmp_path / "ball_flight.json").write_text(json.dumps(flight), encoding="utf-8")
+    result = sp.classify_run(tmp_path)
+    assert result["kind"] == "kick" and result["contact_frame"] == 4
+    assert result["ball_xy_m"] == [30.0, 5.0]  # where it was kicked, not the first ball
+    flight["pre_contact"] = "still"  # a still ball keeps the rule as it was
+    (tmp_path / "ball_flight.json").write_text(json.dumps(flight), encoding="utf-8")
+    assert sp.classify_run(tmp_path)["kind"] == "penalty"
+
+
+def test_open_play_is_a_data_only_choice_and_has_no_wall() -> None:
+    from vaila import freekiki_setpiece as sp
+
+    assert "open_play" in sp.SET_PIECE_CHOICES and "kick" in sp.SET_PIECE_CHOICES
+    chosen = sp.apply_choice({"kind": "free_kick", "reason": "rule"}, "open_play")
+    assert chosen["kind"] == "open_play" and chosen["auto_kind"] == "free_kick"
+    assert [sp.has_wall(k) for k in ("free_kick", "free_kick_wall", "unknown", None)] == [True] * 4
+    assert not sp.has_wall("penalty") and not sp.has_wall("open_play") and not sp.has_wall("kick")
+    assert sp.is_goal_kick("kick") and not sp.is_goal_kick("open_play")
+    kick = sp.apply_choice({"kind": "penalty", "reason": "rule"}, "kick")
+    assert kick["kind"] == "kick" and kick["auto_kind"] == "penalty"
+
+
+def test_dribble_and_pass_are_user_choices_without_wall() -> None:
+    from vaila import freekiki_setpiece as sp
+
+    assert "dribble" in sp.SET_PIECE_CHOICES and "pass" in sp.SET_PIECE_CHOICES
+    for kind in ("dribble", "pass"):
+        chosen = sp.apply_choice({"kind": "kick", "reason": "rule"}, kind)
+        assert chosen["kind"] == kind and chosen["auto_kind"] == "kick"
+        assert not sp.has_wall(kind)
+        assert sp.is_openplay_analysis(kind)
+        assert not sp.is_goal_kick(kind)
+    assert not sp.is_openplay_analysis("open_play")

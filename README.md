@@ -2,7 +2,14 @@
 
 **App version (GUI/CLI banner):** 0.4.14 (see `vaila.py`). **Package version:** 0.4.14 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-01
+**Last updated:** 2026-11-02
+
+FreeKiki `openplay-report` also accepts a two-camera dribble manifest:
+`--manifest MANIFEST.json --output RESULTS --kind dribble --lang pt --animation`.
+It writes a natural-speed SAM 3D Body overlay, a 60-second subtitled TV explanation,
+HTML/PDF and CSV/JSON series on the original clock. Preparation and a fresh CUDA
+body run use `--prepare-originals --rerun-sam`; received files remain read only.
+See [the manifest workflow](docs/freekiki_dribble_tv.md).
 
 Syncvid **Equalize by events (RIFE)** opens a CUDA frame-interpolation tool on the
 reference camera's grid by default. **Output FPS** (including 60, 120 and exact
@@ -13,6 +20,9 @@ then **Run**. Enter start/contact/end for every camera (two, three or more); for
 The window lists the cameras as a scrollable table (vertical and horizontal), and the terminal
 prints the standard `>> vaila/video_event_equalizer: Equivalent CLI` banner to repeat the run
 without the window.
+Any camera can be the **Main** (reference), and **Frame count from** picks the main camera's
+span, the shortest camera (reduce) or the longest one (increase); CLI `--mode reference|reduce|increase`.
+When only the sync start and end are known, the contact may repeat one of them (`1,1,39`).
 All three anchors remain original images; higher FPS adds visual estimates, and
 independent FPS/count choices change playback speed. CLI: `--output-fps` and
 `--output-frame-count`. CSV maps distinguish original and generated images. See the
@@ -25,6 +35,14 @@ or add `--rife` / `--rife-home=DIR` to the Linux installer and `setup_pyproject.
 `VAILA_RIFE_HOME`, and copy an installed one to another disk or computer, offline, with
 `bash bin/setup_rife.sh --export DIR`. Without `--home` the legacy folders
 `vaila/models/rife/train_log/` and `.local/third_party/Practical-RIFE/` are used.
+
+FreeKiki analyses a shot in **open play** (`--set-piece open_play`, also found automatically when
+the ball rolls into the kick or already flies in the first frame): the contact is the break of the
+rolling ball's ground track (or `--contact-frame N` by hand), the flight starts there, and the report
+has no wall but the ball that came in. **Open run and correct...** (CLI `kick-correct`) opens a
+finished `kick_analysis_<time>` folder to correct the ball or the field keypoints in getpixelvideo;
+`kick-analysis --resume <run>` then runs only what changed (a new ball does not redo detection nor
+SAM 3D Body). See the [FreeKiki help](vaila/help/freekiki.md).
 
 Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
 set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.

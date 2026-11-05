@@ -4,12 +4,16 @@ The GPU stages (detection, SAM 3D Body) and the analyses (teams, kicker, reports
 write the files each stage must leave. The tests check the order of the stages, the input checks
 (one or two cameras), the reuse of finished stages, a failing monocular analysis, the failure
 message and the parser. Nothing here needs a video, a model or a GPU.
+
+Version: 0.4.14
+Update Date: 02 November 2026
 """
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pytest
@@ -42,7 +46,7 @@ def _cameras(folder: Path, *, markers: bool = True, both: bool = True) -> list[P
 @pytest.fixture
 def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
     """Replace the heavy stages and the analyses; ``calls`` counts how often each one ran."""
-    calls: dict[str, int] = {}
+    calls: dict[str, Any] = {}
 
     def counted(name, fn):
         def wrapper(*args, **kwargs):
@@ -58,13 +62,20 @@ def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         (predict / "x.dlt3d").write_text("frame,L1\n", encoding="utf-8")
         return predict
 
-    def detect_3d_run(run_dir, video, out_dir, *, work_dir, device=None, ball_csv=None, **_):
+    def detect_3d_run(run_dir, video, out_dir, *, work_dir, device=None, ball_csv=None, **kw):
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
         (out_dir / "poses_3d_on_field.csv").write_text("frame\n", encoding="utf-8")
         (out_dir / "ball.csv").write_text("frame,cx,cy\n", encoding="utf-8")
+        (out_dir / "ball_3d_on_field.csv").write_text("frame,x_m\n", encoding="utf-8")
         (out_dir / "README.txt").write_text(f"video: {video}\n", encoding="utf-8")
+        calls.setdefault("3d_kwargs", []).append(kw)
         return {"out": str(out_dir)}
+
+    def rebuild_ball_in_place(out_dir, video, work, ball_csv, *, contact_frame=None, **_):
+        (Path(out_dir) / "ball.csv").write_text("frame,cx,cy\n", encoding="utf-8")
+        (Path(out_dir) / "ball_3d_on_field.csv").write_text("frame,x_m\n", encoding="utf-8")
+        return {"field3d": {"ball_flight": None}}
 
     def run_player_ids(folders):
         for folder in folders:
@@ -126,6 +137,7 @@ def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
 
     monkeypatch.setattr(fk, "detect_video", counted("detect", detect_video))
     monkeypatch.setattr(d3, "detect_3d_run", counted("3d", detect_3d_run))
+    monkeypatch.setattr(d3, "rebuild_ball_in_place", counted("ball", rebuild_ball_in_place))
     monkeypatch.setattr(pids, "run_player_ids", counted("players", run_player_ids))
     monkeypatch.setattr(st, "run_binocular", counted("binocular", run_binocular))
     monkeypatch.setattr(kp, "_triangulate", counted("triangulate", triangulate))
@@ -368,8 +380,8 @@ def test_the_whole_run_writes_every_stage_in_order(tmp_path: Path, stubs: dict) 
     out = Path(result["out"])
     status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
     assert list(status["stages"]) == [
-        f"detect:{CAM1}", f"3d:{CAM1}", f"detect:{CAM2}", f"3d:{CAM2}",
-        "players", "setpiece", "binocular", "triangulate",
+        f"detect:{CAM1}", f"3d:{CAM1}", f"ball:{CAM1}", f"detect:{CAM2}", f"3d:{CAM2}",
+        f"ball:{CAM2}", "players", "setpiece", "binocular", "triangulate",
         "teams:mono-ref", "kicker:mono-ref", "report:mono-ref",
         "teams:mono-other", "kicker:mono-other", "report:mono-other",
         "c3d:binocular", "teams:binocular", "kicker:binocular", "report:binocular",
@@ -399,19 +411,20 @@ def test_a_run_from_before_the_flight_version_redoes_what_is_built_from_it(
     kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
     status_path = out / kp.STATUS_NAME
     status = json.loads(status_path.read_text(encoding="utf-8"))
-    threed = status["stages"][f"3d:{CAM1}"]["inputs"]
-    assert threed["flight_model"] == fk_physics.FLIGHT_MODEL
-    del threed["flight_model"]  # what a folder made before the tag looks like
+    ball = status["stages"][f"ball:{CAM1}"]["inputs"]
+    assert ball["flight_model"] == fk_physics.FLIGHT_MODEL
+    del ball["flight_model"]  # what a folder made before the tag looks like
     status_path.write_text(json.dumps(status), encoding="utf-8")
     before = dict(stubs)
     kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
-    assert stubs["3d"] == before["3d"] + 1  # the stage of that camera, not of the other one
-    assert stubs["detect"] == before["detect"]  # the detection does not depend on the fit
+    assert stubs.get("ball", 0) == before.get("ball", 0) + 1  # the ball of that camera only
+    assert stubs["3d"] == before["3d"]  # neither SAM 3D Body...
+    assert stubs["detect"] == before["detect"]  # ...nor the detection depends on the fit
     for built_from_it in ("players", "binocular", "triangulate", "kicker", "report"):
         assert stubs[built_from_it] > before[built_from_it], built_from_it
-    again = dict(stubs)
+    again = {k: v for k, v in stubs.items() if k != "3d_kwargs"}
     kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)  # and now everything is current
-    assert stubs == again
+    assert {k: v for k, v in stubs.items() if k != "3d_kwargs"} == again
 
 
 def test_a_new_detection_redoes_the_3d_stage_of_that_camera(tmp_path: Path, stubs: dict) -> None:
@@ -514,7 +527,7 @@ def test_one_video_gives_only_the_monocular_analysis(tmp_path: Path, stubs: dict
     result = kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "kick")
     status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
     assert list(status["stages"]) == [
-        f"detect:{CAM1}", f"3d:{CAM1}", "players", "setpiece",
+        f"detect:{CAM1}", f"3d:{CAM1}", f"ball:{CAM1}", "players", "setpiece",
         "teams:mono-ref", "kicker:mono-ref", "report:mono-ref",
     ]  # fmt: skip
     assert "binocular" not in " ".join(status["stages"])
@@ -707,6 +720,23 @@ def test_a_forced_free_kick_is_not_routed_to_the_penalty(
     )
 
 
+@pytest.mark.parametrize("kind", ["pass", "dribble", "open_play"])
+def test_a_planar_set_piece_skips_the_goal_report_and_is_not_failed(
+    tmp_path: Path, stubs: dict, kind: str
+) -> None:
+    videos = _cameras(tmp_path)
+    result = kp.run_kick_analysis(
+        "ws", videos, reference=1, out_dir=tmp_path / "kick", set_piece=kind
+    )
+    status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
+    assert not any(k.startswith("report:") for k in status["stages"])
+    assert stubs.get("report", 0) == 0
+    for entry in result["summary"]["analyses"].values():
+        assert entry["status"] == "ok"
+        assert entry["report"] == kp.REPORT_SKIPPED
+    assert "kicker:mono-ref" in status["stages"]
+
+
 def test_a_penalty_without_a_ball_at_rest_is_reported_as_unavailable(
     tmp_path: Path, stubs: dict
 ) -> None:
@@ -850,3 +880,141 @@ def test_a_failing_overlay_redraw_does_not_stop_the_penalty_analysis(
     monkeypatch.setattr(d3, "write_3d_overlay", broken)
     kp._penalty_overlay(cam3d, tmp_path / "clip.mp4", work)  # does not raise
     assert "overlay not redrawn" in capsys.readouterr().out
+
+
+def _counts(stubs: dict) -> dict:
+    return {k: v for k, v in stubs.items() if k != "3d_kwargs"}
+
+
+def test_a_corrected_ball_redoes_only_the_ball_and_what_follows(
+    tmp_path: Path, stubs: dict
+) -> None:
+    videos = _cameras(tmp_path)
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
+    before = _counts(stubs)
+    markers = tmp_path / f"{CAM1}_markers.csv"
+    markers.write_text(markers.read_text(encoding="utf-8") + "1,2,2\n", encoding="utf-8")
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out)
+    assert stubs.get("ball", 0) == before.get("ball", 0) + 1
+    assert stubs["detect"] == before["detect"] and stubs["3d"] == before["3d"]  # no SAM again
+    for built_from_it in ("players", "kicker", "report"):
+        assert stubs[built_from_it] > before[built_from_it], built_from_it
+
+
+def test_an_older_run_with_the_ball_in_its_detect_inputs_keeps_detection_and_3d(
+    tmp_path: Path, stubs: dict
+) -> None:
+    videos = _cameras(tmp_path, both=False)
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", videos, out_dir=out)
+    status_path = out / kp.STATUS_NAME
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    ball = status["stages"].pop(f"ball:{CAM1}")["inputs"]  # an older run had no ball stage...
+    for key in (f"detect:{CAM1}", f"3d:{CAM1}"):  # ...and the ball among these inputs
+        status["stages"][key]["inputs"]["markers"] = ball["markers"]
+    status["stages"][f"3d:{CAM1}"]["inputs"]["flight_model"] = ball["flight_model"]
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    before = _counts(stubs)
+    kp.run_kick_analysis("ws", videos, out_dir=out)
+    assert stubs["detect"] == before["detect"] and stubs["3d"] == before["3d"]
+    assert stubs.get("ball", 0) == before.get("ball", 0) + 1  # the new stage runs once
+
+
+def test_corrected_field_keypoints_redo_the_detection_and_move_the_old_one_aside(
+    tmp_path: Path, stubs: dict
+) -> None:
+    video = _cameras(tmp_path, both=False)[0]
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", [video], out_dir=out)
+    old_predict = next((out / "work" / CAM1).glob(f"freekiki_predict_{CAM1}_*"))
+    (out / "work" / CAM1 / "sam3dinov3").mkdir()
+    (tmp_path / f"{CAM1}_kiki49.csv").write_text("frame\n", encoding="utf-8")
+    before = _counts(stubs)
+    kp.run_kick_analysis("ws", [video], out_dir=out)
+    assert stubs["detect"] == before["detect"] + 1 and stubs["3d"] == before["3d"] + 1
+    assert stubs["3d_kwargs"][-1]["fresh_sam"] is True  # the focal changed: SAM 3D Body again
+    moved = list((out / kp.SUPERSEDED).glob(f"*/{CAM1}/*"))
+    assert {p.name for p in moved} == {old_predict.name, "sam3dinov3"}
+    assert not (out / "work" / CAM1 / "sam3dinov3").exists()
+
+
+def test_the_contact_given_by_hand_reaches_the_reference_3d_and_is_stored(
+    tmp_path: Path, stubs: dict
+) -> None:
+    videos = _cameras(tmp_path)
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out, contact_frame=7)
+    first, second = stubs["3d_kwargs"][:2]
+    assert first["contact_frame"] == 7 and second["contact_frame"] is None  # a reference frame
+    options = kp.resume_options(out)
+    assert options["contact_frame"] == 7
+    assert [Path(v).stem for v in options["videos"]] == [CAM1, CAM2]
+    before = _counts(stubs)
+    kp.run_kick_analysis("ws", videos, reference=1, out_dir=out, contact_frame=8)
+    assert stubs.get("ball", 0) == before.get("ball", 0) + 1  # a new contact: the ball again
+    assert stubs["3d"] == before["3d"]
+    with pytest.raises(kp.KickInputError, match="contact-frame"):
+        kp.run_kick_analysis("ws", videos, reference=1, out_dir=out, contact_frame=-1)
+
+
+def test_resume_options_of_an_older_run_come_from_its_stages(tmp_path: Path, stubs: dict) -> None:
+    videos = _cameras(tmp_path)
+    out = tmp_path / "kick"
+    kp.run_kick_analysis("ws", videos, reference=2, out_dir=out, set_piece="open_play")
+    status_path = out / kp.STATUS_NAME
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    del status["options"]  # a run made before the options were stored
+    status_path.write_text(json.dumps(status), encoding="utf-8")
+    options = kp.resume_options(out)
+    assert [Path(v).stem for v in options["videos"]] == [CAM2, CAM1]  # the reference first
+    with pytest.raises(kp.KickInputError, match="not a kick analysis folder"):
+        kp.resume_options(tmp_path)
+
+
+def test_new_ball_observation_reuses_sam_but_new_goal_corners_refit_it(
+    tmp_path: Path, stubs: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from vaila import freekiki_arrival as ar
+
+    videos = _cameras(tmp_path, both=False)
+    out = tmp_path / "kick"
+    seen = []
+    monkeypatch.setattr(ar, "refit_goal_calibration", lambda *args: seen.append(args))
+    monkeypatch.setattr(d3, "_video_info", lambda _video: (80, 1920, 1080))
+    observation = {
+        "type": "goal_entry",
+        "frame": 40,
+        "pixel": [100, 100],
+        "goal_side": -1,
+        "corners_px": {"p32": [50, 200], "p33": [150, 200], "p34": [50, 50], "p35": [150, 50]},
+    }
+    kp.run_kick_analysis("ws", videos, out_dir=out, arrival_observation=observation)
+    before = _counts(stubs)
+    assert len(seen) == 1
+    assert stubs["3d_kwargs"][-1]["arrival_observation"]["frame"] == 40
+    path = Path(kp.resume_options(out)["arrival_observation"])
+    assert path.is_file() and ar.load_observation(path)["pixel"] == [100, 100]
+    moved = observation | {"pixel": [102, 101]}
+    kp.run_kick_analysis("ws", videos, out_dir=out, arrival_observation=moved)
+    assert stubs["detect"] == before["detect"] and stubs["3d"] == before["3d"]
+    assert stubs["ball"] == before.get("ball", 0) + 1 and len(seen) == 1
+    assert list((out / "superseded").glob("*/*/ball_3d_on_field.csv"))
+    assert list(path.parent.glob("arrival_observation_*.json"))
+    changed = moved | {"corners_px": moved["corners_px"] | {"p34": [51, 50]}}
+    kp.run_kick_analysis("ws", videos, out_dir=out, arrival_observation=changed)
+    assert stubs["detect"] == before["detect"] + 1 and stubs["3d"] == before["3d"] + 1
+    assert stubs["3d_kwargs"][-1]["fresh_sam"] is True and len(seen) == 2
+
+
+def test_invalid_arrival_stops_before_making_a_run(tmp_path: Path, stubs: dict) -> None:
+    videos = _cameras(tmp_path, both=False)
+    out = tmp_path / "kick"
+    with pytest.raises(kp.KickInputError, match="confirmed"):
+        kp.run_kick_analysis(
+            "ws",
+            videos,
+            out_dir=out,
+            arrival_observation={"type": "keeper_hand", "frame": 30, "xyz": [1, 2, 3]},
+        )
+    assert not out.exists() and not stubs

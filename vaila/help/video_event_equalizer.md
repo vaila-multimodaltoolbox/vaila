@@ -47,6 +47,51 @@ Add `--dry-run` for the same plan and full maps as JSON without loading RIFE or
 writing outputs. Without `--dry-run`, the CLI prints the preview before export.
 GUI Run prints the equivalent command with the selected output parameters.
 
+### Main camera and frame count
+
+Any camera can be the **Main**: pick the Main button of its row in the window (on the
+command line, it is `--reference`). Its events set the contact and the timing, and its
+video is the reference of the run. The other cameras are mapped onto its timeline.
+
+**Frame count from** chooses how many output frames there are:
+
+- **main camera (as before):** the main camera's own span. The main keeps its frames.
+- **shortest camera (reduce):** the shortest event span in seconds. Longer cameras are
+  compressed onto it, so they lose frames.
+- **longest camera (increase):** the longest event span in seconds. Shorter cameras are
+  stretched onto it with RIFE, so they gain generated frames.
+
+The mode only sets the default count: a typed output frame count overrides it. FPS
+stays the main camera's unless you type Output FPS. Preview prints the target span.
+
+```bash
+uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c1_passe_main.mp4 --reference-events 1,1,26 \
+  --source /path/to/c2_passe_16mm.mp4 --source-events 1,1,39 \
+  --mode increase --output-dir /path/to/results
+```
+
+### Contact on the start or end
+
+When only the start and end of the sync are known, the contact may repeat one of
+them: `1,1,39` puts the contact on the start, `1,26,26` on the end. The output grid
+then places the contact on frame 1 or frame N, and the zero-length segment is skipped.
+Start and end must differ, the contact must lie between them, and every camera must
+use the same pattern as the reference (all on the start, all on the end, or all with
+their own contact frame). Mixed patterns are refused. Outputs of a repeated contact
+keep the reference grid exactly like any other run:
+
+```bash
+uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c2_passe_16mm.mp4 --reference-events 1,1,39 \
+  --source /path/to/c1_passe_main.mp4 --source-events 1,1,26 \
+  --output-dir /path/to/results
+```
+
+The reference sets the output frame count: here 39 frames, so the 26-frame camera
+gets 37 generated frames. Choosing the 26-frame camera as reference instead gives
+26 output frames, and the 39-frame camera is compressed onto them.
+
 ### Three or more cameras
 
 Repeat `--source` and `--source-events` together, in the same order. Each camera

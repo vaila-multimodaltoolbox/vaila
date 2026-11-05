@@ -31,7 +31,9 @@ mode still uses Farnebäck and its grid that preserves every original.
    that list.
 2. Enter **Reference: start, contact, end** and the same three values for every camera.
    Values are original, 1-based, inclusive frames. Start/end initialize from the
-   video counts when browsing; contact must be entered or reviewed. Syncvid's
+   video counts when browsing; contact must be entered or reviewed. The contact may
+   repeat the start or the end (`1,1,39`) when only those are known; every camera must
+   use the same pattern as the reference. Syncvid's
    launcher prefills the current sync-frame values. Use Browse after changing videos
    to refresh the bounds. Removal marks and FPS overrides from Syncvid do not apply.
 3. Optionally set **Output FPS** (decimal/fraction; **60** and **120** shortcuts)

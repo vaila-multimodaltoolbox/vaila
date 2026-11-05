@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 25 September 2026
-Update Date: 29 October 2026
+Update Date: 02 November 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -3371,6 +3371,9 @@ def resolve_detect_predictions(path, video=None) -> Path:
     run = detect_output_dir(path)
     if run is not None:
         return run
+    kick = _kick_detect_run(path, video_path)  # a kick_analysis_* folder or its <stem>_3d_* folder
+    if kick is not None:
+        return kick
 
     folder = path if path.is_dir() else path.parent
     if not folder.is_dir():
@@ -3447,6 +3450,247 @@ def resolve_detect_predictions(path, video=None) -> Path:
         f"No freekiki detect run for {label} in {path} "
         "(need a freekiki_predict_* folder, a detect batch, or a *_3d_* result with work/)"
     )
+
+
+def _set_piece_choices() -> tuple[str, ...]:
+    """The kinds ``--set-piece`` takes, from :mod:`vaila.freekiki_setpiece`."""
+    try:
+        from .freekiki_setpiece import SET_PIECE_CHOICES
+    except ImportError:
+        from freekiki_setpiece import SET_PIECE_CHOICES  # ty: ignore[unresolved-import]
+    return tuple(SET_PIECE_CHOICES)
+
+
+def _contact_arg(text: str):
+    """``--contact-frame``: a 0-based frame number, or ``auto`` (found from the ball)."""
+    if text.strip().lower() == "auto":
+        return "auto"
+    try:
+        return int(text)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("a 0-based frame number or auto") from exc
+
+
+def _kick_analysis_kwargs(args) -> dict:
+    """The keyword arguments of ``run_kick_analysis`` from the ``kick-analysis`` command line.
+
+    With ``--resume RUN`` the videos and options stored in that run are the defaults and the run
+    folder is the output; the options given on the command line replace them.
+    """
+    try:
+        from .freekiki_kick_pipeline import KickInputError, resume_options
+    except ImportError:
+        from freekiki_kick_pipeline import (  # ty: ignore[unresolved-import]
+            KickInputError,
+            resume_options,
+        )
+    stored: dict = {}
+    if args.resume:
+        stored = resume_options(args.resume)
+        videos = args.videos or stored["videos"]
+        out_dir = args.out or args.resume
+        reference = int(args.reference) if args.videos else 1  # stored videos: the reference first
+    else:
+        if not args.videos:
+            raise KickInputError("give --videos (a new analysis) or --resume RUN (an existing one)")
+        videos, out_dir, reference = args.videos, args.out, int(args.reference)
+    if args.sync is not None:
+        sync = (args.sync, args.cut_start)
+    else:
+        sync = tuple(stored["sync"]) if stored.get("sync") else None
+
+    def pick(name: str, default):
+        given = getattr(args, name, None)
+        if given is not None:
+            return given
+        return stored.get(name) if stored.get(name) is not None else default
+
+    return {
+        "videos": videos[0] if isinstance(videos, list) and len(videos) == 1 else videos,
+        "reference": reference,
+        "out_dir": out_dir,
+        "kick_foot": pick("kick_foot", "auto"),
+        "reuse": not args.no_reuse,
+        "model": args.model if args.model != "active" else stored.get("model", "active"),
+        "device": args.device,
+        "sam_device": args.sam_device,
+        "min_camera_ok": pick("min_camera_ok", 0.3),
+        "team_a": pick("team_a", "green"),
+        "analysis": pick("analysis", None),
+        "sync": sync,
+        "set_piece": pick("set_piece", "auto"),
+        "contact_frame": None if args.contact_frame == "auto" else pick("contact_frame", None),
+        "arrival_observation": pick("arrival_observation", None),
+    }
+
+
+KICK_STATUS = "pipeline_status.json"  # the kick analysis records its stages here
+KICK_CORRECTIONS = "corrections"  # <kick run>/corrections/<stem>/: review session and backups
+
+
+def _kick_dir(path) -> Path | None:
+    """The kick_analysis_* folder of ``path`` (the folder itself or one of its 3D folders)."""
+    folder = Path(path).expanduser()
+    folder = folder if folder.is_dir() else folder.parent
+    for candidate in (folder, folder.parent):
+        if (candidate / KICK_STATUS).is_file():
+            return candidate.resolve()
+    return None
+
+
+def _kick_detect_run(path, video=None) -> Path | None:
+    """The detect run a kick analysis recorded for ``video`` (default: the reference camera).
+
+    The kick layout keeps it in ``work/<stem>/freekiki_predict_<stem>_*``; the stage record names
+    the one in use, else the newest one there is taken. None when ``path`` is not a kick run.
+    """
+    kick = _kick_dir(path)
+    if kick is None:
+        return None
+    status = json.loads((kick / KICK_STATUS).read_text(encoding="utf-8"))
+    stems = [k.split(":", 1)[1] for k in status.get("stages", {}) if k.startswith("detect:")]
+    if video is not None:
+        stems = [s for s in stems if s == Path(video).stem] or [Path(video).stem]
+    for stem in stems[:1]:
+        record = status["stages"].get(f"detect:{stem}") or {}
+        predict = (record.get("result") or {}).get("predict")
+        if predict and Path(predict).is_dir():
+            return Path(predict).resolve()
+        found = sorted(
+            p for p in (kick / "work" / stem).glob(f"freekiki_predict_{stem}_*") if p.is_dir()
+        )
+        if found:
+            return found[-1].resolve()
+    return None
+
+
+def kick_run_camera(run_dir, camera: str = "reference") -> dict:
+    """One camera of a kick analysis folder: ``run``, ``video``, ``stem``, ``threed`` (its 3D
+    folder) and ``predict`` (its detect run, None when missing)."""
+    run = _kick_dir(run_dir)
+    if run is None:
+        raise ValueError(f"{run_dir} is not a kick analysis folder (no {KICK_STATUS})")
+    try:
+        from .freekiki_kick_pipeline import resume_options
+    except ImportError:
+        from freekiki_kick_pipeline import resume_options  # ty: ignore[unresolved-import]
+    videos = [Path(v) for v in resume_options(run)["videos"]]
+    index = {"reference": 0, "other": 1}.get(camera)
+    if index is None:
+        raise ValueError(f"camera must be reference or other, got {camera!r}")
+    if index >= len(videos):
+        raise ValueError(f"{run.name} has one camera: there is no other camera to correct")
+    video = videos[index]
+    ts = json.loads((run / KICK_STATUS).read_text(encoding="utf-8"))["ts"]
+    return {
+        "run": run,
+        "video": video,
+        "stem": video.stem,
+        "threed": run / f"{video.stem}_3d_{ts}",
+        "predict": _kick_detect_run(run, video),
+    }
+
+
+def kick_review_session(run_dir, camera: str = "reference") -> Path:
+    """The review session in which the field keypoints of one kick camera are corrected.
+
+    It lives in ``<run>/corrections/<stem>/session.json``: made once, then resumed. Its drafts are
+    the camera's ``<stem>_kiki49.csv`` when one exists (a second round), else the points the
+    analysis used (``field_kps_getpixelvideo.csv`` of the detect run: accepted after the snap; the
+    geometry fills are left out, the pipeline computes them again). F9 in getpixelvideo writes the
+    corrected ``<stem>_kiki49.csv`` next to the video.
+    """
+    import cv2
+
+    cam = kick_run_camera(run_dir, camera)
+    path = cam["run"] / KICK_CORRECTIONS / cam["stem"] / "session.json"
+    if path.is_file():
+        session = load_review_session(path)
+        if session.get("dataset_folder") != str(path.parent):
+            session["dataset_folder"] = str(path.parent)
+            save_review_session(session)
+        return path
+    marked = cam["video"].with_name(f"{cam['stem']}{KIKI49_SUFFIX}")
+    source = marked if marked.is_file() else None
+    if source is None and cam["predict"] is not None:
+        source = cam["predict"] / "field_kps_getpixelvideo.csv"
+    if source is None or not source.is_file():
+        raise ValueError(f"no field keypoints to correct for {cam['video'].name} in {cam['run']}")
+    cap = cv2.VideoCapture(str(cam["video"]))
+    try:
+        if not cap.isOpened():
+            raise OSError(f"Cannot open video: {cam['video']}")
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 30.0)
+        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    finally:
+        cap.release()
+    session = new_review_session(cam["video"], width, height, fps, session_path=path)
+    # F9 must save this session in the run, so the next correction reopens the edits.
+    # Without this, getpixelvideo offers to relocate it and leaves this draft behind.
+    session["dataset_folder"] = str(path.parent)
+    session["export_mode"] = "only_correct"
+    session["draft_source"] = str(source)
+    for frame, pts in sorted(read_manual_keypoints(source, total).items()):
+        xy = [(float(x), float(y)) for x, y in pts]
+        conf = [1.0 if math.isfinite(x) and math.isfinite(y) else float("nan") for x, y in xy]
+        apply_review_prediction(session, frame, xy, conf, f"draft:{source.name}")
+    save_review_session(session)
+    return path
+
+
+def kick_correction_argv(run_dir, what: str, camera: str = "reference") -> list[str]:
+    """The getpixelvideo arguments that open one kick camera for a correction.
+
+    ``ball``: the video with its ball track (Save writes ``<stem>_markers.csv``). ``field``: the
+    review session of :func:`kick_review_session` (F9 writes ``<stem>_kiki49.csv``).
+    """
+    cam = kick_run_camera(run_dir, camera)
+    if what == "ball":
+        try:
+            from .freekiki_detect3d import write_ball_correction_csv
+        except ImportError:
+            from freekiki_detect3d import write_ball_correction_csv  # ty: ignore[unresolved-import]
+        track = write_ball_correction_csv(cam["threed"])
+        return ["-f", str(cam["video"]), "--track-csv", str(track)]
+    if what == "field":
+        return ["--freekiki-session", str(kick_review_session(run_dir, camera))]
+    raise ValueError(f"what must be ball or field, got {what!r}")
+
+
+def kick_correct(run_dir, what: str, camera: str = "reference", *, wait: bool = True) -> dict:
+    """Open getpixelvideo on one camera of a kick run to correct the ball or the field keypoints.
+
+    The file it will replace (``<stem>_markers.csv`` or ``<stem>_kiki49.csv``, next to the video)
+    is copied first to ``<run>/corrections/<stem>/``. Then run ``kick-analysis --resume <run>``:
+    only the stages that read the corrected file run again.
+    """
+    cam = kick_run_camera(run_dir, camera)
+    argv = kick_correction_argv(run_dir, what, camera)
+    name = f"{cam['stem']}_markers.csv" if what == "ball" else f"{cam['stem']}{KIKI49_SUFFIX}"
+    target = cam["video"].with_name(name)
+    backup = None
+    if target.is_file():
+        folder = cam["run"] / KICK_CORRECTIONS / cam["stem"]
+        folder.mkdir(parents=True, exist_ok=True)
+        backup = folder / f"{datetime.now():%Y%m%d_%H%M%S}_{name}"
+        shutil.copy2(target, backup)
+        _log(f"kick-correct: {target.name} copied to {backup}")
+    gpv = Path(__file__).resolve().parent / "getpixelvideo.py"
+    print_gui_cli_mirror(
+        "vaila/getpixelvideo", ["uv", "run", "--no-sync", "vaila/getpixelvideo.py", *argv]
+    )
+    how = "Save" if what == "ball" else "F9"
+    _log(f"kick-correct: correct the {what} of {cam['video'].name}, then {how}: it writes {target}")
+    if wait:
+        subprocess.run([sys.executable, str(gpv), *argv], check=False)
+    else:
+        subprocess.Popen([sys.executable, str(gpv), *argv])
+    _log(
+        f"kick-correct: next, run it again on the same folder: kick-analysis --resume {cam['run']}"
+    )
+    return {"argv": argv, "target": str(target), "backup": str(backup) if backup else None}
 
 
 def freekiki_run_options(run_dir) -> dict:
@@ -7561,6 +7805,10 @@ def build_parser() -> argparse.ArgumentParser:
             "HTML + PDF + slow-motion animation of a finished 3D run, for the press (report_tv/).",
         ),
         (
+            "openplay-report",
+            "Planar dribble (1vN) or pass TV report from typed SAM person ids (report_tv/).",
+        ),
+        (
             "rec3d-binocular",
             "Ball in metres from two synchronized cameras (triangulation), from two 3D folders.",
         ),
@@ -7582,6 +7830,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Rewrites the kicker's metrics, series and figures (sticks, curves, overlays, interactive "
             "page) of a finished kick_analysis folder from its files. Nothing is detected again.",
         ),
+        (
+            "kick-correct",
+            "Open a kick_analysis folder in getpixelvideo to correct the ball or the field "
+            "keypoints of one camera; then kick-analysis --resume runs only what they change.",
+        ),
     ):
         p = sub.add_parser(cmd, help=help_text)
         if cmd == "export":
@@ -7599,13 +7852,16 @@ def build_parser() -> argparse.ArgumentParser:
         elif cmd not in (
             "ball-rebuild",
             "report-tv",
+            "openplay-report",
             "rec3d-binocular",
             "players-link",
             "players-id",
             "kick-figures",
+            "kick-correct",
         ):
             p.add_argument("-w", "--workspace", required=True, help="FreeKiki workspace folder.")
-        if cmd == "kick-figures":  # not needed, but the GUI always passes it
+        if cmd in ("kick-figures", "kick-correct", "openplay-report"):
+            # not needed for these, but the GUI always passes workspace
             p.add_argument(
                 "-w", "--workspace", help="Not needed: accepted because the GUI always passes it."
             )
@@ -7749,11 +8005,39 @@ def build_parser() -> argparse.ArgumentParser:
                 help="Analysis marked as the result in the README (default: binocular, or "
                 "mono-ref when the run has one camera).",
             )
+        elif cmd == "kick-correct":
+            p.add_argument("run", help="kick_analysis_<time> folder (from kick-analysis).")
+            p.add_argument(
+                "--what",
+                choices=("ball", "field"),
+                required=True,
+                help="ball: the ball track (<video>_markers.csv); field: the 49 field keypoints "
+                "(<video>_kiki49.csv), drafted from the points the analysis used.",
+            )
+            p.add_argument(
+                "--camera",
+                choices=("reference", "other"),
+                default="reference",
+                help="Camera to correct (default: the reference).",
+            )
+            p.add_argument(
+                "--no-wait",
+                action="store_true",
+                help="Return at once instead of waiting for getpixelvideo to close.",
+            )
         elif cmd == "kick-analysis":
+            p.add_argument(
+                "--arrival-observation",
+                metavar="JSON_FILE|none",
+                default=None,
+                help="Manual goal entry (frame, pixel, goal_side, corners_px) or explicitly "
+                "confirmed keeper_hand arrival. Stored in corrections/ and reused by --resume. "
+                "Use none to clear it. A new ball pixel reuses SAM; new corners refit the camera.",
+            )
             p.add_argument(
                 "--videos",
                 nargs="+",
-                required=True,
+                default=None,
                 help="Folder with one cut video (monocular analysis) or two ('_sync_N_frames_A_to_B' "
                 "in the name, or the two videos of the event equalizer with their event_equalizer.json: "
                 "binocular and monocular of each camera), or the video files. Each needs "
@@ -7768,10 +8052,27 @@ def build_parser() -> argparse.ArgumentParser:
             )
             p.add_argument(
                 "--set-piece",
-                choices=("auto", "penalty", "free_kick"),
-                default="auto",
-                help="Kind of set piece: auto (the ball rule decides, default), penalty or free_kick. "
+                choices=_set_piece_choices(),
+                default=None,
+                help="Kind: auto (ball rule; rolling/unseen → kick), penalty, free_kick, "
+                "kick (chute a gol, flight TV report), open_play (data only), dribble, pass. "
                 "The rule's own answer stays in data/setpiece.json as auto_kind.",
+            )
+            p.add_argument(
+                "--contact-frame",
+                type=_contact_arg,
+                default=None,
+                help="Kick contact, 0-based frame of the reference video (as in <video>_markers.csv), "
+                "or auto. Default (auto): found from the ball (a still ball leaves its rest pixel; "
+                "a rolling ball breaks its ground track; a ball already flying starts at the first "
+                "frame). With --resume, auto drops a contact stored in the run.",
+            )
+            p.add_argument(
+                "--resume",
+                metavar="RUN",
+                help="Run an existing kick_analysis folder again with its own videos and options "
+                "(after kick-correct): only the stages whose inputs changed run. The options "
+                "given here replace the stored ones.",
             )
             p.add_argument(
                 "--reference",
@@ -7798,7 +8099,7 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--kick-foot",
                 choices=("auto", "left", "right"),
-                default="auto",
+                default=None,
                 help="Kicking foot: auto = the foot nearest the ball at contact (default).",
             )
             p.add_argument(
@@ -7811,7 +8112,7 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument("--sam-device", help="SAM 3D Body device (default: automatic).")
             p.add_argument(
                 "--team-a",
-                default="green",
+                default=None,
                 choices=("green", "blue", "orange", "yellow"),
                 help="Shirt colour of TEAM_A (green). TEAM_B is the other colour most field "
                 "players wear.",
@@ -7819,7 +8120,7 @@ def build_parser() -> argparse.ArgumentParser:
             p.add_argument(
                 "--min-camera-ok",
                 type=float,
-                default=0.3,
+                default=None,
                 help="Share of sampled frames in which a camera must show the pitch (0.3).",
             )
         elif cmd == "report-tv":
@@ -7865,6 +8166,106 @@ def build_parser() -> argparse.ArgumentParser:
                 "--names", default="", help="Player name used in the text, e.g. Paquetá."
             )
             p.add_argument("--no-animation", action="store_true", help="Report only, no MP4.")
+        elif cmd == "openplay-report":
+            op_input = p.add_mutually_exclusive_group(required=True)
+            op_input.add_argument(
+                "--folder",
+                "--run",
+                dest="folder",
+                help="Finished 3D / kick folder with ball_3d_on_field.csv and ground tracks.",
+            )
+            op_input.add_argument(
+                "--manifest",
+                type=Path,
+                help="Two-camera original-frame dribble TV manifest (JSON).",
+            )
+            p.add_argument(
+                "--output", type=Path, help="Separate results directory for manifest input."
+            )
+            p.add_argument(
+                "--animation",
+                action="store_true",
+                help="Write natural-speed SAM3D and 60-second subtitled TV videos (manifest).",
+            )
+            p.add_argument(
+                "--prepare-originals",
+                action="store_true",
+                help="Revalidate calibration/ball seeds on the original images (manifest).",
+            )
+            p.add_argument(
+                "--rerun-sam",
+                action="store_true",
+                help="Run SAM 3D Body again on originals using selected SAM identities (CUDA).",
+            )
+            p.add_argument(
+                "--kind",
+                choices=("dribble", "pass"),
+                required=True,
+                help="dribble = 1vN planar report; pass = two players + ball.",
+            )
+            p.add_argument(
+                "--dribbler",
+                type=int,
+                help="SAM person_id of the dribbler (required for --kind dribble).",
+            )
+            p.add_argument(
+                "--markers",
+                help="Comma-separated SAM person_ids of markers, e.g. 23,10,5 (dribble).",
+            )
+            p.add_argument(
+                "--passer",
+                type=int,
+                help="SAM person_id of the passer (required for --kind pass).",
+            )
+            p.add_argument(
+                "--receiver",
+                type=int,
+                help="SAM person_id of the receiver (required for --kind pass).",
+            )
+            p.add_argument(
+                "--shot-folder",
+                type=Path,
+                help="Kick-analysis 3D folder of the shot that follows the pass (pass only).",
+            )
+            p.add_argument(
+                "--arrival-frame",
+                type=int,
+                help="0-based clip frame of the receiver's first touch, seen in the video "
+                "(pass only; default: closest receiver-ball approach).",
+            )
+            p.add_argument(
+                "--tv-package",
+                type=Path,
+                help="Pass only: also write the TV delivery folder here (60 s explainer video, "
+                "SAM 3D Body clip, report, captions, data and checksums).",
+            )
+            p.add_argument(
+                "--tv-second-camera",
+                type=Path,
+                help="Pass TV package: 3D folder of another run of the same pass (e.g. a slow "
+                "replay), synchronized by the ball and shown beside the main camera.",
+            )
+            p.add_argument(
+                "--ball-source",
+                choices=("auto", "ground", "flight"),
+                default="auto",
+                help="Ball file: flight = ball_3d_on_field.csv, ground = ball_3d.csv; auto uses "
+                "ground when the flight model puts the ball under the pitch.",
+            )
+            p.add_argument(
+                "--fps",
+                type=float,
+                help="Override fps (default: run JSON, else the source video, else 30).",
+            )
+            p.add_argument(
+                "--lang",
+                choices=("pt", "en", "both"),
+                default="both",
+                help="Language of the report: pt, en or both.",
+            )
+            p.add_argument("--title", default="", help="Report title override.")
+            p.add_argument("--subtitle", default="", help="Subtitle override.")
+            p.add_argument("--authors", default="", help="Authors line.")
         elif cmd == "rec3d-binocular":
             p.add_argument("--run1", required=True, help="3D folder of the reference camera.")
             p.add_argument("--run2", required=True, help="3D folder of the second camera.")
@@ -7951,7 +8352,8 @@ def build_parser() -> argparse.ArgumentParser:
                 "--ball-anchors",
                 help='JSON with the physical anchors of the flight, e.g. \'{"kicker_id": 30, '
                 '"barrier_id": 15, "keeper_id": 21, "barrier_frame": 9}\'. Without it the ball '
-                "keeps the smoothed track.",
+                'uses the automatic contact/flight. Also accepts {"arrival": {...}} for a '
+                "manual goal entry or a confirmed keeper_hand observation.",
             )
         elif cmd == "detect-3d":
             p.add_argument("--run", required=True, help="detect run or batch folder.")
@@ -8308,6 +8710,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         _log(f"kick figures written: {result['out']}")
         return 0
+    if args.command == "kick-correct":
+        try:
+            kick_correct(args.run, args.what, args.camera, wait=not args.no_wait)
+        except (OSError, ValueError, KeyError) as exc:
+            _log(f"kick-correct: {exc}")
+            return 1
+        return 0
     if args.command == "kick-analysis":
         try:
             from .freekiki_kick_pipeline import KickInputError, KickStageError, run_kick_analysis
@@ -8317,28 +8726,16 @@ def main(argv: list[str] | None = None) -> int:
                 KickStageError,
                 run_kick_analysis,
             )
-        videos = args.videos[0] if len(args.videos) == 1 else args.videos
         if (args.sync is None) != (args.cut_start is None):
             _log("kick-analysis: --sync and --cut-start go together")
             return 1
-        sync = None if args.sync is None else (args.sync, args.cut_start)
         try:
-            result = run_kick_analysis(
-                args.workspace,
-                videos,
-                reference=int(args.reference),
-                out_dir=args.out,
-                kick_foot=args.kick_foot,
-                reuse=not args.no_reuse,
-                model=args.model,
-                device=args.device,
-                sam_device=args.sam_device,
-                min_camera_ok=args.min_camera_ok,
-                team_a=args.team_a,
-                analysis=args.analysis,
-                sync=sync,
-                set_piece=args.set_piece,
-            )
+            kwargs = _kick_analysis_kwargs(args)
+        except (KickInputError, OSError, ValueError) as exc:
+            _log(f"kick-analysis: {exc}")
+            return 1
+        try:
+            result = run_kick_analysis(args.workspace, **kwargs)
         except (KickInputError, KickStageError) as exc:
             _log(f"kick-analysis: {exc}")
             return 1
@@ -8363,6 +8760,93 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"report written: {result['dir']} | confidence: {result['tier']}")
         for code, paths in result["languages"].items():
             _log(f"  [{code}] html: {paths['html']} | pdf: {paths['pdf']}")
+        return 0
+    if args.command == "openplay-report":
+        try:
+            from .freekiki_openplay_report import build_openplay_report
+        except ImportError:
+            from freekiki_openplay_report import (  # ty: ignore[unresolved-import]
+                build_openplay_report,
+            )
+
+        markers = None
+        if getattr(args, "markers", None):
+            try:
+                markers = [int(v) for v in str(args.markers).replace(" ", "").split(",") if v != ""]
+            except ValueError as exc:
+                _log(f"openplay-report: --markers must be integers: {exc}")
+                return 1
+        try:
+            if args.manifest:
+                if (
+                    args.kind != "dribble"
+                    or args.lang != "pt"
+                    or args.output is None
+                    or args.fps is not None
+                ):
+                    raise ValueError(
+                        "manifest input requires --kind dribble --lang pt --output DIR and uses original FPS (no --fps)"
+                    )
+                try:
+                    from .freekiki_openplay_video import build_manifest_report
+                except ImportError:
+                    from vaila.freekiki_openplay_video import build_manifest_report
+                result = build_manifest_report(
+                    args.manifest,
+                    args.output,
+                    animation=args.animation,
+                    prepare=args.prepare_originals,
+                    sam=args.rerun_sam,
+                )
+            else:
+                if args.animation or args.prepare_originals or args.rerun_sam or args.output:
+                    raise ValueError(
+                        "--animation, --prepare-originals, --rerun-sam and --output require --manifest"
+                    )
+                result = build_openplay_report(
+                    args.folder,
+                    kind=args.kind,
+                    dribbler_id=args.dribbler,
+                    marker_ids=markers,
+                    passer_id=args.passer,
+                    receiver_id=args.receiver,
+                    shot_folder=args.shot_folder,
+                    arrival_frame=args.arrival_frame,
+                    ball_source=args.ball_source,
+                    fps=args.fps,
+                    title=args.title,
+                    subtitle=args.subtitle,
+                    authors=args.authors,
+                    lang=args.lang,
+                )
+        except (FileNotFoundError, ValueError, OSError) as exc:
+            _log(f"openplay-report: {exc}")
+            return 1
+        _log(f"openplay report written: {result['dir']} | kind: {result['kind']}")
+        for code, paths in result["languages"].items():
+            _log(f"  [{code}] html: {paths['html']} | pdf: {paths['pdf']}")
+        if getattr(args, "tv_package", None):
+            if args.kind != "pass" or args.manifest:
+                _log("openplay-report: --tv-package is for --kind pass with --folder")
+                return 1
+            try:
+                from .freekiki_pass_tv import build_pass_tv_package
+            except ImportError:
+                from freekiki_pass_tv import (  # ty: ignore[unresolved-import]
+                    build_pass_tv_package,
+                )
+            try:
+                package = build_pass_tv_package(
+                    args.folder,
+                    args.tv_package,
+                    shot_folder=args.shot_folder,
+                    second_camera=getattr(args, "tv_second_camera", None),
+                    command=[sys.executable, "-m", "vaila.freekiki", *sys.argv[1:]],
+                )
+            except (FileNotFoundError, ValueError, OSError, RuntimeError) as exc:
+                _log(f"openplay-report: TV package failed: {exc}")
+                return 1
+            _log(f"TV package written: {package['dir']} | checks: {package['checks']}")
         return 0
     if args.command == "rec3d-binocular":
         try:
@@ -9070,7 +9554,35 @@ def run_freekiki() -> None:
             run_cli(["extend", "--src", src] + (["--commit"] if commit else []))
 
     kick_result = tk.StringVar(value="auto")  # the analysis marked as the result
-    kick_set_piece = tk.StringVar(value="auto")  # penalty or free kick, or auto (the ball rule)
+    kick_set_piece = tk.StringVar(
+        value="auto"
+    )  # penalty, free kick, open play, dribble, pass, or auto
+    kick_contact = tk.StringVar(value="")  # optional kick contact, 0-based frame of the reference
+    op_dribbler = tk.StringVar(value="")
+    op_marker1 = tk.StringVar(value="")
+    op_marker2 = tk.StringVar(value="")
+    op_marker3 = tk.StringVar(value="")
+    op_passer = tk.StringVar(value="")
+    op_receiver = tk.StringVar(value="")
+    op_arrival = tk.StringVar(value="")
+    op_folder = tk.StringVar(value="")
+    op_shot_folder = tk.StringVar(value="")
+    op_tv_package = tk.BooleanVar(value=False)
+    op_second_cam = tk.StringVar(value="")
+
+    def _contact_args(resume: bool = False) -> list[str] | None:
+        """``--contact-frame`` from the box; empty is the automatic contact (None: not a number)."""
+        text = kick_contact.get().strip()
+        if not text:
+            return ["--contact-frame", "auto"] if resume else []
+        if not text.isdigit():
+            messagebox.showerror(
+                "FreeKiki",
+                "Contact frame: a 0-based frame number, or empty (automatic).",
+                parent=root,
+            )
+            return None
+        return ["--contact-frame", text]
 
     def do_kick_analysis():
         ws = v["ws"].get().strip()
@@ -9102,7 +9614,138 @@ def run_freekiki() -> None:
             cmd += ["--analysis", kick_result.get()]
         if kick_set_piece.get() != "auto":
             cmd += ["--set-piece", kick_set_piece.get()]
-        run_cli(cmd)
+        contact = _contact_args()
+        if contact is None:
+            return
+        run_cli(cmd + contact)
+
+    def do_open_kick_run():
+        """A finished kick run: correct its ball or field keypoints, then run it again in place."""
+        try:
+            from .freekiki_kick_pipeline import KickInputError, resume_options
+        except ImportError:
+            from freekiki_kick_pipeline import (  # ty: ignore[unresolved-import]
+                KickInputError,
+                resume_options,
+            )
+        win = tk.Toplevel(root)
+        win.title("Open kick run and correct")
+        run_var = tk.StringVar(win, "")
+        cam_var = tk.StringVar(win, "reference")
+        arrival_var = tk.StringVar(win, "")
+
+        def browse_run():
+            folder = filedialog.askdirectory(
+                parent=win, title="Kick analysis folder (kick_analysis_<time>)"
+            )
+            if not folder:
+                return
+            try:
+                options = resume_options(folder)
+            except (KickInputError, OSError, ValueError) as exc:
+                messagebox.showerror("FreeKiki", str(exc), parent=win)
+                return
+            run_var.set(folder)
+            arrival_var.set(options.get("arrival_observation") or "none")
+            kick_set_piece.set(options.get("set_piece") or "auto")
+            stored = options.get("contact_frame")
+            kick_contact.set("" if stored is None else str(stored))
+            videos = ", ".join(Path(v).name for v in options["videos"])
+            info.set(f"Videos (reference first): {videos}")
+
+        def chosen_run() -> str | None:
+            folder = run_var.get().strip()
+            if not folder:
+                messagebox.showerror("FreeKiki", "Choose the kick analysis folder.", parent=win)
+                return None
+            return folder
+
+        def correct(what: str):
+            folder = chosen_run()
+            if folder:
+                run_cli(["kick-correct", folder, "--what", what, "--camera", cam_var.get()])
+
+        def rerun():
+            folder = chosen_run()
+            contact = _contact_args(resume=True)
+            if folder and contact is not None:
+                run_cli(
+                    [
+                        "kick-analysis",
+                        "--resume",
+                        folder,
+                        "--set-piece",
+                        kick_set_piece.get(),
+                        *contact,
+                        *(
+                            ["--arrival-observation", arrival_var.get()]
+                            if arrival_var.get()
+                            else []
+                        ),
+                    ]
+                )
+
+        def mark_arrival():
+            folder = chosen_run()
+            if not folder:
+                return
+            try:
+                cam = kick_run_camera(folder)
+                try:
+                    from .freekiki_arrival import show_arrival_dialog
+                except ImportError:
+                    from freekiki_arrival import show_arrival_dialog  # ty: ignore[unresolved-import]
+                show_arrival_dialog(win, cam, on_saved=lambda path: arrival_var.set(str(path)))
+            except (ValueError, OSError) as exc:
+                messagebox.showerror("FreeKiki", str(exc), parent=win)
+
+        frame = ttk.Frame(win, padding=10)
+        frame.pack(fill="both", expand=True)
+        ttk.Label(frame, text="Kick analysis folder:").grid(row=0, column=0, sticky="w")
+        ttk.Entry(frame, textvariable=run_var, width=70).grid(row=0, column=1, sticky="ew", padx=4)
+        ttk.Button(frame, text="Browse", command=browse_run).grid(row=0, column=2)
+        info = tk.StringVar(win, "Choose a kick_analysis_<time> folder.")
+        ttk.Label(frame, textvariable=info, wraplength=620).grid(
+            row=1, column=0, columnspan=3, sticky="w", pady=4
+        )
+        cams = ttk.Frame(frame)
+        cams.grid(row=2, column=0, columnspan=3, sticky="w", pady=2)
+        ttk.Label(cams, text="Camera:").pack(side="left", padx=(0, 8))
+        for text, value in (("Reference", "reference"), ("Other", "other")):
+            ttk.Radiobutton(cams, text=text, variable=cam_var, value=value).pack(
+                side="left", padx=(0, 10)
+            )
+        acts = ttk.Frame(frame)
+        acts.grid(row=3, column=0, columnspan=3, sticky="w", pady=6)
+        ttk.Button(acts, text="Correct ball", command=lambda: correct("ball")).pack(side="left")
+        ttk.Button(acts, text="Correct field keypoints", command=lambda: correct("field")).pack(
+            side="left", padx=6
+        )
+        ttk.Button(acts, text="Re-run analysis", command=rerun).pack(side="left", padx=6)
+        arrival_row = ttk.Frame(frame)
+        arrival_row.grid(row=4, column=0, columnspan=3, sticky="w", pady=4)
+        ttk.Button(arrival_row, text="Mark arrival (reference)", command=mark_arrival).pack(
+            side="left"
+        )
+        ttk.Button(arrival_row, text="Clear arrival", command=lambda: arrival_var.set("none")).pack(
+            side="left", padx=6
+        )
+        ttk.Label(arrival_row, textvariable=arrival_var, wraplength=440).pack(side="left")
+        ttk.Label(
+            frame,
+            text=(
+                "1. Correct ball: Save writes <video>_markers.csv. Correct field keypoints: F9 writes "
+                "<video>_kiki49.csv (drafts: the points the analysis used). The file it replaces is "
+                "copied to corrections/ of the run first.\n"
+                "2. Re-run analysis: the same folder; only the stages whose inputs changed run "
+                "(a new ball: the ball and what follows; new keypoints: detection and SAM 3D Body "
+                "again, the old ones go to superseded/). Kind of kick and contact frame: the boxes "
+                "of section 5 (empty contact = automatic)."
+            ),
+            wraplength=620,
+            justify="left",
+        ).grid(row=5, column=0, columnspan=3, sticky="w", pady=4)
+        frame.columnconfigure(1, weight=1)
 
     def do_kick_figures():
         folder = filedialog.askdirectory(
@@ -9195,6 +9838,32 @@ def run_freekiki() -> None:
         ttk.Button(bar, text="Cancel", command=pick.destroy).pack(side="right")
         pick.wait_window()
         return chosen[0]
+
+    def do_arrival_anchor():
+        picked = _pick_ball_target()
+        if picked is None:
+            return
+        video_path, folder = picked
+        try:
+            try:
+                from .freekiki_arrival import load_observation, show_arrival_dialog
+            except ImportError:
+                from freekiki_arrival import load_observation, show_arrival_dialog  # ty: ignore[unresolved-import]
+            kick = _kick_dir(folder)
+            camera = {
+                "video": video_path,
+                "run": kick or folder,
+                "predict": resolve_detect_predictions(folder),
+            }
+            show_arrival_dialog(
+                root,
+                camera,
+                on_saved=lambda path: v["ball_anchors"].set(
+                    json.dumps({"arrival": load_observation(path)})
+                ),
+            )
+        except (ValueError, OSError) as exc:
+            messagebox.showerror("FreeKiki", str(exc), parent=root)
 
     def do_anchor_dialog():
         """A window to build the ball anchors from a finished 3D run (at least three points)."""
@@ -9941,6 +10610,9 @@ def run_freekiki() -> None:
         side="left", padx=(4, 6)
     )
     ttk.Entry(anchors_row, textvariable=v["ball_anchors"], width=40).pack(side="left")
+    ttk.Button(anchors_row, text="Observed arrival...", command=do_arrival_anchor).pack(
+        side="left", padx=6
+    )
     bar = ttk.Frame(box)
     bar.grid(row=8, column=0, columnspan=3, sticky="w", pady=2)
     ttk.Button(bar, text="Detect", command=do_detect).pack(side="left")
@@ -9970,6 +10642,8 @@ def run_freekiki() -> None:
         width=11,
         state="readonly",
     ).pack(side="left")
+    ttk.Label(bar3, text="Contact frame (optional, 0-based):").pack(side="left", padx=(16, 4))
+    ttk.Entry(bar3, textvariable=kick_contact, width=6).pack(side="left")
     bar4 = ttk.Frame(box)
     bar4.grid(row=11, column=0, columnspan=3, sticky="w", pady=2)
     ttk.Label(bar4, text="Set piece:").pack(side="left", padx=(4, 8))
@@ -9980,7 +10654,163 @@ def run_freekiki() -> None:
         side="left", padx=(0, 10)
     )
     ttk.Radiobutton(bar4, text="Free kick", variable=kick_set_piece, value="free_kick").pack(
+        side="left", padx=(0, 10)
+    )
+    ttk.Radiobutton(bar4, text="Kick (chute a gol)", variable=kick_set_piece, value="kick").pack(
+        side="left", padx=(0, 10)
+    )
+    ttk.Radiobutton(
+        bar4, text="Open play (só dados)", variable=kick_set_piece, value="open_play"
+    ).pack(side="left", padx=(0, 10))
+    ttk.Radiobutton(bar4, text="Drible", variable=kick_set_piece, value="dribble").pack(
+        side="left", padx=(0, 10)
+    )
+    ttk.Radiobutton(bar4, text="Passe", variable=kick_set_piece, value="pass").pack(side="left")
+
+    bar_op = ttk.Frame(box)
+    bar_op.grid(row=12, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Label(bar_op, text="Open-play IDs (SAM person_id):").pack(side="left", padx=(4, 6))
+    ttk.Label(bar_op, text="Driblador").pack(side="left")
+    ttk.Entry(bar_op, textvariable=op_dribbler, width=5).pack(side="left", padx=(2, 8))
+    ttk.Label(bar_op, text="Marc.1").pack(side="left")
+    ttk.Entry(bar_op, textvariable=op_marker1, width=5).pack(side="left", padx=(2, 4))
+    ttk.Label(bar_op, text="2").pack(side="left")
+    ttk.Entry(bar_op, textvariable=op_marker2, width=5).pack(side="left", padx=(2, 4))
+    ttk.Label(bar_op, text="3").pack(side="left")
+    ttk.Entry(bar_op, textvariable=op_marker3, width=5).pack(side="left", padx=(2, 10))
+    ttk.Label(bar_op, text="Passador").pack(side="left")
+    ttk.Entry(bar_op, textvariable=op_passer, width=5).pack(side="left", padx=(2, 8))
+    ttk.Label(bar_op, text="Recebedor").pack(side="left")
+    ttk.Entry(bar_op, textvariable=op_receiver, width=5).pack(side="left", padx=(2, 4))
+
+    def _parse_id(text: str, label: str) -> int | None:
+        text = text.strip()
+        if not text:
+            return None
+        if not text.lstrip("-").isdigit():
+            messagebox.showerror("FreeKiki", f"{label}: integer SAM person_id.", parent=root)
+            return -1
+        return int(text)
+
+    def do_browse_openplay_folder():
+        folder = filedialog.askdirectory(
+            parent=root, title="3D / kick folder with tracks (ball + people)"
+        )
+        if folder:
+            op_folder.set(folder)
+
+    def do_browse_second_camera():
+        folder = filedialog.askdirectory(
+            parent=root, title="3D folder of the second camera of the pass (optional, TV package)"
+        )
+        if folder:
+            op_second_cam.set(folder)
+
+    def do_browse_shot_folder():
+        folder = filedialog.askdirectory(
+            parent=root, title="Kick-analysis 3D folder of the shot after the pass (optional)"
+        )
+        if folder:
+            op_shot_folder.set(folder)
+
+    def do_openplay_report():
+        kind = kick_set_piece.get()
+        if kind not in ("dribble", "pass"):
+            messagebox.showerror(
+                "FreeKiki",
+                "Select Set piece = Drible or Passe, fill the SAM person_ids, then run this button.",
+                parent=root,
+            )
+            return
+        folder = op_folder.get().strip() or v["out"].get().strip()
+        if not folder:
+            messagebox.showerror(
+                "FreeKiki",
+                "Choose the finished 3D / kick folder (Browse open-play folder… or Output dir).",
+                parent=root,
+            )
+            return
+        cmd = ["openplay-report", "--folder", folder, "--kind", kind]
+        if kind == "dribble":
+            drib = _parse_id(op_dribbler.get(), "Driblador")
+            if drib is None or drib < 0:
+                if drib is None:
+                    messagebox.showerror(
+                        "FreeKiki", "Drible: enter the driblador person_id.", parent=root
+                    )
+                return
+            markers = []
+            for var, lab in (
+                (op_marker1, "Marcador 1"),
+                (op_marker2, "Marcador 2"),
+                (op_marker3, "Marcador 3"),
+            ):
+                mid = _parse_id(var.get(), lab)
+                if mid == -1:
+                    return
+                if mid is not None:
+                    markers.append(mid)
+            if not markers:
+                messagebox.showerror(
+                    "FreeKiki", "Drible: enter at least Marcador 1 person_id.", parent=root
+                )
+                return
+            cmd += ["--dribbler", str(drib), "--markers", ",".join(str(m) for m in markers)]
+        else:
+            passer = _parse_id(op_passer.get(), "Passador")
+            receiver = _parse_id(op_receiver.get(), "Recebedor")
+            if passer is None or passer < 0 or receiver is None or receiver < 0:
+                if passer is None or receiver is None:
+                    messagebox.showerror(
+                        "FreeKiki", "Passe: enter passador and recebedor person_ids.", parent=root
+                    )
+                return
+            cmd += ["--passer", str(passer), "--receiver", str(receiver)]
+            arrival = _parse_id(op_arrival.get(), "1º toque (quadro)")
+            if arrival == -1:
+                return
+            if arrival is not None:
+                cmd += ["--arrival-frame", str(arrival)]
+            shot = op_shot_folder.get().strip()
+            if shot:
+                cmd += ["--shot-folder", shot]
+            if op_tv_package.get():
+                stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                cmd += ["--tv-package", str(Path(folder) / f"resultados_passe_tv_{stamp}")]
+                second = op_second_cam.get().strip()
+                if second:
+                    cmd += ["--tv-second-camera", second]
+        run_cli(cmd)
+
+    bar_op2 = ttk.Frame(box)
+    bar_op2.grid(row=13, column=0, columnspan=3, sticky="w", pady=2)
+    line_op = ttk.Frame(bar_op2)
+    line_op.pack(side="top", anchor="w")
+    ttk.Button(line_op, text="Browse open-play folder...", command=do_browse_openplay_folder).pack(
         side="left"
+    )
+    ttk.Entry(line_op, textvariable=op_folder, width=42).pack(side="left", padx=6)
+    ttk.Button(line_op, text="Report drible/passe", command=do_openplay_report).pack(
+        side="left", padx=6
+    )
+    line_pass = ttk.Frame(bar_op2)  # pass only: first touch frame and the shot that follows
+    line_pass.pack(side="top", anchor="w", pady=(2, 0))
+    ttk.Label(line_pass, text="Passe: 1º toque (quadro)").pack(side="left", padx=(4, 2))
+    ttk.Entry(line_pass, textvariable=op_arrival, width=5).pack(side="left", padx=(0, 10))
+    ttk.Button(line_pass, text="Pasta do chute...", command=do_browse_shot_folder).pack(side="left")
+    ttk.Entry(line_pass, textvariable=op_shot_folder, width=30).pack(side="left", padx=6)
+    ttk.Checkbutton(line_pass, text="Pacote TV (vídeos)", variable=op_tv_package).pack(
+        side="left", padx=(4, 0)
+    )
+    ttk.Button(line_pass, text="Câmera 2...", command=do_browse_second_camera).pack(
+        side="left", padx=(8, 0)
+    )
+
+    bar5 = ttk.Frame(box)
+    bar5.grid(row=14, column=0, columnspan=3, sticky="w", pady=2)
+    ttk.Button(bar5, text="Open run and correct...", command=do_open_kick_run).pack(side="left")
+    ttk.Label(bar5, text="ball or field keypoints of a finished kick run, then re-run it").pack(
+        side="left", padx=6
     )
     ttk.Button(bar2, text="Kick figures", command=do_kick_figures).pack(side="left", padx=6)
     ttk.Button(bar2, text="Load previous result...", command=do_load_result).pack(
@@ -9994,9 +10824,12 @@ def run_freekiki() -> None:
         "Set piece: Detect + 3D prints a provisional penalty or free kick from the ball of that run "
         "(data/setpiece_provisional.json); a SAM ball is not corrected, so One-click confirms it with "
         "the corrected ball (set piece line of the kick analysis README).",
-        "Set piece radios (below One-click): Auto (geral) = the ball rule decides; Penalty or "
-        "Free kick forces the kind of the kick analysis, and the rule's answer stays in "
-        "data/setpiece.json (auto_kind).",
+        "Set piece radios (below One-click): Auto = ball rule (rolling/unseen → kick / chute a gol); "
+        "Penalty / Free kick / Kick = ball to goal (flight TV report); Open play = data only "
+        "(no goal report); Drible / Passe = planar Report drible/passe (COD, distances; not TV gol). "
+        "Contact frame: empty = found from the ball; a number = the kick contact by hand.",
+        "Open run and correct: a finished kick_analysis folder; correct its ball or field "
+        "keypoints in getpixelvideo, then Re-run analysis in the same folder (only what changed).",
         "Correct: fix wrong points, mark missing ones (Del = not visible), F3 frame OK, "
         "F9 Save dataset (Full or Only Correct mode).",
         "Then put that folder in section 3 'Corrections' and Train (Base 'active' = fine-tune).",

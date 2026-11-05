@@ -191,3 +191,14 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
   physical smoothing still applies, and the ball rows are scored 1.0. Verified with the reused SAM 3D Body output: mode `corrected`, 70 frames found.
 - **Player model:** `PLAYER_MODEL` accel 2.0 m/s^2, measurement 0.6 m (grid on the Paqueta run): max 9.5 m/s^2 (was 28), median per-ID
   peak 0.9 m/s^2; the trade-off is a flatter response to fast runs (max speed 4 m/s on that clip).
+
+### FreeKiki pass report: timing, receiver run, shot link (2 November 2026)
+
+- **What:** `openplay-report --kind pass` gets `--arrival-frame`, `--shot-folder`, `--ball-source`; GUI section 5
+  second line *Passe: 1º toque (quadro)* + *Pasta do chute…*. `freekiki_pass.pass_timing` (t = 0 at release),
+  `shot_link` (reuses `freekiki_report.compute_metrics`), `data/pass_timeseries.csv`.
+- **Why:** the first pass report used 30 fps (clip is 23.976), a ball file under the pitch, and constant-velocity
+  player tracks. Details and numbers: `docs/sessions/2026-11-02-freekiki-pass-shot-link.md`.
+- **Gotcha:** `filter_utils.butter_filter(padding=True)` reflects evenly → zero speed at the clip edges; use
+  `sosfiltfilt(..., padtype="odd")` for positions you differentiate. The GUI width test (≤ 900 px) fails if
+  section 5 rows grow; new widgets go on a second line inside `bar_op2`.

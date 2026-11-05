@@ -191,3 +191,27 @@ def test_write_outputs_writes_the_files(tmp_path: Path) -> None:
         assert paths[key].is_file() and paths[key].stat().st_size > 0
     header = paths["metrics"].read_text(encoding="utf-8").splitlines()[0]
     assert header == "metric,value,unit,source,quality,reason,definition"
+
+
+def test_a_contact_the_flight_decided_stands_without_a_rest_pixel() -> None:
+    """Open play: no rest pixel (the marker finds no contact), the flight's break is the contact."""
+    rolling = {f: (500.0 + 4.0 * f, 500.0) for f in range(N)}  # the ball moves from the first frame
+    incoming = {"speed_mps": 6.0, "turn_deg": 85.0}
+    result = kk.analyze_kicker(_rows(), _ball(), rolling, kicker_id=KICKER, fps=FPS,
+                               contact_override=CONTACT, override_source="kink",
+                               incoming=incoming)  # fmt: skip
+    contact = _metric(result, "contact_frame")
+    assert contact["value"] == CONTACT and contact["source"] == "inferido"
+    assert "rolling" in contact["reason"]
+    assert result["events"]["contact_source"] == "kink"
+    assert _metric(result, "v_ball_pre_mps")["value"] == 6.0
+    assert _metric(result, "ball_turn_deg")["value"] == 85.0
+    assert "already came in" in _metric(result, "ratio_vball_vfoot")["reason"]
+
+
+def test_a_contact_given_by_hand_is_labelled_as_given() -> None:
+    result = kk.analyze_kicker(_rows(), _ball(), _pixels(), kicker_id=KICKER, fps=FPS,
+                               contact_override=CONTACT, override_source="manual")  # fmt: skip
+    contact = _metric(result, "contact_frame")
+    assert contact["source"] == "informado" and contact["reason"] == "contact frame given by hand"
+    assert not any(m["metric"] == "v_ball_pre_mps" for m in result["metrics"])

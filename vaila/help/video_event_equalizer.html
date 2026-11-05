@@ -51,6 +51,38 @@ custom grid; <code>reference_position</code> always gives the exact rational pos
 <code>event</code> labels anchors. Counts appear in preview and manifest. Both cameras
 are preflighted at their own dimensions when interpolation is needed. These controls
 reuse the installed model without new dependencies or downloads.</p>
+<h2>Main camera and frame count</h2>
+<p>Any camera can be the <strong>Main</strong>: pick the Main button of its row in the window (on the
+command line, it is <code>--reference</code>). Its events set the contact and the timing, and its
+video is the reference of the run. The other cameras are mapped onto its timeline.</p>
+<p><strong>Frame count from</strong> chooses how many output frames there are:</p>
+<ul>
+<li><strong>main camera (as before):</strong> the main camera's own span. The main keeps its frames.</li>
+<li><strong>shortest camera (reduce):</strong> the shortest event span in seconds. Longer cameras are
+compressed onto it, so they lose frames.</li>
+<li><strong>longest camera (increase):</strong> the longest event span in seconds. Shorter cameras are
+stretched onto it with RIFE, so they gain generated frames.</li>
+</ul>
+<p>The mode only sets the default count: a typed output frame count overrides it. FPS stays the main
+camera's unless you type Output FPS. Preview prints the target span.</p>
+<pre>uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c1_passe_main.mp4 --reference-events 1,1,26 \
+  --source /path/to/c2_passe_16mm.mp4 --source-events 1,1,39 \
+  --mode increase --output-dir /path/to/results</pre>
+<h2>Contact on the start or end</h2>
+<p>When only the start and end of the sync are known, the contact may repeat one of them:
+<code>1,1,39</code> puts the contact on the start, <code>1,26,26</code> on the end. The output
+grid then places the contact on frame 1 or frame N, and the zero-length segment is skipped.
+Start and end must differ, the contact must lie between them, and every camera must use the
+same pattern as the reference (all on the start, all on the end, or all with their own
+contact frame). Mixed patterns are refused.</p>
+<pre>uv run --no-sync python -m vaila.video_event_equalizer \
+  --reference /path/to/c2_passe_16mm.mp4 --reference-events 1,1,39 \
+  --source /path/to/c1_passe_main.mp4 --source-events 1,1,26 \
+  --output-dir /path/to/results</pre>
+<p>The reference sets the output frame count: here 39 frames, so the 26-frame camera gets 37
+generated frames. Choosing the 26-frame camera as reference instead gives 26 output frames,
+and the 39-frame camera is compressed onto them.</p>
 <h2>Installation and reinstallation</h2>
 <p><strong>Practical-RIFE 4.25 is optional and no longer installed by default.</strong>
 Install it (about 50&nbsp;MB) in a folder you choose, then verify CUDA, in an existing

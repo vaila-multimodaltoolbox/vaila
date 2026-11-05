@@ -2,6 +2,9 @@
 
 A physical flight is simulated, seen by one synthetic camera, and fitted back; the entry point from the
 goal homography is compared with the true crossing. Synthetic data only: no GPU, no model, no video.
+
+Version: 0.4.14
+Update Date: 02 November 2026
 """
 
 from __future__ import annotations
@@ -125,7 +128,7 @@ def test_entry_is_found_and_the_fit_follows_the_true_flight() -> None:
     assert result["fit"]["rms_px"] < 1.0
 
 
-def test_a_save_takes_the_keeper_hand_at_the_last_frame() -> None:
+def test_a_missing_entry_is_undetermined_and_a_save_needs_explicit_confirmation() -> None:
     theta = [
         30.0,
         0.0,
@@ -162,9 +165,24 @@ def test_a_save_takes_the_keeper_hand_at_the_last_frame() -> None:
         )
     result = af.auto_flight(ball_all, pixels, cameras, pose_rows, FPS, N)
     assert result is not None
+    assert result["arrival"] is None
+    _, record = af.auto_rows_and_record(result, pixels, N)
+    assert record["arrival_status"] == "undetermined"
+    assert "p_arrival" not in record["anchor_points"]
+    observation = {
+        "type": "keeper_hand",
+        "frame": last,
+        "xyz": [51.8, -0.2, 1.15],
+        "confirmed": True,
+        "sigma_m": 0.3,
+    }
+    result = af.auto_flight(
+        ball_all, pixels, cameras, pose_rows, FPS, N, arrival_observation=observation
+    )
     arrival = result["arrival"]
     assert arrival is not None and arrival["type"] == "keeper_hand"
     assert np.allclose(arrival["xyz"], [51.8, -0.2, 1.15], atol=1e-6)  # mean of the two wrists
+    assert arrival["observation"]["confirmed"] is True
 
 
 def test_no_movement_means_no_automatic_flight() -> None:
@@ -190,3 +208,97 @@ def test_a_drifting_marker_before_the_contact_does_not_fix_the_kick_time() -> No
     assert result["onset_frame"] < 12  # the drift makes the first moved frame early
     assert result["fit"]["kick_time_s"] == pytest.approx(0.4, abs=1.5 / FPS)
     assert result["fit"]["rms_px"] < 3.0
+
+
+KICK_POINT = (30.0, 0.0)
+SHOT = [
+    KICK_POINT[0],
+    KICK_POINT[1],
+    22.0,
+    0.0,
+    7.0,
+    0.4,
+    0.0,
+    0.0,
+    0.0,
+]  # kicked at 0.4 s (frame 12)
+ROLL = np.array([0.0, 6.0])  # a cross: the ball rolls into the kick at 6 m/s along +y
+
+
+def _rolling_positions() -> np.ndarray:
+    """The ball rolls on the ground into the kick point, then flies (the kick at frame 12)."""
+    positions = _flight(SHOT)
+    kick_t = SHOT[5]
+    for f in range(N):
+        t = f / FPS
+        if t < kick_t:
+            xy = np.asarray(KICK_POINT) + ROLL * (t - kick_t)
+            positions[f] = [xy[0], xy[1], BALL_RADIUS]
+    return positions
+
+
+def test_rolling_break_finds_the_kick_despite_a_badly_marked_frame() -> None:
+    ground = {f: (5.0 + 0.2 * f, 1.0) for f in range(10)}  # 6 m/s at 30 fps
+    ground.update({f: (7.0 + 0.8 * (f - 10), 1.0 + 0.3 * (f - 10)) for f in range(10, 20)})
+    ground[4] = (ground[4][0] + 0.15, ground[4][1] - 0.15)  # one bad mark while it rolls
+    found = af.rolling_break(ground, FPS)
+    # frame 10 is the kick point itself, still on the rolling line: 11 is the first frame off it
+    assert found is not None and found["frame"] == 11
+    assert found["kick_xy"] == pytest.approx([7.1, 1.0], abs=0.05)  # between frames 10 and 11
+    assert found["incoming"]["speed_mps"] == pytest.approx(6.0, abs=0.5)
+
+
+def test_a_ball_flying_from_the_first_frame_has_no_rolling_break() -> None:
+    ground = {f: (5.0 + 1.0 * f, 0.5 * f) for f in range(15)}  # 33 m/s: no roll is that fast
+    assert af.rolling_break(ground, FPS) is None
+
+
+def test_find_contact_names_its_source_and_a_given_frame_wins() -> None:
+    still = {f: (100.0 + (max(f - 10, 0)) * 9.0, 100.0) for f in range(20)}
+    found = af.find_contact(still, {}, FPS)
+    assert (found["source"], found["pre_contact"]) == ("rest", "still")
+    flying = {f: (100.0 + 30.0 * f, 100.0) for f in range(20)}
+    ground = {f: (5.0 + 1.1 * f, 0.0) for f in range(20)}
+    found = af.find_contact(flying, ground, FPS)
+    assert (found["frame"], found["source"], found["pre_contact"]) == (0, "first_frame", "unseen")
+    given = af.find_contact(flying, ground, FPS, contact_frame=7)
+    assert (given["frame"], given["source"], given["pre_contact"]) == (7, "manual", "rolling")
+
+
+def test_a_rolling_ball_is_fitted_from_the_contact_with_its_incoming_line() -> None:
+    positions = _rolling_positions()
+    pixels = _pixels(positions)
+    cameras = dict.fromkeys(range(N), L)
+    ball_all = ball_3d(_ball_rows(pixels), cameras)
+    result = af.auto_flight(ball_all, pixels, cameras, [], FPS, N)
+    assert result is not None
+    assert result["contact"]["source"] == "kink" and result["contact"]["pre_contact"] == "rolling"
+    assert result["onset_frame"] in (12, 13)  # the kick lies between the last roll and the flight
+    assert result["start"]["xyz"][:2] == pytest.approx(KICK_POINT, abs=0.3)  # not the roll's median
+    assert result["barrier"] == {}  # no wall in open play
+    assert result["incoming"]["speed_mps"] == pytest.approx(6.0, abs=0.6)
+    assert result["incoming"]["turn_deg"] == pytest.approx(90.0, abs=10.0)  # +y in, +x out
+    assert result["fit"]["rms_px"] < 3.0
+    rows, record = af.auto_rows_and_record(result, pixels, N)
+    assert record["pre_contact"] == "rolling" and record["contact_source"] == "kink"
+    assert "p_wall" not in record["anchor_points"]
+    before = [r for r in rows if r["frame"] < result["onset_frame"]]
+    assert all(r["z_m"] == BALL_RADIUS for r in before)  # the roll stays on the ground
+    assert before[0]["y_m"] == pytest.approx(positions[0, 1], abs=0.05)  # not frozen at the kick
+
+
+def test_a_ball_flying_from_the_first_frame_starts_there(tmp_path) -> None:
+    theta = list(SHOT)
+    theta[5] = 0.0  # the kick is the first frame of the clip
+    positions = _flight(theta)
+    pixels = _pixels(positions)
+    cameras = dict.fromkeys(range(N), L)
+    result = af.auto_flight(ball_3d(_ball_rows(pixels), cameras), pixels, cameras, [], FPS, N)
+    assert result is not None
+    assert result["contact"]["source"] == "first_frame" and result["onset_frame"] == 0
+    assert -1.0 / FPS - 1e-9 <= result["fit"]["kick_time_s"] <= 0.5 / FPS + 1e-9
+    _, record = af.auto_rows_and_record(result, pixels, N)
+    (tmp_path / "ball_flight.json").write_text(__import__("json").dumps(record), encoding="utf-8")
+    read = af.flight_contact(tmp_path)
+    assert read is not None and (read["frame"], read["pre_contact"]) == (0, "unseen")
+    assert af.flight_contact(tmp_path / "missing") is None

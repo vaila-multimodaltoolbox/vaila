@@ -12,7 +12,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 Version: 0.4.14
 Created: 25 October 2026
-Update Date: 29 October 2026
+Update Date: 02 November 2026
 
 Description:
     Runs on the output of a finished ``detect`` run (or batch) and adds, per video:
@@ -47,6 +47,7 @@ import re
 import shutil
 import subprocess
 import sys
+from contextlib import suppress
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
@@ -602,6 +603,13 @@ class BallAnchorPoints:
     points: tuple[dict, ...]
 
 
+@dataclass(frozen=True)
+class BallArrivalObservation:
+    """One observed arrival combined with the automatic contact/start, rather than three XYZs."""
+
+    arrival: dict
+
+
 MIN_BALL_POINTS = 3
 BALL_CENTRE_Z = 0.11  # the ball's centre on the ground (m)
 
@@ -622,7 +630,9 @@ def _point_from_json(item: dict, index: int) -> dict:
     }
 
 
-def ball_anchor_spec_from_json(text: str) -> BallAnchorSpec | BallAnchorPoints:
+def ball_anchor_spec_from_json(
+    text: str,
+) -> BallAnchorSpec | BallAnchorPoints | BallArrivalObservation:
     """Ball anchors from JSON: either the player form (``kicker_id``...) or ``{"points": [...]}``.
 
     Unknown keys are an error; the points form needs at least three points.
@@ -630,6 +640,14 @@ def ball_anchor_spec_from_json(text: str) -> BallAnchorSpec | BallAnchorPoints:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("--ball-anchors must be a JSON object")
+    if "arrival" in data:
+        try:
+            from .freekiki_arrival import validate_observation
+        except ImportError:
+            from freekiki_arrival import validate_observation  # ty: ignore[unresolved-import]
+        if set(data) != {"arrival"}:
+            raise ValueError("arrival cannot be combined with other --ball-anchors forms")
+        return BallArrivalObservation(validate_observation(data["arrival"]))
     if "points" in data:
         items = data["points"]
         if not isinstance(items, list) or len(items) < MIN_BALL_POINTS:
@@ -996,15 +1014,24 @@ def write_field_3d(
     kept: set[int] | None,
     ball_rows: list[dict],
     ball_trusted: bool = False,
-    ball_anchors: BallAnchorSpec | BallAnchorPoints | None = None,
+    ball_anchors: BallAnchorSpec | BallAnchorPoints | BallArrivalObservation | None = None,
     video: Path | None = None,
+    contact_frame: int | None = None,
+    arrival_observation: dict | None = None,
 ) -> dict:
     """Write the 3D markers in pitch metres and the C3D file. Returns a summary dict.
+
+    ``contact_frame`` (0-based, optional) is a kick contact given by hand for the automatic flight
+    (:func:`vaila.freekiki_auto_flight.find_contact`).
 
     A hand-corrected ball (``ball_trusted``) with ``ball_anchors`` follows the fitted flight
     (:func:`flight_ball_rows`) and writes ``ball_flight.json``. Without anchors it keeps the
     smoothed track of :func:`physical_ball_rows`.
     """
+    if isinstance(ball_anchors, BallArrivalObservation):
+        if arrival_observation is not None:
+            raise ValueError("give only one arrival observation")
+        arrival_observation, ball_anchors = ball_anchors.arrival, None
     names, _, xyz = load_field_points()
     pixels_csv = run_dir / "field_kps_getpixelvideo.csv"
     pixels = _read_field_pixels(pixels_csv) if pixels_csv.is_file() else {}
@@ -1048,15 +1075,33 @@ def write_field_3d(
         int(r["frame"]): (float(r["cx"]), float(r["cy"])) for r in ball_rows if r["cx"] != ""
     }
     if ball_anchors is None and pixels_all:
-        auto = auto_flight(ball_all, pixels_all, cameras, pose_rows, rate_hz, n_frames)
+        auto = auto_flight(
+            ball_all,
+            pixels_all,
+            cameras,
+            pose_rows,
+            rate_hz,
+            n_frames,
+            contact_frame=contact_frame,
+            arrival_observation=arrival_observation,
+        )
     if auto is not None:
+        if arrival_observation is not None and arrival_observation["type"] == "goal_entry":
+            pixels_all[arrival_observation["frame"]] = tuple(arrival_observation["pixel"])
         ball_on, record = auto_rows_and_record(auto, pixels_all, n_frames)
         (out_dir / "ball_flight.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
         flight_summary = {k: record[k] for k in ("kick_time_s", "spin_rps", "rms_px", "max_px")}
         flight_summary["anchor_residuals"] = record["anchor_residuals"]
         flight_summary["peak_speed_mps"] = record["peak_speed_mps"]
         flight_summary["arrival"] = record["arrival"]["type"] if record["arrival"] else None
+        flight_summary["contact"] = {
+            k: record.get(k) for k in ("contact_frame", "contact_source", "pre_contact")
+        }
         _log(f"ball flight (monocular, automatic anchors): {flight_summary}")
+        if record["quality"] != "ok":
+            _log(f"ball flight needs review: {record['quality']}")
+        if record.get("contact_warning"):
+            _log(f"ball flight: {record['contact_warning']}")
     elif ball_trusted and ball_anchors is not None:
         if isinstance(ball_anchors, BallAnchorPoints):
             anchors = anchors_from_points(ball_anchors)
@@ -1119,8 +1164,15 @@ def detect_3d_run(
     field_min_frac: float = 0.5,
     python: str = sys.executable,
     ball_csv: Path | None = None,
+    contact_frame: int | None = None,
+    arrival_observation: dict | None = None,
+    fresh_sam: bool = False,
 ) -> dict:
     """Run the 3D chain for one video of a finished detect run. Returns a summary dict.
+
+    ``contact_frame`` is a kick contact given by hand (0-based). ``fresh_sam`` starts a new SAM 3D
+    Body run instead of resuming a matching earlier one: needed when the camera (the focal of the
+    corrected field keypoints) changed.
 
     ``ball_csv`` is a corrected ball track in pixels (``frame,p0_x,p0_y``, as saved by
     getpixelvideo): it replaces the detector, and the physical smoothing still applies.
@@ -1155,6 +1207,8 @@ def detect_3d_run(
     sam_out = work / "sam3dinov3"
     cmd = [python, str(SAM3DINOV3), "-i", str(video), "-o", str(sam_out), "-t", text,
            "--cam-int-npy", str(npy)]  # fmt: skip
+    if fresh_sam:
+        cmd.append("--fresh")
     if weights_dir is not None:
         cmd += ["--weights-dir", str(weights_dir)]
     if device:
@@ -1225,6 +1279,8 @@ def detect_3d_run(
         kept=kept,
         ball_rows=ball_rows,
         ball_trusted=ball_csv is not None,
+        contact_frame=contact_frame,
+        arrival_observation=arrival_observation,
     )
     return summary
 
@@ -1244,7 +1300,9 @@ def write_ball_dependent_outputs(
     kept: set[int] | None,
     ball_rows: list[dict],
     ball_trusted: bool = False,
-    ball_anchors: BallAnchorSpec | BallAnchorPoints | None = None,
+    ball_anchors: BallAnchorSpec | BallAnchorPoints | BallArrivalObservation | None = None,
+    contact_frame: int | None = None,
+    arrival_observation: dict | None = None,
 ) -> dict:
     """Everything that depends on the ball, written into ``out_dir`` (shared by both paths).
 
@@ -1264,6 +1322,8 @@ def write_ball_dependent_outputs(
         ball_trusted=ball_trusted,
         ball_anchors=ball_anchors,
         video=video,
+        contact_frame=contact_frame,
+        arrival_observation=arrival_observation,
     )
     _log(f"{video.name}: 3D markers in pitch metres {summary['field3d']}")
     summary["topview"] = write_topview(out_dir, video.stem, fps=fps, n_frames=n_frames)
@@ -1432,10 +1492,8 @@ def _attach_work(out_dir: Path, work: Path, owner: Path) -> tuple[Path, Path]:
     flat_owner_work = owner_work.is_dir() and work == owner_work.resolve()
     if flat_owner_work and owner.resolve() != out_dir.resolve():
         shutil.move(str(work), str(dest))
-        try:
+        with suppress(OSError):
             owner_work.symlink_to(dest.resolve(), target_is_directory=True)
-        except OSError:
-            pass
         return dest.resolve(), out_dir
     try:
         dest.symlink_to(work, target_is_directory=True)
@@ -1452,7 +1510,7 @@ def rebuild_ball_3d(
     video: Path | None = None,
     out_root: Path | None = None,
     timestamp: str | None = None,
-    ball_anchors: BallAnchorSpec | BallAnchorPoints | None = None,
+    ball_anchors: BallAnchorSpec | BallAnchorPoints | BallArrivalObservation | None = None,
 ) -> dict:
     """Rebuild only the ball-dependent outputs from a 3D folder and a corrected ball.
 
@@ -1543,6 +1601,63 @@ def rebuild_ball_3d(
         ball_rows=rows,
         ball_trusted=True,
         ball_anchors=ball_anchors,
+    )
+
+
+def rebuild_ball_in_place(
+    out_dir: Path,
+    video: Path,
+    work: Path,
+    ball_csv: Path,
+    *,
+    contact_frame: int | None = None,
+    arrival_observation: dict | None = None,
+) -> dict:
+    """Redo only the ball-dependent outputs of a 3D folder, in the same folder (no SAM 3D Body).
+
+    For the kick analysis, whose 3D folder keeps its intermediates in ``work`` (the detect run, the
+    SAM 3D Body output) outside it: a corrected ball or a new contact frame rewrites the ball, the
+    flight, the C3D files, the top view and the overlay, and reads everything else as it is.
+    """
+    out_dir, video, work, ball_csv = Path(out_dir), Path(video), Path(work), Path(ball_csv)
+    run_dir = _detect_run_dir(work, video.stem)
+    if run_dir is None:
+        raise FileNotFoundError(f"No freekiki detect run for {video.name} in {work}")
+    sam_out = work / "sam3dinov3"
+    camera_csv = _single(sorted(sam_out.rglob("*_sam3dinov3_camera.csv")), "camera csv")
+    if camera_csv is None:
+        raise FileNotFoundError(f"No sam3dinov3 camera csv in {sam_out}")
+    keypoints_csv = _single(
+        sorted(sam_out.rglob("*_sam3dinov3_keypoints3d.csv")), "keypoints3d csv"
+    )
+    n_frames, _, _ = _video_info(video)
+    fps = _video_fps(video)
+    rows = read_corrected_ball(ball_csv, n_frames)
+    write_ball_csv(out_dir / "ball.csv", rows)
+    found = sum(1 for r in rows if r["cx"] != "")
+    summary: dict = {
+        "video": video.name,
+        "run": run_dir.name,
+        "out": str(out_dir),
+        "ball": {"mode": "corrected", "frames": len(rows), "found": found},
+    }
+    _log(f"{video.name}: ball rebuilt in place from {ball_csv.name} on {found} frames")
+    return write_ball_dependent_outputs(
+        run_dir,
+        out_dir,
+        work,
+        video,
+        summary,
+        dlt3d=_single(sorted(run_dir.glob("*.dlt3d")), "*.dlt3d"),
+        n_frames=n_frames,
+        fps=fps,
+        camera_csv=camera_csv,
+        keypoints_csv=keypoints_csv,
+        kept=_read_kept(out_dir / "players_on_field.csv"),
+        ball_rows=rows,
+        ball_trusted=True,
+        contact_frame=contact_frame,
+        arrival_observation=arrival_observation,
     )
 
 

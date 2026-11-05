@@ -38,6 +38,7 @@ Farnebäck and its grid that preserves every original.</p>
 <li>Choose <strong>Reference video</strong> (the output timeline). Every other camera is a row of the <strong>Cameras</strong> table (2, 3, ...); <strong>Add camera</strong> and <strong>Remove</strong> change that list.</li>
 <li>Enter <strong>Reference: start, contact, end</strong> and the same three values for every camera:
 original, 1-based, inclusive frames. Browse initializes start/end from counts; review contact.
+The contact may repeat the start or the end (<code>1,1,39</code>) when only those are known; every camera must use the same pattern as the reference.
 The Syncvid launcher prefills sync-frame values. Use Browse to refresh bounds when changing videos.
 Syncvid removal marks and FPS overrides do not apply.</li>
 <li>Optionally set <strong>Output FPS</strong> (decimal/fraction, with <strong>60</strong> and
