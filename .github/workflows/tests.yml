@@ -57,7 +57,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg pkg-config libcairo2-dev python3-dev build-essential xvfb
+          # libegl1, libgl1, libgomp1: Open3D; libxrender1, libxi6, libxkbcommon0: VTK and Qt-free GUIs
+          sudo apt-get install -y ffmpeg pkg-config libcairo2-dev python3-dev build-essential xvfb \
+            libegl1 libgl1 libgomp1 libxrender1 libxi6 libxkbcommon0
 
       - name: System packages (macOS)
         if: runner.os == 'macOS'
