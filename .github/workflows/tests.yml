@@ -5,6 +5,9 @@
 #
 # Linux is the required job. macOS and Windows run as `experimental` (allowed to
 # fail) until their first green run is confirmed; then drop `continue-on-error`.
+# First run (PR #653, 2026-11-06): macOS 2765 passed / 3 failed (two were a hard-coded
+# cwd, fixed); Windows 2735 passed / 33 failed, mostly files read without
+# encoding="utf-8", POSIX path assumptions in tests and files still open on delete.
 #
 # Lint is not gated here yet: `ruff check vaila/ tests/` reports pre-existing findings on
 # main (82 on 2026-11-05). Add a ruff step once those are cleared.
@@ -31,6 +34,10 @@ jobs:
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 60
+    env:
+      # Use uv's own CPython build: it ships tkinter on every OS. The Ubuntu runner's
+      # system Python 3.12 has no tkinter, and 117 test modules failed to import.
+      UV_PYTHON_PREFERENCE: only-managed
     strategy:
       fail-fast: false
       matrix:
@@ -50,7 +57,9 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg pkg-config libcairo2-dev python3-dev build-essential
+          # libegl1, libgl1, libgomp1: Open3D; libxrender1, libxi6, libxkbcommon0: VTK and Qt-free GUIs
+          sudo apt-get install -y ffmpeg pkg-config libcairo2-dev python3-dev build-essential xvfb \
+            libegl1 libgl1 libgomp1 libxrender1 libxi6 libxkbcommon0
 
       - name: System packages (macOS)
         if: runner.os == 'macOS'
@@ -72,7 +81,11 @@ jobs:
       - name: Tests
         env:
           MPLBACKEND: Agg
-        run: uv run --frozen pytest tests -q -p no:cacheprovider --junitxml=pytest-${{ matrix.os }}.xml
+        shell: bash
+        # Linux runners have no display; xvfb-run gives Tk a virtual one.
+        run: |
+          cmd=(uv run --frozen pytest tests -q -p no:cacheprovider --junitxml=pytest-${{ matrix.os }}.xml)
+          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a "${cmd[@]}"; else "${cmd[@]}"; fi
 
       - name: Upload test report
         if: always()

@@ -29,6 +29,9 @@ from vaila.interp_smooth_core import (
 from vaila.interp_smooth_split import arima_smooth, generate_report, parse_rate_hz, process_file
 from vaila.interp_smooth_split import savgol_smooth as mod_savgol
 
+# Repository root, so the CLI tests run from any checkout location.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 
 def _synth(fs=100.0, seconds=2.0):
     t = np.arange(0, seconds, 1.0 / fs)
@@ -416,7 +419,7 @@ def test_cli_help_mentions_resample():
 
     proc = subprocess.run(
         [sys.executable, "vaila/interp_smooth_split.py", "--help"],
-        cwd="/home/preto/data/vaila",
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
@@ -663,7 +666,7 @@ def test_cli_flag_overrides_toml(tmp_path):
             "--time-column-rate",
             "60000/1001",
         ],
-        cwd="/home/preto/data/vaila",
+        cwd=REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
