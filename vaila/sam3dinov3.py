@@ -6,7 +6,7 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 28 October 2026
+Update Date: 05 November 2026
 Version: 0.4.14
 
 Description:
@@ -601,8 +601,6 @@ def _cam_int_for_frame(cam_seq: Any, frame_idx: int, default: Any) -> Any:
 
 
 def _finite_matrix(K: Any) -> bool:
-    import numpy as np
-
     return bool(np.isfinite(np.asarray(K, dtype=np.float64)).all())
 
 
@@ -1266,8 +1264,8 @@ def run_sam3d_from_sam(
         _log(f"Using fixed intrinsics: f={float(args.focal_px):.1f} px, principal point centred")
     cam_seq = None
     if getattr(args, "cam_int_npy", None):
-        import numpy as np
-
+        # Module-level numpy only: a local ``import numpy as np`` here made ``np`` local to
+        # the whole function and broke --save-mesh without --cam-int-npy.
         cam_seq = np.load(args.cam_int_npy)
         usable = int(np.isfinite(cam_seq).all(axis=(1, 2)).sum()) if cam_seq.ndim == 3 else 0
         _log(f"Per-frame intrinsics: {usable}/{len(cam_seq)} frames from {args.cam_int_npy}")

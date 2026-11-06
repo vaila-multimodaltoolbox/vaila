@@ -222,3 +222,14 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
 - **Gotcha:** sync this CUDA machine with `uv sync --no-group cpu --group cuda --extra sam --extra fifa --extra sapiens
   --extra upscaler --frozen --inexact`; without the extras uv removes them, and without `--inexact` it removes the
   editable Sapiens2 install.
+
+### sam3dinov3: --save-mesh crashed with UnboundLocalError on np (5 November 2026)
+
+- **Cause:** `5d89b9f3` (27 October 2026) added `import numpy as np` inside the `--cam-int-npy` branch of
+  `run_sam3d_from_sam`. Python then treats `np` as local to the whole function, so without `--cam-int-npy` the first
+  `np` use (`np.asarray(estimator.faces)` for `--save-mesh`, and the later mesh `.npz` writes) raised
+  `UnboundLocalError`. SAM 3 had already finished; only the SAM 3D Body stage failed.
+- **Fix:** use the module-level `numpy` (also removed the redundant local import in `_finite_matrix`).
+- **Regression:** `tests/test_sam3dinov3_numpy_scope.py` stubs the capture and the estimator (no GPU) and checks
+  `mesh_faces.npy`; a second test fails if any function in the module makes `np` local again.
+- **Resume a failed batch:** `--resume <processed_sam3dinov3_*>` reuses `sam3/sam_tracks.csv` and retries the failure.
