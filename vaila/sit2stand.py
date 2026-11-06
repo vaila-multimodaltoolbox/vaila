@@ -4,8 +4,8 @@ sit2stand.py - Sit to Stand Analysis Module
 ================================================================================
 Author: Prof. Paulo Santiago
 Create: 10 October 2025
-Update: 24 September 2026
-Version: 0.4.5
+Update: 06 November 2026
+Version: 0.4.15
 
 Description:
 ------------
@@ -3685,6 +3685,10 @@ def save_force_plot_png(
             alpha=0.7,
             label=f"Maximum Force: {max_force:.1f}N",
         )
+
+        # Headroom so the peak labels (offset 15 pt above the peak) stay below the title.
+        y_low, y_high = ax1.get_ylim()
+        ax1.set_ylim(y_low, y_high + 0.15 * (y_high - y_low))
 
         # Customize main plot
         ax1.set_xlabel("Time (s)", fontsize=12, fontweight="bold")
