@@ -58,8 +58,10 @@ jobs:
         run: |
           sudo apt-get update
           # libegl1, libgl1, libgomp1: Open3D; libxrender1, libxi6, libxkbcommon0: VTK and Qt-free GUIs
+          # fonts-urw-base35: Tk's Helvetica resolves to Nimbus Sans, as on the developers'
+          # machines; with DejaVu the GUI width tests measure about 2 % wider.
           sudo apt-get install -y ffmpeg pkg-config libcairo2-dev python3-dev build-essential xvfb \
-            libegl1 libgl1 libgomp1 libxrender1 libxi6 libxkbcommon0
+            libegl1 libgl1 libgomp1 libxrender1 libxi6 libxkbcommon0 fonts-urw-base35
 
       - name: System packages (macOS)
         if: runner.os == 'macOS'

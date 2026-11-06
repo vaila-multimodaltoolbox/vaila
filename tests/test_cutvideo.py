@@ -1,14 +1,22 @@
 """Focused tests for cutvideo timeline, sync handoff, and render helpers.
 
-Update Date: 27 October 2026
-Version: 0.4.14
+Update Date: 06 November 2026
+Version: 0.4.15
 """
 
+import re
 from pathlib import Path
 
 import pytest
 
 from vaila import cutvideo, syncvid
+from vaila.ffmpeg_utils import get_ffmpeg_version
+
+
+def _ffmpeg_major() -> int | None:
+    """Major version of the resolved ffmpeg (``None`` when unknown)."""
+    match = re.match(r"n?(\d+)", get_ffmpeg_version())
+    return int(match.group(1)) if match else None
 
 
 def test_timeline_x_for_frame_reaches_both_edges():
@@ -365,6 +373,15 @@ def test_frame_accurate_cut_filters_are_inclusive_and_rewrite_pts():
     assert "duration=" in af
 
 
+@pytest.mark.xfail(
+    (_ffmpeg_major() or 99) < 7,
+    reason=(
+        "Known bug with FFmpeg 6.1 (Ubuntu 24.04 apt, used by install_vaila_linux.sh): the cut "
+        "ends on another frame when source PTS are irregular (CI run 42237680966, PR #654). "
+        "Passes with FFmpeg 8.1."
+    ),
+    strict=False,
+)
 def test_ffmpeg_cut_keeps_inclusive_end_on_irregular_pts(tmp_path: Path) -> None:
     """Sync cuts must keep the marked final frame when source PTS are uneven.
 
