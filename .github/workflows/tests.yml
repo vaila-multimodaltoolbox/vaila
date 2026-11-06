@@ -84,10 +84,16 @@ jobs:
         env:
           MPLBACKEND: Agg
         shell: bash
-        # Linux runners have no display; xvfb-run gives Tk a virtual one.
+        # Linux runners have no display; xvfb-run gives Tk a virtual one. At 96 DPI Tk
+        # sizes fonts as on a normal desktop (the FreeKiki width test measured 897 px at
+        # 96 DPI on a developer machine and 977 px with Xvfb's default DPI).
         run: |
           cmd=(uv run --frozen pytest tests -q -p no:cacheprovider --junitxml=pytest-${{ matrix.os }}.xml)
-          if [ "$RUNNER_OS" = "Linux" ]; then xvfb-run -a "${cmd[@]}"; else "${cmd[@]}"; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a -s "-screen 0 1920x1080x24 -dpi 96" "${cmd[@]}"
+          else
+            "${cmd[@]}"
+          fi
 
       - name: Upload test report
         if: always()
