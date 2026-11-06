@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 import sys
@@ -418,7 +419,9 @@ def test_rec3d_single_row_dlt_fallback(test_data):
     assert result.returncode == 0
     subfolders = [f for f in out_dir.iterdir() if f.is_dir() and "vaila_rec3d" in f.name]
     assert len(subfolders) == 1
-    res_df = pd.read_csv(next(f for f in subfolders[0].iterdir() if f.suffix == ".csv"))
+    # The primary CSV is rec3d_<timestamp>.csv; sidecars (e.g. _nviews.csv) share the prefix.
+    primary = re.compile(r"^rec3d_\d{8}_\d{6}\.csv$")
+    res_df = pd.read_csv(next(f for f in subfolders[0].iterdir() if primary.match(f.name)))
     assert len(res_df) == 4
     # All frames reconstructed. rec3d.py labels its output from p0 (0.4.3),
     # matching getpixelvideo.py's pixel columns.

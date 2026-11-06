@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.5
+Version: 0.4.15
 Created: 02 August 2025
-Last Updated: 24 September 2026
+Last Updated: 06 November 2026
 
 ================================================================================
 Description
@@ -24,13 +24,16 @@ multiple cameras. For each camera you provide:
   - One pixel-coordinate CSV with columns: frame, p0_x, p0_y, p1_x, p1_y, ..., pN_x, pN_y.
 
 Frames common to all pixel files are reconstructed; output is written to a
-timestamped subfolder in the chosen output directory.
+timestamped subfolder in the chosen output directory. Each marker is triangulated
+from the cameras that see it in that frame (a NaN pixel only drops that camera);
+at least two cameras are needed, otherwise the marker stays NaN.
 
 Output files (same base name, in the output subfolder):
   - rec3d_YYYYMMDD_HHMMSS.csv   — 3D points (frame, p0_x, p0_y, p0_z, ...)
   - rec3d_YYYYMMDD_HHMMSS.3d    — same data, duplicate copy
   - rec3d_YYYYMMDD_HHMMSS_m.c3d — C3D in meters (POINT:UNITS=m, POINT:FRAMES set)
   - rec3d_YYYYMMDD_HHMMSS_mm.c3d — C3D in millimeters (POINT:UNITS=mm)
+  - rec3d_YYYYMMDD_HHMMSS_nviews.csv — cameras used per marker and frame (0 = not reconstructed)
 
 C3D files are compatible with viewc3d, viewc3d_pyvista, readc3d_export (inspect/
 convert), and standard C3D tools. They are produced via readcsv_export.auto_create_c3d_from_csv.
@@ -179,13 +182,15 @@ try:
         write_ply_mesh,
     )
     from .rec3d import (
+        MIN_VIEWS,
         find_common_frames,
         find_unreconstructed_markers,
         generate_blender_companion_script,
         load_pixel_csv_positional,
-        rec3d_multicam,
+        rec3d_available_views,
         resolve_marker_labels,
         save_rec3d_as_bvh,
+        write_nviews_csv,
     )
 except ImportError:
     from cli_highlight import print_gui_cli_mirror  # ty: ignore[unresolved-import]
@@ -199,13 +204,15 @@ except ImportError:
         write_ply_mesh,
     )
     from rec3d import (  # ty: ignore[unresolved-import]
+        MIN_VIEWS,
         find_common_frames,
         find_unreconstructed_markers,
         generate_blender_companion_script,
         load_pixel_csv_positional,
-        rec3d_multicam,
+        rec3d_available_views,
         resolve_marker_labels,
         save_rec3d_as_bvh,
+        write_nviews_csv,
     )
 
 try:
@@ -835,6 +842,7 @@ def run_reconstruction(
     reconstruction_array[:, 0] = common_frames
 
     pixel_frame_to_row = [{int(f): i for i, f in enumerate(frames)} for frames in pixel_frames_list]
+    n_views = np.zeros((total_frames, num_markers), dtype=int)
 
     progress_step = max(1, total_frames // 20)
     for frame_idx, frame in enumerate(common_frames):
@@ -850,21 +858,16 @@ def run_reconstruction(
             continue
 
         for marker in range(num_markers):
-            pixel_obs_list = []
-            valid_marker = True
-            for cam_idx, row_idx in enumerate(pixel_row_for_cam):
-                x_obs, y_obs = pixel_xy_list[cam_idx][row_idx, marker]
-                if np.isnan(x_obs) or np.isnan(y_obs):
-                    valid_marker = False
-                    break
-                pixel_obs_list.append((float(x_obs), float(y_obs)))
-
+            # Cameras that miss this marker (NaN) are skipped; any MIN_VIEWS cameras
+            # that see it are enough to reconstruct it.
+            pixel_obs_list = [
+                pixel_xy_list[cam_idx][row_idx, marker]
+                for cam_idx, row_idx in enumerate(pixel_row_for_cam)
+            ]
+            point3d, used = rec3d_available_views(dlt_params_list, pixel_obs_list)
+            n_views[frame_idx, marker] = used if np.isfinite(point3d).all() else 0
             col_start = 1 + marker * 3
-            if not valid_marker or len(pixel_obs_list) != len(dlt_params_list):
-                pass
-            else:
-                point3d = rec3d_multicam(dlt_params_list, pixel_obs_list)
-                reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
+            reconstruction_array[frame_idx, col_start : col_start + 3] = point3d
 
     print("3D reconstruction completed!")
 
@@ -894,6 +897,19 @@ def run_reconstruction(
     print("Saving 3D reconstruction results...")
     rec3d_df.to_csv(file_3d_path, index=False, float_format="%.6f")
     rec3d_df.to_csv(file_csv_path, index=False, float_format="%.6f")
+    keep = valid_frames_mask.to_numpy()
+    write_nviews_csv(
+        common_frames[keep],
+        n_views[keep],
+        num_markers,
+        os.path.join(new_dir, f"{file_base}_nviews.csv"),
+    )
+    partial = int(np.count_nonzero((n_views >= MIN_VIEWS) & (n_views < len(dlt_params_list))))
+    if partial:
+        print(
+            f"{partial} marker-frame(s) reconstructed from fewer than all "
+            f"{len(dlt_params_list)} cameras (at least {MIN_VIEWS}); see {file_base}_nviews.csv"
+        )
 
     # Resolve pN -> semantic label (nose, left_knee, ...) for the C3D and the
     # labels sidecar. marker_labels is None (or the wrong length) in the
@@ -998,6 +1014,7 @@ def run_reconstruction(
     print("Files created:")
     print(f"  - {file_base}.csv (CSV format)")
     print(f"  - {file_base}.3d (3D format)")
+    print(f"  - {file_base}_nviews.csv (cameras used per marker and frame)")
     print(f"  - {file_base}_m.c3d (C3D in meters)")
     print(f"  - {file_base}_mm.c3d (C3D in millimeters)")
     msg_bvh = f"  - {file_base}.bvh (Mocap format for Blender"
@@ -1045,7 +1062,7 @@ def run_reconstruction(
             f"Processed: {len(common_frames)} frames with {num_markers} markers\n"
             f"Output directory: {os.path.basename(new_dir)}\n\n"
             f"Files created:\n"
-            f"• CSV and 3D format files\n"
+            f"• CSV and 3D format files (+ _nviews.csv: cameras per marker)\n"
             f"• C3D files (meters and millimeters)\n"
             f"{msg_bvh_gui}{extra_msg}",
         )

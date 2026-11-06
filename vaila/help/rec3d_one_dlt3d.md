@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec3d_one_dlt3d.py` |
-| **Version** | 0.4.5 |
-| **Updated** | 24 September 2026 |
+| **Version** | 0.4.15 |
+| **Updated** | 06 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -21,7 +21,7 @@ Batch 3D reconstruction using the **Direct Linear Transformation (DLT)** method 
 - One **DLT3D parameter file** (11 coefficients per camera, e.g. from the `dlt3d` module).
 - One **pixel-coordinate CSV**: column 0 is the frame identifier and every pair of columns after that is one marker's (x, y).
 
-Frames common to all pixel files are reconstructed; results are written to a **timestamped subfolder** in the chosen output directory.
+Frames common to all pixel files are reconstructed; results are written to a **timestamped subfolder** in the chosen output directory. **Since 0.4.15** each marker is triangulated from the cameras that see it: a `NaN` pixel in one camera only drops that camera, and the marker is reconstructed whenever at least **two** cameras see it (before, one missing camera discarded the marker). `rec3d_*_nviews.csv` records how many cameras were used.
 
 ---
 
@@ -50,6 +50,7 @@ All outputs share the same base name and are written inside a new subfolder: `re
 | `rec3d_*.3d` | Same data as CSV (duplicate format). |
 | `rec3d_*_m.c3d` | C3D in **meters** (`POINT:UNITS=m`, `POINT:FRAMES` set). |
 | `rec3d_*_mm.c3d` | C3D in **millimeters** (`POINT:UNITS=mm`). |
+| `rec3d_*_nviews.csv` | Cameras used per marker and frame (`frame`, `p0_nviews`, ...; 0 = not reconstructed). |
 
 C3D files are compatible with **viewc3d**, **viewc3d_pyvista**, **readc3d_export** (inspect/convert), and standard C3D tools. They are generated via `readcsv_export.auto_create_c3d_from_csv`.
 

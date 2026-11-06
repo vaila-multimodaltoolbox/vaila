@@ -6,8 +6,8 @@ Vector Coding, and Extrapolated Center of Mass (XCoM) dynamic-stability metrics.
 
 > **Module:** `vaila/tugturn.py`
 > **Authors:** Paulo R. P. Santiago, Abel G. Chinaglia
-> **Version:** 0.4.5
-> **Updated:** 24 September 2026
+> **Version:** 0.4.15
+> **Updated:** 06 November 2026
 > **Python:** 3.12
 > **License:** AGPL-3.0
 > **Reference:** Chinaglia AG, Cesar GM, Santiago PRP. *Automating Timed Up and Go
@@ -129,6 +129,21 @@ with `g = 9.81 m/s^2` and `l` approximated by the mean CoM-Z height. The
 First-Gait and Second-Gait phases and stored as
 `XcoM_Deviation_First_Gait_m` / `XcoM_Deviation_Second_Gait_m`.
 
+## Cadence and velocity: global vs gait window
+
+Two definitions are reported side by side (JSON `Global` key / `_bd_results.csv` column):
+
+| Field | Interval |
+| --- | --- |
+| `Cadence_steps_per_min` / `Cadence`, `Velocity_m_s` | First to last heel strike of the whole trial. The pause before the turn and the turn are inside the interval, so both values are lower than during walking. Kept unchanged for comparison with earlier results (arXiv:2602.21425). |
+| `Cadence_First_Gait_steps_per_min` / `Cadence_First_Gait`, `Cadence_Second_Gait_steps_per_min` / `Cadence_Second_Gait` | First to last kept heel strike inside one straight-gait phase: `(n_HS − 1) / (t_last − t_first) × 60`. |
+| `Velocity_First_Gait_m_s`, `Velocity_Second_Gait_m_s` | Horizontal CoM path over the same interval divided by its duration. |
+| `Cadence_Gait_steps_per_min` / `Cadence_Gait`, `Velocity_Gait_m_s` | Both gait phases pooled, weighted by their duration. |
+
+A phase with fewer than two heel strikes gives an empty value. For the reference trial
+`s26_m1_t1`, the global cadence is 67.9 steps/min and 0.347 m/s, whereas the gait-window
+values are 117.0 (first gait) and 113.1 (second gait) steps/min and 0.59 m/s.
+
 ## Configuration (TOML)
 
 Every CSV is paired with a TOML file with the same stem (or a single TOML
@@ -162,7 +177,7 @@ Per-trial artefacts written to the output directory:
 | `*_tugturn_report.html`             | Static Matplotlib visual report |
 | `*_tugturn_report_interactive.html` | Interactive Plotly version (XYZ overlay, gait events, stick figures) |
 | `*_tugturn_data.json`               | Full structured report (metadata, phases, spatiotemporal, VC, XcoM) |
-| `*_bd_results.csv`                  | One-row global summary (cadence, velocity, phase durations, VC summary) |
+| `*_bd_results.csv`                  | One-row global summary (cadence and velocity, global and per gait phase; phase durations; VC summary) |
 | `*_bd_steps.csv`                    | One row per detected step (Time_s, Y_m, Side, Phase, Step/Stride/Width, Stance/Swing) |
 | `*_bd_kinematics.csv`               | One-row kinematic summary (knee max R/L, mean trunk inclination, Coupling SD R/L) |
 | `*_bd_participants.csv`             | One-row TOML metadata snapshot (timestamped) |

@@ -1,0 +1,82 @@
+# Run the vailá test suite on every push and pull request to main.
+#
+# CPU wheels only (the default `uv sync` groups: dev + cpu). Tests that need CUDA,
+# gated model weights or large media fixtures skip themselves when those are absent.
+#
+# Linux is the required job. macOS and Windows run as `experimental` (allowed to
+# fail) until their first green run is confirmed; then drop `continue-on-error`.
+#
+# Lint is not gated here yet: `ruff check vaila/ tests/` reports pre-existing findings on
+# main (82 on 2026-11-05). Add a ruff step once those are cleared.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pytest:
+    name: pytest (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            experimental: false
+          - os: macos-latest
+            experimental: true
+          - os: windows-latest
+            experimental: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: System packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg pkg-config libcairo2-dev python3-dev build-essential
+
+      - name: System packages (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg pkg-config cairo
+
+      - name: System packages (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress -y
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Sync locked environment (CPU)
+        run: uv sync --frozen
+
+      - name: Tests
+        env:
+          MPLBACKEND: Agg
+        run: uv run --frozen pytest tests -q -p no:cacheprovider --junitxml=pytest-${{ matrix.os }}.xml
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-${{ matrix.os }}
+          path: pytest-${{ matrix.os }}.xml

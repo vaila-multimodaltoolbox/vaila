@@ -233,3 +233,16 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
 - **Regression:** `tests/test_sam3dinov3_numpy_scope.py` stubs the capture and the estimator (no GPU) and checks
   `mesh_faces.npy`; a second test fails if any function in the module makes `np` local again.
 - **Resume a failed batch:** `--resume <processed_sam3dinov3_*>` reuses `sam3/sam_tracks.csv` and retries the failure.
+
+### tugturn: cadence and velocity per gait phase (5 November 2026)
+
+- **What:** `tugturn.gait_phase_cadence_velocity` and `gait_phase_metrics` add `Cadence_{First,Second}_Gait_steps_per_min`,
+  `Cadence_Gait_steps_per_min`, `Velocity_{First,Second}_Gait_m_s`, `Velocity_Gait_m_s` to the JSON `Global` block, and
+  `Cadence_First_Gait`, `Cadence_Second_Gait`, `Cadence_Gait`, `Velocity_*_Gait_m_s` at the end of `_bd_results.csv`.
+- **Why:** the global `Cadence_steps_per_min`/`Velocity_m_s` run from the first to the last heel strike of the trial, so the
+  pause and the turn are in the denominator (`s26_m1_t1`: 67.9 steps/min, 0.347 m/s). Within the gait windows: 117.0 and
+  113.1 steps/min, 0.59 m/s. The global fields and column order are unchanged (arXiv:2602.21425 values still reproduce).
+- **Sample data restored:** `tests/tugturn/s26_m1_t1.csv` (from `2630477e`) and `tests/Force_Plate/sit2stand/sit2stand1.csv`
+  (from `51ba3fe0`) had never reached `main`, so 17 tugturn integration/regression tests were skipping. Both are back;
+  `tests/test_sit2stand_sample.py` runs the sit2stand CLI on its sample. The multimodal C3D of the same commit stays out
+  until its origin and consent are confirmed.

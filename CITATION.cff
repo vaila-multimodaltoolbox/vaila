@@ -1,0 +1,121 @@
+# Citation metadata for vailá. GitHub shows a "Cite this repository" button from this file.
+# TODO (authors): add ORCID iDs (field `orcid: "https://orcid.org/0000-0000-0000-0000"`);
+# add the Zenodo concept DOI under `identifiers` once the GitHub-Zenodo integration
+# archives the v0.4.15 release.
+cff-version: 1.2.0
+message: "If you use vailá, please cite the software and the preprint below."
+title: "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox"
+type: software
+version: 0.4.15
+license: AGPL-3.0-or-later
+repository-code: "https://github.com/vaila-multimodaltoolbox/vaila"
+abstract: >-
+  Open-source Python toolbox for multimodal biomechanics: video preprocessing and
+  synchronization, markerless and manual tracking, DLT calibration and 3D reconstruction,
+  C3D/CSV export, and analysis of motion capture, IMU, force plate, EMG and GNSS data,
+  through a graphical launcher and, for most modules, command-line interfaces.
+keywords:
+  - biomechanics
+  - motion analysis
+  - markerless motion capture
+  - direct linear transformation
+  - multimodal data
+  - open-source software
+authors:
+  - given-names: Paulo Roberto Pereira
+    family-names: Santiago
+    email: paulosantiago@usp.br
+    affiliation: "University of São Paulo"
+  - given-names: Abel Gonçalves
+    family-names: Chinaglia
+    affiliation: "University of São Paulo"
+  - given-names: Rafael Luiz Martins
+    family-names: Monteiro
+    affiliation: "University of São Paulo"
+  - given-names: Ligia Yumi
+    family-names: Mochida
+    affiliation: "University of North Florida"
+  - given-names: Bruno L. S.
+    family-names: Bedo
+    affiliation: "University of São Paulo"
+  - given-names: Guilherme Manna
+    family-names: Cesar
+    affiliation: "University of North Florida"
+identifiers:
+  - type: doi
+    value: 10.48550/arXiv.2410.07238
+    description: "arXiv preprint (2024)"
+preferred-citation:
+  type: article
+  title: "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox"
+  authors:
+    - given-names: Paulo Roberto Pereira
+      family-names: Santiago
+    - given-names: Abel Gonçalves
+      family-names: Chinaglia
+    - given-names: Kira
+      family-names: Flanagan
+    - given-names: Bruno L. S.
+      family-names: Bedo
+    - given-names: Ligia Yumi
+      family-names: Mochida
+    - given-names: Juan
+      family-names: Aceros
+    - given-names: Aline
+      family-names: Bononi
+    - given-names: Guilherme Manna
+      family-names: Cesar
+  year: 2024
+  journal: "arXiv"
+  doi: 10.48550/arXiv.2410.07238
+  url: "https://arxiv.org/abs/2410.07238"
+references:
+  - type: article
+    title: "Multimodal Motion Capture Toolbox for Enhanced Analysis of Intersegmental Coordination in Children with Cerebral Palsy and Typically Developing"
+    authors:
+      - family-names: Mochida
+        given-names: Ligia Yumi
+      - family-names: Santiago
+        given-names: Paulo R. P.
+      - family-names: Lamb
+        given-names: Miranda
+      - family-names: Cesar
+        given-names: Guilherme M.
+    journal: "Journal of Visualized Experiments"
+    issue: "226"
+    start: e69604
+    year: 2025
+    doi: 10.3791/69604
+  - type: article
+    title: "Predicting walkway spatiotemporal parameters using a markerless, pixel-based machine learning approach"
+    authors:
+      - family-names: Tahara
+        given-names: Ariany K.
+      - family-names: Chinaglia
+        given-names: Abel G.
+      - family-names: Monteiro
+        given-names: Rafael L. M.
+      - family-names: Bedo
+        given-names: Bruno L. S.
+      - family-names: Cesar
+        given-names: Guilherme M.
+      - family-names: Santiago
+        given-names: Paulo R. P.
+    journal: "Brazilian Journal of Motor Behavior"
+    volume: 19
+    issue: "1"
+    start: e462
+    year: 2025
+    doi: 10.20338/bjmb.v19i1.462
+  - type: article
+    title: "Automating Timed Up and Go Phase Segmentation and Gait Analysis via the tugturn Markerless 3D Pipeline"
+    authors:
+      - family-names: Chinaglia
+        given-names: Abel Gonçalves
+      - family-names: Cesar
+        given-names: Guilherme Manna
+      - family-names: Santiago
+        given-names: Paulo Roberto Pereira
+    journal: "arXiv"
+    year: 2026
+    doi: 10.48550/arXiv.2602.21425
