@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.14
+Version: 0.4.15
 Created: 02 August 2025
-Last Updated: 05 November 2026
+Last Updated: 06 November 2026
 
 ================================================================================
 Description

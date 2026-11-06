@@ -1,84 +1,87 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.14 (see `vaila.py`). **Package version:** 0.4.14 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.15 (see `vaila.py`). **Package version:** 0.4.15 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-05
-
-FreeKiki `openplay-report` also accepts a two-camera dribble manifest:
-`--manifest MANIFEST.json --output RESULTS --kind dribble --lang pt --animation`.
-It writes a natural-speed SAM 3D Body overlay, a 60-second subtitled TV explanation,
-HTML/PDF and CSV/JSON series on the original clock. Preparation and a fresh CUDA
-body run use `--prepare-originals --rerun-sam`; received files remain read only.
-See [the manifest workflow](docs/freekiki_dribble_tv.md).
-
-Syncvid **Equalize by events (RIFE)** opens a CUDA frame-interpolation tool on the
-reference camera's grid by default. **Output FPS** (including 60, 120 and exact
-fractions) and **Output frame count** define a common grid for both cameras.
-Click **Preview** to review durations, contact timing and original/generated counts,
-then **Run**. Enter start/contact/end for every camera (two, three or more); for example,
-`c1: 1,9,19` and reference `c2: 1,9,22` produce 22 frames each with contact at frame 9.
-The window lists the cameras as a scrollable table (vertical and horizontal), and the terminal
-prints the standard `>> vaila/video_event_equalizer: Equivalent CLI` banner to repeat the run
-without the window.
-Any camera can be the **Main** (reference), and **Frame count from** picks the main camera's
-span, the shortest camera (reduce) or the longest one (increase); CLI `--mode reference|reduce|increase`.
-When only the sync start and end are known, the contact may repeat one of them (`1,1,39`).
-All three anchors remain original images; higher FPS adds visual estimates, and
-independent FPS/count choices change playback speed. CLI: `--output-fps` and
-`--output-frame-count`. CSV maps distinguish original and generated images. See the
-[RIFE setup and workflow](vaila/help/syncvid.md#equalize-by-events-rife).
-RIFE is **optional and no longer installed by default** (about 50 MB). Install the pinned
-RIFE 4.25 code/model, with a CUDA inference check, into a folder you choose:
-`bash bin/setup_rife.sh --home /big/disk/rife` (Windows: `pwsh bin/setup_rife.ps1 --home D:\rife`),
-or add `--rife` / `--rife-home=DIR` to the Linux installer and `setup_pyproject.sh`
-(`-Rife` / `-RifeHome DIR` on Windows). Select the folder with `--rife-home DIR` or
-`VAILA_RIFE_HOME`, and copy an installed one to another disk or computer, offline, with
-`bash bin/setup_rife.sh --export DIR`. Without `--home` the legacy folders
-`vaila/models/rife/train_log/` and `.local/third_party/Practical-RIFE/` are used.
-
-FreeKiki analyses a shot in **open play** (`--set-piece open_play`, also found automatically when
-the ball rolls into the kick or already flies in the first frame): the contact is the break of the
-rolling ball's ground track (or `--contact-frame N` by hand), the flight starts there, and the report
-has no wall but the ball that came in. **Open run and correct...** (CLI `kick-correct`) opens a
-finished `kick_analysis_<time>` folder to correct the ball or the field keypoints in getpixelvideo;
-`kick-analysis --resume <run>` then runs only what changed (a new ball does not redo detection nor
-SAM 3D Body). See the [FreeKiki help](vaila/help/freekiki.md).
-
-Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
-set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.
-Live remaining-frame counts help match lengths by hand. **Save all / Save current video**
-export new trimmed videos at each source FPS, without synchronization or interpolation.
-See the [manual-cut workflow](vaila/help/syncvid.md#manual-cuts-side-by-side).
-
-Syncvid **Sync by events + interpolation** preserves every selected original and inserts
-bidirectional Farnebäck estimates on the minimum exact rational grid. Select **Events: interpolate**
-and set **Max output FPS** (default 240; CLI `--max-output-fps 480` to authorize higher rates).
-The limit does not force the output FPS. The preview shows the calculated rate, final count and
-original/interpolated counts for every camera; checkpoints save the limit.
-The `63/71/81 ↔ 54/58/62` example at a `30000/1001` reference clock yields 37 frames
-at `60000/1001`, with common events at output frames 1, 17 and 37. Interpolated ball,
-feet and occlusions can show artifacts. See the [interpolation workflow](vaila/help/syncvid.md#sync-by-events--interpolation).
-
-Syncvid **Sync by events** calibrates physical time after repeat review, using editable event pairs
-and exact rational clocks. Cut Video exports a shared time grid, temporal-error maps and retained
-PNG observations with their physical times. See the [event workflow](vaila/help/syncvid.md#sync-by-events-physical-time-calibration).
-
-Syncvid repeat detection combines motion thresholds with alternating vertical field shifts, sharing
-decisions between GUI and CLI. CSV audits separate automatic reasons from reviewed export marks.
-See [Syncvid help](vaila/help/syncvid.md#remove-repeated-frames).
-
-FreeKiki Kiki49 review: `uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS` opens a 49-point review session. After **Mark Reviewed** and **Export Reviewed**, preview with `uv run --no-sync vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH_ID`; add `--commit` to append validated frames to train. GetPixelCoord also opens a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp for CALIB/MEASURE. See [GetPixelVideo help](vaila/help/getpixelvideo.md) and [FreeKiki help](vaila/help/freekiki.md).
-
-Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
-momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
-These markerless estimates are not force-platform measurements. See the
-[complete metric/event dictionary and validation notes](docs/cmj_pods.md).
-
-File Manager now shares previewed operations between GUI and CLI; YouTube Downloader uses one reviewed URL list with MP4/MP3 selection, progress and cooperative cancellation. See [File Manager help](vaila/help/filemanager.md), [Downloader help](vaila/help/vaila_ytdown.md) and the project [/debug skill](.agents/skills/debug/SKILL.md).
+**Last updated:** 2026-11-06
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
 </p>
+
+<p align="center">
+  <a href="https://github.com/vaila-multimodaltoolbox/vaila/actions/workflows/tests.yml"><img src="https://github.com/vaila-multimodaltoolbox/vaila/actions/workflows/tests.yml/badge.svg" alt="Tests"/></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_v3-blue.svg" alt="License: AGPL v3"/></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.12-blue.svg" alt="Python 3.12"/></a>
+  <a href="https://arxiv.org/abs/2410.07238"><img src="https://img.shields.io/badge/arXiv-2410.07238-b31b1b.svg" alt="arXiv 2410.07238"/></a>
+  <!-- Zenodo DOI badge: add after the v0.4.15 release is archived by Zenodo. -->
+</p>
+
+_vailá_ (Versatile Anarcho Integrated Liberation Ánalysis) is an open-source Python toolbox for
+biomechanics. It connects video preparation and synchronization, markerless and manual tracking,
+camera calibration and 2D/3D reconstruction, and the processing of force-plate, EMG, IMU,
+motion-capture and GNSS recordings. A Tkinter launcher opens each module, and most modules also
+run from the command line. Intermediate results are plain CSV, C3D and calibration files, so each
+stage can be inspected, corrected and run again.
+
+### Key features
+
+- **Video:** cutting, compression, stabilization, distortion correction and synchronization by
+  events, with CSV maps that separate original from interpolated frames.
+- **Tracking and review:** optional MediaPipe, YOLO, SAM 3 and Sapiens2 backends; GetPixelVideo
+  loads their outputs for point-by-point review, correction and gap filling.
+- **Calibration and reconstruction:** DLT2D/DLT3D with fixed or per-frame parameters (moving
+  cameras), soccer-field calibration, triangulation from the cameras that see each marker, and
+  CSV/C3D/BVH export.
+- **Sensors:** force plate (centre of pressure, ground reaction force), EMG, IMU, marker clusters,
+  GNSS/GPS and heart rate/ECG.
+- **Task analyses:** Timed Up and Go (`tugturn`), sit-to-stand (`sit2stand`), vertical jump,
+  markerless walkway gait and treadmill load cells.
+- **GUI and CLI:** applicable GUI dialogs print the equivalent command so a run can be repeated
+  without the window.
+
+### Quick start
+
+```bash
+git clone https://github.com/vaila-multimodaltoolbox/vaila.git
+cd vaila
+uv sync            # CPU and macOS; NVIDIA GPU: uv sync --no-group cpu --group cuda
+uv run vaila.py    # NVIDIA GPU: uv run --no-sync vaila.py
+```
+
+The installers in [Install Now](#-install-now-one-line) do the same and also create shortcuts.
+On an NVIDIA machine, add `--no-sync` to every `uv run` below so the CUDA wheels are kept.
+
+### Reproduce the examples
+
+Sample data ship in `tests/`. Each command writes to a new folder and leaves `tests/` unchanged.
+
+DLT3D calibration of eight cameras and 3D reconstruction of a static reference object:
+
+```bash
+cp -r tests/DLT3D_and_Rec3d /tmp/vaila_dlt && D=/tmp/vaila_dlt
+for c in "$D"/pixelcorrds/c0*_markers_1_line.csv; do
+  uv run python -m vaila.dlt3d --pixel "$c" --real "$D"/ref3d_realworld/ref3d_realworld_format1.ref3d
+done
+uv run python -m vaila.rec3d_one_dlt3d --dlt3d "$D"/pixelcorrds/*.dlt3d \
+  --pixels "$D"/pixelcorrds/*.csv --fps 100 --output "$D"/out
+```
+
+Timed Up and Go from 3D markerless coordinates (phases, gait events, coordination, HTML report):
+
+```bash
+uv run python -m vaila.tugturn -i tests/tugturn/s26_m1_t1.csv \
+  -c tests/tugturn/s26_m1_t1.toml -o /tmp/vaila_tugturn
+```
+
+Sit-to-stand from force-platform data (phases, tables and plots):
+
+```bash
+uv run python -m vaila.sit2stand tests/Force_Plate/sit2stand/config_sit2stand.toml \
+  tests/Force_Plate/sit2stand /tmp/vaila_sit2stand
+```
+
+On a desktop CPU these take about 1 s, 20 s and 2 s. To cite _vailá_, see
+[Citing _vailá_](#citing-vailá) or GitHub's **Cite this repository** button (`CITATION.cff`).
 
 <div align="center">
   <table>
@@ -202,12 +205,88 @@ cd path\to\vaila
 > on startup are cached ~20 h. Install trees without `.git` fall back to comparing
 > `pyproject.toml` with GitHub's `main` and show the one-line install command.
 
+## What's new
+
+FreeKiki `openplay-report` also accepts a two-camera dribble manifest:
+`--manifest MANIFEST.json --output RESULTS --kind dribble --lang pt --animation`.
+It writes a natural-speed SAM 3D Body overlay, a 60-second subtitled TV explanation,
+HTML/PDF and CSV/JSON series on the original clock. Preparation and a fresh CUDA
+body run use `--prepare-originals --rerun-sam`; received files remain read only.
+See [the manifest workflow](docs/freekiki_dribble_tv.md).
+
+Syncvid **Equalize by events (RIFE)** opens a CUDA frame-interpolation tool on the
+reference camera's grid by default. **Output FPS** (including 60, 120 and exact
+fractions) and **Output frame count** define a common grid for both cameras.
+Click **Preview** to review durations, contact timing and original/generated counts,
+then **Run**. Enter start/contact/end for every camera (two, three or more); for example,
+`c1: 1,9,19` and reference `c2: 1,9,22` produce 22 frames each with contact at frame 9.
+The window lists the cameras as a scrollable table (vertical and horizontal), and the terminal
+prints the standard `>> vaila/video_event_equalizer: Equivalent CLI` banner to repeat the run
+without the window.
+Any camera can be the **Main** (reference), and **Frame count from** picks the main camera's
+span, the shortest camera (reduce) or the longest one (increase); CLI `--mode reference|reduce|increase`.
+When only the sync start and end are known, the contact may repeat one of them (`1,1,39`).
+All three anchors remain original images; higher FPS adds visual estimates, and
+independent FPS/count choices change playback speed. CLI: `--output-fps` and
+`--output-frame-count`. CSV maps distinguish original and generated images. See the
+[RIFE setup and workflow](vaila/help/syncvid.md#equalize-by-events-rife).
+RIFE is **optional and no longer installed by default** (about 50 MB). Install the pinned
+RIFE 4.25 code/model, with a CUDA inference check, into a folder you choose:
+`bash bin/setup_rife.sh --home /big/disk/rife` (Windows: `pwsh bin/setup_rife.ps1 --home D:\rife`),
+or add `--rife` / `--rife-home=DIR` to the Linux installer and `setup_pyproject.sh`
+(`-Rife` / `-RifeHome DIR` on Windows). Select the folder with `--rife-home DIR` or
+`VAILA_RIFE_HOME`, and copy an installed one to another disk or computer, offline, with
+`bash bin/setup_rife.sh --export DIR`. Without `--home` the legacy folders
+`vaila/models/rife/train_log/` and `.local/third_party/Practical-RIFE/` are used.
+
+FreeKiki analyses a shot in **open play** (`--set-piece open_play`, also found automatically when
+the ball rolls into the kick or already flies in the first frame): the contact is the break of the
+rolling ball's ground track (or `--contact-frame N` by hand), the flight starts there, and the report
+has no wall but the ball that came in. **Open run and correct...** (CLI `kick-correct`) opens a
+finished `kick_analysis_<time>` folder to correct the ball or the field keypoints in getpixelvideo;
+`kick-analysis --resume <run>` then runs only what changed (a new ball does not redo detection nor
+SAM 3D Body). See the [FreeKiki help](vaila/help/freekiki.md).
+
+Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
+set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.
+Live remaining-frame counts help match lengths by hand. **Save all / Save current video**
+export new trimmed videos at each source FPS, without synchronization or interpolation.
+See the [manual-cut workflow](vaila/help/syncvid.md#manual-cuts-side-by-side).
+
+Syncvid **Sync by events + interpolation** preserves every selected original and inserts
+bidirectional Farnebäck estimates on the minimum exact rational grid. Select **Events: interpolate**
+and set **Max output FPS** (default 240; CLI `--max-output-fps 480` to authorize higher rates).
+The limit does not force the output FPS. The preview shows the calculated rate, final count and
+original/interpolated counts for every camera; checkpoints save the limit.
+The `63/71/81 ↔ 54/58/62` example at a `30000/1001` reference clock yields 37 frames
+at `60000/1001`, with common events at output frames 1, 17 and 37. Interpolated ball,
+feet and occlusions can show artifacts. See the [interpolation workflow](vaila/help/syncvid.md#sync-by-events--interpolation).
+
+Syncvid **Sync by events** calibrates physical time after repeat review, using editable event pairs
+and exact rational clocks. Cut Video exports a shared time grid, temporal-error maps and retained
+PNG observations with their physical times. See the [event workflow](vaila/help/syncvid.md#sync-by-events-physical-time-calibration).
+
+Syncvid repeat detection combines motion thresholds with alternating vertical field shifts, sharing
+decisions between GUI and CLI. CSV audits separate automatic reasons from reviewed export marks.
+See [Syncvid help](vaila/help/syncvid.md#remove-repeated-frames).
+
+FreeKiki Kiki49 review: `uv run --no-sync vaila/getpixelvideo.py -f VIDEO.mp4 --freekiki-workspace WS` opens a 49-point review session. After **Mark Reviewed** and **Export Reviewed**, preview with `uv run --no-sync vaila/freekiki.py ingest -w WS --src SESSION_DIR --match-id MATCH_ID`; add `--commit` to append validated frames to train. GetPixelCoord also opens a single still or a sequence of png, jpg, jpeg, bmp, tif, tiff, or webp for CALIB/MEASURE. See [GetPixelVideo help](vaila/help/getpixelvideo.md) and [FreeKiki help](vaila/help/freekiki.md).
+
+Vertical Jump now adds a CMJ **PODS** profile: explicit onset-to-takeoff timing, mRSI,
+momentum sources, braking/propulsive force estimates, phase QC and Team Batch comparisons.
+These markerless estimates are not force-platform measurements. See the
+[complete metric/event dictionary and validation notes](docs/cmj_pods.md).
+
+File Manager now shares previewed operations between GUI and CLI; YouTube Downloader uses one reviewed URL list with MP4/MP3 selection, progress and cooperative cancellation. See [File Manager help](vaila/help/filemanager.md), [Downloader help](vaila/help/vaila_ytdown.md) and the project [/debug skill](.agents/skills/debug/SKILL.md).
+
 ## Introduction
 
 The analysis of human movement is fundamental in both health and sports biomechanics, providing valuable insights into various aspects of physical performance, rehabilitation, and injury prevention. However, existing software often restricts user control and customization, acting as a "black box." With _vailá_, users have the freedom to explore, customize, and create their own tools in a truly open-source and collaborative environment.
 
 ## Table of Contents
 
+- [Quick start](#quick-start) and [Reproduce the examples](#reproduce-the-examples)
+- [What's new](#whats-new)
 - [Introduction](#introduction)
 - [Description](#description)
 - [_vailá_ Structure and Interface](#vailá-structure-and-interface)
@@ -255,7 +334,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 30.Oct.2026 v0.4.14 (Python 3.12.15)
+vailá - 06.Nov.2026 v0.4.15 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -840,6 +919,11 @@ To run the full test suite, use **uv**:
 uv run pytest
 ```
 
+GitHub Actions runs the suite on every push and pull request to `main` with CPU wheels
+([`.github/workflows/tests.yml`](.github/workflows/tests.yml); Linux is required, macOS and
+Windows are experimental). Tests that need CUDA, gated model weights or large media skip
+themselves when those are absent.
+
 You can also run specific test files for more detailed output:
 
 ```bash
@@ -1035,7 +1119,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.14`** (30 October 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.15`** (06 November 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

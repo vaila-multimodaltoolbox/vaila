@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.14
+Version: 0.4.15
 Created: August 03, 2025
-Last Updated: 05 November 2026
+Last Updated: 06 November 2026
 
 Description:
     Batch 3D reconstruction using per-frame Direct Linear Transformation (DLT3D)
@@ -42,7 +42,7 @@ Description:
     not one output per input file. ``rec3d_<timestamp>_nviews.csv`` records how
     many cameras reconstructed each marker in each frame.
 
-    Missing views (v0.4.14): each marker is triangulated from the cameras that see
+    Missing views (v0.4.15): each marker is triangulated from the cameras that see
     it (finite pixel and finite DLT row for that frame); a NaN in one camera no
     longer discards the marker when at least two other cameras see it.
     ``rec3d_multicam(..., weights=...)`` accepts optional per-camera weights

@@ -6,8 +6,8 @@ Vector Coding, and Extrapolated Center of Mass (XCoM) dynamic-stability metrics.
 
 > **Module:** `vaila/tugturn.py`
 > **Authors:** Paulo R. P. Santiago, Abel G. Chinaglia
-> **Version:** 0.4.14
-> **Updated:** 05 November 2026
+> **Version:** 0.4.15
+> **Updated:** 06 November 2026
 > **Python:** 3.12
 > **License:** AGPL-3.0
 > **Reference:** Chinaglia AG, Cesar GM, Santiago PRP. *Automating Timed Up and Go

@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec3d.py` |
-| **Version** | 0.4.14 |
-| **Updated** | 05 November 2026 |
+| **Version** | 0.4.15 |
+| **Updated** | 06 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -43,7 +43,7 @@ All camera pixel files must live in the **same input directory** (one CSV per ca
 - Exactly **one CSV per camera** must be placed in `--input-dir`, matching `--dlt-files` in count. Files are paired by **sorted filename**, so name them so that alphabetical order matches camera/DLT-file order (e.g. `cam1_pixels.csv`, `cam2_pixels.csv`, ...).
 - If camera pixel files have different marker counts, the smallest common count is used (with a warning).
 
-Only frames present in **every** camera's pixel file are reconstructed. **Since 0.4.14** each marker is triangulated from the cameras that see it: a camera whose pixel is `NaN` (occlusion, tracker gap) or whose DLT row is missing/`NaN` for that frame is skipped, and the marker is reconstructed whenever at least **two** cameras remain (before, one missing camera discarded the marker). `rec3d_*_nviews.csv` records how many cameras were used.
+Only frames present in **every** camera's pixel file are reconstructed. **Since 0.4.15** each marker is triangulated from the cameras that see it: a camera whose pixel is `NaN` (occlusion, tracker gap) or whose DLT row is missing/`NaN` for that frame is skipped, and the marker is reconstructed whenever at least **two** cameras remain (before, one missing camera discarded the marker). `rec3d_*_nviews.csv` records how many cameras were used.
 
 ---
 

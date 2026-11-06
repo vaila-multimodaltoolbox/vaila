@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/rec3d_one_dlt3d.py` |
-| **Version** | 0.4.14 |
-| **Updated** | 05 November 2026 |
+| **Version** | 0.4.15 |
+| **Updated** | 06 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -21,7 +21,7 @@ Batch 3D reconstruction using the **Direct Linear Transformation (DLT)** method 
 - One **DLT3D parameter file** (11 coefficients per camera, e.g. from the `dlt3d` module).
 - One **pixel-coordinate CSV**: column 0 is the frame identifier and every pair of columns after that is one marker's (x, y).
 
-Frames common to all pixel files are reconstructed; results are written to a **timestamped subfolder** in the chosen output directory. **Since 0.4.14** each marker is triangulated from the cameras that see it: a `NaN` pixel in one camera only drops that camera, and the marker is reconstructed whenever at least **two** cameras see it (before, one missing camera discarded the marker). `rec3d_*_nviews.csv` records how many cameras were used.
+Frames common to all pixel files are reconstructed; results are written to a **timestamped subfolder** in the chosen output directory. **Since 0.4.15** each marker is triangulated from the cameras that see it: a `NaN` pixel in one camera only drops that camera, and the marker is reconstructed whenever at least **two** cameras see it (before, one missing camera discarded the marker). `rec3d_*_nviews.csv` records how many cameras were used.
 
 ---
 

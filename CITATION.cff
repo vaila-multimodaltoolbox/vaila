@@ -5,7 +5,7 @@ cff-version: 1.2.0
 message: "If you use vailá, please cite the software and the preprint below."
 title: "vailá: Versatile Anarcho Integrated Liberation Ánalysis in Multimodal Toolbox"
 type: software
-version: 0.4.14
+version: 0.4.15
 license: AGPL-3.0-or-later
 repository-code: "https://github.com/vaila-multimodaltoolbox/vaila"
 abstract: >-

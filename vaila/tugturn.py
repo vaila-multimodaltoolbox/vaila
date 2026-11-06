@@ -6,8 +6,8 @@ Authors:
     - Paulo R. P. Santiago
     - Abel G. Chinaglia
 Created: 20 February 2026
-Updated: 05 November 2026
-Version: 0.4.14
+Updated: 06 November 2026
+Version: 0.4.15
 Python Version: 3.12.14
 
 Description:
