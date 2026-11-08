@@ -246,3 +246,52 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
   (from `51ba3fe0`) had never reached `main`, so 17 tugturn integration/regression tests were skipping. Both are back;
   `tests/test_sit2stand_sample.py` runs the sit2stand CLI on its sample. The multimodal C3D of the same commit stays out
   until its origin and consent are confirmed.
+
+### Chessboard Calib: multi-camera chessboard calibration for Rec3D (6 November 2026)
+
+- **What:** `vaila/chessboard_calib.py`, button **Chessboard Calib** (named Camera Calib until 8 November 2026) at `C_A_r3_c1` (below DLT/REC 2D-3D; menu/hints
+  registered). One chessboard video per camera → corners (zoomed crop around the last detection), intrinsics,
+  frame offsets, extrinsics (planar PnP → camera graph → bundle adjustment), world frame (board or control
+  points), exports `<stem>.dlt3d`, `<stem>_intrinsics.toml`, `<stem>_board_pixels.csv`, `cameras.json`, report.
+  `undistort` subcommand (and GUI button) prepares pixel CSVs for Rec3D 1DLT and prints its command.
+- **Gotchas:**
+  - Boards with an even number of inner corners on both sides (e.g. 7x9 squares → 6x8) look the same after a
+    180° turn; `canonical_corner_order` renumbers from the top-left of the upright board, or cameras disagree.
+  - Corners that cover a few % of the image cannot fix k2/k3 (k3 = −5…−19 on the lab videos); `--intrinsics auto`
+    drops to f + k1 below 5 % coverage.
+  - Huber loss made `least_squares` crawl (1000 evaluations, 157 s, higher error); linear loss converges in ~4
+    evaluations, then one refit without views above max(3 × median, 2 px).
+  - Distort CSV (`vaila_datdistort.py`) reprojects with `getOptimalNewCameraMatrix` at a fixed 1920x1080, not K, so
+    it must not feed Rec3D with these DLTs; use `chessboard_calib.py undistort`.
+  - In the reference-camera frame the reference camera has t = 0 and the DLT normalization (P[2,3] = 1) fails;
+    DLTs are always built in the world frame.
+  - **Dropped frames:** OpenCV numbers a sought frame (`CAP_PROP_POS_FRAMES`) by timestamp, round(t·fps), but
+    counts one by one while reading; it also lands late for ~16–26 frames after a gap (seek goes back 16 frames
+    and counts grabs). The lab cameras dropped 2–3 frames each; counting put the CSV points 6–8 px off in
+    getpixelvideo (paused) and changed the inter-camera offsets by 1 frame at the drop. Fix: frames numbered by
+    timestamp (`ffmpeg_utils.TimestampFrameCounter`), getpixelvideo `VideoFrameSource` verifies every seek.
+    MP4 with drops stores avg_frame_rate = count/duration (OpenCV uses it) → `numbering_fps` takes r_frame_rate.
+  - Integer pairwise lags + rounded least squares disagreed by 1 frame on 6 pairs (cameras ~0.5 frame apart);
+    parabolic sub-frame lags fixed it (BA 0.58 → 0.47 px, rejected views 21 → 2).
+- **Lab videos** (`/home/preto/data/chessboard_calib`, 8 cameras, 1920x1080, 30 fps; MPEG-PS files named .mp4, camera
+  01 HEVC): coverage 1.3–3.9 % per camera, f 1054–1124 px, k1 −0.30…−0.44, BA 0.47 px, board-size error 0.78 mm
+  (in-sample) and 0.79 mm (held-out blocks); Rec3D 1DLT on cameras 06/07/08 after `undistort --apply-offsets`:
+  0.75 mm median over 355 frames. Valid near the board; distortion at the image borders is extrapolated.
+- **8 November 2026 (lab board is 98 mm; the 6 November runs used 0.1 m, so their coordinates are 2 % large):**
+  - Default `--square 0.098`.
+  - **Static board → wrong f, invisible to the validation.** Frontal clip (06/07/08, board standing on the force
+    plate, tilt p95 7–8°) gave f 1284/1195/989 px against 1075/1125/1055 from the 8-camera run of the same files.
+    Its own validation still read 0.76 mm, but points 2–3 m from the board were 58 mm off. New
+    `board_tilt_p95_deg` + WARNING below 20° (moved board: 54–70°).
+  - `--intrinsics-toml-dir` silently re-estimated when names differed (cut copies `<cam>_sync_..._frames_...`);
+    now matched by camera name contained in the video name, logged, warned when missing. With the loaded lens
+    the frontal clip agrees with the 8-camera run within 2.4 mm at 1–1.5 m and 6 mm at 2–3 m.
+  - Sub-frame offsets from a still board are off by 0.1–0.2 frame (frontal: 07 −0.15 / 08 +0.57 against
+    −0.025 / +0.681 from the moving board). Manual `--frame-offsets` accept decimals for that reason.
+  - `undistort --subframe` interpolates linearly to the reference instants (no gap filling). Rec3D 06/07/08 on the
+    fastest 10 % of board frames: 0.70 → 0.62 mm median.
+  - RIFE: the event equalizer accepts decimal events; the calibration prints the command (only without dropped
+    frames: the equalizer numbers in reading order). Moving segment 750–930: residual 08 −0.332 (whole frames)
+    → −0.057 (RIFE), BA 0.36 → 0.28 px.
+  - `/home/preto/data/Lance_decifrado/rife` no longer exists; RIFE resolves to the checkout
+    (`.local/third_party/Practical-RIFE` + `vaila/models/rife/train_log`).

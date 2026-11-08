@@ -1,7 +1,7 @@
 """Terminal menu for vailá — compact grid + ``/`` search + CLI run hints.
 
-Version: 0.4.1
-Update Date: 15 September 2026
+Version: 0.4.15
+Update Date: 08 November 2026
 """
 
 from __future__ import annotations
@@ -110,7 +110,7 @@ VAILA_MENU_ENTRIES: tuple[VailaMenuEntry, ...] = (
     VailaMenuEntry("C_A_r2_c1", "C_A", "Data Files", "DLT/REC 2D-3D", "dlt_rec_toolkit"),
     VailaMenuEntry("C_A_r2_c2", "C_A", "Data Files", "C3D Metadata", "edit_c3d_metadata"),
     VailaMenuEntry("C_A_r2_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
-    VailaMenuEntry("C_A_r3_c1", "C_A", "Data Files", "vailá", "show_vaila_message"),
+    VailaMenuEntry("C_A_r3_c1", "C_A", "Data Files", "Chessboard Calib", "chessboard_calib"),
     VailaMenuEntry("C_A_r3_c2", "C_A", "Data Files", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_A_r3_c3", "C_A", "Data Files", "vailá", "show_vaila_message"),
     VailaMenuEntry("C_A_r4_c1", "C_A", "Data Files", "ReID Marker", "reid_marker"),

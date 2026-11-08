@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 139 | **Categories:** 7 | **Generated on:** 06/11/2026 (v0.4.15)
+**Documented topics:** 140 | **Categories:** 7 | **Generated on:** 08/11/2026 (v0.4.15)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -112,8 +112,10 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolov26track** — This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...
   - [HTML](yolov26track.html) · [Markdown](yolov26track.md)
 
-## Processing (23)
+## Processing (24)
 
+- **chessboard_calib** — Calibrates several cameras from chessboard videos (one video per camera, same session) and exports what vailá needs for 3D reconstruction:
+  - [HTML](chessboard_calib.html) · [Markdown](chessboard_calib.md)
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)
 - **dlt2d** — Calculates Direct Linear Transformation (DLT2D) parameters (8 coefficients) from a pixel-coordinate calibration file and a corresponding real-world 2D refere...

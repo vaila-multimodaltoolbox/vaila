@@ -38,6 +38,8 @@ it does not create train/val/test splits. See the FreeKiki help page for ingest.
 
 - **Centered letterbox viewport:** When the fitted video is smaller than the window (common for portrait clips), the frame is centered so you can mark points in the black margins on *all* sides — left and top included, not only right/bottom. Still frames that differ in size from the session canvas are fit with black bars (never stretched). Version/date appear only in the OS window title (`vailá getpixelvideo — Update: … Version: …`), not overlaid on the video.
 
+- **Frame numbers in videos with dropped frames (v0.4.15):** Network cameras sometimes drop frames, leaving gaps in the timestamps. A frame's number is its timestamp (round(t × fps), first frame 0), the same paused, stepping, or playing; before, OpenCV numbered paused frames by timestamp and playing frames one by one, so points drifted by the number of dropped frames after a gap. A dropped number shows the previous image. When an MP4 reports a lower average rate only because of the drops, the nominal rate is used. Tools that count frames while reading (Markerless 2D, Video to PNG) still number frames after a drop differently; make a constant-frame-rate copy (`ffmpeg -i in.mp4 -fps_mode cfr -r 30 -c:v libx264 -crf 12 out.mp4`) when their CSVs must match.
+
 - **AI Tracker (NCC + Spatial Motion Prior + Online Discriminator & multi-backbone deep features) & RTS Smoother (`AI Track` button / hotkey `T`):** Normalized Cross-Correlation with sub-pixel parabolic peak refinement, 2D Gaussian spatial motion prior (with velocity prediction) to prevent distractor jumps, adaptive running template EMA blending, online appearance model that **keeps learning across manual corrections** (no wipe on re-anchor), low-confidence rejection, and optional Deep Visual Feature embeddings (PyTorch ResNet50, default, or opt-in ResNet152 / MobileNetV3-Small / EfficientNet-B0 / CUDA). Backbone weights live only under `vaila/models/ai_tracker/` (`resnet50_imagenet.pth`, `resnet152_imagenet.pth`, `mobilenet_v3_small_imagenet.pth`, `efficientnet_b0_imagenet.pth`, or a custom path). If missing, the GUI prompts to **browse** an existing `.pth`/`.pt` or **download** a clean official ImageNet checkpoint into that folder (Torch hub cache is never the permanent home; a one-time migration copies hub files into `ai_tracker/` when found). When enabled, the frozen *primary* backbone's embedding is also concatenated into the online discriminator's feature vector, so it participates in every per-click retrain without ever being backpropagated through. An optional, **off-by-default cascade fallback** (`fallback_variant` in the TOML profile, e.g. `efficientnet_b0`) re-scores a low-confidence frame with a second backbone and adopts it only if it scores higher — never affects the discriminator's feature width, only per-frame verification. Features:
   - **Accessible button:** Short label `AI Track` illuminates in **bright green** immediately when enabled (armed/tracking) and red when off. Optional **Deep** checkbox sits to the right of `AI Track` (deep features are an option of the tracker, not a separate mode).
   - **Marker Lock (`Lock (B)` button / `B`):** High-visibility blue **Lock (B)** / amber **LOCKED Mn (B)** next to **Go KP**. Pins the selected marker so TAB, Go KP, sequential advance, and R-delete cannot switch away. Locked markers also show a cyan ring on the video. Turning **AI Track** ON auto-locks the target marker; turning AI Track or Deep **OFF does not unlock** — only **B** or the **Lock** button unlocks.
@@ -718,6 +720,11 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.15 (06 November 2026) — Frame numbers in videos with dropped frames
+
+- Paused, stepping, and playing use the same timestamp frame number; seeks right after a gap land on the right frame.
+- A paused frame is decoded once and redrawn from memory.
 
 ### Version 0.4.10 (19 October 2026) — MEASURE Level+Tape, Clear, Undo/Redo
 

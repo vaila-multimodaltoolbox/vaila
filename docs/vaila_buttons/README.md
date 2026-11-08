@@ -60,6 +60,7 @@ Each button in the vailá GUI has its own documentation file:
 | C_A_r1_c2 | C3D <--> CSV | `convert_c3d_csv` | [convert-c3d-csv.md](convert-c3d-csv.md) |
 | C_A_r1_c3 | Smooth & Filter | `gapfill_split` | [smooth-filter.md](smooth-filter.md) |
 | C_A_r2_c1 | DLT/REC 2D-3D | `dlt_rec_toolkit` | coringa: Make DLT2D ([dlt2d.md](dlt2d.md)), Rec2D 1DLT ([rec2d-one-dlt2d.md](rec2d-one-dlt2d.md)), Rec2D MultiDLT ([rec2d.md](rec2d.md)), Make DLT3D ([dlt3d.md](dlt3d.md)), Rec3D 1DLT ([rec3d-one-dlt3d.md](rec3d-one-dlt3d.md)), Rec3D MultiDLT ([rec3d.md](rec3d.md)) |
+| C_A_r3_c1 | Chessboard Calib | `chessboard_calib` | [chessboard-calib.md](chessboard-calib.md) |
 | C_A_r4_c1 | ReID Marker | `reid_marker` | [reid-marker.md](reid-marker.md) |
 | C_B_r1_c1 | Video <--> PNG | `extract_png_from_videos` | [extract-png.md](extract-png.md) |
 | C_B_r1_c2 | Planar Geo | `planar_geometry_tracker` | [planar-geo.md](planar-geo.md) |

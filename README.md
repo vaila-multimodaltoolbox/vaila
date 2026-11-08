@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.15 (see `vaila.py`). **Package version:** 0.4.15 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-06
+**Last updated:** 2026-11-08
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -334,7 +334,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 06.Nov.2026 v0.4.15 (Python 3.12.15)
+vailá - 08.Nov.2026 v0.4.15 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -394,7 +394,8 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 C_A_r1_c1 - Edit CSV/C3D  C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
 C_A_r2_c2 - C3D Metadata  C_A_r2_c3 - vailá
-C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
+C_A_r3_c1 - Chessboard Calib (multi-camera chessboard -> .dlt3d)
+C_A_r3_c2 - vailá         C_A_r3_c3 - vailá
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2_3D  C_A_r4_c3 - vailá
 C_A_r5_c1 - vailá         C_A_r5_c2 - vailá          C_A_r5_c3 - vailá
 
