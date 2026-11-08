@@ -337,6 +337,18 @@
               (<code>vailá getpixelvideo — Update: … Version: …</code>), not overlaid on the video.
             </li>
             <li>
+              <strong>Frame numbers in videos with dropped frames (v0.4.15):</strong> Network cameras
+              sometimes drop frames, leaving gaps in the timestamps. A frame&rsquo;s number is its
+              timestamp (round(t &times; fps), first frame 0), the same paused, stepping, or playing;
+              before, OpenCV numbered paused frames by timestamp and playing frames one by one, so
+              points drifted by the number of dropped frames after a gap. A dropped number shows the
+              previous image. When an MP4 reports a lower average rate only because of the drops, the
+              nominal rate is used. Tools that count frames while reading (Markerless 2D, Video to PNG)
+              still number frames after a drop differently; make a constant-frame-rate copy
+              (<code>ffmpeg -i in.mp4 -fps_mode cfr -r 30 -c:v libx264 -crf 12 out.mp4</code>) when
+              their CSVs must match.
+            </li>
+            <li>
               <strong>Multi-format Support:</strong> Load and visualize
               MediaPipe, YOLO tracking, vailá standard formats, and markerless 2D named-landmark CSVs (<code>frame_index,nose_x,nose_y,nose_z,...</code>)
             </li>
@@ -1822,6 +1834,12 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.15 (06 November 2026) &mdash; Frame numbers in videos with dropped frames</h3>
+        <ul>
+          <li>Paused, stepping, and playing use the same timestamp frame number; seeks right after a gap land on the right frame.</li>
+          <li>A paused frame is decoded once and redrawn from memory.</li>
+        </ul>
 
         <h3>Version 0.4.10 (19 October 2026) &mdash; MEASURE Level+Tape, Clear, Undo/Redo</h3>
         <ul>

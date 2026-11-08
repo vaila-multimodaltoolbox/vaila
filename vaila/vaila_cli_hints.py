@@ -1,7 +1,7 @@
 """CLI run hints for vailá menu entries (headless ``--cli`` mode).
 
-Version: 0.4.5
-Update Date: 23 September 2026
+Version: 0.4.15
+Update Date: 08 November 2026
 """
 
 from __future__ import annotations
@@ -142,6 +142,13 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
         ),
         "DLT/REC chooser (coringa) — Make DLT2D, Rec2D 1DLT/MultiDLT, "
         "Make DLT3D, Rec3D 1DLT/MultiDLT. Each keeps its own GUI/CLI unchanged.",
+    ),
+    "chessboard_calib": CliRunHint(
+        (
+            "uv run vaila/chessboard_calib.py",
+            "uv run vaila/chessboard_calib.py -i videos/ --pattern 6x8 --square 0.098",
+        ),
+        "Multi-camera chessboard calibration -> .dlt3d (Rec3D); undistort subcommand for pixel CSVs.",
     ),
     "reid_marker": CliRunHint(("uv run vaila/reid_markers.py",), "Marker Re-ID GUI."),
     "run_sapiens3d_kinematics": CliRunHint(

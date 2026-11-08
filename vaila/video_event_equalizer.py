@@ -1,11 +1,15 @@
 """Equalize two or more videos on a configurable common event grid using local CUDA RIFE.
 
-Update Date: 01 November 2026
-Version: 0.4.14
+Update Date: 08 November 2026
+Version: 0.4.15
 
 Frames are 1-based and inclusive. Generated images are estimates, not acquired
 measurements. Linear spacing between events is assumed; output FPS/count can
 change playback speed independently of the reference clock.
+
+Event frames may have decimals (``2.561,2.561,180.561``): a camera measured to be a fraction
+of a frame off (for instance by ``chessboard_calib``) is then resampled at those positions,
+so every one of its output frames is generated between two originals.
 """
 
 from __future__ import annotations
@@ -40,7 +44,6 @@ try:
         EventSyncError,
         _encode_samples,
         calibrate_camera,
-        parse_event_frames,
         rational_rate,
     )
 except ImportError:
@@ -55,9 +58,10 @@ except ImportError:
         EventSyncError,
         _encode_samples,
         calibrate_camera,
-        parse_event_frames,
         rational_rate,
     )
+
+EventFrame = int | Fraction  # 1-based; a Fraction places an event between two frames
 
 ROOT = Path(__file__).resolve().parents[1]
 WARNING = (
@@ -138,7 +142,27 @@ def source_roles(count: int) -> list[str]:
     return ["source" if index == 0 else f"source_{index + 1}" for index in range(count)]
 
 
-def contact_pattern(events: Sequence[int]) -> str | None:
+def parse_event_positions(text: str, name: str) -> list[EventFrame]:
+    """Event frames separated by spaces or commas; decimals or fractions for sub-frame events.
+
+    Whole numbers stay ``int`` (the original integer path, bit for bit); others are exact
+    ``Fraction`` values (``"192.561"`` -> 192561/1000).
+    """
+    values: list[EventFrame] = []
+    for token in str(text).replace(",", " ").split():
+        try:
+            value = Fraction(token)
+        except (ValueError, ZeroDivisionError) as exc:
+            raise EventSyncError(
+                f"{name}: enter event frames separated by spaces or commas"
+            ) from exc
+        if value < 1:
+            raise EventSyncError(f"{name}: expected positive 1-based frames (got {token})")
+        values.append(int(value) if value.denominator == 1 else value)
+    return values
+
+
+def contact_pattern(events: Sequence[EventFrame]) -> str | None:
     """``"start"`` or ``"end"`` when the contact repeats that event, else None (own frame)."""
     _start, contact, _end = events
     if contact == events[0]:
@@ -146,7 +170,7 @@ def contact_pattern(events: Sequence[int]) -> str | None:
     return "end" if contact == events[2] else None
 
 
-def check_events(name: str, events: Sequence[int], count: int) -> str | None:
+def check_events(name: str, events: Sequence[EventFrame], count: int) -> str | None:
     """Validate ``[start, contact, end]`` of one camera and return its contact pattern.
 
     The contact may repeat the start or the end (when only those two are known), but not both,
@@ -160,8 +184,13 @@ def check_events(name: str, events: Sequence[int], count: int) -> str | None:
             f"{name}: contact must lie between start and end, and start must differ from end "
             f"(got {start},{contact},{end})"
         )
+    if not all(isinstance(value, int) for value in events):
+        # Sub-frame events: every sampled position lies between start and end.
+        if end > count:
+            raise EventSyncError(f"{name}: end event {end} exceeds the {count} frames")
+        return contact_pattern(events)
     # Only distinct frames are real events; calibrate_camera checks bounds and ordering.
-    distinct = sorted({start, contact, end})
+    distinct = sorted({int(start), int(contact), int(end)})
     calibrate_camera(
         name,
         {"events": distinct, "frame_count": count},
@@ -179,7 +208,7 @@ def _round_half_up(value: Fraction) -> int:
 
 
 def output_grid(
-    reference_events: Sequence[int],
+    reference_events: Sequence[EventFrame],
     reference_count: int,
     rate: str,
     output_fps: Any = None,
@@ -217,7 +246,7 @@ def output_grid(
             raise ValueError
     except ValueError as exc:
         raise EventSyncError("Output frame count: use an integer of at least 3 frames") from exc
-    ideal_contact = Fraction(reference_events[1] - reference_events[0], span) * (count - 1)
+    ideal_contact = Fraction(reference_events[1] - reference_events[0]) / span * (count - 1)
     if pattern is None:
         contact = min(count - 1, max(2, _round_half_up(ideal_contact) + 1))
     else:  # a contact on the start or end has no interval to round
@@ -246,8 +275,8 @@ def output_grid(
 
 
 def _camera_map(
-    reference_events: Sequence[int],
-    source_events: Sequence[int],
+    reference_events: Sequence[EventFrame],
+    source_events: Sequence[EventFrame],
     source_count: int,
     grid: dict[str, Any],
     name: str = "Source",
@@ -302,8 +331,8 @@ def _camera_map(
 
 
 def frame_map(
-    reference_events: Sequence[int],
-    source_events: Sequence[int],
+    reference_events: Sequence[EventFrame],
+    source_events: Sequence[EventFrame],
     reference_count: int,
     source_count: int,
     rate: str,
@@ -329,9 +358,9 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
     probed = [probe(args.reference)] + [probe(path) for path in sources]
     if len({camera["path"] for camera in probed}) != len(probed):
         raise EventSyncError("Choose different camera videos")
-    ref_events = parse_event_frames(args.reference_events, "Reference events")
+    ref_events = parse_event_positions(args.reference_events, "Reference events")
     src_events = [
-        parse_event_frames(events, f"{role} events")
+        parse_event_positions(events, f"{role} events")
         for role, events in zip(source_roles(len(sources)), source_events, strict=True)
     ]
     reference = probed[0]
@@ -357,7 +386,8 @@ def prepare(args: argparse.Namespace) -> dict[str, Any]:
         originals = sum(row["kind"] == "original" for row in rows)
         cameras[role] = dict(
             camera,
-            events=events,
+            # exact rationals as text, like the other rational fields of the manifest
+            events=[value if isinstance(value, int) else str(value) for value in events],
             rows=rows,
             original_output_count=originals,
             generated_output_count=len(rows) - originals,

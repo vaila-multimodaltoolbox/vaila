@@ -18,6 +18,10 @@ pan, frame navigation, and multiple marker modes. CSV coordinates are saved as
 integers where applicable. Marker backups go to ``.vaila_markers_history/`` (latest
 100 per video).
 
+Frame numbers are video timestamps (round(t * fps), first frame 0) whether paused,
+stepping, or playing, so videos with dropped frames (gaps in the timestamps) show the
+same image for a frame number in every mode (``VideoFrameSource``).
+
 AI Track & JIT Online Learning (toolbar AI Track button / T key):
   - Semi-automatic tracking: NCC + sub-pixel parabolic refinement + 2D Gaussian
     spatial prior + Kalman-filter velocity prediction + online linear appearance model.
@@ -268,6 +272,14 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+
+try:
+    from .ffmpeg_utils import numbering_fps, timestamp_frame_number
+except ImportError:
+    from ffmpeg_utils import (  # ty: ignore[unresolved-import]
+        numbering_fps,
+        timestamp_frame_number,
+    )
 
 try:
     from .scout_getpixel_sync import write_sync_state as _write_scout_sync
@@ -636,28 +648,152 @@ class FrameSource:
 
 
 class VideoFrameSource(FrameSource):
-    """Wraps cv2.VideoCapture; delegates all methods."""
+    """Wraps cv2.VideoCapture with one frame numbering for seeking and playing.
+
+    OpenCV numbers a frame reached by seeking (``set(CAP_PROP_POS_FRAMES, n)``) by its
+    timestamp, round(t * fps), but counts frames one by one while playing. When the camera
+    dropped frames (gaps in the timestamps, common with network cameras) the same frame
+    number showed a different image paused and playing, and OpenCV's seek landed a few
+    frames late for a short stretch after each gap. Here playing and seeking both use the
+    timestamp number, every seek is checked and corrected, and a frame number that the
+    camera dropped shows the previous image (as a constant-frame-rate copy would). The
+    step is the nominal frame rate when the average rate is only lowered by drops (see
+    ``ffmpeg_utils.numbering_fps``). The last frame is kept, so redrawing a paused frame
+    does not decode the video again. Videos without usable timestamps keep OpenCV's own
+    behaviour.
+    """
 
     def __init__(self, video_path):
         self._cap = cv2.VideoCapture(str(video_path))
         self._metadata = get_precise_video_metadata(video_path)
+        self._cv_fps = float(self._cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        self._fps = (
+            numbering_fps(
+                self._cv_fps,
+                self._metadata.get("r_frame_rate"),
+                self._metadata.get("avg_frame_rate"),
+            )
+            if self._cv_fps > 0
+            else 0.0
+        )
+        self._queue: list[tuple[int, np.ndarray]] = []  # frames read() returns first
+        self._last: tuple[int, np.ndarray] | None = None
+        self._pos = 0  # number of the frame the next read() returns
+        self._first = 0
+        self._timestamps = False
+        if self._cap.isOpened() and self._fps > 0:
+            ok0, f0 = self._cap.read()
+            ms0 = self._cap.get(cv2.CAP_PROP_POS_MSEC)
+            ok1, f1 = self._cap.read()
+            ms1 = self._cap.get(cv2.CAP_PROP_POS_MSEC)
+            if ok0 and ok1 and f0 is not None and f1 is not None and ms1 > ms0:
+                self._timestamps = True
+                self._first = timestamp_frame_number(ms0, self._fps)
+                self._queue = [(0, f0), (self._number(ms1), f1)]
+            else:
+                self._cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    def _number(self, pos_msec: float) -> int:
+        return timestamp_frame_number(pos_msec, self._fps) - self._first
+
+    def _opencv_number(self, number: int) -> int:
+        """OpenCV's frame number (its own rate) for the same time."""
+        return int(number * self._cv_fps / self._fps + 0.5)
+
+    @property
+    def timestamps(self) -> bool:
+        """True when frames are numbered by their timestamps."""
+        return self._timestamps
+
+    @property
+    def numbering_fps(self) -> float:
+        return self._fps if self._timestamps else self._cv_fps
+
+    def frame_span(self) -> int:
+        """Frame numbers 0 .. span-1 cover the video."""
+        n = int(self._cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if not self._timestamps:
+            return n
+        return int(round(n * self._fps / self._cv_fps))
 
     def isOpened(self):  # noqa: N802 (match cv2.VideoCapture API)
         return self._cap.isOpened()
 
     def read(self):
-        ret, frame = self._cap.read()
-        if ret and frame is not None:
-            frame = check_and_rotate_frame(frame, self._metadata)
-        return ret, frame
+        if not self._timestamps:
+            ret, frame = self._cap.read()
+            if ret and frame is not None:
+                frame = check_and_rotate_frame(frame, self._metadata)
+            return ret, frame
+        if self._queue:
+            number, frame = self._queue.pop(0)
+        else:
+            ret, frame = self._cap.read()
+            if not ret or frame is None:
+                return False, None
+            number = self._number(self._cap.get(cv2.CAP_PROP_POS_MSEC))
+        self._last = (number, frame)
+        self._pos = number + 1
+        return True, check_and_rotate_frame(frame.copy(), self._metadata)
+
+    def _seek(self, target: int) -> bool:
+        """Queue the frame shown at ``target``: the last one whose number is <= target."""
+        best: tuple[int, np.ndarray] | None = None
+        after: tuple[int, np.ndarray] | None = None
+        for back in (0, 32, 128, 512):
+            start = max(0, target - back)
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, self._opencv_number(start))
+            best, after = None, None
+            while True:
+                ok, frame = self._cap.read()
+                if not ok or frame is None:
+                    break
+                number = self._number(self._cap.get(cv2.CAP_PROP_POS_MSEC))
+                if number > target:
+                    after = (number, frame)
+                    break
+                best = (number, frame)
+                if number == target:
+                    break
+            if best is not None or after is None or start == 0:
+                break  # found, past the end, or nothing earlier to try
+        if best is None:
+            if after is None:
+                return False  # past the last frame
+            # seek unusable: OpenCV's own guess
+            self._cap.set(cv2.CAP_PROP_POS_FRAMES, self._opencv_number(target))
+            return True
+        if after is None and best[0] < target:
+            return False  # past the last frame
+        self._queue = [(target, best[1])]
+        if after is not None:
+            self._queue.append(after)
+        return True
 
     def set(self, prop, value):
-        return self._cap.set(prop, value)
+        if prop != cv2.CAP_PROP_POS_FRAMES or not self._timestamps:
+            return self._cap.set(prop, value)
+        target = max(0, int(value))
+        self._pos = target
+        if self._last is not None and self._last[0] == target:
+            self._queue = [self._last]
+            return True
+        self._queue = []
+        return self._seek(target)
 
     def get(self, prop):
+        if self._timestamps:
+            if prop == cv2.CAP_PROP_POS_FRAMES:
+                return float(self._pos)
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return float(self.frame_span())
+            if prop == cv2.CAP_PROP_FPS:
+                return self._fps
         return self._cap.get(prop)
 
     def release(self):
+        self._queue = []
+        self._last = None
         self._cap.release()
 
 
@@ -758,6 +894,19 @@ class PngSequenceFrameSource(FrameSource):
     def release(self):
         self._paths = []
         self._opened = False
+
+
+def align_video_metadata(frame_source, metadata: dict) -> dict:
+    """Use the frame source's timestamp numbering for ``fps`` and ``nb_frames``.
+
+    For a constant-rate video with dropped frames saved as MP4, ffprobe reports
+    count / duration as the rate and the decoded count as ``nb_frames``; frame numbers
+    follow the camera rate, so both are replaced. Other media are returned unchanged.
+    """
+    if isinstance(frame_source, VideoFrameSource) and frame_source.timestamps:
+        metadata["fps"] = frame_source.numbering_fps
+        metadata["nb_frames"] = max(int(metadata.get("nb_frames") or 0), frame_source.frame_span())
+    return metadata
 
 
 def create_frame_source(path, source_type, start_index: int = 0):
@@ -18441,7 +18590,7 @@ def run_getpixelvideo(
         print("Error opening media.")
         return
     if source_type == "video":
-        metadata = get_precise_video_metadata(media_path)
+        metadata = align_video_metadata(frame_source, get_precise_video_metadata(media_path))
     else:
         metadata = get_image_sequence_metadata(media_path, source_type, start_index=start_frame)
     total_frames = metadata.get("nb_frames") or int(frame_source.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -18517,7 +18666,9 @@ def run_getpixelvideo(
                 print("Error opening media.")
                 break
             if source_type == "video":
-                metadata = get_precise_video_metadata(media_path)
+                metadata = align_video_metadata(
+                    frame_source, get_precise_video_metadata(media_path)
+                )
             else:
                 metadata = get_image_sequence_metadata(
                     media_path, source_type, start_index=start_frame

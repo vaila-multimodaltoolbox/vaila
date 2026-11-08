@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 06 November 2026
+Update Date: 08 November 2026
 Version: 0.4.15
 
 Example of usage:
@@ -358,7 +358,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 06.Nov.2026 v0.4.15 (Python 3.12.15)
+    vailá - 08.Nov.2026 v0.4.15 (Python 3.12.15)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -418,7 +418,8 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 C_A_r1_c1 - Edit CSV/C3D  C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
 C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
 C_A_r2_c2 - C3D Metadata  C_A_r2_c3 - vailá
-C_A_r3_c1 - vailá         C_A_r3_c2 - vailá          C_A_r3_c3 - vailá
+C_A_r3_c1 - Chessboard Calib (multi-camera chessboard -> .dlt3d)
+C_A_r3_c2 - vailá         C_A_r3_c3 - vailá
 C_A_r4_c1 - ReID Marker   C_A_r4_c2 - Sapiens2_3D  C_A_r4_c3 - vailá
 C_A_r5_c1 - vailá         C_A_r5_c2 - vailá          C_A_r5_c3 - vailá
 
@@ -477,7 +478,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 06.Nov.2026 v0.4.15 (Python 3.12.15)")
+        self.title("vailá - 08.Nov.2026 v0.4.15 (Python 3.12.15)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -1363,11 +1364,11 @@ class Vaila(tk.Tk):
             width=button_width,
         )
 
-        # C_A_r3_c1 - Data Files: vailá (placeholder; Make DLT3D moved into DLT/REC 2D-3D)
+        # C_A_r3_c1 - Data Files: Chessboard Calib (multi-camera chessboard -> .dlt3d + intrinsics)
         vaila_c_a_r3_c1 = tk.Button(
             tools_col1,
-            text="vailá",
-            command=self.show_vaila_message,
+            text="Chessboard Calib",
+            command=self.chessboard_calib,
             width=button_width,
         )
 
@@ -2892,6 +2893,17 @@ class Vaila(tk.Tk):
         from vaila import rec3d
 
         rec3d.run_rec3d()
+
+    # C_A_r3_c1 - Chessboard Calib
+    def chessboard_calib(self):
+        """Multi-camera chessboard calibration (vaila/chessboard_calib.py).
+
+        Calibrates intrinsics, frame offsets and extrinsics from one chessboard video per
+        camera and exports ``.dlt3d`` files for Rec3D plus intrinsics TOML files for Distort
+        CSV. Runs in its own process (Tk dialog, then the terminal shows progress).
+        """
+        print("Launching: vaila.chessboard_calib")
+        run_vaila_module("vaila.chessboard_calib", "vaila/chessboard_calib.py")
 
     # C_A_r4_c1 - ReID Marker
     def reid_marker(self):

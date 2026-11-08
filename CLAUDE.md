@@ -219,7 +219,7 @@ Two dispatch patterns:
 | Frame B (r5) | Ultrasound · Brainstorm · Scout · StartBlock · Pynalty |
 | Frame B (r6) | Sprint · tugturn · Soccer Tools (Field KPs AI, Soccer-Field Calib, VEK ElasticKick, FIFA cams→DLT, FreeKiki) · Deadlift |
 | Frame B (r7) | Treadmill LC (step-based ground-reaction-force workflow, TOML config) |
-| Frame C-A (Data Files) | Edit CSV/C3D · C3D↔CSV · Smooth & Filter · **DLT/REC 2D-3D** (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT) · ReID Marker |
+| Frame C-A (Data Files) | Edit CSV/C3D · C3D↔CSV · Smooth & Filter · **DLT/REC 2D-3D** (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT) · **Chessboard Calib** (multi-camera chessboard → `.dlt3d` + intrinsics TOML) · ReID Marker |
 | Frame C-B (Video/Image) | Video↔PNG · Planar Geo · Draw Box · Compress Video · Video Stabilizer · Make Sync file · GetPixelCoord · Metadata info · Merge/Split · Distort · Cut · Resize · YT Downloader · Insert Audio · rm Dup PNG |
 | Frame C-C (Visualization) | Show C3D/CSV 3D · Plot 2D/3D · Draw Sports · Stroboscopic |
 

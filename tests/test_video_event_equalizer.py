@@ -1,7 +1,7 @@
 """Common event grid, exact FPS, export provenance and Syncvid launcher regressions.
 
-Update Date: 01 November 2026
-Version: 0.4.14
+Update Date: 08 November 2026
+Version: 0.4.15
 """
 
 import argparse
@@ -875,3 +875,60 @@ def test_gui_main_radio_button_becomes_the_reference_of_the_run(video_args, monk
     root.mainloop.side_effect = interact
     video_args.mode = "reference"
     equalizer.show_gui(video_args)
+
+
+# --------------------------------------------------------------------------- #
+# sub-frame events (decimals): a camera shifted by a fraction of a frame
+# --------------------------------------------------------------------------- #
+
+
+def test_whole_number_events_keep_the_integer_path():
+    assert equalizer.parse_event_positions("1, 9, 22", "x") == [1, 9, 22]
+    assert all(type(v) is int for v in equalizer.parse_event_positions("1 9.0 22", "x"))
+    assert equalizer.parse_event_positions("2.561", "x") == [Fraction(2561, 1000)]
+    for bad in ("0.5,1,3", "1,a,3", "1,nan,3"):
+        with pytest.raises(equalizer.EventSyncError):
+            equalizer.parse_event_positions(bad, "x")
+
+
+def test_decimal_events_shift_a_camera_below_one_frame(video_args):
+    video_args.reference_events = "2,2,18"
+    video_args.source_events = "1.5,1.5,17.5"
+    manifest = equalizer.prepare(video_args)
+    assert manifest["output_frame_count"] == 17
+    rows = manifest["cameras"]["source"]["rows"]
+    assert [Fraction(r["source_position"]) for r in rows] == [Fraction(3, 2) + k for k in range(17)]
+    assert all(r["kind"] == "generated" for r in rows)
+    assert {Fraction(r["interpolation_fraction"]) for r in rows} == {Fraction(1, 2)}
+    assert all(r["kind"] == "original" for r in manifest["cameras"]["reference"]["rows"])
+    assert manifest["cameras"]["source"]["events"] == ["3/2", "3/2", "35/2"]
+    json.dumps(manifest)  # the manifest stays JSON
+
+
+def test_decimal_events_beyond_the_video_are_refused(video_args):
+    video_args.reference_events = "2,2,18"
+    video_args.source_events = "2.5,2.5,19.5"  # the source has 19 frames
+    with pytest.raises(equalizer.EventSyncError, match="exceeds"):
+        equalizer.prepare(video_args)
+
+
+def test_cli_keeps_decimal_events_and_export_generates_the_shifted_frames(
+    video_args, monkeypatch, capsys
+):
+    video_args.reference_events = "2,2,18"
+    video_args.source_events = "1.5,1.5,17.5"
+    command = equalizer.cli_command(video_args)
+    assert "1.5,1.5,17.5" in command
+    assert equalizer.main(command[3:] + ["--dry-run"]) == 0
+    dry = json.loads(capsys.readouterr().out)
+    assert (
+        dry["cameras"]["source"]["rows"]
+        == equalizer.prepare(video_args)["cameras"]["source"]["rows"]
+    )
+    monkeypatch.setattr(equalizer, "RifeInterpolator", StandInRife)
+    destination = equalizer.export(video_args)
+    manifest = json.loads((destination / "event_equalizer.json").read_text(encoding="utf-8"))
+    images = read_video(destination / manifest["cameras"]["source"]["video"])
+    assert len(images) == 17
+    # source frame j (1-based) is gray 8*(j-1); position 1.5+k blends frames k+1 and k+2
+    assert [round(float(image.mean())) for image in images] == [8 * k + 4 for k in range(17)]

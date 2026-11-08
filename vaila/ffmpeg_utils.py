@@ -7,8 +7,8 @@
 #
 # ffmpeg_utils.py
 #
-# Update Date: 02 October 2026
-# Version: 0.4.7
+# Update Date: 06 November 2026
+# Version: 0.4.15
 #
 # Central helper module for FFmpeg binary discovery and H.264 encoding helpers
 # shared by cutvideo, drawboxe, and related video tools.
@@ -37,6 +37,9 @@
 # H.264 <stem>_h264.mp4 copy of videos opencv-python cannot decode (AV1: its
 # bundled FFmpeg has no software AV1 decoder).
 #
+# Frame numbers: timestamp_frame_number() / TimestampFrameCounter number decoded
+# frames by timestamp, as OpenCV's seek does, and list frames the camera dropped.
+#
 # Usage:
 #   from vaila.ffmpeg_utils import (
 #       get_ffmpeg_path,
@@ -47,6 +50,7 @@
 #   subprocess.run([get_ffmpeg_path(), "-i", "video.mp4", ...])
 
 import contextlib
+import math
 import os
 import shutil
 import subprocess
@@ -751,6 +755,107 @@ def opencv_compatible_copy(path) -> Path:
     if not opencv_reads_video(dst):
         raise RuntimeError(f"OpenCV still cannot read the H.264 copy: {dst}")
     return dst
+
+
+def timestamp_frame_number(pos_msec: float, fps: float) -> int:
+    """Frame number of a timestamp: round(t * fps), the rule of OpenCV's seek.
+
+    ``pos_msec`` is ``cv2.CAP_PROP_POS_MSEC`` of the frame just decoded.
+    """
+    return int(fps * float(pos_msec) / 1000.0 + 0.5)
+
+
+def _rate(value) -> float | None:
+    """``30``, ``"30/1"`` or ``"30000/1001"`` -> float; None when missing or invalid."""
+    try:
+        if isinstance(value, str) and "/" in value:
+            num, den = value.split("/", 1)
+            rate = float(num) / float(den)
+        else:
+            rate = float(value)
+    except (TypeError, ValueError, ZeroDivisionError):
+        return None
+    return rate if math.isfinite(rate) and rate > 0 else None
+
+
+def numbering_fps(opencv_fps: float, r_frame_rate=None, avg_frame_rate=None) -> float:
+    """Frame rate for timestamp frame numbers.
+
+    OpenCV uses the average rate (``avg_frame_rate``). For a constant-rate video with
+    dropped frames an MP4 stores count / duration there, below the camera rate, and
+    frame numbers would drift over the whole video; the nominal ``r_frame_rate`` is
+    the camera's frame step. When the average is far below the nominal rate the video
+    has a variable rate and OpenCV's rate is kept.
+    """
+    r, a = _rate(r_frame_rate), _rate(avg_frame_rate)
+    if r is not None and a is not None and 0.9 * r <= a <= 1.001 * r:
+        return r
+    return float(opencv_fps)
+
+
+def probe_frame_rates(path) -> tuple[str | None, str | None]:
+    """``(r_frame_rate, avg_frame_rate)`` of the first video stream; Nones if ffprobe fails."""
+    try:
+        result = subprocess.run(
+            [
+                get_ffprobe_path(),
+                "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "stream=r_frame_rate,avg_frame_rate",
+                "-of", "default=noprint_wrappers=1", str(path),
+            ],
+            capture_output=True, text=True, timeout=30,
+        )  # fmt: skip
+    except Exception:
+        return None, None
+    if result.returncode != 0:
+        return None, None
+    found = dict(line.split("=", 1) for line in (result.stdout or "").splitlines() if "=" in line)
+    return found.get("r_frame_rate"), found.get("avg_frame_rate")
+
+
+class TimestampFrameCounter:
+    """Number the frames of a video by their timestamps while reading it in order.
+
+    OpenCV numbers a frame reached by seeking (``CAP_PROP_POS_FRAMES``) by its
+    timestamp, but counts one by one while reading sequentially. When the camera
+    dropped frames (a gap in the timestamps) the two numberings differ after the
+    gap. Call :meth:`next` with ``cv2.CAP_PROP_POS_MSEC`` after every decoded frame to
+    get the timestamp number (the first frame is 0). Numbers missing from the
+    timestamps are collected in ``dropped``. Without usable timestamps (the first
+    two frames have the same time) the counter falls back to counting
+    (``mode == "decode"``). A frame whose timestamp does not advance gets the next
+    free number and is counted in ``irregular``.
+    """
+
+    def __init__(self, fps: float):
+        self.fps = float(fps)
+        self.mode = "timestamp" if self.fps > 0 else "decode"
+        self.dropped: list[int] = []
+        self.irregular = 0
+        self._first: int | None = None
+        self._first_msec = 0.0
+        self._last = -1
+        self._decoded = 0
+
+    def next(self, pos_msec: float) -> int:
+        if self.mode == "timestamp":
+            if self._first is None:
+                self._first = timestamp_frame_number(pos_msec, self.fps)
+                self._first_msec = float(pos_msec)
+            elif self._decoded == 1 and float(pos_msec) <= self._first_msec:
+                self.mode = "decode"
+        if self.mode == "timestamp":
+            number = timestamp_frame_number(pos_msec, self.fps) - (self._first or 0)
+            if number <= self._last:
+                self.irregular += 1
+                number = self._last + 1
+            elif number > self._last + 1 and self._decoded > 0:
+                self.dropped.extend(range(self._last + 1, number))
+        else:
+            number = self._decoded
+        self._last = number
+        self._decoded += 1
+        return number
 
 
 def clear_ffmpeg_encoder_cache() -> None:

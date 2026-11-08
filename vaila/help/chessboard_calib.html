@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>vailá Manual | Chessboard Calib</title>
+    <style>
+      :root {
+        --primary: #2563eb;
+        --secondary: #475569;
+        --accent: #f59e0b;
+        --bg: #f8fafc;
+        --text: #1e293b;
+        --code-bg: #e2e8f0;
+      }
+
+      body {
+        font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+        line-height: 1.6;
+        color: var(--text);
+        background: var(--bg);
+        margin: 0;
+        padding: 0;
+      }
+
+      .sidebar {
+        width: 300px;
+        height: 100vh;
+        background: #fff;
+        position: fixed;
+        left: 0;
+        top: 0;
+        border-right: 1px solid #e2e8f0;
+        overflow-y: auto;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+
+      .sidebar h2 {
+        font-size: 1.2rem;
+        color: var(--primary);
+        margin-top: 0;
+      }
+
+      .sidebar ul {
+        list-style: none;
+        padding: 0;
+      }
+
+      .sidebar a {
+        text-decoration: none;
+        color: var(--secondary);
+        font-weight: 500;
+        display: block;
+        padding: 5px 10px;
+        border-radius: 4px;
+        transition: all 0.2s;
+        font-size: 0.92rem;
+      }
+
+      .sidebar a:hover {
+        background: #f1f5f9;
+        color: var(--primary);
+      }
+
+      .main-content {
+        margin-left: 300px;
+        padding: 40px 60px;
+        max-width: 1000px;
+      }
+
+      header {
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 20px;
+        margin-bottom: 30px;
+      }
+
+      h1 {
+        font-size: 2.3rem;
+        color: var(--primary);
+        margin: 0;
+      }
+
+      .version-badge {
+        background: var(--accent);
+        color: #fff;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.9rem;
+        vertical-align: middle;
+        margin-left: 10px;
+      }
+
+      h2 {
+        color: var(--primary);
+        border-bottom: 2px solid #e2e8f0;
+        padding-bottom: 10px;
+        margin-top: 40px;
+      }
+
+      h3 {
+        color: #1d4ed8;
+        margin-top: 26px;
+      }
+
+      code {
+        background: var(--code-bg);
+        padding: 2px 6px;
+        border-radius: 3px;
+        font-family: "Consolas", monospace;
+        font-size: 0.9em;
+      }
+
+      pre {
+        background: #1e293b;
+        color: #f8fafc;
+        padding: 16px;
+        border-radius: 8px;
+        overflow-x: auto;
+      }
+
+      pre code {
+        background: transparent;
+        color: inherit;
+        padding: 0;
+      }
+
+      .callout {
+        padding: 16px;
+        border-radius: 6px;
+        margin: 20px 0;
+        background: #eff6ff;
+        border-left: 4px solid var(--primary);
+      }
+
+      .meta {
+        background: #fff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 14px 18px;
+        margin: 18px 0;
+        font-size: 0.92rem;
+      }
+
+      .meta strong {
+        color: var(--primary);
+      }
+
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 16px 0;
+        background: #fff;
+      }
+
+      th, td {
+        border: 1px solid #e2e8f0;
+        padding: 8px 12px;
+        text-align: left;
+        font-size: 0.92rem;
+      }
+
+      th {
+        background: #f1f5f9;
+        color: var(--primary);
+      }
+
+      blockquote {
+        margin: 16px 0;
+        padding: 12px 18px;
+        background: #fefce8;
+        border-left: 4px solid var(--accent);
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <nav class="sidebar">
+      <h2>vailá Docs</h2>
+      <ul>
+        <li><a href="#intro">Introduction</a></li>
+        <li><a href="#outputs">Outputs</a></li>
+        <li><a href="#pipeline">Pipeline</a></li>
+        <li><a href="#recording">Recording the videos</a></li>
+        <li><a href="#rec3d">3D reconstruction</a></li>
+        <li><a href="#cli">CLI</a></li>
+        <li><a href="#limits">Limits</a></li>
+        <li><a href="#tests">Tests</a></li>
+      </ul>
+    </nav>
+
+    <main class="main-content">
+      <header id="intro">
+        <h1>Chessboard Calib <span class="version-badge">v0.4.15</span></h1>
+        <p>
+          Calibrates several cameras from chessboard videos (one video per camera, same
+          session) and exports the files that <i>vailá</i> needs for 3D reconstruction.
+        </p>
+        <div class="meta">
+          <strong>Module:</strong> <code>vaila/chessboard_calib.py</code><br />
+          <strong>Button:</strong> Frame C-A &rarr; <strong>Chessboard Calib</strong> (below DLT/REC 2D-3D)<br />
+          <strong>Category:</strong> Processing &middot;
+          <strong>Version:</strong> 0.4.15 &middot;
+          <strong>Updated:</strong> 08 November 2026 &middot;
+          <strong>Author:</strong> Paulo Santiago &middot;
+          <strong>License:</strong> AGPL-3.0
+        </div>
+      </header>
+
+      <section id="outputs">
+        <h2>Outputs</h2>
+        <p>Results go to <code>&lt;output&gt;/processed_chessboard_calib_YYYYMMDD_HHMMSS/</code>.</p>
+        <table>
+          <thead><tr><th>File</th><th>Used by</th></tr></thead>
+          <tbody>
+            <tr><td><code>&lt;camera&gt;.dlt3d</code></td><td>Rec3D 1DLT / MultiDLT</td></tr>
+            <tr><td><code>&lt;camera&gt;_intrinsics.toml</code> (fx, fy, cx, cy, k1, k2, k3, p1, p2)</td><td>Distort Video; <code>--intrinsics-toml-dir</code> of a later run</td></tr>
+            <tr><td><code>&lt;camera&gt;_board_pixels.csv</code></td><td>detected corners, <i>vailá</i> pixel format</td></tr>
+            <tr><td><code>cameras.json</code></td><td>K, distortion, R, t, camera centre and frame offset per camera</td></tr>
+            <tr><td><code>calibration_report.json</code>, <code>README_calibration.txt</code></td><td>errors, offsets, world frame, validation</td></tr>
+            <tr><td><code>validation_board_3d.csv</code></td><td>board corners triangulated with the exported DLTs</td></tr>
+            <tr><td><code>qa/&lt;camera&gt;_coverage.png</code></td><td>corners used; the calibration is measured inside the red outline</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section id="pipeline">
+        <h2>Pipeline</h2>
+        <ol>
+          <li><strong>Corners.</strong> Every <code>--step</code>-th frame is searched. While the board was seen recently, only an upscaled crop around it is searched (<code>--zoom</code>, default 2); otherwise the full frame every <code>--search-every</code> frames. Corners are refined to sub-pixel accuracy and numbered from the top-left corner of the upright board, so a physical corner has the same number in every camera.
+            <br /><strong>Frame numbers are video timestamps</strong> (round(t &times; fps), first frame 0), as in getpixelvideo and in a constant-frame-rate copy. Network cameras sometimes drop frames (gaps in the timestamps), and a frame after a gap may also fail to decode. Those numbers are missing and are listed per camera in the log, the report (<code>frame_numbering</code>) and the README. Counting frames while reading would shift every later frame by the number of drops, differently in each camera. When an MP4 reports a lower average rate only because of the drops, the nominal rate (<code>r_frame_rate</code>) is used.</li>
+          <li><strong>Intrinsics</strong> per camera. With <code>--intrinsics auto</code> the model depends on the image coverage of the corners: &ge; 30 % <code>standard</code> (f, principal point, k1, k2, p1, p2); 5&ndash;30 % <code>constrained</code> (f, k1, k2); &lt; 5 % <code>minimal</code> (f, k1). <br /><strong>Board tilt:</strong> the report gives, per camera, how much the board orientation varied (<code>board_tilt_p95_deg</code>). Below 20&deg; the board kept almost one orientation, the focal length cannot be told apart from the board distance, and the log and README print a WARNING. The validation does not see it, because it measures the board itself.
+            <br /><strong>Loading the lens:</strong> <code>--intrinsics-toml-dir</code> takes a folder of <code>&lt;camera&gt;_intrinsics.toml</code>, for example the <code>processed_chessboard_calib_*</code> folder of a calibration of the same cameras where the board moved. Each video takes the TOML whose camera name starts or is contained in its name, so cut (<code>&lt;camera&gt;_sync_..._frames_...</code>) and equalized (<code>source_2_&lt;camera&gt;_..._equalized</code>) copies use the lens of the original camera. The log names the file used and warns when none matches. Close-up videos can be passed with <code>--intrinsics-input</code>.</li>
+          <li><strong>Frame offsets</strong> (<code>--sync auto</code>, needs <code>--step 1</code>): the board's rotation between frames has the same angle in every camera; its cross-correlation gives the lag between cameras. Each lag is refined to a fraction of a frame (parabola through the correlation peak). The offsets are solved together and rounded to whole frames; the values before rounding are reported (<code>frame_offsets_subframe</code>). Cameras that are not genuinely synchronized differ by fractions of a frame, which a whole-frame shift cannot remove. Convention: <em>camera frame = reference frame + offset</em>. Manual: <code>--frame-offsets</code>, which may have decimals (e.g. offsets measured in a recording where the board moved). The decimals are kept for <code>--subframe</code> and the RIFE command.
+            <br /><strong>The sub-frame offsets need a moving board.</strong> On the lab's frontal clip, with the board held still, the estimate was off by 0.1&ndash;0.2 frame. On a segment where the board moved, a recalibration after whole-frame shifts recovered the expected remainder within 0.015 frame.
+            <br />Fractions of a frame can be used in two ways. With <code>undistort --subframe</code>, the pixel CSVs are interpolated in time. Alternatively, the videos themselves are aligned with RIFE: when a camera is more than 0.1 frame off and no camera dropped frames, the log and README print a ready <a href="video_event_equalizer.html">Video Event Equalizer</a> command with decimal events.</li>
+          <li><strong>Extrinsics:</strong> planar PnP per view, initial camera poses from shared views, then a bundle adjustment of all camera and board poses with fixed intrinsics (views above max(3 &times; median, 2 px) are removed once).</li>
+          <li><strong>World frame:</strong> <code>--world board</code> (origin at corner 0 of the board in the frame seen by most cameras; with <code>--board-axes upright</code> X along the rows, Z up, Y through the board) or <code>--world control</code> (CSV <code>name,x,y,z</code> in metres plus one <i>vailá</i> pixel CSV per camera with the same points).</li>
+          <li><strong>Checks:</strong> reprojection error per camera; board corners triangulated with the exported DLTs and compared with the square size, in the calibration frames and in held-out 60-frame blocks (<code>--holdout-block</code>).</li>
+        </ol>
+      </section>
+
+      <section id="recording">
+        <h2>Recording the calibration videos</h2>
+        <ul>
+          <li>Show the board to every camera, close and far, over the whole image including edges and corners. Lens distortion is measured only where the board appeared.</li>
+          <li><strong>Tilt the board 30&ndash;45&deg; in several directions.</strong> A board held still in one place gives a focal length that trades against distance. An example is the lab's frontal clip of the board standing on the force plate, with a tilt of 7&ndash;8&deg;. There cameras 06/07/08 got f = 1284 / 1195 / 989 px instead of 1075 / 1125 / 1055 px, and points 2&ndash;3 m from the board were 58 mm (median) away from the 8-camera calibration, while the clip's own validation read 0.76 mm. If such a clip defines the world frame, load the lens of a calibration where the board moved (<code>--intrinsics-toml-dir</code>).</li>
+          <li>Keep the board upright (rows within &plusmn;45&deg; of horizontal).</li>
+          <li>Several cameras should see the board at the same moments, forming one connected chain.</li>
+          <li>Measure the square side over several squares with a ruler: it sets the scale of everything. The lab board has 98&nbsp;mm squares (<code>--square 0.098</code>, the default); 0.1 instead of 0.098 makes 1&nbsp;m read 1.020&nbsp;m.</li>
+        </ul>
+      </section>
+
+      <section id="rec3d">
+        <h2>After calibration: 3D reconstruction</h2>
+        <ol>
+          <li>Remove the lens distortion with this calibration (each CSV name starts with or contains its camera video name):
+            <pre><code>uv run vaila/chessboard_calib.py undistort --calib out/processed_chessboard_calib_YYYYMMDD_HHMMSS -i pixels/ --apply-offsets</code></pre>
+            In the GUI: <strong>Chessboard Calib</strong> &rarr; <strong>Undistort pixels for Rec3D...</strong>. <code>--apply-offsets</code> rewrites the <code>frame</code> column to the reference timeline (frame &minus; offset). The offsets were measured in the calibration recording, so they apply only to pixel CSVs of those same recordings; measure them again for a new recording.
+            <br /><code>--subframe</code> (GUI: answer <em>yes</em> to &ldquo;Use the sub-frame offsets&rdquo;) uses the offsets before rounding: each camera's value at reference frame <i>n</i> is interpolated linearly between its frames &lfloor;n + e&rfloor; and &lceil;n + e&rceil;. A missing or empty neighbour gives an empty value, so gaps and dropped frames are not filled. An integer offset gives exactly <code>--apply-offsets</code>. Without fractional offsets in the report (<code>--sync none</code>, manual offsets), <code>--subframe</code> stops with an error. Pixel CSVs of videos already aligned with the Video Event Equalizer need neither option.
+            <br />The CSV frame numbers must follow the video timestamps, as getpixelvideo and this module do. Tools that count frames while reading (Markerless 2D, Video to PNG) number every frame after a dropped frame differently. If the report lists dropped frames, run them on constant-frame-rate copies (<code>ffmpeg -i &lt;camera&gt;.mp4 -fps_mode cfr -r 30 -c:v libx264 -crf 12 &lt;camera&gt;_cfr.mp4</code>), where a dropped frame repeats the previous image.</li>
+          <li>Run <strong>Rec3D 1DLT</strong> with the <code>.dlt3d</code> files and the undistorted CSVs; step 1 prints the exact command.</li>
+        </ol>
+        <div class="callout">
+          <strong>Do not use Distort CSV before Rec3D with these files.</strong> It reprojects with
+          <code>cv2.getOptimalNewCameraMatrix</code> at a fixed 1920&times;1080, a different camera
+          matrix from the one in the <code>.dlt3d</code> files.
+        </div>
+        <p>Verified on the lab videos (8 cameras; 06 and 08 November 2026). All 8 cameras lost 2&ndash;3 frames at the same moment, about 14.6 s into the recording.</p>
+        <ul>
+          <li><strong>Offsets:</strong> with timestamp numbering, the offsets of cameras 07 and 08 relative to camera 06 are the same before and after the drop (&minus;3 and +5). Counting frames gave &minus;3/&minus;4 and +5/+4.</li>
+          <li><strong>8 cameras, 98&nbsp;mm squares:</strong> bundle adjustment 0.47 px; board triangulation 0.76 mm median (p95 1.16 mm), held-out blocks 0.77 mm (p95 1.20 mm); board tilt 54&ndash;70&deg; in every camera. The earlier run with 0.1 m had the same lens and every coordinate 2&nbsp;% larger.</li>
+          <li><strong>Rec3D 1DLT, cameras 06/07/08</strong> (board corners, 352 frames): 0.74 mm median with <code>--apply-offsets</code>, 0.69 mm with <code>--subframe</code>. In the 10&nbsp;% of frames where the board moved fastest: 0.70 &rarr; 0.62 mm median, p95 0.85 &rarr; 0.72 mm.</li>
+          <li><strong>Frontal clip</strong> (cameras 06/07/08, board standing still on the force plate). Compared with the 8-camera calibration:
+            <table>
+              <thead><tr><th></th><th>Lens estimated from the clip</th><th>Lens of the 8-camera run</th></tr></thead>
+              <tbody>
+                <tr><td>f (px)</td><td>1284 / 1195 / 989</td><td>1075 / 1125 / 1055</td></tr>
+                <tr><td>Camera distances 06&ndash;07 / 06&ndash;08 (m)</td><td>3.15 / 7.23</td><td>2.53 / 6.62 (8 cameras: 2.50 / 6.61)</td></tr>
+                <tr><td>Disagreement 1&ndash;1.5 m from the board</td><td>12 mm</td><td>2.4 mm</td></tr>
+                <tr><td>Disagreement 2&ndash;3 m from the board</td><td>58 mm</td><td>6.0 mm</td></tr>
+                <tr><td>Own validation</td><td>0.76 mm</td><td>0.75 mm</td></tr>
+              </tbody>
+            </table></li>
+          <li><strong>RIFE alignment</strong> on a segment where the board moved (frames 750&ndash;930): after whole-frame shifts only, a new calibration measured &minus;0.038 / &minus;0.332 frame (&minus;0.025 / &minus;0.319 expected); with the decimal events (RIFE), &minus;0.038 / &minus;0.057 frame, and the bundle adjustment fell from 0.36 to 0.28 px.</li>
+        </ul>
+      </section>
+
+      <section id="cli">
+        <h2>CLI</h2>
+        <pre><code>uv run vaila/chessboard_calib.py                                   # GUI
+uv run vaila/chessboard_calib.py -i videos/ --pattern 6x8 --square 0.098
+uv run vaila/chessboard_calib.py -i cut_videos/ --intrinsics-toml-dir out/processed_chessboard_calib_YYYYMMDD_HHMMSS
+uv run vaila/chessboard_calib.py undistort --calib out/processed_chessboard_calib_YYYYMMDD_HHMMSS -i pixels/ --subframe
+uv run vaila/chessboard_calib.py -i videos/ -o out/ --step 1 --zoom 2 --sync auto
+uv run vaila/chessboard_calib.py -i videos/ --reuse-detections out/processed_chessboard_calib_YYYYMMDD_HHMMSS \
+    --world control --control-points floor_points.csv --control-pixels floor_pixels/</code></pre>
+        <p>On NVIDIA/CUDA workstations use <code>uv run --no-sync</code>. All options: <code>uv run vaila/chessboard_calib.py --help</code> and <code>vaila/help/chessboard_calib.md</code>.</p>
+      </section>
+
+      <section id="limits">
+        <h2>Limits</h2>
+        <ul>
+          <li>With wide-angle lenses and a board that stays near the image centre, the distortion near the image border is extrapolated; points reconstructed there are less accurate than the validation numbers suggest.</li>
+          <li>Both checks use the same session and board: they show that the cameras agree with each other and with the board size, not accuracy against a reference system.</li>
+          <li>A board that keeps one orientation does not determine the focal length (see <em>Board tilt</em>); the validation cannot detect it.</li>
+          <li>Offsets measured by <code>--sync auto</code> come from the board's motion; with a board that hardly moves they are uncertain by about 0.1&ndash;0.2 frame.</li>
+          <li><code>--apply-offsets</code> uses whole frames: cameras that are not genuinely synchronized keep up to half a frame between them (17 ms at 30 fps). <code>--subframe</code> and the RIFE alignment reduce it, but their in-between values are estimates, not measurements.</li>
+          <li>The fisheye model is not offered; the exported TOML and the undistortion use the standard OpenCV model.</li>
+        </ul>
+      </section>
+
+      <section id="tests">
+        <h2>Tests</h2>
+        <pre><code>uv run pytest tests/test_chessboard_calib.py tests/test_video_timestamp_numbering.py tests/test_video_event_equalizer.py -v</code></pre>
+        <p>Synthetic cameras and boards with known truth. They include an end-to-end run on rendered videos with one camera starting 3 frames late, a lag of a fraction of a frame, and a video with dropped frames. The dropped-frame test checks timestamp numbers in the detection and in getpixelvideo, paused and playing. Further tests cover the lens loaded by camera name, the board-tilt warning, <code>--subframe</code> (linear motion recovered exactly, gaps left empty), the RIFE command and decimal events in the equalizer.</p>
+      </section>
+
+      <footer>
+        <hr />
+        <p>&copy; 2026 vailá - Multimodal Toolbox &middot; Released under AGPL-3.0</p>
+      </footer>
+    </main>
+  </body>
+</html>
