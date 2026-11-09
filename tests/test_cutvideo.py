@@ -1,6 +1,6 @@
 """Focused tests for cutvideo timeline, sync handoff, and render helpers.
 
-Update Date: 06 November 2026
+Update Date: 08 November 2026
 Version: 0.4.15
 """
 
@@ -466,3 +466,218 @@ def test_sync_cut_without_repeats_uses_source_frame_numbers(tmp_path: Path):
 
     # A cut whose length does not match its range is left alone.
     assert cutvideo._write_sync_cut_without_repeats(cut, tmp_path, 100, 150, sync_info) is None
+
+
+# --- audio follows the playback speed ([ / ]) -------------------------------------------------
+
+
+@pytest.mark.parametrize("speed", cutvideo.PLAYBACK_SPEED_STEPS)
+def test_audio_header_rate_and_seek_follow_playback_speed(speed):
+    """A WAV declared at ``speed``x lasts 1/speed as long: rate scales, seek offset shrinks."""
+    assert cutvideo.audio_wav_rate(44100, speed) == round(44100 * speed)
+    assert cutvideo.audio_file_seconds(8.0, speed) == pytest.approx(8.0 / speed)
+
+
+def test_write_wav_declares_speed_without_touching_the_samples(tmp_path: Path):
+    import wave
+
+    import numpy as np
+
+    rng = np.random.default_rng(3)
+    audio = (rng.random(4410) * 2 - 1).astype(np.float32)  # 0.1 s at 44.1 kHz
+    paths = {
+        speed: Path(cutvideo.write_wav_from_pcm(audio, 44100, speed)) for speed in (0.5, 1.0, 4.0)
+    }
+    try:
+        frames = {}
+        for speed, path in paths.items():
+            with wave.open(str(path), "rb") as wf:
+                assert wf.getframerate() == round(44100 * speed)
+                assert wf.getnframes() == audio.size  # same samples, different declared rate
+                frames[speed] = wf.readframes(wf.getnframes())
+        assert frames[0.5] == frames[1.0] == frames[4.0]
+        # int16 input (the cached player buffer) gives the same file as float input
+        cached = Path(cutvideo.write_wav_from_pcm(cutvideo.pcm_to_int16(audio), 44100, 1.0))
+        paths[-1] = cached
+        assert cached.read_bytes() == paths[1.0].read_bytes()
+    finally:
+        for path in paths.values():
+            path.unlink(missing_ok=True)
+
+
+_MIXER_SPEED_PROBE = """
+import os, sys, time
+os.environ["SDL_AUDIODRIVER"] = "dummy"
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+import numpy as np, pygame
+from vaila import cutvideo
+
+pygame.mixer.pre_init(frequency=44100, size=-16, channels=1)
+try:
+    pygame.mixer.init()
+except pygame.error as exc:
+    print(exc, file=sys.stderr, flush=True)
+    os._exit(3)  # no audio device, not even the dummy one
+tone = np.sin(2 * np.pi * 440 * np.arange(88200) / 44100).astype(np.float32)  # 2 s
+out = {}
+for speed in (1.0, 4.0):
+    path = cutvideo.write_wav_from_pcm(tone, 44100, speed)
+    pygame.mixer.music.load(path)
+    t0 = time.monotonic()
+    pygame.mixer.music.play()
+    while pygame.mixer.music.get_busy() and time.monotonic() - t0 < 10:
+        time.sleep(0.005)
+    out[speed] = time.monotonic() - t0
+    os.remove(path)
+print(out[1.0], out[4.0], flush=True)
+os._exit(0)
+"""
+
+
+def test_mixer_plays_the_declared_speed(tmp_path: Path):
+    """SDL_mixer must honour the declared rate: 2 s of audio at 4x ends ~4x sooner than at 1x."""
+    import subprocess
+    import sys
+
+    probe = tmp_path / "mixer_speed_probe.py"
+    probe.write_text(_MIXER_SPEED_PROBE, encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, str(probe)],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+    if result.returncode == 3:
+        pytest.skip(f"SDL dummy audio driver unavailable: {result.stderr[-200:]}")
+    assert result.returncode == 0, result.stderr[-800:]
+    normal, fast = (float(x) for x in result.stdout.split()[-2:])
+    assert normal > 1.5  # real-time pacing of the dummy device
+    assert 2.5 < normal / fast < 5.5  # ideal 4x; the device adds a small fixed latency to both
+
+
+_PLAYER_AUDIO_DRIVER = """
+import json, os, sys, threading, time, wave
+os.environ["SDL_AUDIODRIVER"] = "dummy"
+os.environ["SDL_VIDEODRIVER"] = "dummy"
+import pygame
+from vaila import cutvideo
+
+video, out_json = sys.argv[1], sys.argv[2]
+T0 = time.monotonic()
+events = []
+music = pygame.mixer.music
+real_load, real_play = music.load, music.play
+
+def load(path, *a, **k):
+    with wave.open(path, "rb") as wf:
+        ratio = wf.getframerate() / 44100.0
+    events.append({"t": time.monotonic() - T0, "kind": "load", "ratio": ratio})
+    return real_load(path, *a, **k)
+
+def play(*a, **k):
+    start = k.get("start", a[1] if len(a) > 1 else 0.0)
+    ratio = next((e["ratio"] for e in reversed(events) if e["kind"] == "load"), None)
+    events.append({"t": time.monotonic() - T0, "kind": "play", "start": start, "ratio": ratio})
+    return real_play(*a, **k)
+
+music.load, music.play = load, play
+
+def key(k, label):
+    events.append({"t": time.monotonic() - T0, "kind": "key", "label": label})
+    pygame.event.post(pygame.event.Event(pygame.KEYDOWN, key=k, mod=0, unicode="", scancode=0))
+
+def driver():
+    time.sleep(2.0); key(pygame.K_a, "audio")
+    time.sleep(1.5); key(pygame.K_SPACE, "play")
+    time.sleep(1.0); key(pygame.K_RIGHTBRACKET, "faster")
+    time.sleep(1.0); key(pygame.K_SPACE, "pause")
+    time.sleep(0.5); key(pygame.K_RIGHTBRACKET, "faster while paused")
+    time.sleep(0.5); key(pygame.K_SPACE, "resume")
+    time.sleep(1.0); key(pygame.K_LEFTBRACKET, "slower")
+    time.sleep(1.0)
+    pygame.event.post(pygame.event.Event(pygame.QUIT))
+
+threading.Thread(target=driver, daemon=True).start()
+cutvideo.play_video_with_cuts(video)
+with open(out_json, "w", encoding="utf-8") as fh:
+    json.dump(events, fh)
+os._exit(0)  # skip interpreter teardown: the patched C-module functions upset it
+"""
+
+
+def test_player_audio_follows_bracket_speed_changes(tmp_path: Path):
+    """[ / ] must restart the audio at the new speed from the shown frame (was: stayed at 1x)."""
+    import json
+    import subprocess
+    import sys
+
+    import cv2
+    import numpy as np
+
+    fps, seconds = 30.0, 16
+    silent = tmp_path / "silent.avi"
+    writer = cv2.VideoWriter(str(silent), cv2.VideoWriter.fourcc(*"MJPG"), fps, (64, 48))
+    rng = np.random.default_rng(5)
+    for _ in range(int(fps * seconds)):
+        writer.write(rng.integers(0, 255, (48, 64, 3), dtype=np.uint8))
+    writer.release()
+    video = tmp_path / "tone.avi"
+    mux = subprocess.run(
+        [
+            cutvideo.get_ffmpeg_path(),
+            "-v", "error", "-y", "-i", str(silent),
+            "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+            "-c:v", "copy", "-c:a", "pcm_s16le", "-shortest", str(video),
+        ],
+        capture_output=True,
+        text=True,
+    )  # fmt: skip
+    if mux.returncode != 0 or not video.exists():
+        pytest.skip(f"cannot build a video with an audio track: {mux.stderr[-200:]}")
+
+    driver = tmp_path / "drive_player.py"
+    driver.write_text(_PLAYER_AUDIO_DRIVER, encoding="utf-8")
+    out_json = tmp_path / "events.json"
+    result = subprocess.run(
+        [sys.executable, str(driver), str(video), str(out_json)],
+        cwd=Path(__file__).resolve().parents[1],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    assert out_json.exists(), result.stderr[-800:]
+    events = json.loads(out_json.read_text(encoding="utf-8"))
+
+    def key_time(label):
+        return next(e["t"] for e in events if e["kind"] == "key" and e["label"] == label)
+
+    def between(t0, t1, kind):
+        return [e for e in events if e["kind"] == kind and t0 <= e["t"] < t1]
+
+    def media_s(play_event):  # where the video is, in seconds, when this play() started
+        return play_event["start"] * play_event["ratio"]
+
+    t_play, t_fast = key_time("play"), key_time("faster")
+    t_pause, t_fast_paused = key_time("pause"), key_time("faster while paused")
+    t_resume, t_slow = key_time("resume"), key_time("slower")
+
+    # 1x playback starts the audio at the video position.
+    p1 = between(t_play, t_fast, "play")
+    assert len(p1) == 1 and p1[0]["ratio"] == 1.0
+
+    # "]" while playing: a WAV declared at 2x is loaded and played from the same video position.
+    p2 = between(t_fast, t_pause, "play")
+    assert len(p2) == 1 and p2[0]["ratio"] == 2.0
+    assert media_s(p2[0]) == pytest.approx(media_s(p1[0]) + (t_fast - p1[0]["t"]) * 1.0, abs=0.8)
+
+    # "]" while paused changes nothing audible; the next resume uses the new speed (4x).
+    assert not between(t_fast_paused, t_resume, "play")
+    p3 = between(t_resume, t_slow, "play")
+    assert len(p3) == 1 and p3[0]["ratio"] == 4.0
+    assert media_s(p3[0]) == pytest.approx(media_s(p2[0]) + (t_pause - p2[0]["t"]) * 2.0, abs=0.8)
+
+    # "[" while playing: back to 2x, continuing from the video position.
+    p4 = [e for e in events if e["kind"] == "play" and e["t"] >= t_slow]
+    assert len(p4) == 1 and p4[0]["ratio"] == 2.0
+    assert media_s(p4[0]) == pytest.approx(media_s(p3[0]) + (t_slow - p3[0]["t"]) * 4.0, abs=0.8)
