@@ -4,8 +4,8 @@
 
 - **Category:** Tools
 - **File:** `vaila/cutvideo.py`
-- **Version:** 0.4.14
-- **Updated:** 2026-10-28
+- **Version:** 0.4.15
+- **Updated:** 2026-11-08
 - **Author:** Paulo Roberto Pereira Santiago
 - **Email:** paulosantiago@usp.br
 - **GitHub:** https://github.com/vaila-multimodaltoolbox/vaila
@@ -69,6 +69,7 @@ Heittor_cod_02
   **C** loads labels for TOML metadata only (does not rename files). Per-cut names take priority over **B** (single base name).
 - **Runs in its own process**: launched from the main GUI as a subprocess (like `getpixelvideo`), so closing the cut window always returns control to vailá without freezing the main window.
 - **Playback speed (v0.3.76):** `[` / `]` step through discrete speeds (0.0625×–16×, always includes **1×**); HUD overlay upper-right on the video (same style as `getpixelvideo`).
+- **Audio follows the playback speed (v0.4.15):** with the audio panel on (`A`), `[` / `]` re-declare the audio at the new speed and restart it from the frame on screen, so what you hear stays aligned with the waveform playhead. The pitch changes with the speed, like a tape (an octave lower at 0.5×, higher at 2×). Changing the speed while paused takes effect at the next Play. The audio is not corrected afterwards: if the video cannot decode fast enough at high speeds (large frames at 8×–16×), it falls behind the sound.
 - **Time display**: Caption shows filename + FPS + active base prefix (or `Names:CSV(n)` when a per-cut list is loaded); slider shows frame and time with `.6f` precision (`Frame: X/Y (t.TTTTTT/T.TTTTTT)`).
 
 ## 🔧 Main Functions (high level)
@@ -142,12 +143,12 @@ This is launched by **syncvid → Save + Cut Video**. It validates all files bef
 - **Windows paths in TOML:** Paths are stored with `/` to avoid escape issues.
 - **Cannot load cuts:** Ensure the file is `.toml` with `[[cuts]]` entries; legacy `.txt` still loads but is deprecated.
 - **No audio playback:** Check if video file contains audio track; audio panel (A key) shows "No Audio Data" if unavailable.
-- **Audio not syncing:** Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation.
+- **Audio not syncing:** Ensure audio is loaded (A key) and not muted (M key); audio syncs on play/pause and frame navigation, and follows `[` / `]` speed changes (v0.4.15; before, it kept playing at 1× and drifted away from the waveform).
 
 - **Main vailá window froze after cutting / had to `kill`:** Fixed — the cut tool runs in its own subprocess and final ffmpeg/OpenCV export now has a responsive cancellable progress dialog.
 
 ---
-📅 **Last Updated:** 28 October 2026
+📅 **Last Updated:** 08 November 2026
 🔗 **Part of vailá - Multimodal Toolbox**
 
 ### Save current frame as PNG

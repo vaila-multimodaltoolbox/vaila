@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 28 October 2026
-Version: 0.4.14
+Update Date: 08 November 2026
+Version: 0.4.15
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -29,6 +29,9 @@ Features:
 - Added support for audio playback.
 - Added support for loop control.
 - Playback speed: `[` / `]` halve/double speed (0.0625×–16×), same as getpixelvideo.
+- The audio follows the playback speed: `[` / `]` re-declare the temp WAV at the new
+  speed and restart it from the shown frame (pitch changes like a tape), so the
+  waveform playhead and what you hear stay aligned.
 - Added support for auto-fit window.
 - Hold Left/Right/Up/Down while paused to repeat frame steps; zoom reaches 10×.
 - Added support for marker navigation.
@@ -1351,18 +1354,47 @@ def extract_audio_data(video_path, target_sr=44100):
         return None, None
 
 
-def write_wav_from_pcm(audio_data: np.ndarray, sample_rate: int) -> str:
+def pcm_to_int16(audio_data: np.ndarray) -> np.ndarray:
+    """Convert mono float32 PCM (-1..1) to int16; int16 input is returned unchanged."""
+    if audio_data.dtype == np.int16:
+        return audio_data
+    return np.clip(audio_data * 32767.0, -32768, 32767).astype(np.int16)
+
+
+def audio_wav_rate(sample_rate: int, speed: float) -> int:
+    """WAV header rate that makes the mixer play the same samples at ``speed``×.
+
+    SDL_mixer resamples the file's declared rate to the device rate, so declaring
+    ``sample_rate * speed`` plays the unchanged PCM ``speed`` times faster (and
+    raises the pitch, like a tape). The sample data is never touched.
     """
-    Write mono float32 PCM (-1..1) to a temp WAV file and return its path.
+    return max(1, int(round(sample_rate * speed)))
+
+
+def audio_file_seconds(media_seconds: float, speed: float) -> float:
+    """Seek position, in the file's own timeline, of ``media_seconds`` of the video.
+
+    A WAV declared at ``speed``× lasts ``1/speed`` as long, so the seek offset passed
+    to ``pygame.mixer.music.play(start=...)`` shrinks by the same factor.
+    """
+    return media_seconds / speed if speed > 0 else media_seconds
+
+
+def write_wav_from_pcm(audio_data: np.ndarray, sample_rate: int, speed: float = 1.0) -> str:
+    """
+    Write mono PCM (float32 -1..1 or int16) to a temp WAV file and return its path.
+
+    ``speed`` only changes the sample rate declared in the header (see
+    ``audio_wav_rate``), so the audio plays at the video's playback speed.
     """
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
         tmp_path = tmp.name
 
-    pcm_int16 = np.clip(audio_data * 32767.0, -32768, 32767).astype(np.int16)
+    pcm_int16 = pcm_to_int16(audio_data)
     with wave.open(tmp_path, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)  # 16-bit
-        wf.setframerate(sample_rate)
+        wf.setframerate(audio_wav_rate(sample_rate, speed))
         wf.writeframes(pcm_int16.tobytes())
     return tmp_path
 
@@ -1914,6 +1946,8 @@ def play_video_with_cuts(video_path, *, sync_file=None):
     audio_loaded = False
     sample_rate = 44100
     audio_wave_path = None
+    audio_pcm16 = None  # int16 PCM shared by every speed variant of the temp WAV
+    audio_wave_speed = None  # playback speed the loaded WAV was declared for
     audio_muted = False
     audio_ready = False
     audio_music_loaded = False
@@ -2049,13 +2083,16 @@ def play_video_with_cuts(video_path, *, sync_file=None):
             print(f"Audio init failed: {e}")
             return False
 
+    def audio_seek_seconds(frame_idx: int) -> float:
+        """Position of ``frame_idx`` in the loaded WAV (declared at ``audio_wave_speed``×)."""
+        return audio_file_seconds(get_time_s(frame_idx, fps), audio_wave_speed or 1.0)
+
     def sync_audio_to_frame(frame_idx: int):
         """Seek audio playback to match current frame position."""
         if not audio_ready or not audio_loaded or audio_muted:
             return
         try:
-            pos_seconds = get_time_s(frame_idx, fps)
-            pygame.mixer.music.set_pos(pos_seconds)
+            pygame.mixer.music.set_pos(audio_seek_seconds(frame_idx))
         except Exception as e:
             print(f"Audio seek failed: {e}")
 
@@ -2063,9 +2100,8 @@ def play_video_with_cuts(video_path, *, sync_file=None):
         if not audio_ready or not audio_loaded or audio_muted:
             return
         try:
-            pos_seconds = get_time_s(frame_idx, fps)
             # start playback; looping once is enough for single video
-            pygame.mixer.music.play(loops=0, start=pos_seconds)
+            pygame.mixer.music.play(loops=0, start=audio_seek_seconds(frame_idx))
         except Exception as e:
             print(f"Audio play failed: {e}")
 
@@ -2075,18 +2111,38 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                 pygame.mixer.music.stop()
 
     def ensure_music_loaded():
-        nonlocal audio_music_loaded
-        if audio_music_loaded:
+        """Make the mixer hold a WAV declared for the current playback speed.
+
+        The video advances ``playback_speed`` frames' worth of time per real second,
+        so the audio must be declared at the same speed or it drifts away from the
+        waveform playhead. Changing the speed therefore writes/loads a new WAV.
+        """
+        nonlocal audio_music_loaded, audio_wave_path, audio_wave_speed
+        if audio_music_loaded and audio_wave_speed == playback_speed:
             return True
-        if not (audio_ready and audio_loaded and audio_wave_path):
+        if not (audio_ready and audio_loaded and audio_pcm16 is not None):
             return False
         try:
-            pygame.mixer.music.load(audio_wave_path)
+            new_path = write_wav_from_pcm(audio_pcm16, sample_rate, playback_speed)
+            pygame.mixer.music.load(new_path)  # also stops the previous track
+            old_path = audio_wave_path
+            audio_wave_path = new_path
+            audio_wave_speed = playback_speed
             audio_music_loaded = True
+            if old_path:
+                with contextlib.suppress(OSError):
+                    os.remove(old_path)
             return True
         except Exception as e:
             print(f"Audio load failed: {e}")
             return False
+
+    def restart_audio_at_current_speed():
+        """After [ / ]: continue the audio from the shown frame at the new speed."""
+        if paused or not audio_loaded or audio_muted:
+            return  # the next Play/Unmute reloads the WAV for the new speed
+        if ensure_audio_player() and ensure_music_loaded():
+            start_audio_playback(frame_count)
 
     def draw_waveform(surface, current_f, fps_val, sr, data, x_start, y_start, w, h):
         """Draw the audio waveform centered on the current frame."""
@@ -3075,13 +3131,16 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                         data, sr = extract_audio_data(video_path)
                         if data is not None:
                             audio_data = data
+                            audio_pcm16 = pcm_to_int16(data)
                             sample_rate = sr
                             audio_loaded = True
-                            if ensure_audio_player():
-                                if audio_wave_path is None:
-                                    audio_wave_path = write_wav_from_pcm(audio_data, sample_rate)
-                                if ensure_music_loaded() and not audio_muted and not paused:
-                                    start_audio_playback(frame_count)
+                            if (
+                                ensure_audio_player()
+                                and ensure_music_loaded()
+                                and not audio_muted
+                                and not paused
+                            ):
+                                start_audio_playback(frame_count)
                             print("Audio loaded successfully.")
                         else:
                             print("Failed to load audio or no audio track.")
@@ -3122,10 +3181,12 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                     playback_speed = _step_playback_speed(playback_speed, 1)
                     slow_mo_accumulator = 0.0
                     print(f"Playback speed: {_format_playback_speed_label(playback_speed)}×")
+                    restart_audio_at_current_speed()
                 elif event.key == pygame.K_LEFTBRACKET:  # [
                     playback_speed = _step_playback_speed(playback_speed, -1)
                     slow_mo_accumulator = 0.0
                     print(f"Playback speed: {_format_playback_speed_label(playback_speed)}×")
+                    restart_audio_at_current_speed()
                 elif event.key == pygame.K_SPACE:
                     paused = not paused
                     if paused:
