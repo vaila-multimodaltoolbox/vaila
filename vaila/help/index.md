@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 140 | **Categories:** 7 | **Generated on:** 08/11/2026 (v0.4.15)
+**Documented topics:** 141 | **Categories:** 7 | **Generated on:** 11/11/2026 (v0.4.15)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -112,7 +112,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolov26track** — This script performs object detection and tracking on video files using the YOLO model v26 (latest version), with integrated pose estimation capabilities. It...
   - [HTML](yolov26track.html) · [Markdown](yolov26track.md)
 
-## Processing (24)
+## Processing (25)
 
 - **chessboard_calib** — Calibrates several cameras from chessboard videos (one video per camera, same session) and exports what vailá needs for 3D reconstruction:
   - [HTML](chessboard_calib.html) · [Markdown](chessboard_calib.md)
@@ -162,6 +162,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](rec3d_one_dlt3d.html) · [Markdown](rec3d_one_dlt3d.md)
 - **reid_markers** — Marker Re-identification Tool - reid_markers.py
   - [HTML](reid_markers.html) · [Markdown](reid_markers.md)
+- **yolo_depth3d** — Monocular 3D from one video in vailá: 2D keypoints, the metric depth map of the
+  - [HTML](yolo_depth3d.html) · [Markdown](yolo_depth3d.md)
 
 ## Tools (47)
 

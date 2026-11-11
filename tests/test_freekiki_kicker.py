@@ -215,3 +215,32 @@ def test_a_contact_given_by_hand_is_labelled_as_given() -> None:
     contact = _metric(result, "contact_frame")
     assert contact["source"] == "informado" and contact["reason"] == "contact frame given by hand"
     assert not any(m["metric"] == "v_ball_pre_mps" for m in result["metrics"])
+
+
+def test_a_panning_camera_reads_the_marker_contact_on_the_pitch(tmp_path: Path) -> None:
+    # the resting ball slides 1.5 px per frame in the image (a broadcast pan); it is kicked at frame 20
+    pixels = {f: (700.0 - 1.5 * f, 650.0) for f in range(20)}
+    pixels.update({f: (700.0 + 60.0 * (f - 19), 640.0) for f in range(20, 30)})
+    ground = dict.fromkeys(range(20), (41.48, 0.08))
+    ground.update({f: (41.48 + 0.9 * (f - 19), 0.08) for f in range(20, 30)})
+    assert kk.contact_frame(pixels) < 20  # pixels alone take the pan for the kick
+    assert kk.contact_frame(pixels, ground) == 20
+    csv_path = tmp_path / "ball_3d.csv"
+    lines = ["frame,cx,cy,score,x_m,y_m,z_m,on_field"]
+    lines += [
+        f"{f},{pixels[f][0]},{pixels[f][1]},1.0,{x},{y},0.11,True" for f, (x, y) in ground.items()
+    ]
+    lines.append("30,,,,nan,nan,nan,False")
+    csv_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    assert kk.read_ball_ground(csv_path) == ground
+
+
+def test_a_kicking_foot_far_from_the_ball_at_the_contact_is_warned() -> None:
+    # the penalty clip of 08 Nov 2026: the kicker's 3D pose stood ~1.7 m from the ball at the contact
+    rows, ball, pixels = _rows(), _ball(), _pixels()
+    shifted = [dict(r, y_m=r["y_m"] - 1.6) for r in rows]
+    result = kk.analyze_kicker(shifted, ball, pixels, kicker_id=KICKER, fps=FPS)
+    assert result["events"]["kick_foot_ball_gap_m"] > 1.0
+    assert any("wrong depth" in w for w in result["warnings"])
+    near = kk.analyze_kicker(rows, ball, pixels, kicker_id=KICKER, fps=FPS)
+    assert not any("wrong depth" in w for w in near["warnings"])

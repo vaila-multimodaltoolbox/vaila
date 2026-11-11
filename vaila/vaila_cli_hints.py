@@ -1,7 +1,7 @@
 """CLI run hints for vailá menu entries (headless ``--cli`` mode).
 
 Version: 0.4.15
-Update Date: 08 November 2026
+Update Date: 11 November 2026
 """
 
 from __future__ import annotations
@@ -72,11 +72,14 @@ CLI_HINTS_BY_HANDLER: dict[str, CliRunHint] = {
             "uv run python -u vaila/sam3dinov3_visualize.py",
             "uv run python -u vaila/sapiens2_3d.py",
             "uv run python -m vaila.monocular_dlt_align",
+            "uv run --no-sync python -m vaila.yolo_depth3d -i video.mp4 --pixels video_pixel_vaila.csv --dlt3d cam.dlt3d",
         ),
         "Markerless 3D chooser (coringa) — Standard/Advanced MediaPipe+YOLO lift, "
         "SAM3+DINOv3 3D and its Visualize ID, Sapiens2 3D Pose (Sapiens2-keypoint-guided "
         "bbox tightening feeding the same SAM 3D Body mesh), plus Monocular -> DLT world "
-        "(places a 1-camera reconstruction in the calibrated lab frame). Each tool prints "
+        "(places a 1-camera reconstruction in the calibrated lab frame) and YOLO26 Depth 3D "
+        "(2D keypoints + the YOLO26 metric depth map; with a .dlt3d, lab frame and a whole-trial fit "
+        "of the depths with constant segment lengths). Each tool prints "
         "its own Run CLI after dialogs.",
     ),
     "vector_coding": CliRunHint(("uv run vaila/vector_coding.py",), "Vector coding GUI."),

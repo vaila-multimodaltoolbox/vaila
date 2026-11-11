@@ -93,13 +93,14 @@ velocidade média de <b>cerca de {{mean}} km/h</b>, e subiu até <b>{{zmax}} met
 <div class="cards">
   <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l"><!--fk-->distância do chute até a entrada no gol<!--/fk--><!--nw-->distância do chute até o último quadro<!--/nw--> <span class="tag solid">medido</span></div></div>
   <div class="card"><div class="n">{{flight}} <small>s</small></div><div class="l">tempo de voo da bola <span class="tag solid">medido</span></div></div>
-  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l"><!--fk-->velocidade média do pé até a entrada<!--/fk--><!--nw-->velocidade média do pé até o último quadro<!--/nw--> <span class="tag solid">medido</span></div></div>
+  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l"><!--fk-->velocidade média do pé até a entrada<!--/fk--><!--nw-->velocidade média do pé até o último quadro<!--/nw-->{{mean_note}} <span class="tag solid">medido</span></div></div>
   <div class="card"><div class="n">{{launch}} <small>km/h</small></div><div class="l">velocidade na saída do pé <span class="tag est">estimativa</span></div></div>
   <div class="card"><div class="n">{{zmax}} <small>m</small></div><div class="l">altura máxima da bola <span class="tag est">estimativa</span></div></div>
   <div class="card"><div class="n">{{spin}} <small>rps</small></div><div class="l">rotação da bola, inferida da curva <span class="tag est">estimativa</span></div></div>
 </div>
 <p class="note">“Medido”: vem direto das posições da bola na imagem e das linhas do campo. “Estimativa”: depende do
 modelo físico que ajustamos à trajetória; por isso mostramos a ordem de grandeza.</p>
+{{time_note}}
 
 <h2>1. O caminho da bola</h2>
 <p>A bola saiu {{kicker_phrase}} e <!--fk-->foi até a entrada no gol<!--/fk--><!--nw-->voou até o último quadro analisado<!--/nw--> em {{flight}} s. Vista de cima, ela não andou em
@@ -189,7 +190,7 @@ curva que a bola fez no ar, medida pelo afastamento da linha reta.</p>
 <h2>6. O que estes números não dizem</h2>
 <div class="warn">
 <ul>
-  <li><b>É uma reconstrução com uma câmera só.</b> Não há medição com várias câmeras. Valores marcados como “estimativa”
+  <li><b>É uma reconstrução com uma câmera só.</b> {{cameras_note}} Valores marcados como “estimativa”
   podem mudar com um ajuste diferente; por isso mostramos faixas e ordens de grandeza.</li>
   <li><b>A rotação é inferida, não medida.</b> A câmera não resolve o giro da bola; a rotação vem da curva da trajetória.</li>
   <li><b>A validação com um caso publicado não passou.</b> Simulamos o chute de Pelé publicado no material didático da

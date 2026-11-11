@@ -144,6 +144,9 @@ try:
         get_ffprobe_path,
         get_video_encode_ffmpeg_path,
         is_hardware_video_encoder,
+        opencv_needs_compatible_copy,
+        opencv_reads_video,
+        video_is_interlaced,
     )
 except ImportError:
     from ffmpeg_utils import (  # ty: ignore[unresolved-import]
@@ -155,6 +158,9 @@ except ImportError:
         get_ffprobe_path,
         get_video_encode_ffmpeg_path,
         is_hardware_video_encoder,
+        opencv_needs_compatible_copy,
+        opencv_reads_video,
+        video_is_interlaced,
     )
 
 try:
@@ -1678,21 +1684,23 @@ def play_video_with_cuts(video_path, *, sync_file=None):
 
     pygame.init()
 
-    # Initialize video capture with fallback conversion logic
-    cap = cv2.VideoCapture(video_path)
-    video_valid = cap.isOpened()
-
-    if video_valid:
-        # Try reading the first frame to ensure codec support (e.g. AV1 fallback)
-        ret, _ = cap.read()
-        if not ret:
-            video_valid = False
-        else:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    # Initialize video capture with fallback conversion logic.
+    # Interlaced H.264 (common in broadcast) makes OpenCV's swscaler fail
+    # (yuv420p→bgr24) and returns all-black frames with ret=True — treat that
+    # as unreadable and offer a progressive H.264 re-encode with yadif.
+    interlaced_source = video_is_interlaced(video_path)
+    video_valid = not opencv_needs_compatible_copy(video_path)
+    cap = cv2.VideoCapture(video_path) if video_valid else None
 
     if not video_valid:
-        cap.release()
+        if cap is not None:
+            cap.release()
         print(f"Error opening or reading video: {video_path}")
+        if interlaced_source:
+            print(
+                "  [cutvideo] Interlaced video detected — OpenCV cannot convert "
+                "interlaced frames to BGR (swscaler). Convert with yadif."
+            )
 
         # Initialize Tk root if needed for the dialog.
         root = None
@@ -1705,12 +1713,23 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                     root.destroy()
             return
 
+        reason = (
+            "This file is interlaced broadcast video. OpenCV/FFmpeg cannot convert "
+            "interlaced frames to the progressive BGR format used for preview "
+            "(swscaler: Cannot convert interlaced to progressive frames), so the "
+            "player shows a black image.\n\n"
+            "Convert to progressive H.264 (yadif deinterlace)?"
+            if interlaced_source
+            else (
+                "Could not open/read this video with OpenCV.\n\n"
+                "This usually happens when the codec (e.g. AV1) is unsupported, "
+                "or when frames decode as empty/black.\n\n"
+                "Convert automatically to progressive H.264 (MP4)?"
+            )
+        )
         if messagebox.askyesno(
             "Video Load Error",
-            f"Could not open/read video: {Path(video_path).name}\n\n"
-            "This usually happens when the video codec (e.g., AV1) is not supported "
-            "by your OpenCV installation.\n\n"
-            "Do you want to automatically convert it to H.264 (MP4) format?",
+            f"{Path(video_path).name}\n\n{reason}",
             parent=root,
         ):
             converted_path = str(
@@ -1757,6 +1776,11 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                     nonlocal conversion_success, conversion_error
                     try:
                         last_error = None
+                        # Always deinterlace on this fallback path: interlaced
+                        # sources need yadif; progressive sources are unchanged
+                        # enough for preview, and black-frame failures often are
+                        # mis-flagged interlaced streams.
+                        vf_args = ["-vf", "yadif"]
                         for encoder in encoders_with_cpu_fallback():
                             device = encoder_device_tag(encoder)
                             ffmpeg = get_video_encode_ffmpeg_path(encoder)
@@ -1769,6 +1793,7 @@ def play_video_with_cuts(video_path, *, sync_file=None):
                                 "-y",
                                 "-i",
                                 str(video_path),
+                                *vf_args,
                                 *get_ffmpeg_video_encoding_args(encoder),
                                 "-c:a",
                                 "aac",
@@ -1862,14 +1887,15 @@ def play_video_with_cuts(video_path, *, sync_file=None):
 
                 # Switch to the new video
                 video_path = converted_path
-                cap = cv2.VideoCapture(video_path)
-
-                if not cap.isOpened():
+                if not opencv_reads_video(video_path):
                     messagebox.showerror(
-                        "Error", "Could not open the converted video.", parent=root
+                        "Error",
+                        "Converted video still cannot be decoded by OpenCV.",
+                        parent=root,
                     )
                     root.destroy()
                     return
+                cap = cv2.VideoCapture(video_path)
             else:
                 error_msg = error if error else "Unknown error during conversion"
                 print(f"[bold red]Conversion failed:[/bold red] {error_msg}")

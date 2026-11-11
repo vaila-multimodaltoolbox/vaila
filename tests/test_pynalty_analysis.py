@@ -1,7 +1,7 @@
 """Unit tests for Pynalty pure-numpy analysis and report database helpers.
 
-Update Date: 07 September 2026
-Version: 0.3.129
+Update Date: 09 November 2026
+Version: 0.4.15
 """
 
 from __future__ import annotations
@@ -339,3 +339,44 @@ def test_database_append_idempotent(tmp_path: Path) -> None:
         rows = list(csv.DictReader(fh))
     assert len(rows) == 2
     assert summary_row(ctx)["video_name"] == "clip_a.mp4"
+
+
+def test_compute_penalty_metrics_takes_known_plane_points_and_sub_frame_times() -> None:
+    # a save measured in 3D (freekiki): the ball stopped in front of the line, so the pixel of the
+    # save frame is not on the goal plane; the caller gives the would-be crossing, the keeper on the
+    # plane and the times between frames instead (penalty clip, 08 Nov 2026)
+    goal = GoalGeometry()
+    calib = _square_calib_px(goal)
+    common = {"calib_pixels": calib, "kick_frame": 79, "goal_frame": 90, "gk_move_frame": 74,
+                  "kick_ball_px": (366.0, 0.0), "kick_gk_px": (366.0, 100.0),
+                  "goal_ball_px": (366.0, 100.0), "goal_gk_px": (366.0, 100.0),
+                  "fps": 29.97, "goal": goal, "shot_outcome": "save"}  # fmt: skip
+    plain = compute_penalty_metrics(**common)
+    assert plain["ball_entry_x_m"] == pytest.approx(goal.mid_x)  # mapped from the pixels
+    known = compute_penalty_metrics(
+        **common,
+        plane_xz={"goal_ball": (2.40, 0.95), "kick_gk": (3.60, 0.80), "goal_gk": (3.00, 0.45)},
+        timing={"flight_time_s": 0.362, "gk_response_time_s": -0.172, "gk_dive_time_s": 0.534},
+        flight_distance_m=10.4,
+    )
+    assert (known["ball_entry_x_m"], known["ball_entry_z_m"]) == pytest.approx((2.40, 0.95))
+    assert known["flight_time_s"] == pytest.approx(0.362)
+    assert known["vel_ms"] == pytest.approx(10.4 / 0.362)
+    assert known["dist"] == pytest.approx(10.4)
+    assert known["gk_response_time"] == pytest.approx(-0.172)
+    assert known["gk_dist"] == pytest.approx(math.hypot(0.60, 0.35))
+    assert known["gk_vel_ms"] == pytest.approx(math.hypot(0.60, 0.35) / 0.534)
+    assert known["plane_source"] == "3d" and plain["plane_source"] == "pixels"
+    assert known["zone_label"] != plain["zone_label"]
+
+
+def test_hwr_accuracy_matches_the_worked_examples_of_attaallah_2021() -> None:
+    from vaila.pynalty_analysis import hwr_accuracy_pct
+
+    goal = GoalGeometry()
+    mid = goal.height / 2.0
+    # the paper's cases A (x 0.5, y 1.10) and B (x 1.10, y 0.5), from the goal centre: 44.9 % and 35.1 %
+    assert hwr_accuracy_pct(0.5, mid + 1.10, goal) == pytest.approx(44.9, abs=0.1)
+    assert hwr_accuracy_pct(-1.10, mid - 0.5, goal) == pytest.approx(35.1, abs=0.1)
+    assert hwr_accuracy_pct(0.0, mid, goal) == pytest.approx(0.0)
+    assert hwr_accuracy_pct(3.55, mid + 1.11, goal) == pytest.approx(100.0)

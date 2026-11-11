@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 08 November 2026
+Update Date: 11 November 2026
 Version: 0.4.15
 
 Example of usage:
@@ -330,7 +330,7 @@ def _print_chooser_launch(
 ) -> None:
     """Print launcher CLI mirror when a chooser-dialog button is pressed.
 
-    Shared by the Markerless 2D and Markerless 3D choosers (each a "coringa"
+    Shared by the Markerless 2D and Markerless 3D choosers (each a "joker"
     that absorbs several sub-tools), so ``chooser`` names the parent button.
     """
     print("\n" + "=" * 60)
@@ -386,10 +386,10 @@ A_r1_c7 - Tree            A_r1_c8 - Find             A_r1_c9 - Transfer
 ========================== Multimodal Analysis (Frame B) ===================
 B1_r1_c1 - IMU                    B1_r1_c2 - Motion Capture Cluster
 B1_r1_c3 - Motion Capture Full Body
-B1_r1_c4 - Markerless 2D (coringa: MediaPipe (CPU/GPU), Advanced, YOLOv26, Yolo+Markerless_MP,
+B1_r1_c4 - Markerless 2D (joker: MediaPipe (CPU/GPU), Advanced, YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
             Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live)
-B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
+B1_r1_c5 - Markerless 3D (joker: SAM3+DINOv3 3D [+Visualize ID], YOLO26 Depth 3D)
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG
@@ -405,7 +405,7 @@ B5_r5_c1 - Ultrasound     B5_r5_c2 - Brainstorm      B5_r5_c3 - vailá
 B5_r5_c4 - Start Block    B5_r5_c5 - vailá
 
 B5_r6_c1 - Sprint         B5_r6_c2 - vailá           B5_r6_c3 - tugturn
-B5_r6_c4 - Soccer Tools (coringa: Field KPs AI, Soccer-Field Calib,
+B5_r6_c4 - Soccer Tools (joker: Field KPs AI, Soccer-Field Calib,
             FIFA cams→DLT, FIFA Dataset Builder, VEK ElasticKick,
             FIFA: merge manual labels, Scout, Pynalty, FreeKiki)
 B5_r6_c5 - Deadlift
@@ -416,7 +416,7 @@ B6_r7_c4 - vailá          B6_r7_c5 - vailá
 ============================== Tools Available (Frame C) ===================
 -> C_A: Data Files
 C_A_r1_c1 - Edit CSV/C3D  C_A_r1_c2 - C3D <--> CSV   C_A_r1_c3 - Smooth & Filter
-C_A_r2_c1 - DLT/REC 2D-3D (coringa: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
+C_A_r2_c1 - DLT/REC 2D-3D (joker: Make DLT2D/DLT3D, Rec2D/Rec3D 1DLT + MultiDLT)
 C_A_r2_c2 - C3D Metadata  C_A_r2_c3 - vailá
 C_A_r3_c1 - Chessboard Calib (multi-camera chessboard -> .dlt3d)
 C_A_r3_c2 - vailá         C_A_r3_c3 - vailá
@@ -2257,7 +2257,7 @@ class Vaila(tk.Tk):
         Visualize ID rerenderer, plus the Sapiens2-guided variant.
         """
         dialog, place_button, place_section = self._build_grid_chooser_dialog(
-            "Markerless 3D — Select Tool", width=640, height=320
+            "Markerless 3D — Select Tool", width=640, height=390
         )
 
         def use_sam3dinov3():
@@ -2319,6 +2319,16 @@ class Vaila(tk.Tk):
             )
             self.rec3d_mesh_pipeline_video()
 
+        def use_yolo_depth3d():
+            dialog.destroy()
+            _print_chooser_launch(
+                "Markerless 3D",
+                "YOLO26 Depth 3D",
+                "uv run --no-sync python -m vaila.yolo_depth3d",
+                note="2D keypoints + YOLO26 metric depth map -> 3D (lab frame with a .dlt3d)",
+            )
+            self.yolo_depth3d()
+
         place_section("SAM3+DINOv3 (3D)")
         place_button("SAM3+DINOv3 3D", use_sam3dinov3, width=26)
         place_button("SAM3+DINOv3 Visualize ID", use_sam3dinov3_visualize, width=26)
@@ -2327,6 +2337,8 @@ class Vaila(tk.Tk):
         place_section("Calibrated world frame")
         place_button("Monocular -> DLT world", use_monocular_dlt_align, width=26)
         place_button("Monocular -> Planar world", use_monocular_planar_align, width=26)
+        place_section("YOLO26 depth (monocular)")
+        place_button("YOLO26 Depth 3D", use_yolo_depth3d, width=26)
         place_section("Multi-camera pipeline (repeat on other files)")
         place_button("Multi-Camera Mesh Pipeline", use_rec3d_mesh_pipeline, width=26)
 
@@ -4093,6 +4105,22 @@ class Vaila(tk.Tk):
         run_vaila_module(
             "vaila.monocular_dlt_align",
             "vaila/monocular_dlt_align.py",
+            extra_py_flags=("-u",),
+        )
+
+    def yolo_depth3d(self):
+        """Markerless 3D: 2D keypoints + the YOLO26 metric depth map -> 3D from one camera."""
+        print("\n" + "=" * 60)
+        print("Launching: vaila.yolo_depth3d")
+        print(">> Equivalent launch CLI: uv run --no-sync python -m vaila.yolo_depth3d")
+        print("Features: YOLO26-pose (or a pixel CSV) + YOLO26 depth -> 3D per keypoint,")
+        print("          lab frame with a .dlt3d, depth scale from the floor or control points,")
+        print("          writes CSV/C3D + quality numbers (yolodepth3d_summary.json).")
+        print("Runtime: GPU recommended; the depth weights download on first use.")
+        print("=" * 60 + "\n")
+        run_vaila_module(
+            "vaila.yolo_depth3d",
+            "vaila/yolo_depth3d.py",
             extra_py_flags=("-u",),
         )
 

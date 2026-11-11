@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.15 (see `vaila.py`). **Package version:** 0.4.15 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-08
+**Last updated:** 2026-11-11
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -365,7 +365,7 @@ B1_r1_c3 - Motion Capture Full Body
 B1_r1_c4 - Markerless 2D (coringa: MediaPipe (CPU/GPU), Advanced, YOLOv26, Yolo+Markerless_MP,
             YOLOv26 Tracker/Pose/Seg/Train, SAM 3, Sapiens2, SAM3+Sapiens2 [+Visualize ID],
             Markerless Hands, MP Angles, Face Mesh, Crop Face, Markerless Live)
-B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID])
+B1_r1_c5 - Markerless 3D (coringa: SAM3+DINOv3 3D [+Visualize ID], YOLO26 Depth 3D)
 
 B2_r2_c1 - Vector Coding  B2_r2_c2 - EMG             B2_r2_c3 - Force Plate
 B2_r2_c4 - GNSS/GPS       B2_r2_c5 - MEG/EEG

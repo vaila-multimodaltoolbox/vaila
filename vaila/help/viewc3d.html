@@ -38,8 +38,8 @@
             <h3>📋 Module Information</h3>
             <p><strong>Category:</strong> Visualization</p>
             <p><strong>File:</strong> vaila\viewc3d.py</p>
-            <p><strong>Version:</strong> 0.4.5</p>
-            <p><strong>Updated:</strong> 24 September 2026</p>
+            <p><strong>Version:</strong> 0.4.15</p>
+            <p><strong>Updated:</strong> 09 November 2026</p>
             <p><strong>Author:</strong> Paulo Santiago</p>
             <p><strong>GUI Interface:</strong> ✅ Yes</p>
         </div>
@@ -58,6 +58,7 @@
                 <li>Adaptive scale (lab to soccer field), automatic unit detection (mm/m)</li>
                 <li>Trails with ghosting (older segments darker), Z-up camera when Z range &gt; Y range</li>
                 <li>Marker picking: <code>`</code> / <code>~</code> to cycle and highlight one marker (yellow)</li>
+                <li><strong>Skeleton from JSON (<code>J</code>)</strong>: draws bones from a connections JSON (e.g. <code>vaila/skeletons/mediapipe_pose33.json</code>). <code>pN</code> tokens are <strong>0-based</strong>, the same <code>p0..pN-1</code> numbering rec3d writes to its CSV/C3D (<code>p11</code> = left shoulder for MediaPipe). Markers match by exact label first; a <code>pN</code> with no such label falls back to marker index N. <code>0</code> saves a 0-based template JSON</li>
                 <li>Grid and ground from data bounds; Matplotlib fallback if no OpenGL</li>
                 <li><strong>Multi-file loading (<code>Ctrl+L</code>)</strong>: add more C3D files at runtime, each with a distinct marker color; timeline syncs to the highest-FPS loaded file by default, with a prompt to downsample to the lowest FPS instead (nearest-index playback lookup, no data mutated)</li>
             </ul>
@@ -68,6 +69,7 @@
             <p><strong>Classes:</strong> <code>VailaModel</code>, <code>VailaView</code>, <code>LoadedC3D</code></p>
             <p><strong>Entry:</strong> <code>run_viewc3d</code></p>
             <p><strong>Multi-file sync:</strong> <code>resolve_master_fps</code>, <code>master_frame_count</code>, <code>map_master_frame_to_local</code>, <code>assign_file_color</code></p>
+            <p><strong>Skeleton JSON:</strong> <code>resolve_skeleton_marker</code> (pN 0-based or marker name to selected marker)</p>
             <p><strong>Data/UI:</strong> <code>load_c3d_file</code>, <code>select_markers</code>, <code>detect_c3d_units</code></p>
             <p><strong>Scene:</strong> <code>create_ground_plane</code>, <code>create_ground_grid</code>, <code>create_football_field_lines</code>, <code>load_field_lines_from_csv</code></p>
             <p><strong>Fallback:</strong> <code>run_viewc3d_fallback</code> (Matplotlib when OpenGL unavailable)</p>

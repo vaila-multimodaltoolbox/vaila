@@ -93,13 +93,14 @@ at an average speed of <b>about {{mean}} km/h</b>, and rose to <b>{{zmax}} metre
 <div class="cards">
   <div class="card hi"><div class="n">{{dist}} <small>m</small></div><div class="l"><!--fk-->distance from the kick to the entry into the goal<!--/fk--><!--nw-->distance from the kick to the last frame<!--/nw--> <span class="tag solid">measured</span></div></div>
   <div class="card"><div class="n">{{flight}} <small>s</small></div><div class="l">flight time of the ball <span class="tag solid">measured</span></div></div>
-  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l"><!--fk-->average speed from the foot to the entry<!--/fk--><!--nw-->average speed from the foot to the last frame<!--/nw--> <span class="tag solid">measured</span></div></div>
+  <div class="card"><div class="n">≈ {{mean}} <small>km/h</small></div><div class="l"><!--fk-->average speed from the foot to the entry<!--/fk--><!--nw-->average speed from the foot to the last frame<!--/nw-->{{mean_note}} <span class="tag solid">measured</span></div></div>
   <div class="card"><div class="n">{{launch}} <small>km/h</small></div><div class="l">speed leaving the foot <span class="tag est">estimate</span></div></div>
   <div class="card"><div class="n">{{zmax}} <small>m</small></div><div class="l">maximum height of the ball <span class="tag est">estimate</span></div></div>
   <div class="card"><div class="n">{{spin}} <small>rps</small></div><div class="l">spin of the ball, inferred from the curve <span class="tag est">estimate</span></div></div>
 </div>
 <p class="note">“Measured”: comes directly from the positions of the ball in the image and from the pitch lines. “Estimate”: depends on
 the physical model fitted to the trajectory; that is why we show the order of magnitude.</p>
+{{time_note}}
 
 <h2>1. The path of the ball</h2>
 <p>The ball left {{kicker_phrase}} and <!--fk-->reached the entry into the goal<!--/fk--><!--nw-->flew until the last frame analysed<!--/nw--> in {{flight}} s. Seen from above, it did not travel
@@ -189,7 +190,7 @@ curve the ball made in the air, measured by its offset from the straight line.</
 <h2>6. What these numbers do not say</h2>
 <div class="warn">
 <ul>
-  <li><b>It is a reconstruction from a single camera.</b> There is no measurement with several cameras. Values marked as “estimate”
+  <li><b>It is a reconstruction from a single camera.</b> {{cameras_note}} Values marked as “estimate”
   may change with a different fit; that is why we show ranges and orders of magnitude.</li>
   <li><b>The spin is inferred, not measured.</b> The camera does not resolve the spin of the ball; the spin comes from the curve of the trajectory.</li>
   <li><b>The validation with a published case did not pass.</b> We simulated the kick of Pelé published in the teaching material of

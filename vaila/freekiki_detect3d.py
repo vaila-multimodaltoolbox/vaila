@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 25 October 2026
-Update Date: 02 November 2026
+Update Date: 10 November 2026
 
 Description:
     Runs on the output of a finished ``detect`` run (or batch) and adds, per video:
@@ -55,7 +55,14 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from .freekiki_auto_flight import auto_flight, auto_rows_and_record
+    from .freekiki_auto_flight import (
+        GOAL_HALF_M,
+        GOAL_X_M,
+        auto_flight,
+        auto_rows_and_record,
+        camera_centre,
+        pixel_ray,
+    )
     from .freekiki_ball import (
         ball_candidates_net,
         ball_candidates_video,
@@ -74,12 +81,14 @@ try:
     from .freekiki_field3d import (
         BALL_3D_COLUMNS,
         BALL_RADIUS_M,
+        FEET_NAMES,
         FIELD_KP_COLUMNS,
         ball_3d,
         box_ground,
         dlt_for_frames,
         field_keypoints_3d,
         pitch_ball_candidates,
+        pixel_to_plane,
         pose_to_pitch,
         write_table,
     )
@@ -92,8 +101,12 @@ try:
     from .soccerfield_vitruvian_dlt3d import fit_vitruvian_frame
 except ImportError:
     from freekiki_auto_flight import (  # ty: ignore[unresolved-import]
+        GOAL_HALF_M,
+        GOAL_X_M,
         auto_flight,
         auto_rows_and_record,
+        camera_centre,
+        pixel_ray,
     )
     from freekiki_ball import (  # ty: ignore[unresolved-import]
         ball_candidates_net,
@@ -116,12 +129,14 @@ except ImportError:
     from freekiki_field3d import (  # ty: ignore[unresolved-import]
         BALL_3D_COLUMNS,
         BALL_RADIUS_M,
+        FEET_NAMES,
         FIELD_KP_COLUMNS,
         ball_3d,
         box_ground,
         dlt_for_frames,
         field_keypoints_3d,
         pitch_ball_candidates,
+        pixel_to_plane,
         pose_to_pitch,
         write_table,
     )
@@ -356,9 +371,15 @@ STATURE_COLUMNS = [
     "stature_before_m",
     "stature_after_m",
     "flag",
+    "stature_target_m",
+    "stature_source",
+    "isotropic",
 ]
 GROUND_COLUMNS = ["frame", "person_id", "raw_x_m", "raw_y_m", "x_m", "y_m"]
 GROUND_KPT_IDX = 999  # index of the "ground" marker, after the 70 MHR keypoints
+KNOWN_STATURE_QUANTILE = (
+    0.9  # a known stature is matched by this quantile of the nose (not the median)
+)
 BALL_MODES = ("off", "net", "sam3")
 
 
@@ -393,6 +414,96 @@ def _float_or_nan(text: str) -> float:
         return float("nan")
 
 
+def _read_keypoints2d(keypoints_csv: Path) -> dict[tuple[int, int], dict[str, tuple[float, float]]]:
+    """``(frame, person_id) -> {kpt_name: (x_px, y_px)}`` from the sibling ``*_keypoints2d.csv``."""
+    kp2d_csv = keypoints_csv.with_name(
+        keypoints_csv.name.replace("_keypoints3d.csv", "_keypoints2d.csv")
+    )
+    if kp2d_csv == keypoints_csv or not kp2d_csv.is_file():
+        return {}
+    out: dict[tuple[int, int], dict[str, tuple[float, float]]] = {}
+    with kp2d_csv.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            try:
+                pid = int(row["person_id"])
+                frame = int(row["frame"])
+                name = str(row["kpt_name"])
+                u = float(row["x_px"])
+                v = float(row["y_px"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if np.isfinite(u) and np.isfinite(v):
+                out.setdefault((frame, pid), {})[name] = (u, v)
+    return out
+
+
+def _goal_plane_pose(
+    names: list[str],
+    xcam: np.ndarray,
+    k2_map: dict[str, tuple[float, float]],
+    L: np.ndarray,
+    goal_x: float,
+) -> tuple[np.ndarray, tuple[float, float]] | None:
+    """Project a goalkeeper's 2D keypoints onto the goal-parallel vertical plane using ``L``.
+
+    In a diagonal broadcast camera, SAM 3D Body's local mesh is fronto-parallel to the camera
+    (~56 deg off the goal line) and its square crop box pads ~20 px below the feet, which rotates
+    a lateral dive into the pitch and shifts the ground track ~0.9 m forward. Intersecting each 2D
+    keypoint ray with the goalkeeper's goal-parallel plane preserves exact 2D reprojection while
+    keeping lateral dives and outstretched hands aligned with the physical goal mouth.
+    """
+    P = dlt_projection_matrix(L)
+    C = camera_centre(P)
+    sign = 1.0 if goal_x >= 0 else -1.0
+    low_x, high_x = (goal_x - 0.60, goal_x + 0.20) if sign > 0 else (goal_x - 0.20, goal_x + 0.60)
+    foot_x: dict[str, float] = {}
+    for side in ("left", "right"):
+        toe = f"{side}-big-toe-tip"
+        if toe in k2_map:
+            xy = pixel_to_plane(L, k2_map[toe], 0.0)
+            if xy is not None and np.isfinite(xy).all():
+                foot_x[side] = float(np.clip(xy[0], low_x, high_x))
+    name_to_idx = {name: i for i, name in enumerate(names) if name}
+    hip_z = [
+        float(xcam[name_to_idx[n], 2])
+        for n in ("left-hip", "right-hip")
+        if n in name_to_idx and np.isfinite(xcam[name_to_idx[n], 2])
+    ]
+    z_hip = float(np.mean(hip_z)) if hip_z else 0.0
+    pitch = np.full((len(names), 3), np.nan)
+    for i, name in enumerate(names):
+        if not name or name not in k2_map:
+            continue
+        uv = k2_map[name]
+        z_i = float(xcam[i, 2]) if np.isfinite(xcam[i, 2]) else z_hip
+        dz = z_i - z_hip
+        if name.startswith("left-") and name in FEET_NAMES and "left" in foot_x:
+            t_idx = name_to_idx.get("left-big-toe-tip", i)
+            z_toe = float(xcam[t_idx, 2]) if np.isfinite(xcam[t_idx, 2]) else z_i
+            x_t = foot_x["left"] + sign * float(np.clip(0.35 * (z_i - z_toe), -0.15, 0.15))
+        elif name.startswith("right-") and name in FEET_NAMES and "right" in foot_x:
+            t_idx = name_to_idx.get("right-big-toe-tip", i)
+            z_toe = float(xcam[t_idx, 2]) if np.isfinite(xcam[t_idx, 2]) else z_i
+            x_t = foot_x["right"] + sign * float(np.clip(0.35 * (z_i - z_toe), -0.15, 0.15))
+        else:
+            x_t = (goal_x - sign * 0.08) + sign * float(np.clip(0.35 * dz, -0.25, 0.15))
+        ray = pixel_ray(P, uv)
+        if abs(float(ray[0])) < 1e-9:
+            continue
+        pitch[i] = C + ((x_t - float(C[0])) / float(ray[0])) * ray
+    feet_idx = [
+        i for i, name in enumerate(names) if name in FEET_NAMES and np.isfinite(pitch[i]).all()
+    ]
+    if not feet_idx:
+        return None
+    z_off = min(0.0, float(np.min(pitch[feet_idx, 2])))
+    valid = np.isfinite(pitch).all(axis=1)
+    pitch[valid, 2] -= z_off
+    x_ground = float(np.mean(list(foot_x.values()))) if foot_x else float(goal_x - sign * 0.05)
+    y_ground = float(np.mean(pitch[feet_idx, 1]))
+    return pitch, (x_ground, y_ground)
+
+
 def _pose_rows(
     keypoints_csv: Path,
     cameras: dict[int, np.ndarray],
@@ -421,6 +532,7 @@ def _pose_rows(
                 continue
             groups.setdefault((frame, pid), []).append(row)
 
+    kp2d_by_frame = _read_keypoints2d(keypoints_csv)
     raw_ground: dict[int, dict[int, tuple[float, float]]] = {}
     for frame, pid in groups:
         L = cameras.get(frame)
@@ -430,6 +542,18 @@ def _pose_rows(
         ground = box_ground(L, box)
         if ground is not None:
             raw_ground.setdefault(pid, {})[frame] = ground
+
+    goal_mouth_pids: dict[int, float] = {}
+    if kp2d_by_frame:
+        for pid, pts in raw_ground.items():
+            early = [pts[f] for f in sorted(pts)[:10]]
+            if not early:
+                continue
+            med_x = float(np.median([p[0] for p in early]))
+            med_y = float(np.median([p[1] for p in early]))
+            if abs(abs(med_x) - GOAL_X_M) <= 2.5 and abs(med_y) <= GOAL_HALF_M + 1.0:
+                goal_mouth_pids[pid] = GOAL_X_M if med_x >= 0 else -GOAL_X_M
+
     tracks = {
         pid: smooth_track(points, n_frames, fps, PLAYER_MODEL) for pid, points in raw_ground.items()
     }
@@ -455,18 +579,29 @@ def _pose_rows(
                 _float_or_nan(r["ycam_m"]),
                 _float_or_nan(r["zcam_m"]),
             )
-        pitch = pose_to_pitch(names, xcam, L, box, ground_xy=track[frame])
+        raw = raw_ground[pid][frame]
+        smoothed_xy = track[frame]
+        pitch = None
+        if pid in goal_mouth_pids and (frame, pid) in kp2d_by_frame:
+            gk_res = _goal_plane_pose(
+                names, xcam, kp2d_by_frame[(frame, pid)], L, goal_mouth_pids[pid]
+            )
+            if gk_res is not None:
+                pitch, gk_ground = gk_res
+                raw = gk_ground
+                smoothed_xy = gk_ground
+        if pitch is None:
+            pitch = pose_to_pitch(names, xcam, L, box, ground_xy=smoothed_xy)
         if pitch is None:
             continue
-        raw = raw_ground[pid][frame]
         ground_rows.append(
             {
                 "frame": frame,
                 "person_id": pid,
                 "raw_x_m": raw[0],
                 "raw_y_m": raw[1],
-                "x_m": track[frame][0],
-                "y_m": track[frame][1],
+                "x_m": smoothed_xy[0],
+                "y_m": smoothed_xy[1],
             }
         )
         for i, name in enumerate(names):
@@ -1002,6 +1137,20 @@ def write_flight_check_video(
     return out_path
 
 
+def _save_kwargs(save: dict | None) -> dict:
+    """The keyword arguments of :func:`vaila.freekiki_auto_flight.auto_flight` for a save."""
+    if not save or save.get("frame") is None:
+        return {}
+    kwargs: dict = {"save_frame": int(save["frame"])}
+    if save.get("keeper_id") is not None:
+        kwargs["keeper_id"] = int(save["keeper_id"])
+    if save.get("sigma_along") is not None:
+        kwargs["save_sigma_along"] = float(save["sigma_along"])
+    if save.get("shift_m") is not None:
+        kwargs["save_shift_m"] = float(save["shift_m"])
+    return kwargs
+
+
 def write_field_3d(
     run_dir: Path,
     out_dir: Path,
@@ -1018,11 +1167,19 @@ def write_field_3d(
     video: Path | None = None,
     contact_frame: int | None = None,
     arrival_observation: dict | None = None,
+    statures: tuple[dict[int, tuple[float, str]], float] | None = None,
+    save: dict | None = None,
 ) -> dict:
     """Write the 3D markers in pitch metres and the C3D file. Returns a summary dict.
 
     ``contact_frame`` (0-based, optional) is a kick contact given by hand for the automatic flight
     (:func:`vaila.freekiki_auto_flight.find_contact`).
+
+    ``statures`` (optional, :func:`vaila.freekiki_stature.resolve_statures`): the known statures
+    by SAM id and the prior of everyone else; a person with a known stature is scaled as a whole
+    body about its ground point. ``save`` (optional): ``{"frame", "keeper_id", "sigma_along",
+    "shift_m"}``, the keeper stops the ball in that frame (0-based) and the automatic flight is
+    anchored on his hands there (:func:`vaila.freekiki_auto_flight.save_anchor`).
 
     A hand-corrected ball (``ball_trusted``) with ``ball_anchors`` follows the fitted flight
     (:func:`flight_ball_rows`) and writes ``ball_flight.json``. Without anchors it keeps the
@@ -1047,7 +1204,23 @@ def write_field_3d(
         }
         pose_rows, ground_rows = _pose_rows(keypoints_csv, cameras, boxes, kept, rate_hz, n_frames)
         write_table(out_dir / "ground_tracks.csv", GROUND_COLUMNS, ground_rows)
-        stature = apply_stature_scale(pose_rows)
+        by_person, prior_m = statures if statures is not None else ({}, None)
+        if by_person:
+            ground_at = {
+                (int(g["frame"]), int(g["person_id"])): (float(g["x_m"]), float(g["y_m"]))
+                for g in ground_rows
+            }
+            stature = apply_stature_scale(
+                pose_rows,
+                stature_m=prior_m if prior_m is not None else VITRUVIAN_HEIGHT_M,
+                by_person=by_person,
+                ground=ground_at,
+                height_quantile=KNOWN_STATURE_QUANTILE,
+            )
+        elif prior_m is not None:
+            stature = apply_stature_scale(pose_rows, stature_m=prior_m)
+        else:
+            stature = apply_stature_scale(pose_rows)
         write_table(
             out_dir / "stature_by_person.csv", STATURE_COLUMNS, [asdict(s) for s in stature]
         )
@@ -1084,6 +1257,7 @@ def write_field_3d(
             n_frames,
             contact_frame=contact_frame,
             arrival_observation=arrival_observation,
+            **_save_kwargs(save),
         )
     if auto is not None:
         if arrival_observation is not None and arrival_observation["type"] == "goal_entry":
@@ -1167,6 +1341,8 @@ def detect_3d_run(
     contact_frame: int | None = None,
     arrival_observation: dict | None = None,
     fresh_sam: bool = False,
+    statures: tuple[dict[int, tuple[float, str]], float] | None = None,
+    save: dict | None = None,
 ) -> dict:
     """Run the 3D chain for one video of a finished detect run. Returns a summary dict.
 
@@ -1281,6 +1457,8 @@ def detect_3d_run(
         ball_trusted=ball_csv is not None,
         contact_frame=contact_frame,
         arrival_observation=arrival_observation,
+        statures=statures,
+        save=save,
     )
     return summary
 
@@ -1303,6 +1481,8 @@ def write_ball_dependent_outputs(
     ball_anchors: BallAnchorSpec | BallAnchorPoints | BallArrivalObservation | None = None,
     contact_frame: int | None = None,
     arrival_observation: dict | None = None,
+    statures: tuple[dict[int, tuple[float, str]], float] | None = None,
+    save: dict | None = None,
 ) -> dict:
     """Everything that depends on the ball, written into ``out_dir`` (shared by both paths).
 
@@ -1324,6 +1504,8 @@ def write_ball_dependent_outputs(
         video=video,
         contact_frame=contact_frame,
         arrival_observation=arrival_observation,
+        statures=statures,
+        save=save,
     )
     _log(f"{video.name}: 3D markers in pitch metres {summary['field3d']}")
     summary["topview"] = write_topview(out_dir, video.stem, fps=fps, n_frames=n_frames)
@@ -1612,6 +1794,8 @@ def rebuild_ball_in_place(
     *,
     contact_frame: int | None = None,
     arrival_observation: dict | None = None,
+    statures: tuple[dict[int, tuple[float, str]], float] | None = None,
+    save: dict | None = None,
 ) -> dict:
     """Redo only the ball-dependent outputs of a 3D folder, in the same folder (no SAM 3D Body).
 
@@ -1658,6 +1842,8 @@ def rebuild_ball_in_place(
         ball_trusted=True,
         contact_frame=contact_frame,
         arrival_observation=arrival_observation,
+        statures=statures,
+        save=save,
     )
 
 

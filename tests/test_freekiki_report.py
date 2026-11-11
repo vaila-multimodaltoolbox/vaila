@@ -623,5 +623,71 @@ def test_the_low_confidence_warning_names_no_wall_when_there_is_none() -> None:
 
     m = {"tier": "baixa", "worst_anchor_m": 1.2, "method": "monocular_auto", "anchor_mode": "auto"}
     for kind, wall in (("kick", False), ("penalty", False), ("free_kick", True)):
-        text = rep._warn_block({**m, "kind": kind, "wall": wall, "penalty": kind == "penalty"}, "pt")
+        text = rep._warn_block(
+            {**m, "kind": kind, "wall": wall, "penalty": kind == "penalty"}, "pt"
+        )
         assert ("barreira" in text) is wall, kind
+
+
+# --- time and speed: the sub-frame kick, and one source for a saved penalty (penalty_metrics.json) ---
+
+
+def test_the_flight_time_starts_at_the_subframe_kick_of_the_fit(tmp_path: Path) -> None:
+    run_dir = _make_run(tmp_path)
+    flight_path = run_dir / "ball_flight.json"
+    flight = json.loads(flight_path.read_text(encoding="utf-8"))
+    flight["kick_time_s"] = 0.3 / FPS  # the contact falls 0.3 frame after frame 0
+    flight_path.write_text(json.dumps(flight), encoding="utf-8")
+    m = rep.compute_metrics(rep.load_run(run_dir))
+    assert m["kick_frame"] == 0
+    assert m["flight_s"] == pytest.approx((N - 1 - 0.3) / FPS, rel=1e-6)
+    assert m["flight_counted_s"] == pytest.approx(
+        (N - 1) / FPS, rel=1e-6
+    )  # whole frames, as counted
+    assert m["mean_kmh"] > m["mean_counted_kmh"]  # the same path in less time
+    assert m["mean_kmh"] == pytest.approx(m["mean_counted_kmh"] * (N - 1) / (N - 1 - 0.3), rel=1e-6)
+
+
+SAVE_SPEED = {
+    "fps": FPS,
+    "frame_ms": 33.37,
+    "kick": {"frame": 0.24, "time_s": 0.0080, "first_moved_frame": 1, "counted_frame": 0,
+             "pixel_check": {"frame": 0.2, "low": 0.1, "high": 0.3, "variants": 4},
+             "agrees_with_pixels": True},
+    "save": {"frame": N - 1, "time_s": round((N - 1) / FPS, 4)},
+    "flight_time_s": 0.359,
+    "flight_frames_counted": 11,
+    "flight_time_counted_s": 0.367,
+    "distance": {"spot_to_hands_m": 10.667, "path_m": 10.7, "to_line_m": 11.06, "nominal_m": 11.0},
+    "mean": {"ms": 29.7, "kmh": 107.0, "kmh_counted": 104.6, "uncertainty_kmh": 5.0,
+             "range_kmh": [102.0, 112.0]},
+    "exit_model": {"launch_ms": 33.2, "launch_kmh": 119.4, "peak_ms": 32.3, "peak_kmh": 116.3,
+                   "range_kmh": [117.0, 122.0]},
+    "at_save_model": {"ms": 27.3, "kmh": 98.1},
+}  # fmt: skip
+
+
+def test_a_saved_penalty_quotes_the_speed_of_penalty_metrics_json(tmp_path: Path) -> None:
+    """The report and pynalty must say the same speed and time: the report reads it, not recomputes."""
+    run_dir = _make_penalty(tmp_path)
+    (run_dir / "data" / "penalty_metrics.json").write_text(
+        json.dumps({"available": True, "event": "save", "kick_frame": 1, "save_frame": N - 1,
+                    "speed": SAVE_SPEED}),
+        encoding="utf-8",
+    )  # fmt: skip
+    m = rep.compute_metrics(rep.load_run(run_dir))
+    rep.attach_penalty_event_frames(run_dir, m)
+    assert m["mean_kmh"] == 107.0 and m["flight_s"] == 0.359
+    assert m["distance_m"] == 10.667 and m["mean_range_kmh"] == [102.0, 112.0]
+    assert m["mean_counted_kmh"] == 104.6 and m["flight_counted_s"] == 0.367
+    pt = _html(rep.build_report(run_dir, animation=False, lang="pt"), "pt")
+    en = _html(rep.build_report(run_dir, animation=False, lang="en"), "en")
+    for html in (pt, en):
+        assert "{{" not in html
+        assert "107" in html and "102" in html and "112" in html  # the mean and its range
+        assert "104" in html and "11" in html  # the counted frames, next to it
+    assert "quadros" in pt and "frames" in en
+    # a run without that file keeps the report's own numbers and has no such note
+    (run_dir / "data" / "penalty_metrics.json").unlink()
+    plain = _html(rep.build_report(run_dir, animation=False, lang="pt"), "pt")
+    assert "faixa 102" not in plain and "{{" not in plain

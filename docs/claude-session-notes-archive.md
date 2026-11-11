@@ -295,3 +295,67 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
     → −0.057 (RIFE), BA 0.36 → 0.28 px.
   - `/home/preto/data/Lance_decifrado/rife` no longer exists; RIFE resolves to the checkout
     (`.local/third_party/Practical-RIFE` + `vaila/models/rife/train_log`).
+
+### YOLO26 Depth 3D (Markerless 3D chooser, 2026-11-11)
+
+- **What:** `vaila/yolo_depth3d.py` (button **YOLO26 Depth 3D**, Markerless 3D chooser; CLI
+  `python -m vaila.yolo_depth3d`). 2D keypoints (YOLO26-pose or any pixel CSV via `--pixels`) + the
+  YOLO26 `depth` task map -> one 3D point per keypoint. Ultralytics 8.4.202 already has the task; no
+  dependency change. Weights `yolo26*-depth.pt` download to `vaila/models` on first use.
+- **Why the defaults are what they are** (two-camera clip `/home/preto/data/rec3d_IBm`, person at
+  3.5-4 m, error = mean distance to the two-camera Rec3D of the same 33 MediaPipe points):
+  - the network's absolute scale was 42 % / 48 % short on the two phones (true/predicted 1.72 / 1.94),
+    so with a `.dlt3d` and no scale fix the error is 162 cm; `--scale floor-frame` brings it to
+    13.5 / 17.6 cm (12.9 / 17.1 with `--smooth-hz 3`);
+  - the depth BETWEEN joints carries little signal: the depth as read at each joint (`--joint-depth 1`)
+    was worse (18.7 / 24.7 cm) than one depth for the whole person (15.1 / 20.0); the default keeps a
+    quarter of it (0.25). The best shrink factor measured was 0.11-0.26;
+  - `imgsz=768` square beats rectangular input on portrait video (|dz| 18-24 cm vs 37-57 cm), and
+    x >= l > m, so the default model is `yolo26x-depth.pt`;
+  - `--scale control` is unreliable when the control points are on thin poles (the map reads the wall
+    behind: per-point ratios 0.77-2.06); the run warns when the control points disagree by > 10 %;
+  - foot heights for the floor scale are per marker (ankle 0.12 m, heel 0.08 m; toes excluded, their
+    depth mixes with the floor). One height for all markers biased the scale by 5-10 %;
+  - `--bone-fix` halves the segment-length variation (6 % -> 3 %) but does not reduce the error
+    (13.4 / 17.4 cm), so it stays off.
+- **Gotchas:** with a DLT the point is always on its pixel ray, so reprojection in the SAME camera is
+  zero by construction and says nothing; use `--check-dlt3d/--check-pixels` (a second camera) or
+  `--reference-3d`. In a git worktree run with `PYTHONPATH=<worktree>` (the venv's editable install
+  points at the main checkout).
+- **Validation:** `tests/test_yolo_depth3d.py` (synthetic maps, no network/GPU).
+- **Whole-trial fit (same day, after the user's report that it was worse than SAM3+DINOv3):**
+  `--fit auto` is now the default with a `.dlt3d` and 17/33 markers (`fit_depths`, `kinematic_fit`).
+  Unknowns = one camera depth per marker and frame, every point on its DLT ray; terms = constant
+  segment lengths (tightened in stages 5 -> 2 -> 1 cm), the map's difference along each segment
+  (first pass only, Cauchy), the ORDER of the ends from a pose z, feet on Z = 0 at their standing
+  height, trunk above the feet, smooth depth. Sparse `least_squares` (`trf` + `lsmr`), about 1 s per
+  pass for 183 x 33.
+  - **Where the error was** (oracles on the clip): with the TRUE person depth and one depth for all
+    joints the error is still 14.5 / 16.2 cm, so the depth between joints dominated; the foot-on-floor
+    person depth added 7-11 cm.
+  - **MediaPipe z is the missing cue for the arms.** Per segment its SIGN was right in 80-100 % of
+    the frames (corr 0.83-0.95 on the arm segments) while its amount is 2-4x too large. For the
+    trunk sides and the thighs its sign is unreliable (0-57 %), yet using it on every segment was no
+    worse than on the arms only (7.1 / 6.9 vs 7.3 / 7.5 cm): those segments are seen nearly side-on,
+    so their length leaves little room. The depth map
+    gets the arm order wrong about half the time in the frontal view (motion blur in front of a wall).
+    The pixel CSV has no z: `--pose-z auto` finds `<stem>_mp_norm.csv` near it.
+  - **Crop depth** (square crop of the keypoint box + 25 %): joint-level correlation with the truth
+    0.55 -> 0.79 (camera 1). The crop changes the absolute scale (true/pred 2.67 vs 1.75), so its
+    level is set to the full-frame depth of the same keypoints. Without the crop the estimated
+    segment lengths are bad and the fit is 8.3 / 11.1 cm.
+  - **Dead ends, measured:** scaling the map on FLOOR pixels (one scale, or a robust affine fit over
+    the visible floor) puts the person 22-41 cm too near: the network is not consistent between the
+    floor and the body. Reading the map ALONG each limb (Theil-Sen slope) is no better than reading
+    it at the joints. Keeping the map's amounts after the lengths are known made one camera better
+    and the other worse depending on the weights, so the map is dropped after the first pass.
+  - **Results, 13 body joints (c1 / c2):** default 7.1 / 7.0 cm; with the person's segment lengths
+    (`--segment-lengths` = the two-camera Rec3D CSV) 6.8 / 4.9; `--pose-z none` 9.3 / 10.2;
+    YOLO26-pose 17 points 9.0 / 9.6; `--fit off` (crop) 14.2 / 10.7. SAM3+DINOv3 3D + Monocular -> DLT
+    world on the same clip: 11.8 / 8.0 (its shape is good; its person depth is 8-13 cm short).
+  - **What is left:** the depth of the whole person. 1 cm of foot-marker height = 4-5 cm of depth
+    with cameras at 0.96 m; the trousers hide the ankles. Known segment lengths fix it through the
+    apparent size. The COCO ankle is 2-3 cm lower than MediaPipe's (10-15 px here): 0.10 m vs 0.12 m.
+  - **Gotchas:** run several fits in parallel with one BLAS thread each (the module uses
+    `threadpoolctl`); 24 threads on these small sparse products were ~10x slower. `np.load` of a
+    compressed `.npz` decompresses the whole array on EVERY `d["maps"]` access.

@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 26 October 2026
-Update Date: 02 November 2026
+Update Date: 09 November 2026
 
 Description:
     ``freekiki.py report-tv --run <3D folder>`` writes ``report_tv/`` inside the finished run,
@@ -51,6 +51,7 @@ import json
 import re
 import shutil
 import subprocess
+from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -213,14 +214,50 @@ def _people_dir(run_dir: Path) -> Path:
 
 def _setpiece(people_dir: Path) -> dict:
     """``data/setpiece.json`` of the run (the kind of set piece the pipeline decided); {} if none."""
-    path = Path(people_dir) / "data" / "setpiece.json"
-    if not path.is_file():
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return data if isinstance(data, dict) else {}
+    base = Path(people_dir)
+    for rel in (Path("data") / "setpiece.json", Path("setpiece_provisional.json")):
+        path = base / rel
+        if path.is_file():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            if isinstance(data, dict):
+                return data
+    with suppress(Exception):
+        try:
+            from .freekiki_setpiece import classify_run
+        except ImportError:
+            from freekiki_setpiece import classify_run  # ty: ignore[unresolved-import]
+
+        auto = classify_run(base)
+        if isinstance(auto, dict) and auto.get("kind") == "penalty":
+            return auto
+    return {}
+
+
+def _nearest_keeper_id(people_dir: Path, goal_x: float | None) -> int | None:
+    """Person ID nearest ``(goal_x, 0)`` in ``ground_tracks.csv`` when ``player_map.csv`` is absent."""
+    if goal_x is None:
+        return None
+    gt = Path(people_dir) / "ground_tracks.csv"
+    if not gt.is_file():
+        return None
+    by_pid: dict[int, list[float]] = {}
+    with gt.open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            try:
+                pid = int(row["person_id"])
+                x = float(row["x_m"])
+                y = float(row["y_m"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            if np.isfinite(x) and np.isfinite(y):
+                by_pid.setdefault(pid, []).append(float(np.hypot(x - goal_x, y)))
+    if not by_pid:
+        return None
+    best_pid = min(by_pid, key=lambda p: float(np.median(by_pid[p])))
+    return best_pid if float(np.median(by_pid[best_pid])) <= 6.0 else None
 
 
 def keeper_wrists(people_dir, person_id: int, n: int) -> np.ndarray | None:
@@ -301,8 +338,10 @@ def load_run(run_dir, video=None) -> ReportRun:
     setpiece = _setpiece(people_dir)
     kind = str(setpiece.get("kind", "unknown"))
     penalty = kind == "penalty"
-    keeper = load_camera_roles(people_dir).get("keeper_id") if penalty else None
     goal_x = setpiece.get("goal_x_m")
+    keeper = load_camera_roles(people_dir).get("keeper_id") if penalty else None
+    if penalty and keeper is None and goal_x is not None:
+        keeper = _nearest_keeper_id(people_dir, float(goal_x))
     return ReportRun(
         run_dir=run_dir,
         video=video_path,
@@ -340,6 +379,67 @@ def confidence(flight: dict) -> tuple[str, float | None]:
     return "baixa", worst
 
 
+def attach_penalty_event_frames(run_dir: Path | str, metrics: dict) -> dict:
+    """Merge kick / response-onset / save frames from ``data/penalty_metrics.json`` into ``metrics``.
+
+    The slow-motion animation and banners read ``gk_onset_frame`` and ``save_frame`` when present.
+    Missing or unreadable files leave ``metrics`` unchanged.
+    """
+    path = Path(run_dir) / "data" / "penalty_metrics.json"
+    if not path.is_file():
+        return metrics
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return metrics
+    if payload.get("kick_frame") is not None:
+        metrics["kick_frame"] = int(payload["kick_frame"])
+    onset = payload.get("gk_move_frame")
+    if onset is None:
+        onset = (payload.get("keeper") or {}).get("onset_frame")
+    if onset is not None:
+        metrics["gk_onset_frame"] = int(onset)
+    save_f = payload.get("save_frame")
+    if save_f is None and payload.get("event") == "save":
+        save_f = (payload.get("interception") or {}).get("frame")
+    if save_f is None:
+        save_f = payload.get("goal_frame")
+    if save_f is not None:
+        metrics["save_frame"] = int(save_f)
+    if payload.get("event") == "save":
+        metrics["penalty_save_info"] = {
+            k: payload.get(k)
+            for k in ("interception", "counterfactual", "keeper", "uncertainty", "speed")
+        }
+        _adopt_speed_summary(metrics, payload.get("speed"))
+    return metrics
+
+
+def _adopt_speed_summary(metrics: dict, speed: dict | None) -> None:
+    """Quote the speed and the time of ``penalty_metrics.json`` (one source for every report).
+
+    The flight time and the mean speed are the pynalty ones: spot-to-hands distance over the time
+    from the sub-frame kick to the save. The exit and last-frame speeds stay the flight model's.
+    """
+    if not speed:
+        return
+    try:
+        metrics.update(
+            {
+                "flight_s": float(speed["flight_time_s"]),
+                "flight_counted_s": float(speed["flight_time_counted_s"]),
+                "distance_m": float(speed["distance"]["spot_to_hands_m"]),
+                "mean_kmh": float(speed["mean"]["kmh"]),
+                "mean_counted_kmh": float(speed["mean"]["kmh_counted"]),
+                "mean_range_kmh": [float(v) for v in speed["mean"]["range_kmh"]],
+                "flight_frames_counted": int(speed["flight_frames_counted"]),
+                "speed_summary": speed,
+            }
+        )
+    except (KeyError, TypeError, ValueError):
+        return  # an older or partial file: the report keeps its own numbers
+
+
 def compute_metrics(run: ReportRun) -> dict:
     """Every number of the report, from the run's files (no text, no language)."""
     flight = run.flight
@@ -347,15 +447,35 @@ def compute_metrics(run: ReportRun) -> dict:
     finite = np.flatnonzero(np.isfinite(track).all(axis=1))
     if finite.size < 2:
         raise ValueError("The ball track has fewer than two frames on the pitch")
-    kick_f = int(round(float(flight["kick_time_s"]) * run.fps))
+    kick_f_float = float(flight["kick_time_s"]) * run.fps
+    kick_f = int(round(kick_f_float))
     kick_f = min(max(kick_f, int(finite[0])), int(finite[-1]) - 1)
+    floor_f = min(max(int(np.floor(kick_f_float)), int(finite[0])), int(finite[-1]) - 1)
+    if (
+        floor_f < kick_f
+        and float(np.linalg.norm(track[kick_f, :2] - track[int(finite[0]), :2])) > 0.25
+        and float(np.linalg.norm(track[floor_f, :2] - track[int(finite[0]), :2])) <= 0.15
+    ):
+        kick_f = floor_f
     end_f = int(finite[-1])
     speed = np.asarray(flight["speed_mps"], dtype=float)  # m/s per frame (0 at frame 0)
     omega = np.asarray(flight["theta"][6:9], dtype=float)
     omega_norm = float(np.linalg.norm(omega))
 
     seg = np.linalg.norm(np.diff(track[kick_f : end_f + 1], axis=0), axis=1)
-    flight_s = (end_f - kick_f) / run.fps
+    # The flight starts at the fit's sub-frame contact (the kick falls between two frames), not at
+    # the rounded frame; the whole-frame count a viewer makes is kept next to it.
+    counted_kick = int(np.floor(round(kick_f_float, 2)))
+    counted_kick = min(max(counted_kick, int(finite[0])), end_f - 1)
+    flight_counted_s = (end_f - counted_kick) / run.fps
+    flight_s = (
+        flight_counted_s
+        if not (kick_f - 1 <= kick_f_float <= kick_f + 1)
+        else (end_f / run.fps - float(flight["kick_time_s"]))
+    )
+    if flight_s <= 0:
+        flight_s = (end_f - kick_f) / run.fps
+    t_kick = end_f / run.fps - flight_s
     horizontal = float(np.hypot(*(track[end_f, :2] - track[kick_f, :2])))
     vx, vy, vz = (float(v) for v in flight["theta"][2:5])
     zmax_f = int(np.nanargmax(track[:, 2]))
@@ -375,6 +495,15 @@ def compute_metrics(run: ReportRun) -> dict:
     barrier_f, keeper_f, keeper_hands = event_frames(run.anchors, end_f, penalty=penalty, wall=wall)
     hands_start = _hands_at(run.keeper_hands, kick_f) if penalty else None
     hands_end = _hands_at(run.keeper_hands, end_f) if penalty else None
+    # A confirmed arrival (a keeper-hand point fixed by hand, e.g. with a second camera) replaces the
+    # one-camera hands: those poses have no depth, so a gap to the ball or a hands path would be wrong.
+    arrival_point = (flight.get("anchor_points") or {}).get("p_arrival") or {}
+    arrival_manual = arrival_point.get("provenance") == "manual"
+    if arrival_manual:
+        # the end is the confirmed arrival (two cameras); the start keeps the one-camera hands, which the
+        # rear camera confirms at the start of the movement. No gap to the ball: the end is the ball.
+        hands_end = np.asarray(arrival_point["xyz"], dtype=float) if penalty else None
+        keeper_hands = np.full(3, np.nan)
     if hands_end is not None:
         keeper_hands = hands_end
     radial = np.linalg.norm(track[:, :2] - track[kick_f, :2], axis=1)
@@ -395,6 +524,7 @@ def compute_metrics(run: ReportRun) -> dict:
         "anchors": display_anchors(
             run.anchors, penalty, kick_f, end_f, hands_start, hands_end, wall=wall
         ),
+        "arrival_manual": arrival_manual,
         "hands_start": hands_start,
         "hands_end": hands_end,
         "hands_travel_m": float(np.linalg.norm(hands_end - hands_start))
@@ -406,11 +536,15 @@ def compute_metrics(run: ReportRun) -> dict:
         "distance_m": horizontal,
         "flight_s": flight_s,
         "path_m": float(seg.sum()),
+        "flight_counted_s": flight_counted_s,
         "mean_kmh": float(seg.sum() / flight_s * 3.6) if flight_s > 0 else float("nan"),
+        "mean_counted_kmh": float(seg.sum() / flight_counted_s * 3.6)
+        if flight_counted_s > 0
+        else float("nan"),
         "launch_kmh": float(np.hypot(np.hypot(vx, vy), vz) * 3.6),
         "launch_deg": float(np.degrees(np.arctan2(vz, np.hypot(vx, vy)))),
         "zmax_m": float(track[zmax_f, 2]),
-        "zmax_t": float((zmax_f - kick_f) / run.fps),
+        "zmax_t": float(zmax_f / run.fps - t_kick),
         "spin_rps": float(flight["spin_rps"]),
         "spin_axis": flight["spin_axis"],
         "spin_vertical": abs(float(flight["spin_axis"][2])) > 0.8,
@@ -425,10 +559,10 @@ def compute_metrics(run: ReportRun) -> dict:
         "a_magnus": a_magnus,
         "a_gravity": GRAVITY,
         "barrier_f": barrier_f,
-        "barrier_t": float((barrier_f - kick_f) / run.fps) if wall else nan,
+        "barrier_t": float(barrier_f / run.fps - t_kick) if wall else nan,
         "barrier_kmh": float(speed[barrier_f] * 3.6) if wall_ok else nan,
         "barrier_to_goal_m": float(np.linalg.norm(entry - track[barrier_f])) if wall_ok else nan,
-        "after_wall_s": float(flight_s - (barrier_f - kick_f) / run.fps) if wall else nan,
+        "after_wall_s": float((end_f - barrier_f) / run.fps) if wall else nan,
         "wall_z": float(track[barrier_f, 2]) if wall_ok else nan,
         "wall_clear_cm": float((track[barrier_f, 2] - 1.8) * 100) if wall_ok else nan,
         "re_min": float(np.nanmin(re[kick_f + 1 : end_f + 1])),
@@ -931,6 +1065,37 @@ def _warn_block(m: dict, lang: str) -> str:
     )
 
 
+def _mean_note(m: dict, lang: str) -> str:
+    """The range of the mean speed, after its label (empty when the report has none)."""
+    rng = m.get("mean_range_kmh")
+    if not rng:
+        return ""
+    return " " + tr(lang, "mean_range", lo=fmt_num(rng[0], 0, lang), hi=fmt_num(rng[1], 0, lang))
+
+
+def _time_note(m: dict, lang: str) -> str:
+    """The time base of a saved penalty: sub-frame contact, whole frames counted, and what differs."""
+    summary = m.get("speed_summary")
+    if not summary:
+        return ""
+    kick = summary["kick"]
+    text = tr(
+        lang,
+        "time_note",
+        fps=fmt_num(summary["fps"], 2, lang),
+        ms=fmt_num(summary["frame_ms"], 1, lang),
+        kick=fmt_num(kick["frame"], 2, lang),
+        save=summary["save"]["frame"],
+        flight=fmt_num(summary["flight_time_s"], 3, lang),
+        n=summary["flight_frames_counted"],
+        counted=fmt_num(summary["flight_time_counted_s"], 3, lang),
+        counted_kmh=fmt_num(summary["mean"]["kmh_counted"], 0, lang),
+        sigma=fmt_num(summary["mean"]["uncertainty_kmh"], 0, lang),
+        exit_kmh=fmt_num(summary["exit_model"]["launch_kmh"], 0, lang),
+    )
+    return f'<p class="note">{text}</p>'
+
+
 def _quotes(m: dict, lang: str) -> str:
     def num(x, nd=1):
         return fmt_num(x, nd, lang)
@@ -953,6 +1118,10 @@ def _hands_texts(m: dict, lang: str) -> tuple[str, str]:
     def num(x, nd=1):
         return fmt_num(x, nd, lang)
 
+    if m.get("arrival_manual"):
+        travel = m.get("hands_travel_m")
+        moved = tr(lang, "hands_moved", travel=num(travel)) if travel is not None else ""
+        return "", " ".join(t for t in (moved, tr(lang, "hands_manual")) if t)
     gap, travel = m.get("keeper_gap_m"), m.get("hands_travel_m")
     moved = tr(lang, "hands_moved", travel=num(travel)) if travel is not None else ""
     if gap is None:
@@ -1026,6 +1195,40 @@ def arrival_note(metrics: dict, lang: str) -> str:
             else "Arrival undetermined: neither entry nor ball–keeper contact was confirmed. "
             "The last fitted point does not establish a save."
         )
+    elif status == "keeper_hand" and arrival.get("provenance") == "auto":
+        diag = arrival.get("diagnostics") or {}
+        sigma_along = arrival.get("sigma_along", 0.4)
+        if lang == "pt":
+            text = (
+                f"Defesa ancorada nas mãos do goleiro, quadro {arrival['frame']} (base 0). "
+                f"Diferença pose–raio da bola: {diag.get('ray_gap_m', 0):.3f} m; "
+                f"resíduo do ajuste na chegada: {diag.get('fit_residual_m', 0):.3f} m "
+                f"(σ transversal = {arrival.get('sigma', 0.05):.3f} m; "
+                f"σ ao longo do raio = {sigma_along:.2f} m). "
+            )
+        else:
+            text = (
+                f"Save anchored on the goalkeeper's hands, frame {arrival['frame']} (0-based). "
+                f"Pose–ray gap: {diag.get('ray_gap_m', 0):.3f} m; "
+                f"fit residual at arrival: {diag.get('fit_residual_m', 0):.3f} m "
+                f"(across-ray σ = {arrival.get('sigma', 0.05):.3f} m; "
+                f"along-ray σ = {sigma_along:.2f} m). "
+            )
+        save_info = metrics.get("penalty_save_info") or {}
+        cf = save_info.get("counterfactual") or {}
+        if cf.get("y_m") is not None and cf.get("z_m") is not None:
+            if lang == "pt":
+                text += (
+                    f"Sem a intervenção do goleiro, o mesmo voo cruzaria a linha do gol em "
+                    f"y = {cf['y_m']:.2f} m, z = {cf['z_m']:.2f} m "
+                    f"({cf.get('zone_label', '')}; HWR = {cf.get('hwr_accuracy_pct', 0):.1f}%). "
+                )
+            else:
+                text += (
+                    f"Without the goalkeeper, the same flight would cross the goal line at "
+                    f"y = {cf['y_m']:.2f} m, z = {cf['z_m']:.2f} m "
+                    f"({cf.get('zone_label', '')}; HWR = {cf.get('hwr_accuracy_pct', 0):.1f}%). "
+                )
     elif arrival.get("provenance") != "manual":
         text = (
             "Entrada estimada pelo modelo; cruzamento sem marcação manual."
@@ -1087,6 +1290,8 @@ def fill_template(m: dict, figs: dict[str, Path], meta: dict, lang: str, payload
         "dist": num(m["distance_m"]),
         "flight": num(m["flight_s"], 2),
         "mean": num(m["mean_kmh"], 0),
+        "mean_note": _mean_note(m, lang),
+        "time_note": _time_note(m, lang),
         "launch": num(m["launch_kmh"], 0),
         "launch_deg": num(m["launch_deg"], 0),
         "zmax": num(m["zmax_m"], 2),
@@ -1108,6 +1313,9 @@ def fill_template(m: dict, figs: dict[str, Path], meta: dict, lang: str, payload
         "keeper_gap": num(m["keeper_gap_m"], 1),
         "hands_lead": hands_lead,
         "hands_text": hands_text,
+        "cameras_note": tr(
+            lang, "cameras_note_manual" if m.get("arrival_manual") else "cameras_note_default"
+        ),
         "hands_limit": tr(lang, "hands_limit"),
         "incoming_lead": incoming_lead,
         "incoming_text": incoming_text,
@@ -1237,6 +1445,7 @@ def build_report(
     if run.penalty and given_keeper is not None:
         run.keeper_hands = keeper_wrists(run.people_dir, int(given_keeper), run.n)
     m = compute_metrics(run)
+    attach_penalty_event_frames(Path(run.run_dir), m)
     people = _people_for(run, m, players)
     root = Path(run.run_dir) / "report_tv"
     result: dict = {"dir": str(root), "tier": m["tier"], "languages": {}}
@@ -1261,7 +1470,14 @@ def build_report(
             else tr(code, "kicker_default" + sfx),
             "generated": tr(code, "date_format", d=today.day, m=today.month, y=today.year),
             "animation": mp4_name if video_path else "",
-            "players_note": people_note(people, code),
+            "players_note": " ".join(
+                part
+                for part in (
+                    people_note(people, code),
+                    tr(code, "keeper_one_camera") if m.get("arrival_manual") else "",
+                )
+                if part
+            ),
         }
         html = fill_template(m, figs, meta, code, editor_payload(run, m, code))
         html_path = out / html_name

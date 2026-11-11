@@ -4,8 +4,8 @@
 
 - **Category:** Visualization
 - **File:** `vaila\viewc3d.py`
-- **Version:** 0.4.5
-- **Updated:** 24 September 2026
+- **Version:** 0.4.15
+- **Updated:** 09 November 2026
 - **Author:** Paulo Santiago
 - **GUI Interface:** ✅ Yes
 
@@ -40,6 +40,10 @@ with its own marker color, synced to one timeline even when source FPS differ.
   distinct marker color; timeline syncs to the highest-FPS loaded file by
   default, with a prompt to downsample to the lowest FPS instead (nearest-index
   playback lookup — no data is interpolated or overwritten)
+- **Skeleton from JSON (`J`):** draws bones from a connections JSON (e.g. `vaila/skeletons/mediapipe_pose33.json`).
+  `pN` tokens are **0-based**, the same `p0..pN-1` numbering rec3d writes to its CSV/C3D (`p11` = left shoulder
+  for MediaPipe). Markers are matched by exact label first; a `pN` with no such label falls back to marker index N
+  (`0` saves a 0-based template JSON)
 - Matplotlib fallback for systems without OpenGL support
 
 ### Main Keyboard Shortcuts
@@ -48,6 +52,7 @@ with its own marker color, synced to one timeline even when source FPS differ.
 - **Markers:** +/- size; C color; X labels; `` ` `` / `` ~ `` pick (highlight)
 - **View:** T background; Y ground; G field lines; M grid; R reset camera
 - **Trails:** W toggle trails with ghosting
+- **Skeleton:** `J` load skeleton connections JSON; `0` save a template JSON
 - **Multi-file:** `Ctrl+L` load additional C3D file(s)
 - **Help:** H open help (browser)
 
@@ -58,6 +63,7 @@ with its own marker color, synced to one timeline even when source FPS differ.
 - **LoadedC3D** – Per-file state for files added via `Ctrl+L`
 - `run_viewc3d` – Main entry point
 - `resolve_master_fps`, `master_frame_count`, `map_master_frame_to_local` – Multi-file timeline sync (pure helpers)
+- `resolve_skeleton_marker` – Resolves a skeleton-JSON marker token (`pN` 0-based or a name) to a selected marker (pure helper)
 - `assign_file_color` – Per-file marker color assignment
 - `load_c3d_file` – Load C3D with unit detection
 - `select_markers` – Marker selection dialog

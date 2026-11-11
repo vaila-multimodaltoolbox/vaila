@@ -185,3 +185,39 @@ def test_fit_flight_with_three_point_anchors_recovers_the_flight() -> None:
     err = np.array([np.linalg.norm(np.subtract(fit["positions"][f], truth[f])) for f in range(n)])
     assert err.max() < 0.3, err.max()
     assert set(fit["anchor_residuals"]) >= {"p0_m", "p1_m", "p2_m"}
+
+
+def test_a_ray_anchor_sets_only_the_depth_a_single_camera_cannot_see() -> None:
+    # a broadcast camera far away with a long lens (penalty clip, 08 Nov 2026): flights at other
+    # depths along the camera ray reproject onto the same pixels, so an end anchor from a 3D pose
+    # fixes that depth. Two anchors 1 m apart along the ray give two flights 1 m apart there,
+    # both on the observed pixels: that spread is the honest uncertainty of the monocular fit.
+    from vaila import freekiki_physics as ph
+
+    fps, n = 29.97, 12
+    theta = np.array([41.45, 0.0, 27.0, -3.5, 2.5, 0.0, 0.0, 0.0, 0.0])
+    truth = ph.simulate_flight(theta, np.arange(n) / fps, rest_height=ph.BALL_RADIUS)
+    centre = np.array([3.0, -67.7, 17.0])
+    P = _look_at_projection(6000.0, centre, [50.0, 0.0, 1.0])
+    cams = dict.fromkeys(range(n), P)
+    pixels = {}
+    for f in range(n):
+        h = P @ np.append(truth[f], 1.0)
+        pixels[f] = (h[0] / h[2], h[1] / h[2])
+    ray = truth[n - 1] - centre
+    ray /= np.linalg.norm(ray)
+    ends = {}
+    for shift in (-0.5, 0.5):
+        anchor = {"frame": n - 1, "xyz": list(truth[n - 1] + shift * ray), "sigma": 0.05,
+                  "ray": list(ray), "sigma_along": 0.3, "label": "mãos"}  # fmt: skip
+        fit = ph.fit_flight(
+            pixels, cams, fps, n, anchors={"rest": (41.45, 0.0), "points": [anchor]}
+        )
+        assert fit["rms_px"] < 0.5  # the pixels are kept
+        end = np.asarray(fit["positions"][n - 1])
+        to_end = end - centre
+        assert np.linalg.norm(to_end - (to_end @ ray) * ray) < 0.03  # still on the pixel's ray
+        res = fit["anchor_residuals"]
+        assert abs(res["p0_perp_m"]) < 0.03 and abs(res["p0_along_m"]) < 0.2
+        ends[shift] = float(to_end @ ray)
+    assert ends[0.5] - ends[-0.5] == pytest.approx(1.0, abs=0.25)  # the depth follows the anchor

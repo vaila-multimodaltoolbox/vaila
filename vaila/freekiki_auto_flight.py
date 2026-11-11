@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 27 October 2026
-Update Date: 02 November 2026
+Update Date: 09 November 2026
 
 Description:
     The monocular ball is placed on the ground plane, so a ball in the air leaves the pitch. A
@@ -81,6 +81,21 @@ ROLL_BREAK_M = (
 )
 KINK_MIN_DV_MPS = 3.0  # the kick speeds the ball up by at least this much...
 KINK_MIN_TURN_DEG = 30.0  # ...or turns it by at least this angle
+# A moving (panning/zooming) camera moves a resting ball in the image: its stillness and kick are then
+# read on the pitch (the ball lifted with each frame's own camera), where only the ball moves.
+ONSET_SHIFT_M = (
+    0.3  # pitch movement from the rest point that marks the kick (calibration noise ~0.1 m)
+)
+CAMERA_PAN_PX = 2.0  # a fixed pitch point moving more than this in the image: the camera moves
+# A save (the keeper's hands stop the ball): the ball sits on its pixel's camera ray, at the depth of
+# the keeper's palms from the 3D pose. Across the ray the pixels fix it; along it (the depth a single
+# camera cannot see) the pose decides, with this uncertainty.
+SAVE_SIGMA_ACROSS_M = 0.05
+SAVE_SIGMA_ALONG_M = 0.4
+PALM_PARTS = {
+    "left": ("left-wrist", "left-index-tip", "left-pinky-tip"),
+    "right": ("right-wrist", "right-index-tip", "right-pinky-tip"),
+}
 
 
 def kick_onset(
@@ -118,6 +133,74 @@ def is_still(
     pts = np.array([pixels[f] for f in frames], dtype=float)
     rest = np.median(pts, axis=0)
     return bool(np.all(np.hypot(*(pts - rest).T) <= min_shift_px))
+
+
+def kick_onset_ground(
+    ground: dict[int, tuple[float, float]],
+    *,
+    min_shift_m: float = ONSET_SHIFT_M,
+    rest_frames: int = REST_FRAMES,
+) -> int | None:
+    """The first frame in which the ball has moved ``min_shift_m`` on the pitch from its rest point.
+
+    ``ground`` maps frame -> ``(x, y)``, the ball lifted to the pitch with each frame's own camera,
+    so a panning or zooming camera, which moves a resting ball in the image, does not move it here.
+    The rest point is the median of the first ``rest_frames`` frames. The next observed frame must
+    be off too (one badly lifted frame is not a kick), unless the moved frame is the last one.
+    None when the ball never moves in the record.
+    """
+    frames = sorted(ground)
+    if len(frames) < rest_frames + 1:
+        return None
+    rest = np.median(np.asarray([ground[f] for f in frames[:rest_frames]], dtype=float), axis=0)
+
+    def moved(f: int) -> bool:
+        return float(np.hypot(*(np.asarray(ground[f], dtype=float) - rest))) > min_shift_m
+
+    for i in range(rest_frames, len(frames)):
+        if moved(frames[i]) and (i + 1 == len(frames) or moved(frames[i + 1])):
+            return int(frames[i])
+    return None
+
+
+def is_still_ground(
+    ground: dict[int, tuple[float, float]],
+    *,
+    min_shift_m: float = ONSET_SHIFT_M,
+    rest_frames: int = REST_FRAMES,
+) -> bool:
+    """True when the ball lies still on the pitch in the first ``rest_frames`` frames: every one is
+    within ``min_shift_m`` of their median (the pitch twin of :func:`is_still`)."""
+    frames = sorted(ground)[:rest_frames]
+    if len(frames) < rest_frames:
+        return False
+    pts = np.asarray([ground[f] for f in frames], dtype=float)
+    rest = np.median(pts, axis=0)
+    return bool(np.all(np.hypot(*(pts - rest).T) <= min_shift_m))
+
+
+def camera_moves(
+    projections: dict[int, np.ndarray],
+    point_xyz,
+    *,
+    tol_px: float = CAMERA_PAN_PX,
+) -> bool:
+    """True when a fixed pitch point moves more than ``tol_px`` in the image across the frames.
+
+    ``projections`` maps frame -> 3x4 projection. A broadcast camera that pans or zooms moves every
+    pitch point; a fixed camera (the same projection every frame) moves none.
+    """
+    X = np.append(np.asarray(point_xyz, dtype=float), 1.0)
+    pixels = []
+    for P in projections.values():
+        h = np.asarray(P, dtype=float) @ X
+        if abs(h[2]) > 1e-12:
+            pixels.append(h[:2] / h[2])
+    if len(pixels) < 2:
+        return False
+    pts = np.asarray(pixels)
+    spread = np.hypot(*(pts - np.median(pts, axis=0)).T)
+    return bool(np.nanmax(spread) > tol_px)
 
 
 def _line_fit(t: np.ndarray, xy: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
@@ -200,6 +283,7 @@ def find_contact(
     fps: float,
     *,
     contact_frame: int | None = None,
+    panning: bool = False,
 ) -> dict:
     """The kick contact, decided once for the whole pipeline.
 
@@ -208,12 +292,17 @@ def find_contact(
     still ball, :func:`kick_onset`), ``kink`` (:func:`rolling_break`) or ``first_frame`` (the ball
     already flies in the first frame). ``pre_contact``: ``still``, ``rolling`` or ``unseen``.
     ``frame`` is None when the track is too short or the still ball never moves.
+
+    ``panning`` (the camera moves, :func:`camera_moves`): the image moves a resting ball, so its
+    stillness and kick are read on the pitch (:func:`is_still_ground`, :func:`kick_onset_ground`)
+    whenever ``ground`` has enough frames. A fixed camera keeps the pixel rules.
     """
     frames = sorted(pixels)
     if len(frames) < REST_FRAMES + 1:
         return {"frame": None, "source": None, "pre_contact": None,
                 "warning": f"fewer than {REST_FRAMES + 1} ball frames"}  # fmt: skip
-    still = is_still(pixels)
+    on_pitch = panning and len(ground) >= REST_FRAMES + 1
+    still = is_still_ground(ground) if on_pitch else is_still(pixels)
     if contact_frame is not None:
         contact = int(contact_frame)
         before = [f for f in sorted(ground) if f < contact]
@@ -223,7 +312,7 @@ def find_contact(
             found.update(_roll_in(ground, before, contact, fps))
         return found
     if still:
-        onset = kick_onset(pixels)
+        onset = kick_onset_ground(ground) if on_pitch else kick_onset(pixels)
         return {"frame": onset, "source": "rest", "pre_contact": "still",
                 "warning": None if onset is not None else "the ball never moves"}  # fmt: skip
     rolled = rolling_break(ground, fps)
@@ -350,6 +439,86 @@ def keeper_hand(pose_rows: list[dict], frame: int, goal_x: float) -> np.ndarray 
     return None if best is None else best[1]
 
 
+def camera_centre(P: np.ndarray) -> np.ndarray:
+    """The camera centre (pitch metres) of a 3x4 projection: ``P @ [C, 1] = 0``."""
+    P = np.asarray(P, dtype=float)
+    return -np.linalg.solve(P[:, :3], P[:, 3])
+
+
+def pixel_ray(P: np.ndarray, uv) -> np.ndarray:
+    """The unit direction, from the camera into the scene, of the pixel ``uv``'s camera ray."""
+    P = np.asarray(P, dtype=float)
+    d = np.linalg.solve(P[:, :3], np.array([float(uv[0]), float(uv[1]), 1.0]))
+    return d / np.linalg.norm(d)
+
+
+def keeper_palms(pose_rows: list[dict], frame: int, person_id: int) -> np.ndarray | None:
+    """The keeper's palms at ``frame``: the mean over the hands found of each hand's centroid of
+    wrist, index tip and pinky tip (:data:`PALM_PARTS`). None without any of them."""
+    parts: dict[str, np.ndarray] = {}
+    for row in pose_rows:
+        if int(row["frame"]) != frame or int(row["person_id"]) != int(person_id):
+            continue
+        xyz = np.array([row["x_m"], row["y_m"], row["z_m"]], dtype=float)
+        if np.isfinite(xyz).all():
+            parts[str(row["kpt_name"])] = xyz
+    palms = []
+    for names in PALM_PARTS.values():
+        found = [parts[n] for n in names if n in parts]
+        if found:
+            palms.append(np.mean(np.asarray(found), axis=0))
+    return np.mean(np.asarray(palms), axis=0) if palms else None
+
+
+def save_anchor(
+    pose_rows: list[dict],
+    frame: int,
+    P: np.ndarray,
+    ball_uv,
+    toward_xy,
+    *,
+    person_id: int | None = None,
+    goal_x: float = GOAL_X_M,
+    sigma_along: float = SAVE_SIGMA_ALONG_M,
+    shift_m: float = 0.0,
+) -> dict | None:
+    """The ball at the save: a ``points`` anchor on its pixel's camera ray at the keeper's hands.
+
+    The ball centre is a ball radius in front of the palms (:func:`keeper_palms` of ``person_id``,
+    or the wrists of the player nearest the goal, :func:`keeper_hand`), toward ``toward_xy`` (the
+    kick spot). That point is moved to the nearest point of the ball's camera ray: the pixel
+    fixes the ball across the ray, the pose only its depth along it, which is uncertain by
+    ``sigma_along``. ``shift_m`` moves the anchor along the ray (the +/- sigma refits of the
+    uncertainty). ``ray_gap_m`` is how far the pose's ball was from the ray (the pose's own error
+    across it). None when the keeper has no hands in that frame.
+    """
+    if person_id is not None:
+        hands = keeper_palms(pose_rows, frame, person_id)
+    else:
+        hands = keeper_hand(pose_rows, frame, goal_x)
+    if hands is None:
+        return None
+    toward = np.asarray(toward_xy, dtype=float)[:2] - hands[:2]
+    norm = float(np.linalg.norm(toward))
+    step = np.zeros(3) if norm < 1e-9 else np.append(toward / norm, 0.0) * BALL_RADIUS_M
+    ball = hands + step
+    C = camera_centre(P)
+    ray = pixel_ray(P, ball_uv)
+    on_ray = C + float((ball - C) @ ray) * ray
+    anchor = on_ray + float(shift_m) * ray
+    return {
+        "frame": int(frame),
+        "xyz": [float(v) for v in anchor],
+        "sigma": SAVE_SIGMA_ACROSS_M,
+        "ray": [float(v) for v in ray],
+        "sigma_along": float(sigma_along),
+        "label": "chegada: mãos do goleiro (defesa)",
+        "hands_xyz": [float(v) for v in hands],
+        "ray_gap_m": float(np.linalg.norm(ball - on_ray)),
+        "shift_m": float(shift_m),
+    }
+
+
 def auto_flight(
     ball_all: list[dict],
     pixels: dict[int, tuple[float, float]],
@@ -360,6 +529,10 @@ def auto_flight(
     *,
     contact_frame: int | None = None,
     arrival_observation: dict | None = None,
+    save_frame: int | None = None,
+    keeper_id: int | None = None,
+    save_sigma_along: float = SAVE_SIGMA_ALONG_M,
+    save_shift_m: float = 0.0,
 ) -> dict | None:
     """The monocular flight with the automatic start and arrival, or None when the kick cannot
     be found (no movement, or no camera for the start frame).
@@ -374,6 +547,12 @@ def auto_flight(
     and the side of the goal are read from it. ``cameras`` maps frame -> the 11-coefficient DLT, as everywhere in
     the pipeline; it is turned into the 3x4 projections the fit and the goal homography use.
     Returns ``{"fit", "onset_frame", "side", "arrival", "points", "barrier", "rms_flag"}``.
+
+    ``save_frame`` (0-based, optional): the keeper's hands stop the ball in that frame. The pixels
+    after it are dropped (the ball no longer flies freely) and, unless an arrival observation is
+    given by hand, the end is anchored on the keeper's hands (:func:`save_anchor`, the keeper is
+    the SAM ``keeper_id`` or the player nearest the goal). ``save_shift_m`` moves that anchor along
+    the camera ray, for the +/- ``save_sigma_along`` refits of the uncertainty.
     """
     try:
         from .freekiki_arrival import entry_anchor, validate_observation
@@ -413,7 +592,11 @@ def auto_flight(
             pixels[frame] = tuple(observation["pixel"])
     lifted = {int(r["frame"]): r for r in ball_all if np.isfinite(r["x_m"])}
     ground = {f: (float(r["x_m"]), float(r["y_m"])) for f, r in lifted.items()}
-    contact = find_contact(pixels, ground, fps, contact_frame=contact_frame)
+    panning = bool(lifted) and camera_moves(
+        projections,
+        (*ground[min(lifted)], BALL_RADIUS_M),
+    )
+    contact = find_contact(pixels, ground, fps, contact_frame=contact_frame, panning=panning)
     onset = contact["frame"]
     if onset is None:
         if observation is not None:
@@ -464,8 +647,58 @@ def auto_flight(
             "rolling": "start: contato do pé (a bola chegava rolando)",
         }.get(pre, "start: primeiro quadro (o chute é nele ou logo antes)"),
     }
+    save_info: dict | None = None
+    if save_frame is not None:
+        save_frame = int(save_frame)
+        if save_frame <= onset:
+            raise ValueError(
+                f"the save (frame {save_frame}) must be after the kick contact ({onset})"
+            )
+        after = {f: uv for f, uv in after.items() if f <= save_frame}  # no free flight after it
+        save_info = {"frame": save_frame, "anchor": None}
+        if observation is None:
+            P_s, uv_s = projections.get(save_frame), pixels.get(save_frame)
+            if P_s is None or uv_s is None:
+                raise ValueError(
+                    f"no calibrated camera or ball pixel at the save frame {save_frame}"
+                )
+            anchor = save_anchor(
+                pose_rows,
+                save_frame,
+                P_s,
+                uv_s,
+                rest_xy,
+                person_id=keeper_id,
+                sigma_along=save_sigma_along,
+                shift_m=save_shift_m,
+            )
+            save_info["anchor"] = anchor
+            if anchor is not None:
+                arrival = {
+                    "type": "keeper_hand",
+                    "frame": save_frame,
+                    "xyz": anchor["xyz"],
+                    "sigma": anchor["sigma"],
+                    "ray": anchor["ray"],
+                    "sigma_along": anchor["sigma_along"],
+                    "label": anchor["label"],
+                    "provenance": "auto",
+                    "diagnostics": {
+                        "ray_gap_m": round(anchor["ray_gap_m"], 3),
+                        "hands_xyz": [round(v, 3) for v in anchor["hands_xyz"]],
+                        "shift_m": anchor["shift_m"],
+                    },
+                }
     arrival_points = (
-        [] if arrival is None else [{k: arrival[k] for k in ("frame", "xyz", "sigma", "label")}]
+        []
+        if arrival is None
+        else [
+            {
+                k: arrival[k]
+                for k in ("frame", "xyz", "sigma", "label", "ray", "sigma_along")
+                if k in arrival
+            }
+        ]
     )
     first = fit_flight(
         {f: uv for f, uv in after.items() if f in projections},
@@ -478,7 +711,9 @@ def auto_flight(
     )
     positions = first["positions"]
     crossing = _goal_crossing(positions, side, onset)
-    if arrival is None and crossing is not None:
+    if save_info is not None and crossing is not None and crossing[1] > save_info["frame"]:
+        crossing = None  # the keeper stopped the ball first: a later crossing is not an entry
+    if arrival is None and crossing is not None and save_info is None:
         _, frame_f = crossing
         uv_c = _pixel_at(pixels, frame_f)
         P_c = projections.get(int(round(frame_f)))
@@ -493,6 +728,64 @@ def auto_flight(
                     "label": "chegada: entrada no gol (plano da baliza)",
                     "provenance": "model",
                 }
+    is_penalty_spot = (
+        pre == "still"
+        and abs(abs(float(rest_xy[0])) - 41.45) <= 2.0
+        and abs(float(rest_xy[1])) <= 2.0
+    )
+    if (
+        save_info is None
+        and observation is None
+        and arrival is None
+        and is_penalty_spot
+        and pose_rows
+        and last_frame in projections
+        and last_frame in pixels
+    ):
+        auto_anchor = save_anchor(
+            pose_rows,
+            last_frame,
+            projections[last_frame],
+            pixels[last_frame],
+            rest_xy,
+            person_id=keeper_id,
+            goal_x=side * GOAL_X_M,
+            sigma_along=save_sigma_along,
+            shift_m=save_shift_m,
+        )
+        if auto_anchor is not None and auto_anchor["ray_gap_m"] <= 0.45:
+            save_info = {"frame": int(last_frame), "anchor": auto_anchor}
+            arrival = {
+                "type": "keeper_hand",
+                "frame": int(last_frame),
+                "xyz": auto_anchor["xyz"],
+                "sigma": auto_anchor["sigma"],
+                "ray": auto_anchor["ray"],
+                "sigma_along": auto_anchor["sigma_along"],
+                "label": auto_anchor["label"],
+                "provenance": "auto",
+                "diagnostics": {
+                    "ray_gap_m": round(auto_anchor["ray_gap_m"], 3),
+                    "hands_xyz": [round(v, 3) for v in auto_anchor["hands_xyz"]],
+                    "shift_m": auto_anchor["shift_m"],
+                },
+            }
+            arrival_points = [
+                {
+                    k: arrival[k]
+                    for k in ("frame", "xyz", "sigma", "label", "ray", "sigma_along")
+                    if k in arrival
+                }
+            ]
+            first = fit_flight(
+                {f: uv for f, uv in after.items() if f in projections},
+                projections,
+                fps,
+                n_frames,
+                anchors={"rest": rest_xy, "points": arrival_points},
+                theta0=seed,
+                kick_window=kick_window,
+            )
     final = first
     if observation is not None:
         assert arrival is not None
@@ -501,6 +794,11 @@ def auto_flight(
             fit_residual_m=float(np.linalg.norm(pos - np.asarray(arrival["xyz"]))),
             fit_plane_error_m=float(abs(pos[0] - arrival["xyz"][0])),
             fitted_crossing_frame=None if crossing is None else crossing[1],
+        )
+    elif save_info is not None and arrival is not None:
+        pos = np.asarray(final["positions"][save_info["frame"]])
+        arrival["diagnostics"]["fit_residual_m"] = round(
+            float(np.linalg.norm(pos - np.asarray(arrival["xyz"]))), 3
         )
     incoming = contact.get("incoming")
     if incoming is not None:  # the turn of the ball at the kick: incoming line vs fitted launch
@@ -514,6 +812,8 @@ def auto_flight(
         "fit": final,
         "onset_frame": int(onset),
         "contact": {k: contact.get(k) for k in ("frame", "source", "pre_contact", "warning")},
+        "camera_moves": panning,
+        "save_frame": None if save_info is None else save_info["frame"],
         "incoming": incoming,
         "ground": ground if pre == "rolling" else {},
         "side": side,
@@ -521,8 +821,12 @@ def auto_flight(
         "start": start_anchor,
         "points": arrival_points,
         "observation": observation,
-        # the wall is a set-piece rule: 9.15 m from a ball that lay still
-        "barrier": barrier_point(final["positions"], onset) if pre == "still" else {},
+        # the wall is a set-piece rule: 9.15 m from a free kick (never on a penalty)
+        "barrier": (
+            barrier_point(final["positions"], onset)
+            if (pre == "still" and not is_penalty_spot and save_info is None)
+            else {}
+        ),
         "rms_flag": final["rms_px"] is not None and final["rms_px"] > PIXEL_REJECT_PX,
     }
 
@@ -554,10 +858,13 @@ def auto_rows_and_record(result: dict, pixels: dict[int, tuple[float, float]], n
     onset = int(result["onset_frame"])
     ground = result.get("ground") or {}
     observation = result.get("observation")
+    save_frame = result.get("save_frame")
+    # the last frame of free flight: an observed arrival (net or keeper) or the save
+    cut = observation["frame"] if observation is not None else save_frame
     rows: list[dict] = []
     for f in range(n_frames):
         x, y, z = positions[f]
-        if observation is not None and f > observation["frame"]:
+        if cut is not None and f > cut:
             x = y = z = float("nan")  # no free-flight extrapolation after net/keeper contact
         if f < onset and f in ground:  # a rolling ball before the kick: its ground track (exact)
             x, y, z = ground[f][0], ground[f][1], BALL_RADIUS_M
@@ -589,6 +896,7 @@ def auto_rows_and_record(result: dict, pixels: dict[int, tuple[float, float]], n
     record["contact_frame"] = contact.get("frame", result["onset_frame"])
     record["contact_source"] = contact.get("source")
     record["pre_contact"] = contact.get("pre_contact")
+    record["camera_moves"] = bool(result.get("camera_moves", False))
     if contact.get("warning"):
         record["contact_warning"] = contact["warning"]
     if result.get("incoming"):
@@ -597,7 +905,10 @@ def auto_rows_and_record(result: dict, pixels: dict[int, tuple[float, float]], n
     record["arrival"] = result["arrival"]
     record["arrival_status"] = result["arrival"]["type"] if result["arrival"] else "undetermined"
     record["arrival_observation"] = observation
-    record["valid_until_frame"] = observation["frame"] if observation else n_frames - 1
+    record["valid_until_frame"] = cut if cut is not None else n_frames - 1
+    if save_frame is not None:
+        record["save_frame"] = int(save_frame)
+        record["shot_outcome"] = "save"
     anchors = {"p0": {k: result["start"][k] for k in ("label", "frame", "xyz")}}
     if result["barrier"]:
         anchors["p_wall"] = result["barrier"]
@@ -607,10 +918,28 @@ def auto_rows_and_record(result: dict, pixels: dict[int, tuple[float, float]], n
             k: result["arrival"][k]
             for k in ("label", "frame", "xyz", "sigma", "type", "provenance")
         }
+    elif save_frame is not None and result["arrival"] is not None:
+        anchors["p_arrival"] = {
+            k: result["arrival"][k]
+            for k in ("label", "frame", "xyz", "sigma", "sigma_along", "ray", "type", "provenance")
+        }
     record["anchor_points"] = anchors
     problems = []
     if result["rms_flag"]:
         problems.append("rms above the reject limit")
+    if observation is None and save_frame is not None:
+        if result["arrival"] is None:
+            problems.append(
+                "save without the keeper's hands in the 3D pose: the depth of the ball at the save "
+                "is free (one camera); give a keeper id, an arrival observation or a second view"
+            )
+        else:
+            along = abs(float(fit["anchor_residuals"].get("p0_along_m") or 0.0))
+            if along > 3 * float(result["arrival"]["sigma_along"]):
+                problems.append(
+                    "the flight disagrees with the keeper's hands along the camera ray (> 3 sigma): "
+                    "review the keeper's 3D pose or add a second view"
+                )
     if observation is not None:
         diag = result["arrival"]["diagnostics"]
         if diag["fit_residual_m"] > 3 * result["arrival"]["sigma"]:

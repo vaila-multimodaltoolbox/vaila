@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 September 2026
-Update Date: 07 September 2026
-Version: 0.3.129
+Update Date: 09 November 2026
+Version: 0.4.15
 
 Description:
     Pure-numpy kinematics behind the Pynalty penalty analysis. Everything in
@@ -386,6 +386,27 @@ def placement_index(
     danger_band = 2.0 * goal.ball_radius
     risk = float(np.clip((danger_band - margin) / danger_band, 0.0, 1.0))
     return float(np.clip(100.0 * spread * (1.0 - 0.5 * risk), 0.0, 100.0))
+
+
+def hwr_accuracy_pct(x_from_centre_m: float, z_m: float, goal: GoalGeometry | None = None) -> float:
+    """Kick accuracy (%) by the height-to-width ratio index of Attaallah et al. (2021).
+
+    Attaallah M, Bassiouni S, Hassan A, et al. The penalty kick accuracy in soccer: a new
+    biomechanical approach. J Hum Sport Exerc 16(Proc4):S1552-S1562 (2021),
+    doi:10.14198/jhse.2021.16.Proc4.01. ``x`` and ``y`` are measured from the centre of the goal
+    mouth (mid width, mid height); the limits are the half width and half height minus the ball
+    radius (3.55 m and 1.11 m); ``HWR = sqrt((x/x_lim)^2 + (y/y_lim)^2) + x/3`` and the accuracy is
+    ``HWR / HWR_max * 100``: 0 % at the centre, 100 % at the farthest corner of the mouth. The
+    worked examples of the paper (44.9 % and 35.1 %) are reproduced by the tests.
+    """
+    goal = goal or GoalGeometry()
+    x_lim = goal.width / 2.0 - goal.ball_radius
+    y_lim = goal.height / 2.0 - goal.ball_radius
+    x = min(abs(float(x_from_centre_m)), x_lim)
+    y = min(abs(float(z_m) - goal.height / 2.0), y_lim)
+    hwr = math.hypot(x / x_lim, y / y_lim) + x / 3.0
+    hwr_max = math.sqrt(2.0) + x_lim / 3.0
+    return 100.0 * hwr / hwr_max
 
 
 def is_inside_goal(entry_x_m: float, entry_z_m: float, goal: GoalGeometry | None = None) -> bool:
@@ -805,6 +826,9 @@ def compute_penalty_metrics(
     gk_body_points_px=None,
     gk_body_landmark_names: list[str] | None = None,
     defending_landmark_hint: str | None = None,
+    plane_xz: dict | None = None,
+    timing: dict | None = None,
+    flight_distance_m: float | None = None,
 ) -> dict:
     """Full metric set for one penalty, from the marked pixel coordinates.
 
@@ -817,6 +841,14 @@ def compute_penalty_metrics(
     frame), the gap to the ball uses the nearest body point on the goal plane,
     preferring a defending-hand hint when given. Otherwise the marked keeper
     centre at contact is used.
+
+    Points already known on the goal plane (from a 3D reconstruction, e.g. freekiki) skip the
+    pixel mapping: ``plane_xz`` may hold ``goal_ball`` (the entry, or for a save the would-be
+    crossing of the goal line), ``kick_gk``, ``goal_gk``, ``kick_ball`` (each ``(x, z)`` in the
+    goal-plane metres of :meth:`GoalGeometry.corner_coords`) and ``gk_body`` (n x 2). ``timing``
+    may hold ``flight_time_s``, ``gk_response_time_s`` and ``gk_dive_time_s`` (times between
+    frames, e.g. a fitted kick time); ``flight_distance_m`` replaces the spot-to-goal-line
+    distance (for a save: spot to the interception). ``plane_source`` says which was used.
     """
     goal = goal or GoalGeometry()
     raw_anthro = anthro or Anthropometrics()
@@ -827,17 +859,30 @@ def compute_penalty_metrics(
         raise ValueError(f"calibration needs exactly 4 corners, got {calib.shape[0]}")
 
     dlt = dlt2d(goal.corner_coords(), calib)
-    goal_ball_real = rec2d(dlt, [goal_ball_px])[0]
-    gk_kick_real = rec2d(dlt, [kick_gk_px])[0]
-    gk_goal_real = rec2d(dlt, [goal_gk_px])[0]
-    kick_ball_real = rec2d(dlt, [kick_ball_px])[0] if kick_ball_px is not None else None
+    known = plane_xz or {}
+
+    def on_plane(key: str, pixel):
+        if key in known and known[key] is not None:
+            return np.asarray(known[key], dtype=float).reshape(2)
+        return None if pixel is None else rec2d(dlt, [pixel])[0]
+
+    goal_ball_real = on_plane("goal_ball", goal_ball_px)
+    gk_kick_real = on_plane("kick_gk", kick_gk_px)
+    gk_goal_real = on_plane("goal_gk", goal_gk_px)
+    kick_ball_real = on_plane("kick_ball", kick_ball_px)
+    plane_source = "3d" if known else "pixels"
+    times = timing or {}
 
     entry_x, entry_z = float(goal_ball_real[0]), float(goal_ball_real[1])
 
     # --- Ball ---
     delta_frames = int(goal_frame) - int(kick_frame)
-    flight_time = delta_frames / fps if fps > 0 else 0.0
-    dist = ball_flight_distance(entry_x, entry_z, goal)
+    flight_time = float(times.get("flight_time_s", delta_frames / fps if fps > 0 else 0.0))
+    dist = (
+        float(flight_distance_m)
+        if flight_distance_m is not None
+        else ball_flight_distance(entry_x, entry_z, goal)
+    )
     vel_ms = dist / flight_time if flight_time > 0 else 0.0
     vel_kmh = vel_ms * 3.6
 
@@ -848,19 +893,24 @@ def compute_penalty_metrics(
 
     # --- Goalkeeper ---
     gk_response_frames = int(gk_move_frame) - int(kick_frame)
-    gk_response_time = gk_response_frames / fps if fps > 0 else 0.0
+    gk_response_time = float(
+        times.get("gk_response_time_s", gk_response_frames / fps if fps > 0 else 0.0)
+    )
     gk_dist = float(np.linalg.norm(gk_goal_real - gk_kick_real))
     delta_jump_frames = int(goal_frame) - int(gk_move_frame)
-    gk_vel_ms = gk_dist / delta_jump_frames * fps if delta_jump_frames > 0 and fps > 0 else 0.0
+    dive_time = float(times.get("gk_dive_time_s", delta_jump_frames / fps if fps > 0 else 0.0))
+    gk_vel_ms = gk_dist / dive_time if dive_time > 0 else 0.0
     gk_vel_kmh = gk_vel_ms * 3.6
 
     gap_ref = gk_kick_real
     gap_source = "marked_centre"
     gap_landmark = ""
-    if gk_body_points_px is not None:
-        body_px = np.asarray(gk_body_points_px, dtype=float).reshape(-1, 2)
+    if gk_body_points_px is not None or known.get("gk_body") is not None:
         try:
-            body_real = rec2d(dlt, body_px)
+            if known.get("gk_body") is not None:
+                body_real = np.asarray(known["gk_body"], dtype=float).reshape(-1, 2)
+            else:
+                body_real = rec2d(dlt, np.asarray(gk_body_points_px, dtype=float).reshape(-1, 2))
             names = list(gk_body_landmark_names or [])
             # Prefer a defending limb when the caller names one (wrist/hand).
             preferred_idx = None
@@ -873,7 +923,9 @@ def compute_penalty_metrics(
             if preferred_idx is not None and np.isfinite(body_real[preferred_idx]).all():
                 gap_ref = body_real[preferred_idx]
                 gap_source = "defending_part"
-                gap_landmark = names[preferred_idx] if preferred_idx < len(names) else str(preferred_idx)
+                gap_landmark = (
+                    names[preferred_idx] if preferred_idx < len(names) else str(preferred_idx)
+                )
             else:
                 gap_ref, _gap, idx = nearest_body_point_to_ball(body_real, (entry_x, entry_z))
                 gap_source = "nearest_body_point"
@@ -919,7 +971,7 @@ def compute_penalty_metrics(
         "flight_time_s": flight_time,
         "gk_response_frames": gk_response_frames,
         "gk_dive_frames": delta_jump_frames,
-        "gk_dive_time_s": delta_jump_frames / fps if fps > 0 else 0.0,
+        "gk_dive_time_s": dive_time,
         # ball placement + outcome
         "ball_entry_x_m": entry_x,
         "ball_entry_z_m": entry_z,
@@ -932,6 +984,7 @@ def compute_penalty_metrics(
         "zone_index": zone_idx,
         "zone_label": zone_label,
         "placement_index": placement_index(entry_x, entry_z, goal),
+        "hwr_accuracy_pct": hwr_accuracy_pct(entry_x - goal.mid_x, entry_z, goal),
         "dist_to_nearest_post_m": min(entry_x, goal.width - entry_x),
         "dist_to_crossbar_m": goal.height - entry_z,
         "dist_to_ground_m": entry_z,
@@ -960,6 +1013,7 @@ def compute_penalty_metrics(
         "ball_radius_m": goal.ball_radius,
         "calibration_residual_px": calibration_residual_px(calib, goal),
         "calibration_convex": is_convex_quadrilateral(calib),
+        "plane_source": plane_source,
     }
     out.update(reach)
 

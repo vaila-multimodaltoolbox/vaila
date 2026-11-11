@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 25 September 2026
-Update Date: 02 November 2026
+Update Date: 09 November 2026
 
 Description:
     FreeKiki (Soccer Tools) trains, retrains and runs a YOLO-pose network that
@@ -3471,6 +3471,16 @@ def _contact_arg(text: str):
         raise argparse.ArgumentTypeError("a 0-based frame number or auto") from exc
 
 
+def _frame_or_none(value: str):
+    """A 0-based frame number, or ``none`` (drops a stored value on --resume)."""
+    if str(value).strip().lower() == "none":
+        return "none"
+    frame = int(value)
+    if frame < 0:
+        raise argparse.ArgumentTypeError("a 0-based frame number (>= 0) or none")
+    return frame
+
+
 def _kick_analysis_kwargs(args) -> dict:
     """The keyword arguments of ``run_kick_analysis`` from the ``kick-analysis`` command line.
 
@@ -3521,6 +3531,15 @@ def _kick_analysis_kwargs(args) -> dict:
         "set_piece": pick("set_piece", "auto"),
         "contact_frame": None if args.contact_frame == "auto" else pick("contact_frame", None),
         "arrival_observation": pick("arrival_observation", None),
+        "save_frame": None if args.save_frame == "none" else pick("save_frame", None),
+        "shot_outcome": pick("shot_outcome", "auto"),
+        "statures": pick("stature", None)
+        if getattr(args, "stature", None) is not None
+        else stored.get("statures"),
+        "gk_arm_span": pick("gk_arm_span", None),
+        "gk_mass": pick("gk_mass", None),
+        "gk_onset_frame": None if args.gk_onset_frame == "none" else pick("gk_onset_frame", None),
+        "save_sigma_along": pick("save_sigma_along", None),
     }
 
 
@@ -7805,6 +7824,10 @@ def build_parser() -> argparse.ArgumentParser:
             "HTML + PDF + slow-motion animation of a finished 3D run, for the press (report_tv/).",
         ),
         (
+            "tv-dossier",
+            "TV dossier of a saved penalty: GC cards, commentator guide, technical dossier (report_tv/pt/).",
+        ),
+        (
             "openplay-report",
             "Planar dribble (1vN) or pass TV report from typed SAM person ids (report_tv/).",
         ),
@@ -7852,6 +7875,7 @@ def build_parser() -> argparse.ArgumentParser:
         elif cmd not in (
             "ball-rebuild",
             "report-tv",
+            "tv-dossier",
             "openplay-report",
             "rec3d-binocular",
             "players-link",
@@ -8068,6 +8092,46 @@ def build_parser() -> argparse.ArgumentParser:
                 "frame). With --resume, auto drops a contact stored in the run.",
             )
             p.add_argument(
+                "--save-frame",
+                type=_frame_or_none,
+                default=None,
+                help="Penalty saved by the keeper's hands: 0-based frame of the save in the reference "
+                "video. The ball's flight stops there and is anchored on the keeper's hands (his 3D "
+                "pose, uncertain along the camera ray); the penalty metrics then report the "
+                "interception and the would-be crossing of the goal line. 'none' drops a stored one.",
+            )
+            p.add_argument(
+                "--shot-outcome",
+                choices=("auto", "goal", "save", "miss", "woodwork"),
+                default=None,
+                help="Outcome of a penalty (default auto: save when --save-frame is given).",
+            )
+            p.add_argument(
+                "--stature",
+                default=None,
+                help="Known statures: 'keeper=2.04,kicker=1.82' (roles), 'sam:39=2.04' (a SAM id), "
+                "'default=1.83' (everyone else). A known stature scales that person's whole 3D body "
+                "about its ground point (default: 1.83 m prior, vertical scale only).",
+            )
+            p.add_argument("--gk-arm-span", type=float, default=None,
+                           help="Goalkeeper's arm span (m), for the reach model of the penalty.")  # fmt: skip
+            p.add_argument("--gk-mass", type=float, default=None,
+                           help="Goalkeeper's body mass (kg), recorded with the penalty metrics.")  # fmt: skip
+            p.add_argument(
+                "--gk-onset-frame",
+                type=_frame_or_none,
+                default=None,
+                help="The keeper's movement onset marked by eye (0-based frame); the 3D onset from "
+                "his centre of mass is reported next to it. 'none' drops a stored one.",
+            )
+            p.add_argument(
+                "--save-sigma-along",
+                type=float,
+                default=None,
+                help="Uncertainty (m) of the keeper's hands along the camera ray at the save "
+                "(default 0.4): the flight is refitted at +/- this to bound the result.",
+            )
+            p.add_argument(
                 "--resume",
                 metavar="RUN",
                 help="Run an existing kick_analysis folder again with its own videos and options "
@@ -8122,6 +8186,32 @@ def build_parser() -> argparse.ArgumentParser:
                 type=float,
                 default=None,
                 help="Share of sampled frames in which a camera must show the pitch (0.3).",
+            )
+        elif cmd == "tv-dossier":
+            p.add_argument(
+                "-w", "--workspace", help="Not needed: accepted because the GUI always passes it."
+            )
+            p.add_argument(
+                "--run",
+                required=True,
+                help="Finished 3D folder of a saved penalty (has data/penalty_metrics.json).",
+            )
+            p.add_argument(
+                "--cameras",
+                help="JSON with the cameras' frame counts: {'cameras': [{'name', 'file_fps', "
+                "'capture_fps', 'frames', 'source': measured|declared|estimated}, ...]}. Default: the "
+                "main camera alone.",
+            )
+            p.add_argument("--goalkeeper", default="", help="Goalkeeper's name, for the text.")
+            p.add_argument("--kicker", default="", help="Kicker's name, for the text.")
+            p.add_argument("--match", default="", help="Match / competition line under the title.")
+            p.add_argument(
+                "--video",
+                help="Video of the main camera: checks it for repeated frames (the 24 fps argument).",
+            )
+            p.add_argument("--out", help="Output folder (default: <run>/report_tv/pt).")
+            p.add_argument(
+                "--no-pdf", action="store_true", help="Skip the PDF (HTML and Markdown only)."
             )
         elif cmd == "report-tv":
             p.add_argument(
@@ -8760,6 +8850,23 @@ def main(argv: list[str] | None = None) -> int:
         _log(f"report written: {result['dir']} | confidence: {result['tier']}")
         for code, paths in result["languages"].items():
             _log(f"  [{code}] html: {paths['html']} | pdf: {paths['pdf']}")
+        return 0
+    if args.command == "tv-dossier":
+        try:
+            from .freekiki_tv_dossier import build as build_dossier
+        except ImportError:
+            from freekiki_tv_dossier import build as build_dossier  # ty: ignore[unresolved-import]
+
+        result = build_dossier(
+            args.run,
+            names={"keeper": args.goalkeeper, "kicker": args.kicker},
+            match=args.match,
+            cameras_file=args.cameras,
+            video=args.video,
+            out_dir=args.out,
+            pdf=not args.no_pdf,
+        )
+        _log(f"dossier written: html: {result['html']} | md: {result['md']} | pdf: {result['pdf']}")
         return 0
     if args.command == "openplay-report":
         try:

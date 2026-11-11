@@ -9,9 +9,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 26 October 2026
-Update Date: 02 November 2026
+Update Date: 09 November 2026
 
 Description:
     A track of pitch positions (metres, one point per frame) cannot jump: a ball does
@@ -320,6 +320,22 @@ def seed_flight(
     return np.array([rest[0], rest[1], v[0], v[1], v[2], tk, 0.0, 0.0, 0.0])
 
 
+def _ray_axes(ray) -> np.ndarray | None:
+    """Rows: the unit ``ray`` and two unit directions across it (an orthonormal basis), or None."""
+    if ray is None:
+        return None
+    r = np.asarray(ray, dtype=float)
+    norm = float(np.linalg.norm(r))
+    if not np.isfinite(norm) or norm < 1e-9:
+        return None
+    r = r / norm
+    helper = np.array([0.0, 0.0, 1.0]) if abs(r[2]) < 0.9 else np.array([1.0, 0.0, 0.0])
+    e1 = np.cross(r, helper)
+    e1 /= np.linalg.norm(e1)
+    e2 = np.cross(r, e1)
+    return np.vstack([r, e1, e2])
+
+
 def fit_flight_views(
     views: list[tuple[dict[int, tuple[float, float]], dict[int, np.ndarray]]],
     fps: float,
@@ -360,6 +376,13 @@ def fit_flight_views(
     point_frames = [int(p["frame"]) for p in point_list]
     point_xyz = [np.asarray(p["xyz"], dtype=float) for p in point_list]
     point_sigma = [float(p["sigma"]) for p in point_list]
+    # a point may be loose along one direction only (``ray``: the camera ray of a monocular 3D pose,
+    # where its depth is uncertain): its residual is then (along / sigma_along, across / sigma)
+    point_axes = [_ray_axes(p.get("ray")) for p in point_list]
+    point_sigma_along = [
+        float(p.get("sigma_along", p["sigma"])) if p.get("ray") is not None else None
+        for p in point_list
+    ]
     tail_size = (
         (2 if rest_xy is not None else 0)
         + (2 if barrier is not None else 0)
@@ -388,8 +411,14 @@ def fit_flight_views(
         if keeper is not None:
             k = int(keeper["frame"])
             parts.append((pos[k] - np.asarray(keeper["xyz"], dtype=float)) / ANCHOR_SIGMA["keeper"])
-        for f_p, xyz_p, s_p in zip(point_frames, point_xyz, point_sigma, strict=True):
-            parts.append((pos[f_p] - xyz_p) / s_p)
+        for f_p, xyz_p, s_p, axes, s_a in zip(
+            point_frames, point_xyz, point_sigma, point_axes, point_sigma_along, strict=True
+        ):
+            d = pos[f_p] - xyz_p
+            if axes is None:
+                parts.append(d / s_p)
+            else:  # along the ray, then the two directions across it
+                parts.append((axes @ d) / np.array([s_a, s_p, s_p]))
         return np.concatenate(parts)
 
     start_xy = rest_xy
@@ -487,8 +516,15 @@ def fit_flight_views(
             float(np.linalg.norm(tail[i : i + 3]) * ANCHOR_SIGMA["keeper"]), 3
         )
         i += 3
-    for j, s_p in enumerate(point_sigma):
-        anchor_res[f"p{j}_m"] = round(float(np.linalg.norm(tail[i : i + 3]) * s_p), 3)
+    for j, (s_p, s_a) in enumerate(zip(point_sigma, point_sigma_along, strict=True)):
+        if s_a is None:
+            anchor_res[f"p{j}_m"] = round(float(np.linalg.norm(tail[i : i + 3]) * s_p), 3)
+        else:  # in metres: fit minus anchor, along the ray (signed) and across it
+            along = float(tail[i] * s_a)
+            across = float(np.hypot(tail[i + 1], tail[i + 2]) * s_p)
+            anchor_res[f"p{j}_m"] = round(float(np.hypot(along, across)), 3)
+            anchor_res[f"p{j}_along_m"] = round(along, 3)
+            anchor_res[f"p{j}_perp_m"] = round(across, 3)
         i += 3
     return {
         "flight_model": FLIGHT_MODEL,

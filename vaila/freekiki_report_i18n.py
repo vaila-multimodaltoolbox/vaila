@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 27 October 2026
-Update Date: 02 November 2026
+Update Date: 09 November 2026
 
 Description:
     Every text the report, its figures, its animation and its interactive editor show outside
@@ -102,8 +102,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "vid_goal": "Entrada no gol",
         "vid_flight": "Bola em voo",
         "vid_last": "Último quadro",
+        "vid_onset": "INÍCIO DA RESPOSTA",
+        "vid_save": "DEFESA",
         "vid_after": "após o chute",
-        "vid_speed": "velocidade",
+        "vid_speed": "velocidade (modelo)",
         "vid_height": "altura",
         "vid_re": "Reynolds",
         "vid_cd": "Cd (arrasto)",
@@ -129,6 +131,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "anchor_goal": "chegada: gol",
         "anchor_kicker": "pé do chutador",
         "anchor_shoulder": "ombro",
+        "mean_range": "(faixa de {lo} a {hi} km/h)",
+        "time_note": (
+            "Tempo de voo: do contato do pé, que cai entre dois quadros (quadro {kick}), até a defesa no "
+            "quadro {save}, a {fps} quadros por segundo (1 quadro = {ms} ms): <b>{flight} s</b>. Contando só "
+            "quadros inteiros seriam {n} quadros = {counted} s e {counted_kmh} km/h. A velocidade média é a "
+            "distância da marca até as mãos dividida por esse tempo, com incerteza de cerca de ±{sigma} km/h "
+            "(um quarto de quadro em cada ponta e 0,3 m na distância). A saída do pé (cerca de {exit_kmh} km/h) "
+            "vem do modelo de voo e não é medida."
+        ),
         "quote_distance": "A bola percorreu {dist} metros em {flight} segundos.",
         "quote_mean": "Na média, a bola andou a cerca de {mean} km/h do pé até a entrada.",
         "quote_height": "A bola subiu até {zmax} metros de altura, e a barreira tem cerca de 1,8 metro.",
@@ -153,6 +164,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "hands_missing": (
             "As mãos do goleiro não puderam ser medidas neste lance (faltam os punhos dele na reconstrução 3D "
             "ou o mapa de jogadores)."
+        ),
+        "cameras_note_default": "Não há medição com várias câmeras.",
+        "cameras_note_manual": (
+            "O voo vem de uma câmera principal; só o ponto em que a bola chegou às mãos foi confirmado com a "
+            "câmera de trás."
+        ),
+        "keeper_one_camera": (
+            "O goleiro vem de uma câmera só: a posição lateral dele é aproximada. A bola e o ponto da defesa "
+            "seguem as duas câmeras."
+        ),
+        "hands_manual": (
+            "O ponto “fim” é a chegada da bola nas mãos, confirmada com duas câmeras (o lado vem da câmera de trás e "
+            "a profundidade e a altura, da principal). O ponto “início” é a média dos punhos na pose de uma câmera, "
+            "no lugar que a câmera de trás confirma no começo do movimento."
         ),
         "hands_limit": (
             "<b>As mãos do goleiro são os punhos.</b> O modelo de pose não tem um ponto da mão, e a posição 3D de "
@@ -568,8 +593,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "vid_goal": "Ball enters the goal",
         "vid_flight": "Ball in flight",
         "vid_last": "Last frame",
+        "vid_onset": "RESPONSE ONSET",
+        "vid_save": "SAVE",
         "vid_after": "after the kick",
-        "vid_speed": "speed",
+        "vid_speed": "speed (model)",
         "vid_height": "height",
         "vid_re": "Reynolds",
         "vid_cd": "Cd (drag)",
@@ -595,6 +622,15 @@ _STRINGS: dict[str, dict[str, str]] = {
         "anchor_goal": "end: goal",
         "anchor_kicker": "kicker's foot",
         "anchor_shoulder": "shoulder",
+        "mean_range": "(range {lo} to {hi} km/h)",
+        "time_note": (
+            "Flight time: from the foot contact, which falls between two frames (frame {kick}), to the save "
+            "at frame {save}, at {fps} frames per second (1 frame = {ms} ms): <b>{flight} s</b>. Counting whole "
+            "frames only would give {n} frames = {counted} s and {counted_kmh} km/h. The mean speed is the "
+            "distance from the spot to the hands over that time, with an uncertainty of about ±{sigma} km/h "
+            "(a quarter of a frame at each end and 0.3 m in the distance). The exit speed (about {exit_kmh} km/h) "
+            "comes from the flight model and is not measured."
+        ),
         "quote_distance": "The ball travelled {dist} metres in {flight} seconds.",
         "quote_mean": "On average, the ball moved at about {mean} km/h from the foot to the entry.",
         "quote_height": "The ball rose to {zmax} metres, and the wall is about 1.8 metres high.",
@@ -619,6 +655,20 @@ _STRINGS: dict[str, dict[str, str]] = {
         "hands_missing": (
             "The goalkeeper's hands could not be measured in this kick (the wrists are missing in the 3D "
             "reconstruction, or the player map is)."
+        ),
+        "cameras_note_default": "There is no measurement with several cameras.",
+        "cameras_note_manual": (
+            "The flight comes from one main camera; only the point where the ball reached the hands was "
+            "confirmed with the rear camera."
+        ),
+        "keeper_one_camera": (
+            "The goalkeeper comes from a single camera: his lateral position is approximate. The ball and the "
+            "point of the save follow both cameras."
+        ),
+        "hands_manual": (
+            "The “end” point is the arrival of the ball at the hands, confirmed with two cameras (the side comes "
+            "from the rear camera, the depth and height from the main one). The “start” point is the mean of the "
+            "wrists in the one-camera pose, where the rear camera confirms the keeper at the start of the movement."
         ),
         "hands_limit": (
             "<b>The goalkeeper's hands are the wrists.</b> The pose model has no hand point, and the 3D position "

@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 06 November 2026
+Update: 08 November 2026
 Version: 0.4.15
 Python Version: 3.12.15
 
@@ -18443,25 +18443,40 @@ def ensure_decodable_video(path: str) -> str | None:
     an existing readable copy is reused without asking.
     """
     try:
-        from .ffmpeg_utils import opencv_compatible_copy, opencv_copy_path, opencv_reads_video
+        from .ffmpeg_utils import (
+            opencv_compatible_copy,
+            opencv_copy_path,
+            opencv_needs_compatible_copy,
+            opencv_reads_video,
+            video_is_interlaced,
+        )
     except ImportError:
         from ffmpeg_utils import (  # ty: ignore[unresolved-import]
             opencv_compatible_copy,
             opencv_copy_path,
+            opencv_needs_compatible_copy,
             opencv_reads_video,
+            video_is_interlaced,
         )
 
-    if opencv_reads_video(path):
+    if not opencv_needs_compatible_copy(path):
         return path
     copy_path = opencv_copy_path(path)
-    if copy_path.is_file() and opencv_reads_video(copy_path):
+    if copy_path.is_file() and opencv_reads_video(copy_path) and not video_is_interlaced(copy_path):
         print(f"OpenCV cannot decode {Path(path).name}; opening its H.264 copy: {copy_path}")
         return str(copy_path)
     codec = get_precise_video_metadata(path).get("codec") or "unknown"
+    interlaced = video_is_interlaced(path)
     message = (
-        f"OpenCV cannot decode {Path(path).name} (video codec: {codec}).\n"
-        "The FFmpeg inside opencv-python has no software AV1 decoder.\n\n"
-        f"Create an H.264 copy beside it and open that?\n{copy_path.name}\n\n"
+        f"OpenCV cannot decode {Path(path).name} "
+        f"({'interlaced video' if interlaced else f'video codec: {codec}'}).\n"
+        + (
+            "Interlaced frames cannot be converted to progressive BGR by OpenCV's "
+            "FFmpeg (swscaler). A progressive H.264 copy (yadif) is needed.\n\n"
+            if interlaced
+            else "The FFmpeg inside opencv-python has no software AV1 decoder.\n\n"
+        )
+        + f"Create an H.264 copy beside it and open that?\n{copy_path.name}\n\n"
         "Same frames and timestamps; the original is kept. Takes a few minutes."
     )
     print(message)

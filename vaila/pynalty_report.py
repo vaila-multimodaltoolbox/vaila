@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 September 2026
-Update Date: 23 September 2026
-Version: 0.4.5
+Update Date: 09 November 2026
+Version: 0.4.15
 
 Change History:
     - v0.4.5: Fixed write_pose_csv() appending 1-indexed generic marker
@@ -96,6 +96,11 @@ _T: dict[str, dict[str, str]] = {
     "trajectory": {"en": "Ball trajectory", "pt": "Trajetória da bola"},
     "pose": {"en": "Pose kinematics", "pt": "Cinemática por pose"},
     "snapshots": {"en": "Event snapshots", "pt": "Imagens dos eventos"},
+    "videos_section": {"en": "Video animations", "pt": "Animações em vídeo"},
+    "video_lance": {"en": "Slow-motion kick", "pt": "Chute em câmera lenta"},
+    "video_overlay": {"en": "3D overlay on broadcast", "pt": "Sobreposição 3D na transmissão"},
+    "video_topview": {"en": "Top view", "pt": "Vista de cima"},
+    "video_blender": {"en": "Blender 3D preview", "pt": "Prévia 3D no Blender"},
     "methods": {"en": "Methods and limitations", "pt": "Métodos e limitações"},
     "files": {"en": "Files in this analysis", "pt": "Arquivos desta análise"},
     "ball_speed": {"en": "Ball speed", "pt": "Velocidade da bola"},
@@ -852,6 +857,9 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
   .snap { background: var(--card); border-radius: 10px; padding: 12px; }
   .snap img { width: 100%; border-radius: 6px; border: 1px solid #3a4655; display: block; }
   .anim-wrap { background: var(--card); border-radius: 10px; padding: 18px; }
+  .videos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .video-card { background: var(--card); border-radius: 10px; padding: 12px; }
+  .video-card video { width: 100%; border-radius: 6px; background: #000; display: block; }
   .canvases { display: grid; grid-template-columns: repeat(auto-fit, minmax(440px, 1fr)); gap: 16px; }
   .canvas-box { background: #20262e; border-radius: 8px; padding: 10px; }
   canvas { width: 100%; height: auto; display: block; background: #20262e; border-radius: 6px; }
@@ -907,6 +915,8 @@ _HTML_TEMPLATE = """<!DOCTYPE html>
     {{REACH_NOTE}}
   </div>
 </div>
+
+{{VIDEOS_BLOCK}}
 
 <h2>{{L_TRAJECTORY}}</h2>
 <div class="anim-wrap">
@@ -1402,6 +1412,67 @@ def _snapshots_html(ctx: ReportContext, lang: str) -> str:
     return "".join(out) or f'<div class="note">{t(lang, "no_pose")}</div>'
 
 
+def _videos_html(ctx: ReportContext, lang: str, report_dir: str | None = None) -> str:
+    """Relative ``<video>`` cards for TV / overlay / Blender MP4s next to the HTML."""
+    label_for = {
+        "animacao_lance": "video_lance",
+        "kick_animation": "video_lance",
+        "overlay_3d": "video_overlay",
+        "topview": "video_topview",
+        "animacao_3d": "video_blender",
+        "animacao_3d_en": "video_blender",
+        "blender_preview": "video_blender",
+    }
+    # Prefer PT slow-mo for PT report and EN for EN; keep one Blender clip.
+    prefer = (
+        (
+            "kick_animation",
+            "overlay_3d",
+            "topview",
+            "animacao_3d_en",
+            "animacao_3d",
+            "blender_preview",
+        )
+        if lang == "en"
+        else (
+            "animacao_lance",
+            "overlay_3d",
+            "topview",
+            "animacao_3d",
+            "animacao_3d_en",
+            "blender_preview",
+        )
+    )
+    base = Path(report_dir) if report_dir else None
+    cards: list[str] = []
+    seen_names: set[str] = set()
+    for key in prefer:
+        path = ctx.videos.get(key)
+        if not path:
+            continue
+        src = Path(path)
+        name = src.name
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+        href = name
+        if base is not None:
+            try:
+                href = os.path.relpath(src, base)
+            except ValueError:
+                href = f"media/{name}" if (base / "media" / name).is_file() else name
+        elif src.parent.name == "media":
+            href = f"media/{name}"
+        label = t(lang, label_for.get(key, "video_lance"))
+        cards.append(
+            f'<div class="video-card"><h3>{label}</h3>'
+            f'<video controls preload="metadata" src="{href}"></video></div>'
+        )
+    if not cards:
+        return ""
+    return f'<h2>{t(lang, "videos_section")}</h2><div class="videos">{"".join(cards)}</div>'
+
+
 def _methods_html(ctx: ReportContext, lang: str) -> str:
     m = ctx.metrics
     if lang == "pt":
@@ -1489,7 +1560,9 @@ def _anim_data(ctx: ReportContext) -> str:
     return json.dumps(payload)
 
 
-def build_report_html(ctx: ReportContext, lang: str = "en") -> str:
+def build_report_html(
+    ctx: ReportContext, lang: str = "en", *, report_dir: str | None = None
+) -> str:
     """Render the full self-contained report for one language."""
     m = ctx.metrics
     verdict_key = m.get("verdict_class", "unknown")
@@ -1535,6 +1608,7 @@ def build_report_html(ctx: ReportContext, lang: str = "en") -> str:
                 "time": t(lang, "time_label"),
             }
         ),
+        "{{VIDEOS_BLOCK}}": _videos_html(ctx, lang, report_dir=report_dir),
         "{{BALL_TABLE_BLOCK}}": _ball_table_block(ctx, lang),
         "{{POSE_BLOCK}}": _pose_block(ctx, lang),
         "{{SNAPSHOTS}}": _snapshots_html(ctx, lang),
@@ -1557,6 +1631,6 @@ def write_html_reports(out_dir: str, ctx: ReportContext, lang: str = "both") -> 
             continue
         path = os.path.join(out_dir, REPORT_HTML[code])
         with open(path, "w", encoding="utf-8") as fh:
-            fh.write(build_report_html(ctx, code))
+            fh.write(build_report_html(ctx, code, report_dir=out_dir))
         written[code] = path
     return written

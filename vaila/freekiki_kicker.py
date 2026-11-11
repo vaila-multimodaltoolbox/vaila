@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 28 October 2026
-Update Date: 01 November 2026
+Update Date: 09 November 2026
 
 Description:
     The core kick metrics of one kicker, from ``poses_3d_binocular.csv`` (the triangulated
@@ -63,10 +63,13 @@ from pathlib import Path
 import numpy as np
 
 try:
-    from .freekiki_auto_flight import kick_onset
+    from .freekiki_auto_flight import kick_onset, kick_onset_ground
     from .freekiki_com import com_track
 except ImportError:
-    from freekiki_auto_flight import kick_onset  # ty: ignore[unresolved-import]
+    from freekiki_auto_flight import (  # ty: ignore[unresolved-import]
+        kick_onset,
+        kick_onset_ground,
+    )
     from freekiki_com import com_track  # ty: ignore[unresolved-import]
 
 WINDOW_S = 0.033  # the window before the contact (foot) and after it (ball), ~2 frames at 60 Hz
@@ -83,6 +86,9 @@ GOAL_CENTRE_Z_M = 1.22  # the centre of the goal mouth (half the crossbar)
 DEG = 180.0 / math.pi
 SIDES = ("left", "right")
 SENSITIVE_CHANGE = 0.5  # a speed that changes by more than this from 33 to 67 ms is flagged
+BALL_RADIUS_M = 0.11
+PLACEMENT_GAP_M = 0.25  # a kicking foot further than this from the ball surface at the contact
+#                         is a pose placed at the wrong depth (one camera): warned
 SENSITIVE_METRICS = {  # metric -> the key of the sensitivity table it comes from
     "v_foot_pre_mps": "v_foot_pre_mps",
     "v_ball_post_mps": "v_ball_post_mps",
@@ -241,8 +247,30 @@ def read_ball_pixels(path: Path | str) -> dict[int, tuple[float, float]]:
     return out
 
 
-def contact_frame(pixels: dict[int, tuple[float, float]]) -> int | None:
-    """The first frame in which the ball moves from its rest pixel (None when it never does)."""
+def read_ball_ground(path: Path | str) -> dict[int, tuple[float, float]]:
+    """Frame -> the ball lifted to the pitch, ``(x, y)`` metres (``ball_3d.csv``, each frame's own
+    camera). Frames without a lift are left out."""
+    out: dict[int, tuple[float, float]] = {}
+    with Path(path).open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("x_m") not in (None, "", "nan"):
+                x, y = float(row["x_m"]), float(row["y_m"])
+                if math.isfinite(x) and math.isfinite(y):
+                    out[int(row["frame"])] = (x, y)
+    return out
+
+
+def contact_frame(
+    pixels: dict[int, tuple[float, float]],
+    ground: dict[int, tuple[float, float]] | None = None,
+) -> int | None:
+    """The first frame in which the ball moves from its rest point (None when it never does).
+
+    With ``ground`` (the ball on the pitch, :func:`read_ball_ground`; given when the camera pans)
+    the movement is read there: a pan moves the resting ball in the image, not on the pitch.
+    """
+    if ground:
+        return kick_onset_ground(ground)
     return kick_onset(pixels)
 
 
@@ -470,8 +498,12 @@ def analyze_kicker(
     goal_x: float | None = None,
     override_source: str | None = None,
     incoming: dict | None = None,
+    ball_ground: dict[int, tuple[float, float]] | None = None,
 ) -> dict:
     """The metrics of one kicker. Returns ``metrics`` (rows), ``events``, ``series`` and ``sensitivity``.
+
+    ``ball_ground`` (optional, the ball on the pitch per frame) makes the marker contact a pitch
+    movement instead of a pixel one: pass it when the reference camera pans.
 
     ``keeper_id`` (optional) is the goalkeeper's player id: his points go to the figures only, never to
     the kicker's metrics. ``contact_override`` is the contact frame of the fitted flight: when given it
@@ -486,7 +518,7 @@ def analyze_kicker(
     warnings: list[str] = []
     points = person_points(rows, kicker_id, n)
     keeper_points = person_points(rows, keeper_id, n) if keeper_id is not None else {}
-    marker_contact = contact_frame(ball_pixels)
+    marker_contact = contact_frame(ball_pixels, ball_ground)
     contact = marker_contact
     contact_source = "marker"
     given = override_source or "fit"
@@ -555,6 +587,18 @@ def analyze_kicker(
     other = "right" if side == "left" else "left"
     events.update(kick_foot=side, support_foot=other, kick_foot_distance_m=dist)
     metrics.append(_metric("kick_foot", side, "", "inferido", "ok", foot_reason))
+    # the kicking foot touches the ball at the contact: a larger gap is the pose placed at the
+    # wrong depth (one camera), and every metric of the foot-ball geometry carries it
+    gap = dist.get(side) if isinstance(dist, dict) else None
+    if gap is not None and math.isfinite(gap):
+        gap = max(float(gap) - BALL_RADIUS_M, 0.0)
+        events["kick_foot_ball_gap_m"] = round(gap, 3)
+        if gap > PLACEMENT_GAP_M:
+            warnings.append(
+                f"the kicking foot is {gap:.2f} m from the ball at the contact (it should touch it): "
+                "the kicker's 3D pose is placed at the wrong depth (one camera); d_support_ball_m and "
+                "the approach geometry carry that error"
+            )
 
     foot = _foot_marker(points, side, n)
     foot_speed = _norm(local_velocity(foot, fps))

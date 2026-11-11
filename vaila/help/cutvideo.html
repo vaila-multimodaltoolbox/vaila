@@ -41,6 +41,10 @@
 
     <div class="card">
         <h2>Key Updates</h2>
+        <p><strong>Interlaced broadcast preview (v0.4.15):</strong> OpenCV cannot convert interlaced
+        H.264 (common in TV soccer captures) to progressive BGR — preview goes black with
+        <code>Cannot convert interlaced to progressive frames</code>. Cut Video detects this and
+        offers a progressive H.264 re-encode with <code>yadif</code> (<code>*_converted.mp4</code>).</p>
         <p><strong>Event synchronization (v0.4.12):</strong> Sync Video's <strong>Sync by events</strong>
         saves versioned <code>.events.json</code> manifests. A direct <code>--video</code> plus
         <code>--sync-file session.events.json</code> handoff exports without a player window.

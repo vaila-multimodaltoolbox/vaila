@@ -1003,3 +1003,53 @@ def test_pose_rows_skip_a_frame_without_its_own_dlt(tmp_path: Path, monkeypatch)
     poses, ground = d3._pose_rows(csv_path, cameras, boxes, None, 60.0, 3)
     assert {r["frame"] for r in poses} == {0, 1}
     assert {r["frame"] for r in ground} == {0, 1}
+
+
+def test_write_field_3d_scales_a_known_stature_and_records_its_source(tmp_path: Path) -> None:
+    # the penalty clip of 08 Nov 2026: the keeper is 2.04 m, not the 1.83 m prior
+    from vaila import freekiki_field3d as f3
+
+    K, R, t = _look_at_camera(2400.0, np.array([0.0, -60.0, 25.0]), np.zeros(3))
+    C = -R.T @ t
+    L = compute_dlt3d_from_KRt(K, R, t)
+    names = ["left-ankle", "right-ankle", "nose", "left-wrist"]
+    world = np.array([[5.0, 2.0, 0.0], [5.2, 2.0, 0.0], [5.1, 2.0, 1.5], [5.1, 1.4, 1.0]])
+    xcam = (R @ (world - C).T).T
+    feet_px = f3.project_points(L, world[:2]).mean(axis=0)
+    box = (feet_px[0] - 15, feet_px[1] - 90, feet_px[0] + 15, feet_px[1])
+    camera_csv = tmp_path / "cam.csv"
+    keypoints_csv = tmp_path / "kp.csv"
+    with camera_csv.open("w", encoding="utf-8") as fh:
+        fh.write("frame,person_id,focal_length_px,cam_t_x_m,cam_t_y_m,cam_t_z_m,")
+        fh.write("bbox_x1_px,bbox_y1_px,bbox_x2_px,bbox_y2_px\n")
+        fh.write(f"0,0,2400,0,0,0,{box[0]},{box[1]},{box[2]},{box[3]}\n")
+    with keypoints_csv.open("w", encoding="utf-8") as fh:
+        fh.write("frame,person_id,kpt_idx,kpt_name,x_m,y_m,z_m,xcam_m,ycam_m,zcam_m\n")
+        for i, name in enumerate(names):
+            x, y, z = xcam[i]
+            fh.write(f"0,0,{i},{name},0,0,0,{x},{y},{z}\n")
+    out = tmp_path / "out"
+    out.mkdir()
+    d3.write_field_3d(tmp_path, out, cameras={0: L}, n_frames=1, rate_hz=25.0,
+                      camera_csv=camera_csv, keypoints_csv=keypoints_csv, kept={0},
+                      ball_rows=[ball.ball_row(0, None)],
+                      statures=({0: (2.04, "keeper")}, 1.83))  # fmt: skip
+    rows = list(csv.DictReader((out / "poses_3d_on_field.csv").open(encoding="utf-8")))
+    nose = next(r for r in rows if r["kpt_name"] == "nose")
+    assert float(nose["z_m"]) == pytest.approx(2.04 - 0.10, abs=1e-3)
+    stature = next(csv.DictReader((out / "stature_by_person.csv").open(encoding="utf-8")))
+    assert (stature["stature_source"], stature["isotropic"]) == ("keeper", "True")
+    assert float(stature["stature_target_m"]) == pytest.approx(2.04)
+    ground = next(r for r in rows if r["kpt_name"] == "ground")
+    wrist = next(r for r in rows if r["kpt_name"] == "left-wrist")
+    # the arm grows sideways with the body (raw offset 0.6 m times the 1.94/1.5 scale)
+    reach = np.hypot(
+        float(wrist["x_m"]) - float(ground["x_m"]), float(wrist["y_m"]) - float(ground["y_m"])
+    )
+    assert reach == pytest.approx(0.6 * (2.04 - 0.10) / 1.5, abs=0.08)
+
+
+def test_save_kwargs_map_the_save_option_to_the_flight() -> None:
+    assert d3._save_kwargs(None) == {}
+    assert d3._save_kwargs({"frame": 90, "keeper_id": 39, "sigma_along": 0.4, "shift_m": -0.4}) == {
+        "save_frame": 90, "keeper_id": 39, "save_sigma_along": 0.4, "save_shift_m": -0.4}  # fmt: skip

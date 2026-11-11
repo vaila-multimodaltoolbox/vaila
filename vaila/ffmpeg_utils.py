@@ -7,7 +7,7 @@
 #
 # ffmpeg_utils.py
 #
-# Update Date: 06 November 2026
+# Update Date: 08 November 2026
 # Version: 0.4.15
 #
 # Central helper module for FFmpeg binary discovery and H.264 encoding helpers
@@ -35,7 +35,8 @@
 #
 # OpenCV readability: opencv_reads_video() / opencv_compatible_copy() make an
 # H.264 <stem>_h264.mp4 copy of videos opencv-python cannot decode (AV1: its
-# bundled FFmpeg has no software AV1 decoder).
+# bundled FFmpeg has no software AV1 decoder; interlaced broadcast H.264 makes
+# libswscale refuse yuv420p→bgr24 and OpenCV returns all-black frames).
 #
 # Frame numbers: timestamp_frame_number() / TimestampFrameCounter number decoded
 # frames by timestamp, as OpenCV's seek does, and list frames the camera dropped.
@@ -708,19 +709,104 @@ def run_ffmpeg_encode_with_fallback(
     raise RuntimeError("FFmpeg encoding failed without producing an output file")
 
 
-def opencv_reads_video(path) -> bool:
-    """True when OpenCV decodes the first frame of ``path``.
+def opencv_reads_video(path, *, max_probe_frames: int = 5) -> bool:
+    """True when OpenCV decodes at least one non-empty frame of ``path``.
 
     The FFmpeg bundled in the opencv-python wheels has no software AV1 decoder
     (only hardware ``av1``), so e.g. YouTube AV1 downloads open but never read.
+
+    Interlaced broadcast H.264 is worse: ``cap.read()`` returns success with an
+    all-black BGR buffer because libswscale refuses interlaced→progressive
+    colour conversion (``Cannot convert interlaced to progressive frames``).
+    Probing a few frames for any non-zero pixel catches that case.
     """
     import cv2
 
     cap = cv2.VideoCapture(str(path))
     try:
-        return bool(cap.isOpened() and cap.read()[0])
+        if not cap.isOpened():
+            return False
+        for _ in range(max(1, int(max_probe_frames))):
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                return False
+            if frame.size and int(frame.max()) > 0:
+                return True
+        return False
     finally:
         cap.release()
+
+
+def video_is_interlaced(path) -> bool:
+    """True when ffprobe reports interlaced field order or interlaced frames.
+
+    Broadcast soccer clips often omit ``field_order`` on the stream but still
+    set ``interlaced_frame=1`` on each decoded frame (TFF SeparatedFields).
+    """
+    ffprobe = get_ffprobe_path()
+    try:
+        field = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-show_entries",
+                "stream=field_order",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=30,
+        )
+        order = (field.stdout or "").strip().lower()
+        if order and order not in {"progressive", "unknown"}:
+            return True
+
+        frames = subprocess.run(
+            [
+                ffprobe,
+                "-v",
+                "error",
+                "-select_streams",
+                "v:0",
+                "-read_intervals",
+                "%+#3",
+                "-show_entries",
+                "frame=interlaced_frame",
+                "-of",
+                "csv=p=0",
+                str(path),
+            ],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+            timeout=60,
+        )
+        flags = [line.strip() for line in (frames.stdout or "").splitlines() if line.strip()]
+        return bool(flags) and all(flag == "1" for flag in flags)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def opencv_needs_compatible_copy(path) -> bool:
+    """True when OpenCV cannot reliably preview ``path``.
+
+    Covers AV1 (no software decoder in opencv-python), interlaced broadcast
+    H.264 (libswscale refuses interlaced→BGR, often yielding black frames),
+    and any file whose probed frames are empty.
+    """
+    if video_is_interlaced(path):
+        return True
+    return not opencv_reads_video(path)
 
 
 def opencv_copy_path(path) -> Path:
@@ -733,28 +819,42 @@ def opencv_compatible_copy(path) -> Path:
     """H.264 copy of ``path`` that OpenCV can read: ``<stem>_h264.mp4`` beside it.
 
     Every frame and timestamp is kept (``-fps_mode passthrough``), audio is
-    copied. The system FFmpeg decodes (libdav1d for AV1). A readable copy from
-    an earlier run is reused; the source is never modified.
+    copied. The system FFmpeg decodes (libdav1d for AV1). Interlaced sources
+    are deinterlaced with ``yadif`` so OpenCV's swscaler can convert to BGR.
+    A readable copy from an earlier run is reused; the source is never modified.
     """
     src = Path(path)
     dst = opencv_copy_path(src)
     if dst.is_file() and opencv_reads_video(dst):
         return dst
     partial = dst.with_name(f"{dst.stem}.partial.mp4")
-    try:
-        run_ffmpeg_encode_with_fallback(
-            [get_ffmpeg_path(), "-hide_banner", "-y", "-i", str(src)],
-            [
-                "-map", "0:v:0", "-map", "0:a?", "-fps_mode", "passthrough",
-                "-c:a", "copy", "-movflags", "+faststart", str(partial),
-            ],
-        )  # fmt: skip
-        partial.replace(dst)
-    finally:
-        partial.unlink(missing_ok=True)
-    if not opencv_reads_video(dst):
-        raise RuntimeError(f"OpenCV still cannot read the H.264 copy: {dst}")
-    return dst
+    # Prefer yadif when ffprobe says interlaced; if a plain re-encode still
+    # yields black/unreadable frames, retry once with forced deinterlace.
+    attempts = [True] if video_is_interlaced(src) else [False, True]
+    last_error: Exception | None = None
+    for deinterlace in attempts:
+        vf_args = ["-vf", "yadif"] if deinterlace else []
+        if deinterlace:
+            print(f"  [FFmpeg] Applying yadif deinterlace for OpenCV-readable copy → {dst.name}")
+        try:
+            run_ffmpeg_encode_with_fallback(
+                [get_ffmpeg_path(), "-hide_banner", "-y", "-i", str(src), *vf_args],
+                [
+                    "-map", "0:v:0", "-map", "0:a?", "-fps_mode", "passthrough",
+                    "-c:a", "copy", "-movflags", "+faststart", str(partial),
+                ],
+            )  # fmt: skip
+            partial.replace(dst)
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as exc:
+            last_error = exc
+            continue
+        finally:
+            partial.unlink(missing_ok=True)
+        if opencv_reads_video(dst):
+            return dst
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError(f"OpenCV still cannot read the H.264 copy: {dst}")
 
 
 def timestamp_frame_number(pos_msec: float, fps: float) -> int:

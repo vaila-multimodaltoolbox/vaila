@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 28 October 2026
-Update Date: 02 November 2026
+Update Date: 09 November 2026
 
 Description:
     ``freekiki.py kick-analysis`` (and the One-click button of section 5) turns two cut videos of
@@ -60,15 +60,17 @@ except ImportError:
 VIDEO_SUFFIXES = (".mp4", ".avi", ".mov", ".mkv", ".m4v")
 STATUS_NAME = "pipeline_status.json"
 KICK_FOOT_CHOICES = ("auto", "left", "right")
+SHOT_OUTCOME_CHOICES = ("auto", "goal", "save", "miss", "woodwork")
 # the pynalty metrics shown in the README of a penalty run (the rest is in data/penalty_metrics.csv)
 PENALTY_KEEP = ("shot_outcome", "vel_kmh", "dist", "coord_x", "coord_z", "gk_response_time",
                 "gk_dive_time_s", "gk_vel_ms")  # fmt: skip
 # the ball path of a penalty (freekiki_penalty.penalty_path); a change here reruns the penalty stage
-PENALTY_MODEL = "gk-partial-v9"
+PENALTY_MODEL = "save-v12"  # v12: speed summary (sub-frame time base, one mean speed); v11: GK goal-plane 2D-ray pose, geodesic crouch stature, save anchor
 # the kicker stage: a change here reruns it (the contact of the fitted flight, the goal side)
 PLANAR_KINDS = ("open_play", "dribble", "pass")  # no shot at goal: no goal (flight) report
 REPORT_SKIPPED = "skipped: no shot at goal (dribble / pass: freekiki.py openplay-report)"
-KICKER_MODEL = "contact-fit-v1"
+REPORT_AFTER_PENALTY = "rendered after the penalty metrics it quotes"
+KICKER_MODEL = "contact-fit-v2"  # v2: a panning camera reads the marker contact on the pitch
 # the only people a penalty reads: ID0 (the goalkeeper) and ID1 (the kicker), as in player_map.csv
 PENALTY_PLAYERS = ("keeper", "kicker")
 FPS_TOLERANCE = 0.01  # the two cameras must share a frame rate (the clocks are frame / fps)
@@ -378,6 +380,18 @@ def _sam_boxes_csv(work: Path) -> Path:
     return found[-1]
 
 
+def _roles_sam(player_map: Path) -> dict[str, int]:
+    """The SAM ids of the keeper and the kicker in ``player_map.csv`` (``{}`` before the players)."""
+    out: dict[str, int] = {}
+    if not Path(player_map).is_file():
+        return out
+    with Path(player_map).open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            if row.get("role") in ("keeper", "kicker") and row.get("sam_id") not in (None, ""):
+                out.setdefault(row["role"], int(row["sam_id"]))
+    return out
+
+
 def _keeper_id(player_map: Path) -> int | None:
     """The goalkeeper's player id (ID0 of a penalty), or None when the players link found no keeper."""
     with player_map.open(newline="", encoding="utf-8") as fh:
@@ -615,6 +629,16 @@ def _c3d_binocular(
     )
 
 
+def _ref_camera_moves(ref3d: Path) -> bool:
+    """True when the reference flight found a moving (panning/zooming) camera (``ball_flight.json``
+    ``camera_moves``); False for a fixed camera, an older flight or no flight at all."""
+    path = Path(ref3d) / "ball_flight.json"
+    try:
+        return bool(json.loads(path.read_text(encoding="utf-8")).get("camera_moves", False))
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def _fit_contact(flight: dict, marker: int | None, fps: float) -> int | None:
     """The contact frame of the fitted flight when it should replace the marker's, else None.
 
@@ -654,6 +678,11 @@ def _kicker(
     n = int(nominal_clock(ref_video).size)
     flight = json.loads((binocular / "ball_flight.json").read_text(encoding="utf-8"))
     ball_pixels = kicker.read_ball_pixels(ref3d / "ball.csv")
+    # a panning reference camera moves the resting ball in the image: the marker contact is then
+    # read on the pitch (ball_3d.csv, each frame's own camera), never on the pixels
+    ball_ground = None
+    if _ref_camera_moves(ref3d) and (ref3d / "ball_3d.csv").is_file():
+        ball_ground = kicker.read_ball_ground(ref3d / "ball_3d.csv")
     # a ball not at rest (open play) or a contact given by hand: the reference flight decided it
     decided = _module("freekiki_auto_flight").flight_contact(ref3d)
     incoming = None
@@ -661,7 +690,7 @@ def _kicker(
         contact_override, override_source = int(decided["frame"]), str(decided["source"])
         incoming = decided.get("incoming")
     else:
-        contact_override = _fit_contact(flight, kicker.contact_frame(ball_pixels), fps)
+        contact_override = _fit_contact(flight, kicker.contact_frame(ball_pixels, ball_ground), fps)
         override_source = "fit"
     result = kicker.analyze_kicker(
         kicker.read_poses(poses_csv),
@@ -678,6 +707,7 @@ def _kicker(
         goal_x=goal_x,
         override_source=override_source,
         incoming=incoming,
+        ball_ground=ball_ground,
     )
     views = None
     if other3d is not None and ref_work is not None and other_work is not None:
@@ -697,6 +727,55 @@ def _kicker(
     }
 
 
+def _read_pose_rows(path: Path) -> list[dict]:
+    """``poses_3d_on_field.csv`` as the rows the flight reads (frame and SAM person id as ints)."""
+    rows: list[dict] = []
+    with Path(path).open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            try:
+                rows.append({"frame": int(row["frame"]), "person_id": int(row["person_id"]),
+                             "kpt_name": row["kpt_name"], "x_m": float(row["x_m"] or "nan"),
+                             "y_m": float(row["y_m"] or "nan"), "z_m": float(row["z_m"] or "nan")})  # fmt: skip
+            except (KeyError, ValueError):
+                continue
+    return rows
+
+
+def _read_lifted_ball(path: Path) -> list[dict]:
+    """``ball_3d.csv`` (the ball lifted to the pitch per frame) as the rows the flight reads."""
+    rows: list[dict] = []
+    with Path(path).open(newline="", encoding="utf-8") as fh:
+        for row in csv.DictReader(fh):
+            rows.append({"frame": int(row["frame"]), "cx": row["cx"], "cy": row["cy"],
+                         "score": row["score"], "x_m": float(row["x_m"] or "nan"),
+                         "y_m": float(row["y_m"] or "nan"), "z_m": float(row["z_m"] or "nan")})  # fmt: skip
+    return rows
+
+
+def _save_alternatives(
+    ref3d: Path, ref_video: Path, flight: dict, *, save_frame: int, keeper_sam: int, sigma: float
+) -> list[dict]:
+    """The reference flight refitted with the keeper's anchor moved -sigma and +sigma along the
+    camera ray (the depth one camera cannot see): the spread is the uncertainty of the save."""
+    af = _module("freekiki_auto_flight")
+    kicker = _module("freekiki_kicker")
+    fps = _module("freekiki_detect3d")._video_fps(ref_video)
+    n = int(nominal_clock(ref_video).size)
+    cameras = _module("freekiki_stereo").find_dlt3d(ref3d, ref_video)
+    ball_all = _read_lifted_ball(ref3d / "ball_3d.csv")
+    pixels = kicker.read_ball_pixels(ref3d / "ball.csv")
+    pose_rows = _read_pose_rows(ref3d / "poses_3d_on_field.csv")
+    out = []
+    for shift in (-sigma, sigma):
+        fit = af.auto_flight(ball_all, pixels, cameras, pose_rows, fps, n,
+                             contact_frame=int(flight["contact_frame"]), save_frame=save_frame,
+                             keeper_id=keeper_sam, save_sigma_along=sigma, save_shift_m=shift)  # fmt: skip
+        if fit is not None:
+            out.append({"shift_m": shift, "theta": fit["fit"]["theta"], "rms_px": fit["fit"]["rms_px"],
+                        "kick_time_s": fit["fit"]["kick_time_s"]})  # fmt: skip
+    return out
+
+
 def _penalty(
     ref3d: Path,
     ref_video: Path,
@@ -705,6 +784,7 @@ def _penalty(
     *,
     goal_x: float,
     track_csv: Path | None = None,
+    opts: dict | None = None,
 ) -> dict:
     """The pynalty metrics, the ball path and the report of a penalty (reference camera pixels and DLT3D).
 
@@ -712,7 +792,14 @@ def _penalty(
     ``report_tv/penalty/`` the report. ``track_csv`` is the binocular ball of a run with two cameras:
     when it is given, the ball path's verdict is that ball (:func:`freekiki_penalty.penalty_path`); without
     it the verdict is the monocular fit, which is provisional.
+
+    ``opts`` (the penalty options of the run): ``save_frame`` and ``shot_outcome`` (a save measured
+    from the 3D flight, :func:`freekiki_penalty.save_metrics`), ``statures``, ``gk_arm_span`` and
+    ``gk_mass`` (the measured bodies), ``gk_onset_frame`` (an onset marked by eye) and
+    ``save_sigma_along``. The keeper's dive (:func:`freekiki_keeper.keeper_kinematics`) goes to
+    ``data/keeper_metrics.json``.
     """
+    opts = opts or {}
     penalty = _module("freekiki_penalty")
     kicker = _module("freekiki_kicker")
     stereo = _module("freekiki_stereo")
@@ -729,6 +816,51 @@ def _penalty(
     if track_csv is not None and track_csv.is_file():
         xyz = kicker.read_ball_xyz(track_csv, n)
         track = {f: xyz[f] for f in range(n) if np.isfinite(xyz[f]).all()}
+    flight_path = ref3d / "ball_flight.json"
+    flight = json.loads(flight_path.read_text(encoding="utf-8")) if flight_path.is_file() else None
+    ball_on = kicker.read_ball_xyz(ref3d / "ball_3d_on_field.csv", n)
+    flight_track = track or {f: ball_on[f] for f in range(n) if np.isfinite(ball_on[f]).all()}
+    save_frame = opts.get("save_frame")
+    if save_frame is None and flight is not None:
+        save_frame = flight.get("save_frame")
+    outcome = opts.get("shot_outcome") or "auto"
+    shot_outcome = None if outcome == "auto" else outcome
+    keeper_id = _keeper_id(ref3d / "player_map.csv")
+    keeper_points = None
+    players_csv = ref3d / "poses_3d_on_field_players.csv"
+    if keeper_id is not None and players_csv.is_file():
+        keeper_points = kicker.person_points(kicker.read_poses(players_csv), keeper_id, n)
+    spec = opts.get("statures") or {}
+    anthro = _module("pynalty_analysis").Anthropometrics(
+        gk_height_m=spec.get("keeper"), gk_arm_span_m=opts.get("gk_arm_span"),
+        kicker_height_m=spec.get("kicker"),
+    )  # fmt: skip
+    keeper_result = None
+    if keeper_points and flight is not None and flight.get("contact_frame") is not None:
+        last = int(save_frame) if save_frame is not None else n - 1
+        keeper_result = _module("freekiki_keeper").keeper_kinematics(
+            keeper_points, fps=fps, contact_frame=int(flight["contact_frame"]), save_frame=last,
+            goal_x=goal_x, kick_time_s=flight.get("kick_time_s"), ball_xyz=ball_on,
+            onset_frame_given=opts.get("gk_onset_frame"),
+        )  # fmt: skip
+    gk_move = None
+    if keeper_result is not None and keeper_result.get("available"):
+        gk_move = keeper_result["metrics"]["onset_frame"]
+    alternatives = None
+    is_save = save_frame is not None and shot_outcome in (None, "save")
+    if (
+        is_save
+        and flight is not None
+        and keeper is not None
+        and track is None
+        and not opts.get("manual_arrival")
+    ):
+        sigma = opts.get("save_sigma_along") or _module("freekiki_auto_flight").SAVE_SIGMA_ALONG_M
+        try:
+            alternatives = _save_alternatives(ref3d, ref_video, flight, save_frame=int(save_frame),
+                                              keeper_sam=keeper, sigma=float(sigma))  # fmt: skip
+        except (ValueError, FileNotFoundError) as exc:
+            _log(f"penalty: the +/- sigma refits of the save failed ({exc})")
     result = penalty.penalty_metrics(
         field_rows=penalty.read_field_rows(ref3d / "field_kps_3d.csv"),
         ball_px=kicker.read_ball_pixels(ref3d / "ball.csv"),
@@ -740,24 +872,47 @@ def _penalty(
         n_frames=n,
         goal_x=goal_x,
         track=track,
+        flight=flight,
+        flight_track=flight_track,
+        save_frame=save_frame,
+        shot_outcome=shot_outcome,
+        keeper_points=keeper_points,
+        gk_move_frame=gk_move,
+        anthro=anthro,
+        alternatives=alternatives,
     )
+    result["anthropometrics"] = {
+        "gk_height_m": spec.get("keeper"), "gk_arm_span_m": opts.get("gk_arm_span"),
+        "gk_mass_kg": opts.get("gk_mass"), "kicker_height_m": spec.get("kicker"),
+        "source": "given" if spec or opts.get("gk_arm_span") else "default",
+    }  # fmt: skip
     path = result.get("path") or {}
-    keeper_id = _keeper_id(ref3d / "player_map.csv")
-    if keeper_id is not None and path.get(
-        "available"
-    ):  # the goalkeeper's move, partial (no goal line)
-        keeper = kicker.person_points(
-            kicker.read_poses(ref3d / "poses_3d_on_field_players.csv"), keeper_id, n
-        )
+    if keeper_result is not None:
+        result["keeper"] = keeper_result.get("metrics") if keeper_result.get("available") else {
+            "available": False, "reason": keeper_result.get("reason")}  # fmt: skip
+    if result.get("event") != "save" and keeper_id is not None and path.get("available"):
+        # the goalkeeper's move, partial (no goal line)
+        points = keeper_points or kicker.person_points(kicker.read_poses(players_csv), keeper_id, n)
         # the contact of the fitted flight, not the first moved marker frame (which can drift early)
         contact = path["kick_frame"]
         if path.get("fit", {}).get("kick_time_s") is not None:
             contact = min(round(path["fit"]["kick_time_s"] * fps), path["last_frame"])
         result["gk_partial"] = penalty.gk_partial(
-            keeper, kick=contact, last=path["last_frame"], fps=fps, goal_x=goal_x
+            points, kick=contact, last=path["last_frame"], fps=fps, goal_x=goal_x
         )
-    files = penalty.write(_layout().data_dir(folder), result)
-    html = penalty.report(folder / "report_tv" / "penalty", ref_video, fps, result)
+    data_dir = _layout().data_dir(folder)
+    files = penalty.write(data_dir, result)
+    if keeper_result is not None:
+        keeper_json = data_dir / "keeper_metrics.json"
+        keeper_json.write_text(json.dumps(_jsonable(keeper_result), indent=2), encoding="utf-8")
+        files["keeper_json"] = keeper_json
+    try:
+        blender_files = _module("freekiki_blender").export_penalty_blender(folder, render=True)
+        files.update({f"blender_{k}": v for k, v in blender_files.items() if k != "dir"})
+    except Exception as exc:  # Blender package is media-only; metrics/report still stand
+        _log(f"penalty: Blender export skipped ({type(exc).__name__}: {exc})")
+    html = penalty.report(folder / "report_tv" / "penalty", ref_video, fps, result, cam3d=folder)
+    summary_keys = ("event", "interception", "counterfactual", "uncertainty")
     return {
         "available": bool(result["available"]),
         "reason": result.get("reason", ""),
@@ -766,6 +921,8 @@ def _penalty(
         },
         "path": {k: v for k, v in (result.get("path") or {}).items() if k != "rows"} or None,
         "gk_partial": result.get("gk_partial"),
+        "keeper": result.get("keeper"),
+        **{k: result.get(k) for k in summary_keys if result.get(k) is not None},
         "files": {k: str(v) for k, v in files.items()},
         "report": html,
     }
@@ -773,14 +930,16 @@ def _penalty(
 
 def _mono_analysis(
     key, cam3d, video, work, is_ref, *, kick_foot, team_a, runner, sync=None, penalty=False,
-    goal_x=None, report=True,
+    goal_x=None, report=True, defer_report=False,
 ):  # fmt: skip
     """One camera alone: its teams, its kicker and its report. Returns the entry and the kicker values.
 
     A failure is recorded in the entry; the other analyses still run. A penalty has no team split
     (``penalty``). ``sync`` is the ``(sync_frame, cut_start)`` of a video whose name has none.
     ``report=False`` skips the goal report (open play, dribble and pass have no shot at goal; the
-    planar report is ``freekiki.py openplay-report``).
+    planar report is ``freekiki.py openplay-report``). ``defer_report`` leaves the report to the
+    caller: the TV report of a penalty quotes ``data/penalty_metrics.json``, which the penalty stage
+    writes after this analysis.
     """
     entry: dict = {"folder": str(cam3d), "status": "ok"}
     fps = _module("freekiki_detect3d")._video_fps(video)
@@ -804,7 +963,9 @@ def _mono_analysis(
                       lambda: _kicker(cam3d, cam3d, cam3d / "poses_3d_on_field_players.csv",
                                       _layout().data_dir(cam3d), video, kick_foot=kick_foot,
                                       goal_x=goal_x))  # fmt: skip
-        if report:
+        if report and defer_report:
+            entry["report"] = REPORT_AFTER_PENALTY
+        elif report:
             runner(f"report:{key}", {"run": cam3d.name},
                    [cam3d / "report_tv" / "pt" / "relatorio_bola.html",
                     cam3d / "report_tv" / "en" / "ball_report.html"],
@@ -856,6 +1017,36 @@ def _stored_choice(ref3d: Path) -> str:
     return json.loads(path.read_text(encoding="utf-8")).get("choice", "auto")
 
 
+def _penalty_report(
+    key: str, entry: dict, runner, *, folder: Path | None, video: Path | None
+) -> None:
+    """The TV report of the chosen analysis of a penalty, made once ``penalty_metrics.json`` exists.
+
+    The stage's inputs hold that file, so a new penalty result renders the report again. A report
+    that fails is recorded in the entry; the metrics it quotes are already written.
+    """
+    if folder is None:
+        return
+    metrics = _layout().data_dir(folder) / "penalty_metrics.json"
+    stage_key = "report:binocular" if key == "binocular" else f"report:{key}"
+    inputs = {("binocular" if key == "binocular" else "run"): folder.name,
+              "penalty": _file_key(metrics) if metrics.is_file() else None}  # fmt: skip
+    try:
+        runner(stage_key, inputs,
+               [folder / "report_tv" / "pt" / "relatorio_bola.html",
+                folder / "report_tv" / "en" / "ball_report.html"],
+               lambda: _module("freekiki_report").build_report(folder, lang="both", video=video))  # fmt: skip
+        entry["report"] = "ok"
+        # the penalty report plays copies of the report's animations: refresh them, or they are the
+        # ones of an earlier run (the penalty stage made them before this report was rendered)
+        penalty_dir = folder / "report_tv" / "penalty"
+        if penalty_dir.is_dir():
+            _module("freekiki_penalty")._collect_report_videos(folder, penalty_dir)
+    except Exception as exc:  # the metrics are already written; the report failing is not the run
+        entry["report"] = f"failed: {type(exc).__name__}: {exc}"
+        _log(f"{key} report failed: {entry['report']}")
+
+
 def _analyses(
     out: Path,
     *,
@@ -872,6 +1063,7 @@ def _analyses(
     runner,
     setpiece: dict | None = None,
     ref_sync: tuple[int, int] | None = None,
+    penalty_opts: dict | None = None,
 ) -> dict:
     """The analyses of the run: one monocular per camera and the binocular (two cameras).
 
@@ -903,6 +1095,9 @@ def _analyses(
     goal_x = (setpiece or {}).get(
         "goal_x_m"
     )  # the attacked goal line: the side of the views from behind
+    # the TV report of a penalty quotes the pynalty metrics of the chosen analysis, so it is rendered
+    # after the penalty stage (a report made before it read the metrics of an earlier run)
+    defer = chosen if penalty and setpiece is not None and flight_report else None
     results: dict[str, dict] = {}
     kicker_values: dict[str, dict] = {}
     monos = [("mono-ref", ref3d, ref_video, ref_work, True)]
@@ -912,7 +1107,8 @@ def _analyses(
         entry, values = _mono_analysis(key, cam3d, video, work, is_ref, kick_foot=kick_foot,
                                        team_a=team_a, runner=runner,
                                        sync=ref_sync if is_ref else None, penalty=penalty,
-                                       goal_x=goal_x, report=flight_report)  # fmt: skip
+                                       goal_x=goal_x, report=flight_report,
+                                       defer_report=key == defer)  # fmt: skip
         if setpiece is not None:
             _module("freekiki_setpiece").write(_layout().data_dir(cam3d), setpiece)
         results[key] = entry
@@ -952,7 +1148,9 @@ def _analyses(
                                       other3d=other3d, ref_work=ref_work, other_work=other_work,
                                       goal_x=goal_x))  # fmt: skip
         kicker_values["binocular"] = kick["values"]
-        if flight_report:
+        if flight_report and defer == "binocular":
+            entry["report"] = REPORT_AFTER_PENALTY
+        elif flight_report:
             runner("report:binocular", {"binocular": bino_dir.name},
                    [bino_dir / "report_tv" / "pt" / "relatorio_bola.html",
                     bino_dir / "report_tv" / "en" / "ball_report.html"],
@@ -970,12 +1168,16 @@ def _analyses(
         else:
             folder, ball_csv = ref3d, ref3d / "ball_3d_on_field.csv"
         try:
+            flight_file = ref3d / "ball_flight.json"
             results[chosen]["penalty"] = runner(
                 f"penalty:{chosen}",
-                {"ball": ball_csv.name, "goal_x_m": setpiece["goal_x_m"], "model": PENALTY_MODEL},
+                _jsonable({"ball": ball_csv.name, "goal_x_m": setpiece["goal_x_m"],
+                           "model": PENALTY_MODEL, **(penalty_opts or {}),
+                           "flight": _file_key(flight_file) if flight_file.is_file() else None}),
                 [_layout().data_dir(folder) / "penalty_metrics.csv"],
                 lambda: _penalty(ref3d, ref_video, ref_work, folder, goal_x=setpiece["goal_x_m"],
-                                 track_csv=ball_csv if chosen == "binocular" else None))  # fmt: skip
+                                 track_csv=ball_csv if chosen == "binocular" else None,
+                                 opts=penalty_opts))  # fmt: skip
         except Exception as exc:  # a penalty that cannot be measured is reported, the run goes on
             results[chosen]["penalty"] = {
                 "available": False,
@@ -987,6 +1189,12 @@ def _analyses(
             "available": False,
             "reason": "no ball at rest on the field: the pynalty metrics need the ball and the goal side",
         }
+    if defer is not None and results.get(defer, {}).get("status") == "ok":
+        _penalty_report(
+            defer, results[defer], runner,
+            folder={"binocular": bino_dir, "mono-other": other3d}.get(defer, ref3d),
+            video=other_video if defer == "mono-other" else ref_video,
+        )  # fmt: skip
     for key, entry in results.items():
         entry["chosen"] = key == chosen
     return {"analyses": results, "chosen": chosen, "kicker_values": kicker_values.get(chosen, {}),
@@ -1033,7 +1241,51 @@ def _penalty_lines(penalty: dict | None) -> list[str]:
         lines.append(f"Goalkeeper (partial, no goal line): {gk['reason']}")
     elif gk:
         lines.append(f"Goalkeeper: not available ({gk.get('reason', '')})")
+    lines += _save_lines(penalty)
     return [*lines, ""]
+
+
+def _save_lines(penalty: dict) -> list[str]:
+    """A save: the interception, the would-be crossing, their spread and the keeper's dive."""
+    if penalty.get("event") != "save":
+        return []
+    lines: list[str] = []
+    inter = penalty.get("interception") or {}
+    if inter:
+        lines.append(
+            f"Save (frame {inter['frame']}): the hands stop the ball {inter['in_front_of_line_m']} m in "
+            f"front of the goal line, {inter['height_m']} m high, y {inter['lateral_m']} m, "
+            f"{inter['time_s_after_kick']} s after the kick; mean speed from the spot "
+            f"{inter['mean_speed_mps']} m/s over {inter['distance_from_spot_m']} m"
+        )
+    would = penalty.get("counterfactual") or {}
+    if would:
+        mouth = "inside" if would.get("inside_goal_mouth") else "outside"
+        lines.append(
+            f"Without the keeper the same flight would cross the goal line at y {would['y_m']} m, "
+            f"{would['z_m']} m high ({mouth} the goal mouth; {would.get('zone_label', '')}; "
+            f"{would['dist_to_nearest_post_m']} m from the nearest post; HWR accuracy "
+            f"{would['hwr_accuracy_pct']} %, Attaallah et al. 2021)"
+        )
+    spread = ((penalty.get("uncertainty") or {}).get("along_camera_ray")) or []
+    for alt in spread:
+        alt_would = alt.get("counterfactual") or {}
+        xyz = alt.get("interception_xyz")
+        lines.append(
+            f"  keeper anchor moved {alt.get('shift_m')} m along the camera ray: ball at the save "
+            f"{xyz}, would-be crossing y {alt_would.get('y_m')} m, z {alt_would.get('z_m')} m"
+        )
+    keeper = penalty.get("keeper") or {}
+    if keeper.get("dive_side"):
+        lines.append(
+            f"Keeper (data/keeper_metrics.json): onset frame {keeper['onset_frame']} "
+            f"({keeper['onset_source']}; 3D onset frame {keeper.get('onset_frame_auto')}), "
+            f"{keeper['onset_ms_before_kick']} ms before the kick; dives {keeper['dive_side']} "
+            f"{keeper['lateral_displacement_m']} m, peak lateral CoM speed "
+            f"{keeper['peak_lateral_speed_mps']} m/s; hands-ball gap at the save "
+            f"{keeper.get('hands_ball_gap_m')} m"
+        )
+    return lines
 
 
 def _contact_lines(contact: dict | None) -> list[str]:
@@ -1268,6 +1520,13 @@ def run_kick_analysis(
     set_piece: str = "auto",
     contact_frame: int | None = None,
     arrival_observation=None,
+    save_frame: int | None = None,
+    shot_outcome: str = "auto",
+    statures: str | None = None,
+    gk_arm_span: float | None = None,
+    gk_mass: float | None = None,
+    gk_onset_frame: int | None = None,
+    save_sigma_along: float | None = None,
 ) -> dict:
     """The one-click kick analysis. ``videos``: a folder with one or two cut videos, or the files.
 
@@ -1282,6 +1541,13 @@ def run_kick_analysis(
     A corrected ``<video>_kiki49.csv`` redoes the detection (marked by hand, no network) and the 3D;
     the outputs it replaces are moved to ``superseded/<time>/`` of the run, never deleted.
 
+    A penalty saved by the keeper's hands: ``save_frame`` (0-based, reference camera) stops the
+    flight there and anchors it on the keeper's hands, and ``statures`` (``keeper=2.04,...``) scale
+    the people whose stature is known; both are applied by the ``refine`` stage, after the players
+    have roles. ``shot_outcome``, ``gk_arm_span``, ``gk_mass``, ``gk_onset_frame`` (an onset marked
+    by eye) and ``save_sigma_along`` (the hands' uncertainty along the camera ray, m) go to the
+    penalty metrics and the keeper module (``data/keeper_metrics.json``).
+
     Two videos give three analyses (the monocular of each camera and the binocular); one video gives
     the monocular analysis of that camera. ``analysis`` marks the result in the README. ``out_dir``
     default: ``kick_analysis_<time>/`` next to the first video. Give an existing folder to continue an
@@ -1294,6 +1560,21 @@ def run_kick_analysis(
         raise KickInputError(f"--set-piece must be one of {', '.join(set_piece_choices)}")
     if contact_frame is not None and int(contact_frame) < 0:
         raise KickInputError("--contact-frame is a 0-based frame of the reference video (>= 0)")
+    if save_frame is not None:
+        save_frame = int(save_frame)
+        if save_frame < 0 or (contact_frame is not None and save_frame <= int(contact_frame)):
+            raise KickInputError(
+                "--save-frame is a 0-based frame of the reference video after the contact"
+            )
+    if shot_outcome not in SHOT_OUTCOME_CHOICES:
+        raise KickInputError(f"--shot-outcome must be one of {', '.join(SHOT_OUTCOME_CHOICES)}")
+    try:
+        stature_spec = _module("freekiki_stature").parse_stature_spec(statures)
+    except ValueError as exc:
+        raise KickInputError(f"--stature: {exc}") from exc
+    sigma_along = float(save_sigma_along) if save_sigma_along is not None else None
+    if sigma_along is not None and sigma_along <= 0:
+        raise KickInputError("--save-sigma-along must be a positive length in metres")
     picked = pick_videos(videos) if isinstance(videos, (str, Path)) else [Path(v) for v in videos]
     cams = validate_inputs(picked, reference, sync=sync)
     ref = cams[0]
@@ -1323,6 +1604,13 @@ def run_kick_analysis(
         "set_piece": set_piece,
         "contact_frame": contact_frame,
         "arrival_observation": str(observation_path) if observation is not None else None,
+        "save_frame": save_frame,
+        "shot_outcome": shot_outcome,
+        "statures": statures,
+        "gk_arm_span": gk_arm_span,
+        "gk_mass": gk_mass,
+        "gk_onset_frame": gk_onset_frame,
+        "save_sigma_along": sigma_along,
         "kick_foot": kick_foot,
         "team_a": team_a,
         "model": model,
@@ -1437,6 +1725,60 @@ def run_kick_analysis(
     player_outputs = [ref3d / "player_map.csv"] + ([other3d / "player_map.csv"] if other3d else [])
     state.stage("players", {"ref": ref3d.name, "other": other3d.name if other3d else None},
                 player_outputs, players, reuse=reuse)  # fmt: skip
+    if stature_spec or save_frame is not None:
+        # the known statures and the save need the roles (keeper, kicker): the reference ball is
+        # rebuilt with them, then the players' tables follow the rescaled poses
+        def refine() -> dict:
+            if ref.markers is None:
+                raise KickInputError(
+                    "--save-frame and --stature rebuild the ball: the reference camera needs its "
+                    f"corrected ball ({ref.video.stem}_markers.csv)"
+                )
+            roles = _roles_sam(ref3d / "player_map.csv")
+            by_person, prior = _module("freekiki_stature").resolve_statures(stature_spec, roles)
+            save = None
+            if save_frame is not None:
+                save = {"frame": save_frame, "keeper_id": roles.get("keeper")}
+                if sigma_along is not None:
+                    save["sigma_along"] = sigma_along
+            summary = _module("freekiki_detect3d").rebuild_ball_in_place(
+                ref3d, ref.video, ref_work, ref.markers, contact_frame=contact_frame,
+                statures=(by_person, prior) if stature_spec else None, save=save,
+                **({"arrival_observation": observation} if observation is not None else {}),
+            )  # fmt: skip
+            players()
+            after = _roles_sam(ref3d / "player_map.csv")
+            if after != roles:
+                _log(f"refine: the roles changed with the rescaled poses ({roles} -> {after})")
+            return {
+                "roles": roles,
+                "statures": {str(k): list(v) for k, v in by_person.items()},
+                "prior_m": prior,
+                "save": save,
+                "ball_flight": (summary.get("field3d") or {}).get("ball_flight"),
+            }
+
+        runs_before = state.runs
+        state.stage(
+            "refine",
+            _jsonable(
+                {
+                    "ref": ref3d.name,
+                    "statures": stature_spec,
+                    "save_frame": save_frame,
+                    "sigma_along": sigma_along,
+                    "contact_frame": contact_frame,
+                    "markers": _file_key(ref.markers) if ref.markers else None,
+                    "flight_model": _module("freekiki_physics").FLIGHT_MODEL,
+                    "pose_model": "gk-plane-v1",
+                }
+            ),  # fmt: skip
+            [ref3d / "ball_flight.json", ref3d / "stature_by_person.csv"],
+            refine,
+            reuse=reuse,
+        )
+        if state.runs != runs_before:
+            reuse = False  # the ball and the poses changed: every later stage reads them
     # the tolerance is an input: a run that reuses the stages classifies again when the rule changes
     setpiece = state.stage(
         "setpiece",
@@ -1476,6 +1818,11 @@ def run_kick_analysis(
         ref_video=ref.video, other_video=other.video if other else None, bino_dir=bino_dir,
         kick_foot=kick_foot, team_a=team_a, analysis=analysis, runner=runner, setpiece=setpiece,
         ref_sync=sync if other is None else None,
+        penalty_opts={"save_frame": save_frame, "shot_outcome": shot_outcome,
+                      "statures": stature_spec, "gk_arm_span": gk_arm_span, "gk_mass": gk_mass,
+                      "gk_onset_frame": gk_onset_frame, "save_sigma_along": sigma_along,
+                      # a confirmed arrival replaces the keeper's hands: no +/- sigma refits of those
+                      "manual_arrival": bool(observation and observation.get("type") == "keeper_hand")},
     )  # fmt: skip
     run.update(
         {

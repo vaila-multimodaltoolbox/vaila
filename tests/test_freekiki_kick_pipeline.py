@@ -5,8 +5,8 @@ write the files each stage must leave. The tests check the order of the stages, 
 (one or two cameras), the reuse of finished stages, a failing monocular analysis, the failure
 message and the parser. Nothing here needs a video, a model or a GPU.
 
-Version: 0.4.14
-Update Date: 02 November 2026
+Version: 0.4.15
+Update Date: 09 November 2026
 """
 
 from __future__ import annotations
@@ -596,7 +596,7 @@ def test_a_penalty_gets_the_pynalty_metrics_and_the_freekiki_report(
     )
     calls: list[tuple[str, float]] = []
 
-    def fake_penalty(ref3d, ref_video, ref_work, folder, *, goal_x, track_csv=None):
+    def fake_penalty(ref3d, ref_video, ref_work, folder, *, goal_x, track_csv=None, opts=None):
         calls.append((folder.name, goal_x))
         return {
             "available": True,
@@ -618,6 +618,67 @@ def test_a_penalty_gets_the_pynalty_metrics_and_the_freekiki_report(
     readme = (Path(result["out"]) / "README.txt").read_text(encoding="utf-8")
     assert "set piece: penalty (stub)" in readme
     assert "coord_x: 3.0" in readme
+
+
+def test_the_penalty_report_is_rendered_after_the_penalty_metrics(
+    tmp_path: Path, stubs: dict, monkeypatch
+) -> None:
+    """The TV report of a penalty reads data/penalty_metrics.json: it must exist when it renders."""
+    video = _cameras(tmp_path, both=False)[0]
+    monkeypatch.setattr(
+        kp,
+        "_setpiece",
+        lambda ref3d: {
+            "kind": "penalty",
+            "reason": "stub",
+            "goal_x_m": 52.45,
+            "wall_count": 0,
+            "wall_ids": [],
+        },  # fmt: skip
+    )
+    order: list = []
+
+    def fake_penalty(ref3d, ref_video, ref_work, folder, *, goal_x, track_csv=None, opts=None):
+        order.append("penalty")
+        data = kp._layout().data_dir(folder)
+        data.mkdir(parents=True, exist_ok=True)
+        (data / "penalty_metrics.json").write_text(json.dumps({"event": "save"}), encoding="utf-8")
+        (data / "penalty_metrics.csv").write_text("metric\n", encoding="utf-8")  # the stage output
+        return {"available": True, "reason": "", "metrics": {}, "files": {}, "report": {}}
+
+    def build_report(run_dir, *, lang="both", **_):
+        data = kp._layout().data_dir(Path(run_dir))
+        order.append(("report", (data / "penalty_metrics.json").is_file()))
+        base = Path(run_dir) / "report_tv"
+        for sub, name in (("pt", "relatorio_bola.html"), ("en", "ball_report.html")):
+            (base / sub).mkdir(parents=True, exist_ok=True)
+            (base / sub / name).write_text("<html></html>", encoding="utf-8")
+        return {"dir": str(base), "tier": "alta"}
+
+    def stale_media_penalty(ref3d, ref_video, ref_work, folder, **kwargs):
+        # the penalty stage plays the animation the report had made before: a copy of an earlier run
+        media = folder / "report_tv" / "penalty" / "media"
+        media.mkdir(parents=True, exist_ok=True)
+        (media / "animacao_lance.mp4").write_bytes(b"old animation")
+        return fake_penalty(ref3d, ref_video, ref_work, folder, **kwargs)
+
+    def build_report_with_animation(run_dir, **kwargs):
+        out = build_report(run_dir, **kwargs)
+        (Path(run_dir) / "report_tv" / "pt" / "animacao_lance.mp4").write_bytes(b"new animation")
+        return out
+
+    monkeypatch.setattr(kp, "_penalty", stale_media_penalty)
+    monkeypatch.setattr(rep, "build_report", build_report_with_animation)
+    result = kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "kick")
+    assert order == ["penalty", ("report", True)]  # once, and after the metrics it quotes
+    played = next((Path(result["out"])).glob("**/report_tv/penalty/media/animacao_lance.mp4"))
+    assert played.read_bytes() == b"new animation"  # the penalty report plays this run's animation
+    status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
+    assert "penalty" in status["stages"]["report:mono-ref"]["inputs"]
+    # a second call reuses both stages and renders nothing
+    order.clear()
+    kp.run_kick_analysis("ws", [video], out_dir=Path(result["out"]), reuse=True)
+    assert order == []
 
 
 def test_the_readme_says_whether_the_penalty_ball_path_is_straight_or_bowed() -> None:
@@ -1018,3 +1079,68 @@ def test_invalid_arrival_stops_before_making_a_run(tmp_path: Path, stubs: dict) 
             arrival_observation={"type": "keeper_hand", "frame": 30, "xyz": [1, 2, 3]},
         )
     assert not out.exists() and not stubs
+
+
+def test_a_save_and_known_statures_refine_the_reference_after_the_roles(
+    tmp_path: Path, stubs: dict, monkeypatch
+) -> None:
+    # the penalty of 08 Nov 2026: the keeper (SAM 4 in the stub map) is 2.04 m and saves at frame 20
+
+    video = _cameras(tmp_path, both=False)[0]
+    seen: list[dict] = []
+
+    def rebuild(
+        out_dir, video, work, ball_csv, *, contact_frame=None, statures=None, save=None, **_
+    ):
+        seen.append({"statures": statures, "save": save, "contact": contact_frame})
+        out_dir = Path(out_dir)
+        (out_dir / "ball.csv").write_text("frame,cx,cy\n", encoding="utf-8")
+        (out_dir / "ball_3d_on_field.csv").write_text("frame,x_m\n", encoding="utf-8")
+        (out_dir / "ball_flight.json").write_text("{}", encoding="utf-8")
+        (out_dir / "stature_by_person.csv").write_text("person_id\n", encoding="utf-8")
+        return {"field3d": {"ball_flight": None}}
+
+    monkeypatch.setattr(d3, "rebuild_ball_in_place", rebuild)
+    result = kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "kick", contact_frame=10,
+                                  save_frame=20, statures="keeper=2.04,kicker=1.82",
+                                  gk_arm_span=2.09)  # fmt: skip
+    status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
+    assert "refine" in status["stages"]
+    refine = [s for s in seen if s["save"] is not None][-1]
+    assert refine["statures"] == ({4: (2.04, "keeper"), 11: (1.82, "kicker")}, 1.83)
+    assert refine["save"] == {"frame": 20, "keeper_id": 4} and refine["contact"] == 10
+    options = status["options"]
+    assert (options["save_frame"], options["statures"], options["gk_arm_span"]) == (
+        20, "keeper=2.04,kicker=1.82", 2.09)  # fmt: skip
+
+
+def test_save_and_stature_options_are_checked_before_the_run(tmp_path: Path, stubs: dict) -> None:
+    video = _cameras(tmp_path, both=False)[0]
+    with pytest.raises(kp.KickInputError, match="stature"):
+        kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "a", statures="coach=2.0")
+    with pytest.raises(kp.KickInputError, match="save-frame"):
+        kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "b", contact_frame=10, save_frame=5)
+    with pytest.raises(kp.KickInputError, match="shot-outcome"):
+        kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "c", shot_outcome="post")
+
+
+def test_the_readme_reports_a_save_with_its_would_be_crossing_and_spread() -> None:
+    penalty = {
+        "available": True, "event": "save", "metrics": {"vel_kmh": 101.0},
+        "interception": {"frame": 90, "in_front_of_line_m": 0.6, "height_m": 1.0, "lateral_m": -1.2,
+                         "time_s_after_kick": 0.362, "mean_speed_mps": 28.1,
+                         "distance_from_spot_m": 10.2},
+        "counterfactual": {"y_m": -1.5, "z_m": 0.95, "inside_goal_mouth": True,
+                           "zone_label": "Middle Left", "dist_to_nearest_post_m": 2.16,
+                           "hwr_accuracy_pct": 30.2},
+        "uncertainty": {"along_camera_ray": [{"shift_m": -0.4, "interception_xyz": [51.5, -1.6, 1.1],
+                                              "counterfactual": {"y_m": -2.0, "z_m": 0.9}}]},
+        "keeper": {"onset_frame": 74, "onset_source": "given", "onset_frame_auto": 76,
+                   "onset_ms_before_kick": 172.0, "dive_side": "left", "lateral_displacement_m": 0.5,
+                   "peak_lateral_speed_mps": 2.1, "hands_ball_gap_m": 0.05},
+    }  # fmt: skip
+    text = "\n".join(kp._penalty_lines(penalty))
+    assert "Save (frame 90): the hands stop the ball 0.6 m in front of the goal line" in text
+    assert "would cross the goal line at y -1.5 m" in text and "HWR accuracy 30.2 %" in text
+    assert "moved -0.4 m along the camera ray" in text
+    assert "dives left 0.5 m" in text and "172.0 ms before the kick" in text

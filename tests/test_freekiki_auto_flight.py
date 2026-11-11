@@ -3,8 +3,8 @@
 A physical flight is simulated, seen by one synthetic camera, and fitted back; the entry point from the
 goal homography is compared with the true crossing. Synthetic data only: no GPU, no model, no video.
 
-Version: 0.4.14
-Update Date: 02 November 2026
+Version: 0.4.15
+Update Date: 09 November 2026
 """
 
 from __future__ import annotations
@@ -302,3 +302,137 @@ def test_a_ball_flying_from_the_first_frame_starts_there(tmp_path) -> None:
     read = af.flight_contact(tmp_path)
     assert read is not None and (read["frame"], read["pre_contact"]) == (0, "unseen")
     assert af.flight_contact(tmp_path / "missing") is None
+
+
+# --- a panning broadcast camera (penalty clip, 08 Nov 2026) ---------------------------------------
+
+
+def _panning_cameras(step_m: float = 0.08) -> dict[int, np.ndarray]:
+    """The camera of every frame turns a little (its target slides along x): a resting ball moves
+    in the image although it lies still on the pitch, as in a broadcast pan."""
+    return {f: _camera([10.0, -38.0, 22.0], [50.0 - step_m * f, 0.0, 1.0]) for f in range(N)}
+
+
+def test_ground_onset_and_stillness_ignore_the_image_motion() -> None:
+    rest = {f: (41.45 + 0.03 * np.sin(f), 0.07) for f in range(20)}  # calibration noise only
+    moved = {**rest, **{f: (41.45 + 0.9 * (f - 19), 0.07) for f in range(20, 30)}}
+    assert af.is_still_ground(rest)
+    assert af.kick_onset_ground(rest) is None
+    assert af.kick_onset_ground(moved) == 20
+    one_bad = dict(rest)
+    one_bad[9] = (42.2, 0.07)  # one badly lifted frame is not a kick
+    assert af.kick_onset_ground(one_bad) is None
+
+
+def test_find_contact_reads_the_pitch_when_the_camera_pans() -> None:
+    pixels = {f: (700.0 - 1.5 * f, 650.0) for f in range(20)}  # the pan moves the resting ball
+    pixels.update({f: (700.0 + 60.0 * (f - 19), 640.0) for f in range(20, 30)})
+    ground = dict.fromkeys(range(20), (41.48, 0.08))
+    ground.update({f: (41.48 + 0.9 * (f - 19), 0.08) for f in range(20, 30)})
+    assert af.find_contact(pixels, ground, FPS)["frame"] < 20  # the pixels alone see the pan
+    found = af.find_contact(pixels, ground, FPS, panning=True)
+    assert (found["frame"], found["source"], found["pre_contact"]) == (20, "rest", "still")
+
+
+def test_camera_moves_tells_a_pan_from_a_fixed_camera() -> None:
+    fixed = {f: dlt_projection_matrix(L) for f in range(N)}
+    panning = {f: dlt_projection_matrix(Lf) for f, Lf in _panning_cameras().items()}
+    point = (30.0, 0.0, BALL_RADIUS)
+    assert not af.camera_moves(fixed, point)
+    assert af.camera_moves(panning, point)
+
+
+def test_a_panning_camera_does_not_move_the_kick_of_a_still_ball() -> None:
+    theta = [30.0, 0.0, 22.0, 0.0, 7.0, 0.4, 0.0, 0.0, 0.0]  # kicked at 0.4 s (frame 12)
+    positions = _flight(theta)
+    cameras = _panning_cameras()
+    projections = {f: dlt_projection_matrix(Lf) for f, Lf in cameras.items()}
+    pixels = {}
+    for f in range(N):
+        h = projections[f] @ np.append(positions[f], 1.0)
+        pixels[f] = (float(h[0] / h[2]), float(h[1] / h[2]))
+    assert af.kick_onset(pixels) < 12  # the pan alone fakes an early kick in the image
+    ball_all = ball_3d(_ball_rows(pixels), cameras)
+    result = af.auto_flight(ball_all, pixels, cameras, [], FPS, N)
+    assert result is not None
+    assert result["contact"]["pre_contact"] == "still"
+    assert result["onset_frame"] in (12, 13)
+    assert result["fit"]["kick_time_s"] == pytest.approx(0.4, abs=1.5 / FPS)
+    _, record = af.auto_rows_and_record(result, pixels, N)
+    assert record["camera_moves"] is True
+
+
+def _keeper_rows(frame: int, palm_xyz, person_id: int = 39) -> list[dict]:
+    """A keeper's feet on the goal line and both palms (wrist, index and pinky tips) at ``palm_xyz``."""
+    rows = []
+    for name, xyz in (
+        ("left-ankle", (52.0, -0.5, 0.1)),
+        ("right-ankle", (52.0, 0.5, 0.1)),
+        *[(f"{side}-{part}", palm_xyz) for side in ("left", "right")
+          for part in ("wrist", "index-tip", "pinky-tip")],
+    ):  # fmt: skip
+        rows.append({"frame": frame, "person_id": person_id, "kpt_name": name,
+                     "x_m": xyz[0], "y_m": xyz[1], "z_m": xyz[2]})  # fmt: skip
+    return rows
+
+
+def test_a_save_anchors_the_flight_on_the_keepers_hands_and_stops_it_there() -> None:
+    # a penalty kicked at frame 12 from the spot; the keeper catches it at frame 24 in front of the line
+    theta = [41.45, 0.0, 26.0, -3.0, 2.0, 0.4, 0.0, 0.0, 0.0]
+    positions = _flight(theta)
+    pixels = _pixels(positions)
+    save = 24
+    for f in range(save + 1, N):  # after the save the ball flies back: misleading pixels
+        pixels[f] = tuple(_pix(positions[save] - (f - save) * np.array([0.3, 0.0, 0.0])))
+    P = dlt_projection_matrix(L)
+    centre = af.camera_centre(P)
+    ray = positions[save] - centre
+    ray /= np.linalg.norm(ray)
+    toward_spot = np.array([41.45 - positions[save, 0], -positions[save, 1], 0.0])
+    toward_spot /= np.linalg.norm(toward_spot)
+    palms = (
+        positions[save] - af.BALL_RADIUS_M * toward_spot + 0.3 * ray
+    )  # the pose is 0.3 m too deep
+    cameras = dict.fromkeys(range(N), L)
+    ball_all = ball_3d(_ball_rows(pixels), cameras)
+    result = af.auto_flight(ball_all, pixels, cameras, _keeper_rows(save, palms), FPS, N,
+                            save_frame=save, keeper_id=39)  # fmt: skip
+    assert result is not None
+    arrival = result["arrival"]
+    assert (arrival["type"], arrival["provenance"], arrival["frame"]) == (
+        "keeper_hand",
+        "auto",
+        save,
+    )
+    end = np.asarray(result["fit"]["positions"][save])
+    to_end = end - centre
+    assert np.linalg.norm(to_end - (to_end @ ray) * ray) < 0.05  # on the ball's pixel ray
+    assert (
+        np.linalg.norm(end - positions[save]) < 0.45
+    )  # the depth comes from the hands (0.3 m off)
+    assert result["fit"]["kick_time_s"] == pytest.approx(0.4, abs=1.5 / FPS)
+    assert arrival["diagnostics"]["ray_gap_m"] < 0.05  # the hands were already on the ray here
+    rows, record = af.auto_rows_and_record(result, pixels, N)
+    assert record["valid_until_frame"] == save and record["arrival_status"] == "keeper_hand"
+    assert record["save_frame"] == save and record["shot_outcome"] == "save"
+    assert all(np.isnan(r["x_m"]) for r in rows if r["frame"] > save)
+    assert "p_arrival" in record["anchor_points"]
+    assert "p0_along_m" in record["anchor_residuals"]
+    # the uncertainty refit: the same anchor moved one sigma along the ray moves the end by ~sigma
+    shifted = af.auto_flight(ball_all, pixels, cameras, _keeper_rows(save, palms), FPS, N,
+                             save_frame=save, keeper_id=39, save_shift_m=0.4)  # fmt: skip
+    end_shifted = np.asarray(shifted["fit"]["positions"][save])
+    assert (end_shifted - end) @ ray == pytest.approx(0.4, abs=0.15)
+
+
+def test_a_save_without_the_keepers_hands_still_stops_the_flight_at_the_save() -> None:
+    theta = [41.45, 0.0, 26.0, -3.0, 2.0, 0.4, 0.0, 0.0, 0.0]
+    pixels = _pixels(_flight(theta))
+    cameras = dict.fromkeys(range(N), L)
+    result = af.auto_flight(ball_3d(_ball_rows(pixels), cameras), pixels, cameras, [], FPS, N,
+                            save_frame=24)  # fmt: skip
+    assert result is not None and result["arrival"] is None
+    rows, record = af.auto_rows_and_record(result, pixels, N)
+    assert record["valid_until_frame"] == 24 and record["shot_outcome"] == "save"
+    assert "keeper's hands" in record["quality"]
+    assert all(np.isnan(r["x_m"]) for r in rows if r["frame"] > 24)

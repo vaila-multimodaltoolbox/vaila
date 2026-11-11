@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.15
 Created: 26 October 2026
-Update Date: 01 November 2026
+Update Date: 09 November 2026
 
 Description:
     The broadcast video of the kick, every frame slowed down about five times, with the
@@ -59,7 +59,13 @@ except ImportError:
 
 OUT_FPS = 30
 SLOW = 5  # every broadcast frame lasts SLOW output frames (about 5x slow motion at 29.97 fps)
-HOLD_S = {"kick": 1.0, "wall": 2.0, "end": 2.5}  # seconds held on the key moments
+HOLD_S = {
+    "kick": 1.0,
+    "wall": 2.0,
+    "onset": 1.0,
+    "save": 1.5,
+    "end": 2.5,
+}  # seconds held on the key moments
 MARGIN_PX = 220
 
 
@@ -92,10 +98,18 @@ def _crop_box(
 
 def _event(f: int, m: dict, lang: str) -> tuple[str, str]:
     kf, bf, ef = m["kick_frame"], m["barrier_f"], m["end_frame"]
+    onset = m.get("gk_onset_frame")
+    save_f = m.get("save_frame")
     if f < kf:
+        if onset is not None and f == int(onset):
+            return tr(lang, "vid_onset"), "#e040fb"
         return tr(lang, "vid_prep"), "#333333"
     if f == kf:
         return tr(lang, "vid_kick"), "#1664a0"
+    if onset is not None and f == int(onset):
+        return tr(lang, "vid_onset"), "#e040fb"
+    if save_f is not None and f == int(save_f):
+        return tr(lang, "vid_save"), "#ff9800"
     if not m.get("wall", not m.get("penalty")):  # no wall: the ball flies until the last frame
         if f < ef:
             return tr(lang, "vid_flight"), "#5b6577"
@@ -406,7 +420,13 @@ def write_lance_video(
     holds = {m["kick_frame"]: int(HOLD_S["kick"] * OUT_FPS)}
     if m.get("wall", not m.get("penalty")):  # a penalty or an open-play kick has no wall
         holds[m["barrier_f"]] = int(HOLD_S["wall"] * OUT_FPS)
-    holds[last] = int(HOLD_S["end"] * OUT_FPS)
+    onset = m.get("gk_onset_frame")
+    if onset is not None:
+        holds[int(onset)] = max(holds.get(int(onset), 0), int(HOLD_S["onset"] * OUT_FPS))
+    save_f = m.get("save_frame")
+    if save_f is not None:
+        holds[int(save_f)] = max(holds.get(int(save_f), 0), int(HOLD_S["save"] * OUT_FPS))
+    holds[last] = max(holds.get(last, 0), int(HOLD_S["end"] * OUT_FPS))
     writer = cv2.VideoWriter(str(out_path), cv2.VideoWriter_fourcc(*"mp4v"), OUT_FPS, (w, h))  # ty: ignore[unresolved-attribute]
     written = 0
     try:

@@ -6,16 +6,16 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
-Update Date: 08 September 2026
-Version: 0.3.130
+Update Date: 08 November 2026
+Version: 0.4.15
 
 Description:
 Guided analysis of a penalty kick from a single broadcast or handheld camera.
-The pygame workflow calibrates the goal, confirms all three event frames,
-then collects ball/keeper points on paused contact and arrival frames. Optional
-trajectory, pose and body measurements precede review and result export.
+The pygame workflow uses a short 4-step macro flow (kick, goal/calibration,
+response, save) with a large on-video action banner and one-click saving.
+Optional AI tools (trajectory, pose, body measures) stay opt-in.
 The interface supports Portuguese (default) and English independently of reports.
-Reusable calibration is validated and previewed before acceptance.
+Reusable calibration is validated and previewed on the arrival frame.
 
 Usage:
 - GUI mode: click "Pynalty" inside the "Soccer Tools" launcher in the vailá
@@ -164,57 +164,105 @@ BOTTOM_H = 200
 
 STEP_SPECS = (
     {
+        "key": "kick",
+        "name": "1. Ball contact",
+        "why": "Starts the flight clock and fixes where both athletes were at contact.",
+        "how": "Confirm foot-ball contact with ENTER, then click Ball and Keeper.",
+        "required": True,
+    },
+    {
+        "key": "goal",
+        "name": "2. Ball at goal line",
+        "why": "Ends the flight clock; same frame used for goal calibration and outcome.",
+        "how": "Usually the last frame. Confirm, calibrate corners, mark Ball + hand, then G/D/M/W.",
+        "required": True,
+    },
+    {
+        "key": "calibration",
+        "name": "2b. Goal calibration",
+        "why": "Converts pixels into metres on the plane of the goal mouth.",
+        "how": "On the arrival frame: click bottom-left, top-left, top-right, bottom-right.",
+        "required": True,
+    },
+    {
         "key": "gk_move",
-        "name": "1. Keeper starts moving",
+        "name": "3. Keeper starts moving",
         "why": "Anchors reaction time. Negative means the keeper guessed early.",
         "how": "Confirm the first clear dive/prepare motion with ENTER.",
         "required": True,
     },
     {
-        "key": "kick",
-        "name": "2. Ball contact",
-        "why": "Starts the flight clock and fixes where both athletes were at contact.",
-        "how": "Confirm foot-ball contact with ENTER. Points are requested after all three frames.",
-        "required": True,
-    },
-    {
-        "key": "goal",
-        "name": "3. Ball at goal line",
-        "why": "Ends the flight clock and gives the entry point. Outcome (goal/save/miss) is required.",
-        "how": "Confirm goal-line arrival with ENTER. Points and outcome follow the three frames.",
-        "required": True,
-    },
-    {
-        "key": "calibration",
-        "name": "4. Goal calibration",
-        "why": "Converts pixels into metres on the plane of the goal mouth.",
-        "how": "Pause with ENTER, click bottom-left, top-left, top-right, bottom-right, then confirm.",
-        "required": True,
-    },
-    {
         "key": "ball_path",
-        "name": "5. Ball path (optional)",
+        "name": "4. Ball path (optional)",
         "why": "Feeds the trajectory overlay and the animated replay in the report.",
-        "how": "Optional. Press A for YOLO, or click the ball frame by frame. Skip with Step > if you do not need it.",
+        "how": "Optional. Press A for YOLO, or click the ball frame by frame.",
         "required": False,
     },
     {
         "key": "boxes",
-        "name": "6. Pose boxes (optional)",
-        "why": "Crops athletes so MediaPipe finds landmarks a full frame misses. Improves gap-to-ball.",
-        "how": "Optional. Drag KICKER then KEEPER boxes and press P. Skip with Step > if you do not need pose.",
+        "name": "5. Pose boxes (optional)",
+        "why": "Crops athletes so MediaPipe finds landmarks a full frame misses.",
+        "how": "Optional. Drag KICKER then KEEPER boxes and press P.",
         "required": False,
     },
     {
         "key": "anthro",
-        "name": "7. Body measures (optional)",
+        "name": "6. Body measures (optional)",
         "why": "Sets the keeper's reach. If skipped, elite defaults (1.88 m stature) are used.",
-        "how": "Optional. Press B to type stature / arm span / standing reach, or skip to use defaults.",
+        "how": "Optional. Press B to type stature / arm span / standing reach.",
         "required": False,
     },
 )
 
 REQUIRED_STEP_KEYS = frozenset(s["key"] for s in STEP_SPECS if s["required"])
+
+# Macro UI order: Kick → Goal/Calib → Response → Save
+MACRO_STEPS = (
+    {
+        "id": 0,
+        "name_pt": "1. Chute ⚽",
+        "name_en": "1. Kick ⚽",
+        "sub_pt": "Contato + Bola + Goleiro",
+        "sub_en": "Contact + Ball + Keeper",
+        "phases": (0, 1),
+    },
+    {
+        "id": 1,
+        "name_pt": "2. Gol 🥅",
+        "name_en": "2. Goal 🥅",
+        "sub_pt": "Calibração + Bola + Mão + Resultado",
+        "sub_en": "Calib + Ball + Hand + Outcome",
+        "phases": (2, 3, 4),
+    },
+    {
+        "id": 2,
+        "name_pt": "3. Resposta 🧤",
+        "name_en": "3. Response 🧤",
+        "sub_pt": "Início de movimento",
+        "sub_en": "First movement",
+        "phases": (5,),
+    },
+    {
+        "id": 3,
+        "name_pt": "4. Salvar 💾",
+        "name_en": "4. Save 💾",
+        "sub_pt": "Revisão e exportação",
+        "sub_en": "Review and export",
+        "phases": (6, 7, 8, 9),
+    },
+)
+
+# Phase machine indices (keep optional tools before review).
+PHASE_KICK_FRAME = 0
+PHASE_KICK_POINTS = 1
+PHASE_GOAL_FRAME = 2
+PHASE_GOAL_POINTS = 3
+PHASE_OUTCOME = 4
+PHASE_RESPONSE = 5
+PHASE_BALL_PATH = 6
+PHASE_BOXES = 7
+PHASE_ANTHRO = 8
+PHASE_REVIEW = 9
 
 
 def _banner(title: str, detail: str = "") -> None:
@@ -284,20 +332,31 @@ def _wrap(text: str, font, width: int) -> list[str]:
 class _Button:
     """A flat clickable rectangle drawn on the pygame surface."""
 
-    def __init__(self, key: str, label: str):
+    def __init__(self, key: str, label: str, primary: bool = False):
         self.key = key
         self.label = label
+        self.primary = primary
         self.rect = pygame.Rect(0, 0, 0, 0)
 
     def draw(self, screen, font, hover: bool, enabled: bool = True) -> None:
         if not enabled:
             bg, fg = (44, 50, 58), (110, 118, 128)
+            border_col = PANEL_LINE
+            border_w = 1
+        elif self.primary:
+            bg, fg = ((45, 140, 75), WHITE) if hover else ((32, 115, 60), WHITE)
+            border_col = GREEN
+            border_w = 2
         elif hover:
             bg, fg = (76, 130, 96), WHITE
+            border_col = WHITE
+            border_w = 1
         else:
             bg, fg = (52, 62, 74), WHITE
+            border_col = PANEL_LINE
+            border_w = 1
         pygame.draw.rect(screen, bg, self.rect, border_radius=5)
-        pygame.draw.rect(screen, PANEL_LINE, self.rect, 1, border_radius=5)
+        pygame.draw.rect(screen, border_col, self.rect, border_w, border_radius=5)
         surf = font.render(self.label, True, fg)
         screen.blit(
             surf,
@@ -355,18 +414,20 @@ class PynaltyApp:
         self.ui_lang = ui_lang
         self.calibration_path = calibration
         self.explicit_calibration_path = calibration
-        self.phase = 0
-        self.calibration_stage = "frame"
+        self.phase = PHASE_KICK_FRAME
+        self.calibration_stage = "idle"
         self.calibration_preview_edited = False
         self.calibration_draft = []
         self.calibration_record = None
         self.calibration_return = None
         self.calibration_backup = None
         self.output_dir_override: str | None = None
+        self.fps_confirmed = False
+        self.pending_calibration = None
 
         self.events: list[PynaltyEvent] = []
         self._init_events()
-        self.current_event_idx = 3
+        self.current_event_idx = 0
 
         self.current_frame_idx = 0
         self.frame_img = None
@@ -382,6 +443,9 @@ class PynaltyApp:
         self.font_small = None
         self.display_size = (1280, 800)
         self.buttons: list[_Button] = []
+        self.macro_step_rects: list[tuple[pygame.Rect, int]] = []
+        self.quick_save_rect: pygame.Rect | None = None
+        self.optional_tool_rects: list[tuple[pygame.Rect, int]] = []
 
         self.show_help = False
         self.show_wizard = False  # The active calibration prompt is the welcome screen.
@@ -401,25 +465,29 @@ class PynaltyApp:
             self.load_video(self.video_path)
 
     PHASE_KEYS = (
-        "calibration",
-        "gk_move",
-        "kick",
-        "goal",
-        "kick",
-        "goal",
-        "goal",
-        "ball_path",
-        "boxes",
-        "anthro",
-        "review",
+        "kick",  # 0 frame
+        "kick",  # 1 points
+        "goal",  # 2 frame (+ calibration stages)
+        "goal",  # 3 points Ball + hand
+        "goal",  # 4 outcome
+        "gk_move",  # 5 response
+        "ball_path",  # 6 optional
+        "boxes",  # 7 optional
+        "anthro",  # 8 optional
+        "review",  # 9 save
     )
 
     def tr(self, pt: str, en: str) -> str:
         return pt if self.ui_lang == "pt" else en
 
     @property
+    def is_calibrating(self) -> bool:
+        return self.calibration_stage in ("frame", "corners", "preview")
+
+    @property
     def navigation_locked(self) -> bool:
-        return self.phase in (4, 5, 6) or (self.phase == 0 and self.calibration_stage != "frame")
+        # Only lock scrubbing while placing goal corners / previewing TOML.
+        return self.is_calibrating and self.calibration_stage != "frame"
 
     def set_phase(self, phase: int):
         self.phase = max(0, min(phase, len(self.PHASE_KEYS) - 1))
@@ -427,30 +495,126 @@ class PynaltyApp:
         self.current_event_idx = next((i for i, e in enumerate(self.events) if e.key == key), -1)
         self.playing = False
         self.start_drag_slider = False
-        if self.phase in (4, 5, 6) or self.phase in (1, 2, 3) and self.current_event.frame_idx >= 0:
+        if self.phase == PHASE_GOAL_FRAME and self.step("goal").frame_idx < 0 and self.total_frames:
+            # Default arrival/calib frame is the last frame of the clip.
+            self.seek(max(0, self.total_frames - 1), force=True)
+        elif (
+            (
+                self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS, PHASE_OUTCOME)
+                or self.phase in (PHASE_KICK_FRAME, PHASE_GOAL_FRAME, PHASE_RESPONSE)
+            )
+            and self.current_event
+            and self.current_event.frame_idx >= 0
+        ):
             self.seek(self.current_event.frame_idx, force=True)
 
+    def is_macro_step_done(self, idx: int) -> bool:
+        if idx == 0:
+            k = self.step("kick")
+            return k.frame_idx != -1 and all(n in k.points for n in ("Ball", "GK"))
+        if idx == 1:
+            g = self.step("goal")
+            return (
+                g.frame_idx != -1
+                and len(self.calib_points()) == 4
+                and all(n in g.points for n in ("Ball", "GK"))
+                and bool(self.shot_outcome)
+            )
+        if idx == 2:
+            return self.step("gk_move").frame_idx != -1
+        if idx == 3:
+            return self.core_steps_done()
+        return False
+
+    def current_macro_step(self) -> int:
+        if self.phase in (PHASE_KICK_FRAME, PHASE_KICK_POINTS):
+            return 0
+        if (
+            self.phase in (PHASE_GOAL_FRAME, PHASE_GOAL_POINTS, PHASE_OUTCOME)
+            or self.is_calibrating
+        ):
+            return 1
+        if self.phase == PHASE_RESPONSE:
+            return 2
+        return 3
+
+    def goto_macro_step(self, idx: int):
+        """Navigate directly to the chosen macro step, resuming appropriate phase."""
+        if idx == 0:
+            k = self.step("kick")
+            if k.frame_idx >= 0 and not all(n in k.points for n in ("Ball", "GK")):
+                self.set_phase(PHASE_KICK_POINTS)
+            elif k.frame_idx >= 0 and self.phase == PHASE_KICK_POINTS:
+                self.set_phase(PHASE_KICK_FRAME)
+            else:
+                self.set_phase(PHASE_KICK_POINTS if k.frame_idx >= 0 else PHASE_KICK_FRAME)
+        elif idx == 1:
+            # Review goal/calib — never wipe corners just by clicking the card.
+            g = self.step("goal")
+            if g.frame_idx < 0:
+                self.calibration_stage = "idle"
+                self.set_phase(PHASE_GOAL_FRAME)
+            elif len(self.calib_points()) != 4 and not getattr(self, "pending_calibration", None):
+                self._begin_goal_calibration()
+            elif not all(n in g.points for n in ("Ball", "GK")):
+                self.calibration_stage = "idle"
+                self.set_phase(PHASE_GOAL_POINTS)
+            elif not self.shot_outcome:
+                self.calibration_stage = "idle"
+                self.set_phase(PHASE_OUTCOME)
+            else:
+                self.calibration_stage = "idle"
+                self.set_phase(PHASE_GOAL_POINTS)
+        elif idx == 2:
+            self.calibration_stage = "idle"
+            self.set_phase(PHASE_RESPONSE)
+        elif idx == 3:
+            self.calibration_stage = "idle"
+            self.set_phase(PHASE_REVIEW)
+            self.compute_metrics()
+
     def resume_workflow(self, optional_phase=None):
+        """Resume at the first incomplete macro step in the new UI order."""
+        self.calibration_stage = "idle"
+        k = self.step("kick")
+        if not 0 <= k.frame_idx < max(1, self.total_frames):
+            self.set_phase(PHASE_KICK_FRAME)
+            return
+        if not all(n in k.points for n in ("Ball", "GK")):
+            self.set_phase(PHASE_KICK_POINTS)
+            return
+
+        g = self.step("goal")
+        if not 0 <= g.frame_idx < max(1, self.total_frames):
+            self.set_phase(PHASE_GOAL_FRAME)
+            return
+        if g.frame_idx <= k.frame_idx:
+            self.set_phase(PHASE_GOAL_FRAME)
+            return
         if len(self.calib_points()) != 4:
-            self.set_phase(0)
+            if getattr(self, "pending_calibration", None):
+                self.calibration_stage = "preview"
+                self.set_phase(PHASE_GOAL_FRAME)
+                self.seek(g.frame_idx, force=True)
+            else:
+                self._begin_goal_calibration()
             return
-        for phase, key in enumerate(("gk_move", "kick", "goal"), 1):
-            if not 0 <= self.step(key).frame_idx < self.total_frames:
-                self.set_phase(phase)
-                return
-        if self.step("goal").frame_idx <= self.step("kick").frame_idx:
-            self.set_phase(3)
+        if not all(n in g.points for n in ("Ball", "GK")):
+            self.set_phase(PHASE_GOAL_POINTS)
             return
-        for phase, key in ((4, "kick"), (5, "goal")):
-            if not all(k in self.step(key).points for k in ("Ball", "GK")):
-                self.set_phase(phase)
-                return
         if not self.shot_outcome:
-            self.set_phase(6)
+            self.set_phase(PHASE_OUTCOME)
             return
-        self.set_phase(
-            optional_phase if isinstance(optional_phase, int) and 7 <= optional_phase <= 10 else 7
-        )
+
+        if not 0 <= self.step("gk_move").frame_idx < max(1, self.total_frames):
+            self.set_phase(PHASE_RESPONSE)
+            return
+
+        # Core done → land on Save (never auto-enter optional AI phases).
+        if isinstance(optional_phase, int) and PHASE_BALL_PATH <= optional_phase <= PHASE_REVIEW:
+            self.set_phase(optional_phase)
+        else:
+            self.set_phase(PHASE_REVIEW)
 
     def calibration_data(self):
         return {
@@ -519,8 +683,7 @@ class PynaltyApp:
                 self.step("calibration").reset()
                 self.calibration_record = None
                 self.calibration_draft = []
-                self.calibration_stage = "frame"
-                self.set_phase(0)
+                self.calibration_stage = "idle"
                 return False
             return True
         if not path and not report_only and self.video_path:
@@ -546,8 +709,7 @@ class PynaltyApp:
             self.step("calibration").reset()
             self.calibration_record = None
             self.calibration_draft = []
-            self.calibration_stage = "frame"
-            self.set_phase(0)
+            self.calibration_stage = "idle"
             return False
         self.calibration_path = str(path)
         if report_only:
@@ -556,15 +718,30 @@ class PynaltyApp:
             self.goal, self.calibration_record = geometry, data
             self.compute_metrics()
         else:
+            # Stage preview for the goal macro; do not steal focus from Kick.
             self.calibration_draft = pts
             self.calibration_preview_edited = False
             self.pending_calibration = data
-            self.calibration_stage = "preview"
-            self.set_phase(0)
+            self.calibration_stage = "idle"
         return True
 
+    def _begin_goal_calibration(self):
+        """Start corner marking on the arrival frame (default: last frame)."""
+        g = self.step("goal")
+        frame = g.frame_idx if g.frame_idx >= 0 else max(0, self.total_frames - 1)
+        if g.frame_idx < 0:
+            g.frame_idx = frame
+        self.set_phase(PHASE_GOAL_FRAME)
+        self.seek(frame, force=True)
+        if getattr(self, "pending_calibration", None) and self.calibration_draft:
+            self.calibration_stage = "preview"
+        else:
+            self.calibration_draft = []
+            self.calibration_preview_edited = False
+            self.calibration_stage = "corners"
+
     def redo_calibration(self):
-        if self.phase != 0:
+        if not self.is_calibrating:
             self.calibration_return = self.phase
             self.calibration_backup = (
                 copy.deepcopy(self.step("calibration").points),
@@ -573,8 +750,11 @@ class PynaltyApp:
         self.calibration_draft = []
         self.pending_calibration = None
         self.calibration_preview_edited = False
-        self.calibration_stage = "frame"
-        self.set_phase(0)
+        g = self.step("goal")
+        frame = g.frame_idx if g.frame_idx >= 0 else max(0, self.total_frames - 1)
+        self.set_phase(PHASE_GOAL_FRAME)
+        self.seek(frame, force=True)
+        self.calibration_stage = "corners"
 
     def cancel_calibration(self):
         if self.calibration_return is not None:
@@ -583,6 +763,7 @@ class PynaltyApp:
             )
             phase = self.calibration_return
             self.calibration_return = self.calibration_backup = None
+            self.calibration_stage = "idle"
             self.set_phase(phase)
             self.flash(self.tr("Calibração anterior mantida", "Previous calibration retained"))
 
@@ -627,20 +808,26 @@ class PynaltyApp:
             return
         if len(self.calibration_draft) != 4:
             return
-        data = getattr(self, "pending_calibration", None) or self.calibration_data()
+        pending = getattr(self, "pending_calibration", None)
+        data = pending or self.calibration_data()
         data = copy.deepcopy(data)
         data["points"] = copy.deepcopy(self.calibration_draft)
+        reused = bool(pending) and not self.calibration_preview_edited
+        # Keep provenance when reusing an untouched TOML; otherwise stamp arrival frame.
+        if not reused:
+            data["source_frame"] = self.current_frame_idx
         try:
             pts, geometry = self.validate_calibration(data)
         except (ValueError, TypeError, KeyError, np.linalg.LinAlgError) as exc:
             self.flash(str(exc), 180)
             return
-        reused = (
-            bool(getattr(self, "pending_calibration", None)) and not self.calibration_preview_edited
-        )
         self.step("calibration").points = {"points": pts}
         self.step("calibration").frame_idx = -1 if reused else self.current_frame_idx
+        if self.step("goal").frame_idx < 0:
+            self.step("goal").frame_idx = self.current_frame_idx
         self.goal, self.calibration_record = geometry, data
+        self.pending_calibration = None
+        self.calibration_stage = "idle"
         self.refresh_pose_metrics()
         if not reused and not self.persist_calibration():
             root = tk.Tk()
@@ -659,19 +846,24 @@ class PynaltyApp:
         phase = self.calibration_return
         self.calibration_return = self.calibration_backup = None
         if phase is None:
-            self.resume_workflow()
+            self.set_phase(PHASE_GOAL_POINTS)
         else:
             self.set_phase(phase)
         self.compute_metrics()
         self.flash(self.tr("Calibração confirmada", "Calibration confirmed"))
 
     def confirm_frame(self):
-        if self.phase not in (1, 2, 3):
+        if self.phase not in (PHASE_KICK_FRAME, PHASE_GOAL_FRAME, PHASE_RESPONSE):
+            return
+        if self.is_calibrating and self.phase == PHASE_GOAL_FRAME:
+            # Enter during calib preview/corners confirms calibration, not a new frame.
+            if self.calibration_stage in ("corners", "preview"):
+                self.confirm_calibration()
             return
         evt = self.current_event
         frame = self.current_frame_idx
         self.playing = False
-        if self.phase == 3 and frame <= self.step("kick").frame_idx:
+        if self.phase == PHASE_GOAL_FRAME and frame <= self.step("kick").frame_idx:
             self.flash(
                 self.tr("A chegada deve ser posterior ao chute", "Arrival must follow contact"), 120
             )
@@ -687,11 +879,25 @@ class PynaltyApp:
                 self.step("boxes").reset()
             if evt.key == "kick" and self.step("goal").frame_idx <= frame:
                 self.step("goal").reset()
+                self.step("calibration").reset()
+                self.calibration_record = None
         evt.frame_idx = frame
         self.flash(self.tr(f"Frame {frame} confirmado", f"Frame {frame} confirmed"))
-        if self.phase < 3:
-            self.set_phase(self.phase + 1)
-        else:
+        if self.phase == PHASE_KICK_FRAME:
+            self.set_phase(PHASE_KICK_POINTS)
+        elif self.phase == PHASE_GOAL_FRAME:
+            if len(self.calib_points()) == 4:
+                self.calibration_stage = "idle"
+                self.set_phase(PHASE_GOAL_POINTS)
+            elif getattr(self, "pending_calibration", None):
+                self.calibration_draft = list(
+                    self.pending_calibration.get("points") or self.calibration_draft
+                )
+                self.calibration_stage = "preview"
+            else:
+                self.calibration_draft = []
+                self.calibration_stage = "corners"
+        elif self.phase == PHASE_RESPONSE:
             self.resume_workflow()
 
     # ------------------------------------------------------------------ setup
@@ -946,11 +1152,11 @@ class PynaltyApp:
         return done or not self.step_is_required(idx)
 
     def micro_prompt(self) -> str:
-        if self.phase == 0:
+        if self.is_calibrating:
             if self.calibration_stage == "frame":
                 return self.tr(
-                    "Escolha um frame com o gol visível. Enter pausa e inicia os cantos.",
-                    "Choose a frame with the goal visible. Enter pauses and starts the corners.",
+                    "Frame do gol/defesa (em geral o último). Enter inicia os 4 cantos.",
+                    "Goal/save frame (usually the last). Enter starts the 4 corners.",
                 )
             n = len(self.calibration_draft)
             if n < 4:
@@ -963,55 +1169,70 @@ class PynaltyApp:
                     f"Click corner {n + 1}: {corners[n]}. Right click undoes.",
                 )
             return self.tr(
-                "Confira enquadramento, zoom e posição da câmera. Enter confirma; C refaz.",
-                "Check framing, zoom and camera position. Enter confirms; C restarts.",
+                "Confira enquadramento/zoom/câmera. Enter confirma; C refaz.",
+                "Check framing/zoom/camera. Enter confirms; C restarts.",
             )
         prompts = {
-            1: (
-                "Primeiro movimento claro de preparação/mergulho do goleiro. Confirme com Enter.",
-                "First clear keeper preparation/dive movement. Confirm with Enter.",
+            PHASE_KICK_FRAME: (
+                "1. Contato pé-bola. Navegue e confirme com Enter.",
+                "1. Foot-ball contact. Scrub and confirm with Enter.",
             ),
-            2: (
-                "Instante do contato do pé com a bola. Confirme com Enter.",
-                "Instant the foot contacts the ball. Confirm with Enter.",
+            PHASE_RESPONSE: (
+                "3. Primeiro movimento do goleiro (tempo de resposta). Enter confirma.",
+                "3. Keeper first movement (response time). Enter confirms.",
             ),
-            3: (
-                "Instante em que a bola alcança a linha do gol. Confirme com Enter.",
-                "Instant the ball reaches the goal line. Confirm with Enter.",
+            PHASE_GOAL_FRAME: (
+                "2. Frame da bola na linha / defesa (padrão: último). Enter confirma.",
+                "2. Ball-at-line / save frame (default: last). Enter confirms.",
             ),
-            6: (
-                "Qual foi o resultado? Escolha abaixo ou use G / D / M / W.",
-                "What was the outcome? Choose below or use G / D / M / W.",
+            PHASE_OUTCOME: (
+                "Resultado: Gol (G), Defesa (D), Fora (M) ou Trave (W).",
+                "Outcome: Goal (G), Save (D), Miss (M) or Woodwork (W).",
             ),
-            7: (
-                "Opcional: A detecta a bola; clique para trajetória manual, ou Pular.",
-                "Optional: A detects the ball; click for a manual trajectory, or Skip.",
+            PHASE_BALL_PATH: (
+                "Opcional: A detecta a bola; clique para trajetória manual.",
+                "Optional: A detects the ball; click for a manual trajectory.",
             ),
-            8: (
-                "Opcional: arraste a caixa do cobrador, depois do goleiro; P executa pose, ou Pular.",
-                "Optional: drag kicker then keeper boxes; P runs pose, or Skip.",
+            PHASE_BOXES: (
+                "Opcional: arraste caixas cobrador/goleiro; P executa pose.",
+                "Optional: drag kicker/keeper boxes; P runs pose.",
             ),
-            9: (
-                "Opcional: B informa medidas corporais, ou Pular usa os valores padrão.",
-                "Optional: B enters body measurements, or Skip uses defaults.",
+            PHASE_ANTHRO: (
+                "Opcional: B informa medidas corporais (ou use padrões).",
+                "Optional: B enters body measurements (or use defaults).",
             ),
-            10: (
-                "Revise os frames e as marcações. Salvar resultados gera o pacote completo.",
-                "Review frames and marks. Save results generates the full package.",
+            PHASE_REVIEW: (
+                "Revise e salve com S. Trajetória/pose/medidas são opcionais.",
+                "Review and save with S. Trajectory/pose/body are optional.",
             ),
         }
-        if self.phase in (4, 5):
+        if self.phase == PHASE_KICK_POINTS:
             if all(k in self.current_event.points for k in ("Ball", "GK")):
                 return self.tr(
-                    "Pontos confirmados. Continuar avança; botão direito desfaz.",
-                    "Points confirmed. Continue advances; right click undoes.",
+                    "Pontos do chute ok. Continuar avança para o gol.",
+                    "Kick points done. Continue advances to the goal.",
                 )
             ball = "Ball" not in self.current_event.points
             return self.tr(
-                "Clique no centro da bola." if ball else "Clique no centro do goleiro.",
-                "Click the ball centre." if ball else "Click the keeper centre.",
+                "Clique no centro da BOLA." if ball else "Clique no centro do GOLEIRO.",
+                "Click the BALL centre." if ball else "Click the KEEPER centre.",
+            )
+        if self.phase == PHASE_GOAL_POINTS:
+            if all(k in self.current_event.points for k in ("Ball", "GK")):
+                return self.tr(
+                    "Pontos da chegada ok. Continuar escolhe o resultado.",
+                    "Arrival points done. Continue chooses the outcome.",
+                )
+            ball = "Ball" not in self.current_event.points
+            return self.tr(
+                "Clique na BOLA na linha." if ball else "Clique na MÃO do goleiro.",
+                "Click the BALL on the line." if ball else "Click the keeper HAND.",
             )
         return self.tr(*prompts[self.phase])
+
+    def action_banner_text(self) -> str:
+        """Large on-video instruction for the current action."""
+        return self.micro_prompt()
 
     def core_steps_done(self) -> bool:
         """The required marking steps needed before metrics and save."""
@@ -1043,8 +1264,8 @@ class PynaltyApp:
             if dt < -1.0:
                 warn.append(
                     self.tr(
-                        f"Goleiro se move {abs(dt):.2f} s antes do chute: confira o frame.",
-                        f"Keeper moves {abs(dt):.2f} s before contact - check step 1.",
+                        f"Goleiro se move {abs(dt):.2f} s antes do chute: confira a Resposta.",
+                        f"Keeper moves {abs(dt):.2f} s before contact - check Response.",
                     )
                 )
         calib = self.calib_points()
@@ -1052,7 +1273,7 @@ class PynaltyApp:
             warn.append(
                 self.tr(
                     "Cantos não convexos. Pressione C para refazer a calibração.",
-                    "Calibration corners are not convex. Press O to reorder them.",
+                    "Calibration corners are not convex. Press C to recalibrate.",
                 )
             )
         if len(self.ball_path().points) in (1, 2):
@@ -1095,11 +1316,12 @@ class PynaltyApp:
 
         self.screen.set_clip(area)
         self.draw_markers()
-        if self.phase != 0:
+        if not self.is_calibrating:
             self.draw_ball_path_overlay()
             self.draw_boxes()
             self.draw_goal_axes()
             self.draw_vectors()
+        self.draw_action_banner()
         self.screen.set_clip(None)
 
         self.draw_step_panel()
@@ -1114,7 +1336,25 @@ class PynaltyApp:
         elif self.show_help:
             self.draw_help_overlay()
 
-        pygame.display.flip()
+        if pygame.display.get_surface() is self.screen:
+            pygame.display.flip()
+
+    def draw_action_banner(self):
+        """Prominent instruction strip over the video area."""
+        area = self.content_rect()
+        text = self.action_banner_text()
+        if not text:
+            return
+        lines = _wrap(text, self.font_big, area.width - 48)
+        box_h = len(lines) * 26 + 20
+        box = pygame.Rect(area.x + 12, area.y + 12, area.width - 24, box_h)
+        veil = pygame.Surface((box.width, box.height), pygame.SRCALPHA)
+        veil.fill((10, 14, 20, 200))
+        self.screen.blit(veil, box.topleft)
+        pygame.draw.rect(self.screen, YELLOW, box, 2, border_radius=6)
+        for i, line in enumerate(lines):
+            surf = self.font_big.render(line, True, WHITE)
+            self.screen.blit(surf, (box.x + 14, box.y + 10 + i * 26))
 
     def draw_marker(self, pos, color, label=""):
         sx, sy = self.image_to_screen_coords(pos[0], pos[1])
@@ -1132,15 +1372,16 @@ class PynaltyApp:
             ("goal", self.tr("chegada", "arrival"), RED),
         ):
             evt = self.step(key)
-            if self.phase == 0 or evt.frame_idx != self.current_frame_idx:
+            if self.is_calibrating or evt.frame_idx != self.current_frame_idx:
                 continue
+            gk_label = self.tr("Mão", "Hand") if key == "goal" else self.tr("Goleiro", "Keeper")
             for name, label in (
                 ("Ball", self.tr("Bola", "Ball")),
-                ("GK", self.tr("Goleiro", "Keeper")),
+                ("GK", gk_label),
             ):
                 if name in evt.points:
                     self.draw_marker(evt.points[name], color, f"{label}: {suffix}")
-        points = self.calibration_draft if self.phase == 0 else self.calib_points()
+        points = self.calibration_draft if self.is_calibrating else self.calib_points()
         for i, point in enumerate(points):
             self.draw_marker(point, BLUE, f"C{i + 1}")
 
@@ -1233,72 +1474,227 @@ class PynaltyApp:
     def draw_step_panel(self):
         h = self.screen.get_height() - BOTTOM_H
         pygame.draw.rect(self.screen, PANEL_BG, (0, 0, PANEL_W, h))
+        pygame.draw.line(self.screen, PANEL_LINE, (PANEL_W - 1, 0), (PANEL_W - 1, h), 1)
         self.screen.set_clip(pygame.Rect(0, 0, PANEL_W, h))
-        y = 12
-        titles = self.tr(
-            "Calibração|Movimento do goleiro|Contato com a bola|Bola na linha do gol|Pontos no chute|Pontos na chegada|Resultado|Trajetória (opcional)|Pose (opcional)|Medidas (opcional)|Revisão",
-            "Calibration|Keeper movement|Ball contact|Ball at goal line|Contact points|Arrival points|Outcome|Trajectory (optional)|Pose (optional)|Body (optional)|Review",
-        ).split("|")
+
+        y = 10
         self.screen.blit(self.font_big.render("Pynalty", True, GREEN), (16, y))
+        sub_title = self.tr("Análise de Pênalti", "Penalty Analysis")
+        self.screen.blit(self.font_small.render(sub_title, True, GRAY), (110, y + 8))
         y += 34
-        for line in _wrap(f"{self.phase + 1}/11  {titles[self.phase]}", self.font, PANEL_W - 32):
-            self.screen.blit(self.font.render(line, True, YELLOW), (16, y))
-            y += 21
-        y += 8
-        for line in _wrap(self.micro_prompt(), self.font, PANEL_W - 32):
-            self.screen.blit(self.font.render(line, True, WHITE), (16, y))
-            y += 21
-        y += 12
-        controls = (
-            self.tr(
-                "Setas: ±1 / ±10 frames. Espaço: reproduzir/pausar.",
-                "Arrows: ±1 / ±10 frames. Space: play/pause.",
+
+        # Macro-Steps Stepper
+        self.macro_step_rects = []
+        curr_macro = self.current_macro_step()
+        mouse = pygame.mouse.get_pos()
+
+        for step in MACRO_STEPS:
+            idx = step["id"]
+            title = self.tr(step["name_pt"], step["name_en"])
+            sub = self.tr(step["sub_pt"], step["sub_en"])
+            is_curr = idx == curr_macro
+            is_done = self.is_macro_step_done(idx)
+
+            card_rect = pygame.Rect(10, y, PANEL_W - 20, 36)
+            self.macro_step_rects.append((card_rect, idx))
+            hover = card_rect.collidepoint(mouse)
+
+            if is_curr:
+                bg = (40, 52, 70) if not hover else (48, 62, 84)
+                border_color = YELLOW
+                border_w = 2
+            elif is_done:
+                bg = (28, 42, 34) if not hover else (34, 52, 42)
+                border_color = (65, 140, 85)
+                border_w = 1
+            else:
+                bg = (30, 35, 42) if not hover else (38, 44, 54)
+                border_color = (52, 60, 72)
+                border_w = 1
+
+            pygame.draw.rect(self.screen, bg, card_rect, border_radius=5)
+            pygame.draw.rect(self.screen, border_color, card_rect, border_w, border_radius=5)
+
+            mark = "●" if is_curr else ("✓" if is_done else "○")
+            mark_color = YELLOW if is_curr else (GREEN if is_done else GRAY)
+            self.screen.blit(
+                self.font_small.render(mark, True, mark_color),
+                (card_rect.x + 8, card_rect.y + 11),
             )
-            if not self.navigation_locked
-            else self.tr(
-                "Frame pausado e travado. Roda: zoom. Arraste com botão do meio: mover imagem.",
-                "Frame paused and locked. Wheel: zoom. Middle drag: pan.",
+
+            title_color = WHITE if (is_curr or is_done) else GRAY
+            self.screen.blit(
+                self.font.render(title, True, title_color),
+                (card_rect.x + 24, card_rect.y + 4),
+            )
+
+            detail = sub
+            if idx == 0:
+                k = self.step("kick")
+                if k.frame_idx >= 0:
+                    pts = (
+                        "+".join(k.points.keys())
+                        if k.points
+                        else self.tr("sem pontos", "no points")
+                    )
+                    detail = f"Frame {k.frame_idx} ({pts})"
+            elif idx == 1:
+                g = self.step("goal")
+                if len(self.calib_points()) == 4 and g.frame_idx >= 0:
+                    out = self.shot_outcome or self.tr("pendente", "pending")
+                    detail = f"Frame {g.frame_idx} ({out})"
+                elif len(self.calib_points()) == 4:
+                    detail = self.tr("Calibrado (4 cantos)", "Calibrated (4 corners)")
+                elif g.frame_idx >= 0:
+                    detail = f"Frame {g.frame_idx}"
+            elif idx == 2:
+                f = self.step("gk_move").frame_idx
+                if f >= 0:
+                    detail = f"Frame {f}"
+            elif idx == 3:
+                detail = self.tr(
+                    "Pronto para salvar" if self.core_steps_done() else "Aguardando passos",
+                    "Ready to save" if self.core_steps_done() else "Pending steps",
+                )
+
+            self.screen.blit(
+                self.font_small.render(detail, True, AMBER if is_curr else GRAY),
+                (card_rect.x + 24, card_rect.y + 20),
+            )
+            y += 40
+
+        y += 4
+        pygame.draw.line(self.screen, PANEL_LINE, (16, y), (PANEL_W - 16, y), 1)
+        y += 8
+
+        # Active Phase Micro-Prompt Box
+        prompt_lines = _wrap(self.micro_prompt(), self.font_small, PANEL_W - 36)
+        prompt_box_h = max(38, len(prompt_lines) * 16 + 12)
+        prompt_box = pygame.Rect(10, y, PANEL_W - 20, prompt_box_h)
+        pygame.draw.rect(self.screen, (20, 24, 30), prompt_box, border_radius=4)
+        pygame.draw.rect(self.screen, (45, 55, 68), prompt_box, 1, border_radius=4)
+        for i, line in enumerate(prompt_lines):
+            self.screen.blit(
+                self.font_small.render(line, True, WHITE),
+                (prompt_box.x + 8, prompt_box.y + 6 + i * 16),
+            )
+        y += prompt_box_h + 8
+
+        # Live Metrics Card
+        metrics = self.last_results or self.compute_metrics() or {}
+        vel = metrics.get("vel_kmh")
+        flight = metrics.get("flight_time_s")
+        reaction = metrics.get("gk_response_time")
+        outcome = self.shot_outcome
+
+        card_h = 76
+        m_box = pygame.Rect(10, y, PANEL_W - 20, card_h)
+        pygame.draw.rect(self.screen, (18, 22, 28), m_box, border_radius=5)
+        pygame.draw.rect(self.screen, (40, 52, 65), m_box, 1, border_radius=5)
+
+        m_title = self.tr("MÉTRICAS EM TEMPO REAL", "LIVE METRICS")
+        self.screen.blit(self.font_small.render(m_title, True, CYAN), (m_box.x + 8, m_box.y + 5))
+
+        vel_txt = f"{vel:.1f} km/h" if isinstance(vel, int | float) else "— km/h"
+        flight_txt = f"{flight:.3f} s" if isinstance(flight, int | float) else "— s"
+        self.screen.blit(
+            self.font_small.render(
+                f"⚽ {self.tr('Bola', 'Ball')}: {vel_txt}  |  ⏱️ {self.tr('Voo', 'Flight')}: {flight_txt}",
+                True,
+                WHITE,
+            ),
+            (m_box.x + 8, m_box.y + 24),
+        )
+
+        react_txt = f"{reaction:+.3f} s" if isinstance(reaction, int | float) else "— s"
+        out_txt = outcome.upper() if outcome else self.tr("Pendente", "Pending")
+        out_col = (
+            GREEN
+            if outcome == "goal"
+            else (
+                BLUE
+                if outcome == "save"
+                else (RED if outcome == "miss" else (AMBER if outcome == "woodwork" else GRAY))
             )
         )
-        for line in _wrap(controls, self.font_small, PANEL_W - 32):
-            self.screen.blit(self.font_small.render(line, True, GRAY), (16, y))
-            y += 16
-        y += 12
-        for key, label in zip(("gk_move", "kick", "goal"), titles[1:4], strict=True):
-            frame = self.step(key).frame_idx
+        self.screen.blit(
+            self.font_small.render(
+                f"🧤 {self.tr('Reação', 'Reaction')}: {react_txt}  |  ", True, WHITE
+            ),
+            (m_box.x + 8, m_box.y + 44),
+        )
+        r_w = self.font_small.size(f"🧤 {self.tr('Reação', 'Reaction')}: {react_txt}  |  ")[0]
+        self.screen.blit(
+            self.font_small.render(out_txt, True, out_col), (m_box.x + 8 + r_w, m_box.y + 44)
+        )
+        y += card_h + 8
+
+        # Quick Save Button
+        if self.core_steps_done():
+            self.quick_save_rect = pygame.Rect(10, y, PANEL_W - 20, 32)
+            qs_hover = self.quick_save_rect.collidepoint(mouse)
+            qs_bg = (40, 130, 70) if not qs_hover else (55, 160, 85)
+            pygame.draw.rect(self.screen, qs_bg, self.quick_save_rect, border_radius=5)
+            pygame.draw.rect(self.screen, GREEN, self.quick_save_rect, 1, border_radius=5)
+            qs_lbl = self.tr("💾 SALVAR RESULTADOS (S)", "💾 SAVE RESULTS (S)")
+            qs_surf = self.font.render(qs_lbl, True, WHITE)
             self.screen.blit(
-                self.font_small.render(
-                    f"{label}: {frame if frame >= 0 else '—'}", True, GREEN if frame >= 0 else GRAY
+                qs_surf,
+                (
+                    self.quick_save_rect.centerx - qs_surf.get_width() // 2,
+                    self.quick_save_rect.centery - qs_surf.get_height() // 2,
                 ),
-                (16, y),
             )
-            y += 20
-        if self.phase == 0:
-            # Image order: 2--3 above 1--4. Highlight the next required corner.
-            corners = [(48, y + 64), (48, y + 14), (250, y + 14), (250, y + 64)]
+            y += 38
+        else:
+            self.quick_save_rect = None
+
+        # Optional Tools Row
+        self.optional_tool_rects = []
+        opt_w = (PANEL_W - 20 - 12) // 3
+        tools = [
+            (PHASE_BALL_PATH, self.tr("Traj A", "Path A")),
+            (PHASE_BOXES, self.tr("Pose P", "Pose P")),
+            (PHASE_ANTHRO, self.tr("Med B", "Body B")),
+        ]
+        for t_i, (t_phase, t_label) in enumerate(tools):
+            t_rect = pygame.Rect(10 + t_i * (opt_w + 6), y, opt_w, 24)
+            self.optional_tool_rects.append((t_rect, t_phase))
+            t_hover = t_rect.collidepoint(mouse)
+            t_active = self.phase == t_phase
+            t_bg = (45, 60, 80) if t_active else ((40, 48, 58) if t_hover else (30, 35, 42))
+            t_border = YELLOW if t_active else (PANEL_LINE if not t_hover else WHITE)
+            pygame.draw.rect(self.screen, t_bg, t_rect, border_radius=4)
+            pygame.draw.rect(self.screen, t_border, t_rect, 1, border_radius=4)
+            t_surf = self.font_small.render(t_label, True, WHITE if (t_active or t_hover) else GRAY)
+            self.screen.blit(
+                t_surf,
+                (
+                    t_rect.centerx - t_surf.get_width() // 2,
+                    t_rect.centery - t_surf.get_height() // 2,
+                ),
+            )
+        y += 28
+
+        # Goal calibration schematic while placing corners
+        if self.is_calibrating:
+            corners = [(48, y + 54), (48, y + 14), (250, y + 14), (250, y + 54)]
             pygame.draw.lines(self.screen, GRAY, True, corners, 2)
             for i, pt in enumerate(corners):
                 color = YELLOW if i == len(self.calibration_draft) else BLUE
-                pygame.draw.circle(self.screen, color, pt, 11)
+                pygame.draw.circle(self.screen, color, pt, 10)
                 self.screen.blit(
                     self.font_small.render(str(i + 1), True, BLACK), (pt[0] - 4, pt[1] - 7)
                 )
-        elif self.phase == 10:
-            for warning in self.validation_warnings():
-                for line in _wrap(warning, self.font_small, PANEL_W - 32):
+            y += 68
+
+        # Validation warnings
+        for warning in self.validation_warnings():
+            for line in _wrap(warning, self.font_small, PANEL_W - 32):
+                if y + 16 < h:
                     self.screen.blit(self.font_small.render(line, True, AMBER), (16, y))
                     y += 16
-            for label, key, unit in (
-                (self.tr("Bola", "Ball"), "vel_kmh", "km/h"),
-                (self.tr("Voo", "Flight"), "flight_time_s", "s"),
-                (self.tr("Reação", "Reaction"), "gk_response_time", "s"),
-            ):
-                value = self.last_results.get(key)
-                if isinstance(value, int | float):
-                    self.screen.blit(
-                        self.font_small.render(f"{label}: {value:.3f} {unit}", True, WHITE), (16, y)
-                    )
-                    y += 20
+
         self.screen.set_clip(None)
 
     def draw_bottom_bar(self):
@@ -1372,45 +1768,62 @@ class PynaltyApp:
             ("load", self.tr("Carregar L", "Load L")),
             ("help", self.tr("Ajuda H", "Help H")),
         ]
-        if self.phase == 0:
+        primary_key = "confirm"
+        if self.is_calibrating:
             label = self.tr("Confirmar frame Enter", "Confirm frame Enter")
-            if len(self.calibration_draft) == 4:
+            if self.calibration_stage == "corners" and len(self.calibration_draft) < 4:
+                label = self.tr("Marque os 4 cantos", "Mark the 4 corners")
+            elif len(self.calibration_draft) == 4:
                 label = (
                     self.tr("Usar calibração Enter", "Use calibration Enter")
                     if getattr(self, "pending_calibration", None)
-                    else self.tr("Confirmar e salvar", "Confirm and save")
+                    and not self.calibration_preview_edited
+                    else self.tr("Confirmar e salvar Enter", "Confirm and save Enter")
                 )
             specs.insert(0, ("confirm", label))
             if self.calibration_return is not None:
                 specs.append(("cancel", self.tr("Cancelar Esc", "Cancel Esc")))
-        elif self.phase in (1, 2, 3):
+        elif self.phase in (PHASE_KICK_FRAME, PHASE_GOAL_FRAME, PHASE_RESPONSE):
             specs.insert(0, ("confirm", self.tr("Confirmar frame Enter", "Confirm frame Enter")))
-        elif self.phase in (4, 5, 6):
+        elif self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS):
             specs.insert(0, ("edit", self.tr("Editar frame E", "Edit frame E")))
-            if self.phase in (4, 5) and all(k in self.current_event.points for k in ("Ball", "GK")):
-                specs.insert(0, ("next", self.tr("Continuar", "Continue")))
-            if self.phase == 6:
-                specs = [
-                    (k, self.tr(pt, en))
-                    for k, pt, en in (
-                        ("goal", "Gol G", "Goal G"),
-                        ("save_outcome", "Defesa D", "Save D"),
-                        ("miss", "Fora M", "Miss M"),
-                        ("woodwork", "Trave W", "Woodwork W"),
-                    )
-                ] + specs
-        elif self.phase in (7, 8, 9):
+            if all(k in self.current_event.points for k in ("Ball", "GK")):
+                primary_key = "next"
+                specs.insert(0, ("next", self.tr("Continuar Enter", "Continue Enter")))
+            else:
+                primary_key = "edit"
+        elif self.phase == PHASE_OUTCOME:
+            primary_key = "goal"
+            specs = [
+                (k, self.tr(pt, en))
+                for k, pt, en in (
+                    ("goal", "Gol G", "Goal G"),
+                    ("save_outcome", "Defesa D", "Save D"),
+                    ("miss", "Fora M", "Miss M"),
+                    ("woodwork", "Trave W", "Woodwork W"),
+                )
+            ] + specs
+        elif self.phase in (PHASE_BALL_PATH, PHASE_BOXES, PHASE_ANTHRO):
             action = {
-                7: ("auto_ball", self.tr("Detectar bola A", "Detect ball A")),
-                8: ("pose", self.tr("Executar pose P", "Run pose P")),
-                9: ("anthro", self.tr("Medidas B", "Body B")),
+                PHASE_BALL_PATH: ("auto_ball", self.tr("Detectar bola A", "Detect ball A")),
+                PHASE_BOXES: ("pose", self.tr("Executar pose P", "Run pose P")),
+                PHASE_ANTHRO: ("anthro", self.tr("Medidas B", "Body B")),
             }[self.phase]
-            specs = [("next", self.tr("Pular / Continuar", "Skip / Continue")), action] + specs
+            primary_key = "next"
+            specs = [
+                ("next", self.tr("Voltar ao Salvar", "Back to Save")),
+                action,
+            ] + specs
         else:
+            primary_key = "save"
             specs.insert(0, ("save", self.tr("Salvar resultados S", "Save results S")))
+        if self.core_steps_done() and not any(k == "save" for k, _ in specs):
+            specs.insert(0, ("save", self.tr("Salvar resultados S", "Save results S")))
+            if primary_key not in ("goal", "confirm", "next"):
+                primary_key = "save"
         cols = max(2, (w - 40) // 190)
         bw, bh, gap = (w - 40) // cols - 6, 29, 6
-        self.buttons = [_Button(k, label) for k, label in specs]
+        self.buttons = [_Button(k, label, primary=(k == primary_key)) for k, label in specs]
         mouse = pygame.mouse.get_pos()
         for i, btn in enumerate(self.buttons):
             btn.rect = pygame.Rect(
@@ -1437,8 +1850,8 @@ class PynaltyApp:
         veil.fill((0, 0, 0, 235))
         self.screen.blit(veil, (0, 0))
         text = self.tr(
-            "Pynalty: calibrar → confirmar três frames → clicar nos pontos → opcionais → salvar.\nEnter confirma somente a ação indicada. Setas: ±1 / ±10 frames; Espaço: reproduzir/pausar.\nC: refazer calibração. Esc: cancelar recalibração ou sair. E: editar frame dos pontos.\nRoda / +/-: zoom; botão do meio: mover imagem; 0: ajustar à janela.\nClique esquerdo: próximo ponto; direito: desfazer. Não há cliques na fase dos frames.\nTab / Shift+Tab: avançar / voltar. G / D / M / W: gol / defesa / fora / trave.\nA: trajetória automática; P: pose; B: medidas; S: salvar na revisão; L: carregar sessão.\nPT / EN ou F2 muda o idioma sem perder marcações. F: ajustar fps.\nH fecha a ajuda. Enter inicia.",
-            "Pynalty: calibrate → confirm three frames → click points → optional steps → save.\nEnter confirms only the indicated action. Arrows: ±1 / ±10 frames; Space: play/pause.\nC: recalibrate. Esc: cancel recalibration or quit. E: edit point frame.\nWheel / +/-: zoom; middle drag: pan; 0: fit window.\nLeft click: next point; right click: undo. Clicks do nothing during frame selection.\nTab / Shift+Tab: next / back. G / D / M / W: goal / save / miss / woodwork.\nA: automatic trajectory; P: pose; B: body; S: save at review; L: load session.\nPT / EN or F2 changes language without losing marks. F: adjust fps.\nH closes help. Enter starts.",
+            "Pynalty: 4 etapas (Chute → Gol/Calibração → Resposta → Salvar).\n1 Chute: confirme o contato e marque Bola + Goleiro.\n2 Gol: use o frame da chegada/defesa (em geral o último): 4 cantos + Bola + Mão + G/D/M/W.\n3 Resposta: frame do início de movimento do goleiro.\n4 Salvar: S exporta. A/P/B são opcionais e nunca bloqueiam.\nEnter confirma a ação do banner. Setas: ±1 / ±10 frames; Espaço: reproduzir/pausar.\nC: refazer calibração. Esc: cancelar recalibração ou sair. E: editar frame dos pontos.\nClique esquerdo: marcar; direito: desfazer. Timeline: marcadores coloridos pulam ao evento.\nF: FPS. F2 / PT-EN: idioma. H fecha a ajuda.",
+            "Pynalty: 4 steps (Kick → Goal/Calibration → Response → Save).\n1 Kick: confirm contact and mark Ball + Keeper.\n2 Goal: arrival/save frame (usually last): 4 corners + Ball + Hand + G/D/M/W.\n3 Response: keeper first-movement frame.\n4 Save: S exports. A/P/B are optional and never block.\nEnter confirms the banner action. Arrows: ±1 / ±10 frames; Space: play/pause.\nC: recalibrate. Esc: cancel recalibration or quit. E: edit point frame.\nLeft click: mark; right: undo. Timeline colored markers snap to events.\nF: FPS. F2 / PT-EN: language. H closes help.",
         )
         y = 32
         for paragraph in text.split("\n"):
@@ -1584,35 +1997,21 @@ class PynaltyApp:
             self.compute_metrics()
 
     def confirm_fps_on_start(self):
-        """First box shown when the window opens, ahead of calibration.
+        """Accept auto-detected FPS with a flash; press F anytime to edit.
 
-        Velocity and time depend on FPS, so it must be settled before anything
-        else. ``self.fps`` already holds the ffprobe-based auto-detection from
-        ``load_video`` (same logic as numberframes.py); this just lets the user
-        confirm it or type the correct value over it (e.g. when ffprobe/OpenCV
-        misread a variable-frame-rate or phone-captured clip).
+        Velocity and time depend on FPS. ``self.fps`` already holds the
+        ffprobe-based detection from ``load_video`` (same logic as
+        numberframes.py). A blocking modal before the layout is avoided so the
+        marking UI is immediately usable.
         """
-        raw = self._text_input(
+        self.fps_confirmed = True
+        self.flash(
             self.tr(
-                f"FPS detectado: {self.fps:.3f} Hz. Confirme ou corrija (necessário p/ velocidade e tempo)",
-                f"Detected FPS: {self.fps:.3f} Hz. Confirm or correct (needed for velocity and time)",
+                f"FPS {self.fps:.3f} Hz — Enter inicia o chute; F altera",
+                f"FPS {self.fps:.3f} Hz — Enter starts kick; F to change",
             ),
-            f"{self.fps:.3f}",
+            180,
         )
-        if raw is None or not raw.strip():
-            return
-        try:
-            value = float(raw.strip().replace(",", "."))
-        except ValueError:
-            self.flash(
-                self.tr(
-                    "Número inválido; mantendo FPS detectado", "Not a number; keeping detected FPS"
-                )
-            )
-            return
-        if value > 0:
-            self.fps = value
-            self.flash(self.tr(f"FPS confirmado: {value:.3f} Hz", f"FPS confirmed: {value:.3f} Hz"))
 
     def flight_window(self, pad: int = 4) -> tuple[int, int]:
         """Frame range covering the whole event, with a little padding."""
@@ -1928,7 +2327,7 @@ class PynaltyApp:
         self.pose_sequences = {}
         self.pose_metrics = {}
         self.last_results = {}
-        self.calibration_stage = "frame"
+        self.calibration_stage = "idle"
         self.calibration_preview_edited = False
         self.calibration_draft = []
         self.pending_calibration = None
@@ -2102,7 +2501,7 @@ class PynaltyApp:
             if "Ball" in goal.points:
                 dot(img, goal.points["Ball"], (0, 0, 255), "Ball @ line")
             if "GK" in goal.points:
-                dot(img, goal.points["GK"], (255, 0, 255), "GK @ line")
+                dot(img, goal.points["GK"], (255, 0, 255), "Hand @ line")
             k_ball, g_ball = kick.points.get("Ball"), goal.points.get("Ball")
             if k_ball and g_ball:
                 pt1 = (int(k_ball[0]), int(k_ball[1]))
@@ -2363,46 +2762,65 @@ class PynaltyApp:
         elif key == "cancel":
             self.cancel_calibration()
         elif key == "confirm":
-            if self.phase == 0:
+            if self.is_calibrating:
                 self.confirm_calibration()
             else:
                 self.confirm_frame()
-        elif key == "edit" and self.phase in (4, 5, 6):
-            self.set_phase(2 if self.phase == 4 else 3)
+        elif key == "edit" and self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS, PHASE_OUTCOME):
+            self.calibration_stage = "idle"
+            self.set_phase(
+                PHASE_KICK_FRAME if self.phase == PHASE_KICK_POINTS else PHASE_GOAL_FRAME
+            )
         elif key == "prev":
-            if self.phase > 1:
+            self.calibration_stage = "idle"
+            if self.phase > PHASE_KICK_FRAME:
                 self.set_phase(self.phase - 1)
-            elif self.phase == 1:
-                self.redo_calibration()
         elif key == "next":
-            if self.phase in (7, 8, 9):
-                self.set_phase(self.phase + 1)
+            if self.phase in (PHASE_BALL_PATH, PHASE_BOXES, PHASE_ANTHRO):
+                self.set_phase(PHASE_REVIEW)
                 self.compute_metrics()
-            elif self.phase in (1, 2, 3):
+            elif self.phase in (PHASE_KICK_FRAME, PHASE_GOAL_FRAME, PHASE_RESPONSE):
                 self.confirm_frame()
-            elif self.phase == 0:
+            elif self.is_calibrating:
                 self.confirm_calibration()
-            elif self.phase in (4, 5) and all(
+            elif self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS) and all(
                 k in self.current_event.points for k in ("Ball", "GK")
             ):
-                self.set_phase(self.phase + 1)
-            elif self.phase == 6 and self.shot_outcome:
-                self.set_phase(7)
+                if self.phase == PHASE_KICK_POINTS:
+                    self.set_phase(PHASE_GOAL_FRAME)
+                else:
+                    self.set_phase(PHASE_OUTCOME)
+            elif self.phase == PHASE_OUTCOME and self.shot_outcome:
+                self.resume_workflow()
         elif key in ("goal", "save_outcome", "miss", "woodwork"):
             self._set_shot_outcome("save" if key == "save_outcome" else key)
-        elif key == "auto_ball" and self.phase == 7:
+        elif key == "auto_ball":
+            self.set_phase(PHASE_BALL_PATH)
             self.auto_detect_ball()
-        elif key == "pose" and self.phase == 8:
+        elif key == "pose":
+            self.set_phase(PHASE_BOXES)
             self.run_pose()
-        elif key == "anthro" and self.phase == 9:
+        elif key == "anthro":
+            self.set_phase(PHASE_ANTHRO)
             self.ask_anthro()
-        elif key == "save" and self.phase == 10:
-            self.flash(
-                self.tr("Resultados salvos", "Results saved")
-                if self.save_results_package()
-                else self.tr("Falha ao salvar", "Save failed"),
-                120,
-            )
+        elif key == "save":
+            if self.core_steps_done():
+                if self.phase != PHASE_REVIEW:
+                    self.set_phase(PHASE_REVIEW)
+                self.flash(
+                    self.tr("Resultados salvos", "Results saved")
+                    if self.save_results_package()
+                    else self.tr("Falha ao salvar", "Save failed"),
+                    120,
+                )
+            else:
+                self.flash(
+                    self.tr(
+                        "Complete Chute, Gol/Calibração e Resposta antes de salvar",
+                        "Complete Kick, Goal/Calibration and Response before saving",
+                    ),
+                    150,
+                )
         elif key == "load":
             if self.load_toml():
                 self.prepare_calibration()
@@ -2410,32 +2828,35 @@ class PynaltyApp:
             self.show_help = not self.show_help
 
     def goto_step(self, idx: int, *, force: bool = False):
-        """Compatibility hook for event indices; UI navigation uses explicit phases."""
+        """Compatibility hook for event indices; UI navigation uses macro steps."""
         if not 0 <= idx < len(self.events):
             return
         key = self.events[idx].key
-        phase = {
-            "calibration": 0,
-            "gk_move": 1,
-            "kick": 2,
-            "goal": 3,
-            "ball_path": 7,
-            "boxes": 8,
-            "anthro": 9,
-        }[key]
-        if phase == 0:
+        if key == "calibration":
             self.redo_calibration()
-        elif phase <= self.phase:
-            self.set_phase(phase)
-        else:
-            self._on_button("next")
+            return
+        macro = {"kick": 0, "goal": 1, "gk_move": 2, "ball_path": 3, "boxes": 3, "anthro": 3}.get(
+            key, 3
+        )
+        self.goto_macro_step(macro)
 
     def _maybe_advance(self):
-        if self.phase in (4, 5) and all(k in self.current_event.points for k in ("Ball", "GK")):
-            self.set_phase(self.phase + 1)
+        if self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS) and all(
+            k in self.current_event.points for k in ("Ball", "GK")
+        ):
+            if self.phase == PHASE_KICK_POINTS:
+                self.set_phase(PHASE_GOAL_FRAME)
+            else:
+                self.set_phase(PHASE_OUTCOME)
 
     def _set_shot_outcome(self, key: str):
-        if self.phase != 6:
+        if self.step("goal").frame_idx < 0:
+            self.flash(
+                self.tr(
+                    "Defina o frame de chegada antes do resultado",
+                    "Set arrival frame before outcome",
+                )
+            )
             return
         outcome, label = classify_shot_outcome(key, ball_inside_goal=True)
         # Re-classify with real geometry when metrics exist.
@@ -2444,7 +2865,9 @@ class PynaltyApp:
         self.shot_outcome = outcome
         self.flash(self.tr("Resultado confirmado", f"Result: {label}"))
         self.compute_metrics()
-        self.set_phase(7)
+        if self.phase == PHASE_OUTCOME:
+            # After outcome go to Response (or Save if response already set).
+            self.resume_workflow()
 
     def _mark_point(self, ix: float, iy: float):
         """Place the next point for the current step."""
@@ -2453,18 +2876,41 @@ class PynaltyApp:
 
         if not (0 <= ix < self.width and 0 <= iy < self.height):
             return
-        if self.phase in (1, 2, 3, 6, 10):
+        if (
+            self.phase
+            in (PHASE_KICK_FRAME, PHASE_GOAL_FRAME, PHASE_RESPONSE, PHASE_OUTCOME, PHASE_REVIEW)
+            and not self.is_calibrating
+        ):
             return
-        if self.phase in (4, 5):
+        if self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS):
+            # Keep marks on the confirmed event frame; snap back if user scrubbed away.
+            if evt.frame_idx >= 0 and self.current_frame_idx != evt.frame_idx:
+                self.seek(evt.frame_idx, force=True)
+                self.flash(
+                    self.tr(
+                        "Volte ao frame do evento para marcar (ou E para editar)",
+                        "Return to the event frame to mark (or E to edit)",
+                    )
+                )
+                return
             for name in ("Ball", "GK"):
                 if name not in evt.points:
                     evt.points[name] = [ix, iy]
-                    self.flash(self.tr("Ponto confirmado", "Point confirmed"))
+                    label = (
+                        self.tr("Bola", "Ball")
+                        if name == "Ball"
+                        else (
+                            self.tr("Mão", "Hand")
+                            if self.phase == PHASE_GOAL_POINTS
+                            else self.tr("Goleiro", "Keeper")
+                        )
+                    )
+                    self.flash(self.tr(f"{label} marcada", f"{label} marked"))
                     break
             self.compute_metrics()
             self._maybe_advance()
             return
-        if self.phase == 0:
+        if self.is_calibrating:
             if self.calibration_stage == "frame" or len(self.calibration_draft) >= 4:
                 return
             self.calibration_draft.append([ix, iy])
@@ -2491,8 +2937,8 @@ class PynaltyApp:
         if key == "anthro":
             self.flash(
                 self.tr(
-                    "B informa medidas; Pular usa valores padrão",
-                    "Press B to type measurements, or Step > to use defaults",
+                    "B informa medidas; volte ao Salvar se usar padrões",
+                    "Press B to type measurements, or return to Save for defaults",
                 )
             )
             return
@@ -2502,21 +2948,26 @@ class PynaltyApp:
     def _undo_point(self):
         evt = self.current_event
         key = self.current_key
-        if self.phase in (1, 2, 3, 10):
+        if (
+            self.phase in (PHASE_KICK_FRAME, PHASE_GOAL_FRAME, PHASE_RESPONSE, PHASE_REVIEW)
+            and not self.is_calibrating
+        ):
             return
-        if self.phase == 0:
-            if getattr(self, "pending_calibration", None):
-                self.pending_calibration = copy.deepcopy(self.pending_calibration)
-                self.pending_calibration["source_video"] = str(self.video_path or "")
-                self.pending_calibration["source_frame"] = self.current_frame_idx
+        if self.is_calibrating:
+            pending = self.pending_calibration
+            if pending is not None:
+                pending = copy.deepcopy(pending)
+                pending["source_video"] = str(self.video_path or "")
+                pending["source_frame"] = self.current_frame_idx
+                self.pending_calibration = pending
                 self.calibration_preview_edited = True
             if self.calibration_draft:
                 self.calibration_draft.pop()
                 self.calibration_stage = "corners"
             return
-        elif self.phase in (4, 5, 6):
-            if self.phase == 6:
-                self.set_phase(5)
+        elif self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS, PHASE_OUTCOME):
+            if self.phase == PHASE_OUTCOME:
+                self.set_phase(PHASE_GOAL_POINTS)
             self.shot_outcome = None
             for name in ("GK", "Ball"):
                 if name in self.current_event.points:
@@ -2570,8 +3021,42 @@ class PynaltyApp:
             self.seek(0)
         elif key == pygame.K_END:
             self.seek(self.total_frames - 1)
+        elif key in (pygame.K_1, pygame.K_KP1):
+            # Fast key: Kick macro
+            if self.phase not in (PHASE_KICK_FRAME, PHASE_KICK_POINTS):
+                self.goto_macro_step(0)
+            elif self.phase == PHASE_KICK_FRAME:
+                self.confirm_frame()
+            else:
+                self.set_phase(PHASE_KICK_FRAME)
+        elif key in (pygame.K_2, pygame.K_KP2):
+            # Fast key: Goal/Calib macro
+            if self.phase not in (PHASE_GOAL_FRAME, PHASE_GOAL_POINTS, PHASE_OUTCOME) and not (
+                self.is_calibrating
+            ):
+                self.goto_macro_step(1)
+            elif self.phase == PHASE_GOAL_FRAME and not self.is_calibrating:
+                self.confirm_frame()
+            elif self.phase in (PHASE_GOAL_POINTS, PHASE_OUTCOME) or self.is_calibrating:
+                self.calibration_stage = "idle"
+                self.set_phase(PHASE_GOAL_FRAME)
+        elif key in (pygame.K_3, pygame.K_KP3):
+            # Fast key: Response macro
+            if self.phase != PHASE_RESPONSE:
+                self.goto_macro_step(2)
+            else:
+                self.confirm_frame()
         elif key in (pygame.K_RETURN, pygame.K_KP_ENTER):
-            self._on_button("confirm")
+            if self.is_calibrating:
+                self._on_button("confirm")
+            elif self.phase in (PHASE_KICK_POINTS, PHASE_GOAL_POINTS) and all(
+                k in self.current_event.points for k in ("Ball", "GK")
+            ):
+                self._on_button("next")
+            elif self.phase == PHASE_REVIEW and self.core_steps_done():
+                self._on_button("save")
+            else:
+                self._on_button("confirm")
         elif key == pygame.K_TAB:
             self._on_button("prev" if pygame.key.get_mods() & pygame.KMOD_SHIFT else "next")
         elif key == pygame.K_SPACE and not self.navigation_locked:
@@ -2594,7 +3079,7 @@ class PynaltyApp:
         elif key == pygame.K_f:
             self.ask_fps()
         elif key == pygame.K_ESCAPE:
-            if self.phase == 0 and self.calibration_return is not None:
+            if self.is_calibrating and self.calibration_return is not None:
                 self.cancel_calibration()
             else:
                 return False
@@ -2631,6 +3116,27 @@ class PynaltyApp:
                     self._on_button(btn.key)
                 return
 
+        # Direct navigation via sidebar macro-steps
+        for rect, step_idx in getattr(self, "macro_step_rects", []):
+            if rect.collidepoint(mx, my):
+                if event.button == 1:
+                    self.goto_macro_step(step_idx)
+                return
+
+        # Direct quick save
+        quick_save = getattr(self, "quick_save_rect", None)
+        if quick_save and quick_save.collidepoint(mx, my):
+            if event.button == 1:
+                self._on_button("save")
+            return
+
+        # Optional tools direct access
+        for rect, opt_phase in getattr(self, "optional_tool_rects", []):
+            if rect.collidepoint(mx, my):
+                if event.button == 1:
+                    self.set_phase(opt_phase)
+                return
+
         w, h = self.screen.get_size()
         slider_zone = pygame.Rect(0, h - BOTTOM_H, w, 44)
 
@@ -2638,7 +3144,21 @@ class PynaltyApp:
             if slider_zone.collidepoint(mx, my) and not self.navigation_locked:
                 self.playing = False
                 self.start_drag_slider = True
-                self._slider_seek(mx)
+                snapped = False
+                if self.total_frames > 1:
+                    margin = 20
+                    timeline_w = w - margin * 2
+                    for evt in (self.step("gk_move"), self.step("kick"), self.step("goal")):
+                        if evt.frame_idx != -1:
+                            evt_x = margin + int(
+                                evt.frame_idx / (self.total_frames - 1) * timeline_w
+                            )
+                            if abs(mx - evt_x) <= 8:
+                                self.seek(evt.frame_idx)
+                                snapped = True
+                                break
+                if not snapped:
+                    self._slider_seek(mx)
             elif self.content_rect().collidepoint(mx, my):
                 ix, iy = self.screen_to_image_coords(mx, my)
                 if not (0 <= ix < self.width and 0 <= iy < self.height):

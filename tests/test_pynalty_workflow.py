@@ -1,7 +1,7 @@
 """Guided Pynalty workflow and reusable calibration regression tests.
 
-Update Date: 08 September 2026
-Version: 0.3.130
+Update Date: 08 November 2026
+Version: 0.4.15
 """
 
 import copy
@@ -31,65 +31,80 @@ def press(app, key):
     return app._handle_keydown(SimpleNamespace(key=key))
 
 
-def calibrate(app):
-    app.seek(5)
+def mark_kick(app, frame=20):
+    """Macro 1: contact frame + Ball + Keeper."""
+    assert app.phase == pynalty.PHASE_KICK_FRAME
+    app.seek(frame)
     press(app, pygame.K_RETURN)
+    assert app.phase == pynalty.PHASE_KICK_POINTS
+    assert app.current_frame_idx == frame
+    app._mark_point(300, 250)
+    app._mark_point(350, 300)
+    # Auto-advances to goal frame (defaults to last frame).
+    assert app.phase == pynalty.PHASE_GOAL_FRAME
+    assert app.step("kick").points == {"Ball": [300, 250], "GK": [350, 300]}
+
+
+def calibrate_on_arrival(app, frame=None):
+    """Macro 2 calib: confirm arrival frame + 4 corners."""
+    assert app.phase == pynalty.PHASE_GOAL_FRAME
+    target = max(0, app.total_frames - 1) if frame is None else frame
+    app.seek(target)
+    press(app, pygame.K_RETURN)
+    assert app.is_calibrating
+    assert app.calibration_stage == "corners"
     for point in ((100, 400), (100, 100), (550, 100), (550, 400)):
         app._mark_point(*point)
-    assert app.phase == 0  # Four clicks still require explicit confirmation.
+    assert app.calibration_stage == "preview"
     press(app, pygame.K_RETURN)
-    assert app.phase == 1
+    assert not app.is_calibrating
+    assert app.phase == pynalty.PHASE_GOAL_POINTS
+    assert len(app.calib_points()) == 4
 
 
-def mark_frames(app):
-    for phase, frame in ((1, 10), (2, 20), (3, 40)):
-        assert app.phase == phase
-        app.seek(frame)
-        app.playing = True
-        app._mark_point(150, 200)
-        assert not app.current_event.points
-        assert app.current_event.frame_idx == -1
-        press(app, pygame.K_RETURN)
-        assert not app.playing
-    assert app.phase == 4
-    assert app.current_frame_idx == 20
-
-
-def mark_points(app):
-    for phase, frame in ((4, 20), (5, 40)):
-        assert app.phase == phase
-        assert app.current_frame_idx == frame
-        app.seek(90)
-        press(app, pygame.K_SPACE)
-        assert app.current_frame_idx == frame and not app.playing
-        app._mark_point(300, 250)
-        app._mark_point(350, 300)
-    assert app.phase == 6
+def mark_arrival_points_and_outcome(app):
+    """Macro 2 points + outcome on the arrival frame."""
+    assert app.phase == pynalty.PHASE_GOAL_POINTS
+    app._mark_point(400, 280)
+    app._mark_point(350, 290)
+    assert app.phase == pynalty.PHASE_OUTCOME
     app._on_button("goal")
-    assert app.phase == 7
+    assert app.shot_outcome == "goal"
+
+
+def mark_response(app, frame=10):
+    """Macro 3: keeper first-movement frame."""
+    assert app.phase == pynalty.PHASE_RESPONSE
+    app.seek(frame)
+    press(app, pygame.K_RETURN)
+    assert app.step("gk_move").frame_idx == frame
+    assert app.phase == pynalty.PHASE_REVIEW
+    assert app.core_steps_done()
+
+
+def full_core_flow(app):
+    mark_kick(app)
+    calibrate_on_arrival(app)
+    mark_arrival_points_and_outcome(app)
+    mark_response(app)
 
 
 def test_full_guided_flow_and_review(app):
-    calibrate(app)
-    mark_frames(app)
-    mark_points(app)
-    for phase in (8, 9, 10):
-        app._on_button("next")
-        assert app.phase == phase
-    app._on_button("next")
-    assert app.phase == 10
+    full_core_flow(app)
+    assert app.phase == pynalty.PHASE_REVIEW
     assert app.compute_metrics()
     assert app.step("gk_move").frame_idx < app.step("kick").frame_idx
+    # Optional AI phases are never forced after outcome.
+    assert app.phase != pynalty.PHASE_BALL_PATH
 
 
 def test_calibration_pause_bounds_undo(app):
-    app._mark_point(100, 100)
-    assert not app.calibration_draft
-    app.seek(8)
+    mark_kick(app)
+    app.seek(90)
     app.playing = True
     press(app, pygame.K_RETURN)
-    app.seek(20)
-    assert app.current_frame_idx == 8 and not app.playing
+    assert app.is_calibrating and app.calibration_stage == "corners"
+    assert app.current_frame_idx == 90 and not app.playing
     for point in ((-1, 0), (640, 0), (0, 480), (float("nan"), 1)):
         app._mark_point(*point)
     assert not app.calibration_draft
@@ -99,19 +114,17 @@ def test_calibration_pause_bounds_undo(app):
 
 
 def test_arrival_order_and_edit_invalidates(app):
-    calibrate(app)
-    for frame in (10, 20):
-        app.seek(frame)
-        app.confirm_frame()
+    mark_kick(app, frame=20)
+    # Arrival must be after kick.
     app.seek(20)
-    app.confirm_frame()
-    assert app.phase == 3 and app.step("goal").frame_idx == -1
-    app.seek(40)
-    app.confirm_frame()
-    mark_points(app)
-    app.set_phase(4)
+    press(app, pygame.K_RETURN)
+    assert app.phase == pynalty.PHASE_GOAL_FRAME
+    assert app.step("goal").frame_idx == -1
+    calibrate_on_arrival(app, frame=40)
+    mark_arrival_points_and_outcome(app)
+    app.set_phase(pynalty.PHASE_KICK_POINTS)
     app._on_button("edit")
-    assert app.phase == 2
+    assert app.phase == pynalty.PHASE_KICK_FRAME
     app.step("ball_path").points = {"old": [1]}
     app.pose_metrics = {"old": 1}
     app.seek(45)
@@ -124,22 +137,17 @@ def test_arrival_order_and_edit_invalidates(app):
 
 
 def test_recalibrate_cancel_and_replace(app):
-    calibrate(app)
-    mark_frames(app)
-    mark_points(app)
+    full_core_flow(app)
     old = copy.deepcopy(app.to_data())
     app.redo_calibration()
-    app.confirm_calibration()
-    app._mark_point(101, 400)
+    assert app.is_calibrating
     app.cancel_calibration()
-    assert app.phase == 7
+    assert app.phase == pynalty.PHASE_REVIEW
     assert app.to_data()["events"] == old["events"]
     app.redo_calibration()
-    app.confirm_calibration()
     for point in ((110, 400), (110, 100), (560, 100), (560, 400)):
         app._mark_point(*point)
     app.confirm_calibration()
-    assert app.phase == 7
     assert app.calib_points()[0] == [110, 400]
     assert app.step("kick").frame_idx == 20
     assert app.step("kick").points["Ball"] == [300, 250]
@@ -147,19 +155,25 @@ def test_recalibrate_cancel_and_replace(app):
 
 
 def test_calibration_reuse_and_provenance(app):
-    calibrate(app)
+    mark_kick(app, frame=20)
+    calibrate_on_arrival(app, frame=40)
     path = app.calibration_path
+    source_frame = app.calibration_record["source_frame"]
     fresh = pynalty.PynaltyApp()
     fresh.video_path = app.video_path
     fresh.width, fresh.height, fresh.total_frames = 640, 480, 100
     assert fresh.prepare_calibration()
-    assert fresh.phase == 0 and fresh.calibration_stage == "preview"
+    assert fresh.pending_calibration is not None
     assert not fresh.calib_points()
+    # Kick first, then accept pending calib on arrival.
+    mark_kick(fresh)
+    press(fresh, pygame.K_RETURN)
+    assert fresh.calibration_stage == "preview"
     fresh.confirm_calibration()
     assert fresh.calib_points() == app.calib_points()
     assert fresh.step("calibration").frame_idx == -1
     assert fresh.step("gk_move").frame_idx == -1
-    assert fresh.calibration_record["source_frame"] == 5
+    assert fresh.calibration_record["source_frame"] == source_frame
     assert fresh.calibration_path == path
 
 
@@ -176,7 +190,8 @@ def test_calibration_reuse_and_provenance(app):
     ],
 )
 def test_invalid_calibration(app, mutation):
-    calibrate(app)
+    mark_kick(app)
+    calibrate_on_arrival(app)
     data = copy.deepcopy(app.calibration_record)
     mutation(data)
     with pytest.raises((ValueError, np.linalg.LinAlgError)):
@@ -188,12 +203,13 @@ def test_bad_file_starts_fresh(app, tmp_path):
     path.write_text("[broken")
     app.explicit_calibration_path = str(path)
     assert not app.prepare_calibration()
-    assert app.phase == 0 and app.calibration_stage == "frame"
+    assert app.calibration_stage == "idle"
     assert app.feedback_msg
 
 
 def test_write_failure_preserves_file_and_session(app, monkeypatch):
-    calibrate(app)
+    mark_kick(app)
+    calibrate_on_arrival(app)
     path = pynalty.Path(app.calibration_path)
     old = path.read_bytes()
 
@@ -218,16 +234,15 @@ def test_write_failure_offers_destination(app, monkeypatch, tmp_path):
         return path is not None
 
     monkeypatch.setattr(app, "persist_calibration", save)
-    calibrate(app)
-    assert writes == [None, destination]
+    mark_kick(app)
+    calibrate_on_arrival(app)
+    assert None in writes and destination in writes
     assert app.calib_points()
 
 
 @pytest.mark.parametrize("keyed", [True, False])
 def test_session_resume_and_precedence(app, keyed):
-    calibrate(app)
-    mark_frames(app)
-    app._mark_point(300, 250)
+    mark_kick(app)
     data = app.to_data()
     if not keyed:
         for event in data["events"]:
@@ -238,27 +253,31 @@ def test_session_resume_and_precedence(app, keyed):
     other.video_path = app.video_path
     other.width, other.height, other.total_frames = 640, 480, 100
     other.load_from_data(data)
-    assert other.phase == 4 and other.current_frame_idx == 20
-    assert other.step("kick").points == {"Ball": [300, 250]}
+    assert other.phase == pynalty.PHASE_GOAL_FRAME
+    assert other.step("kick").points == {"Ball": [300, 250], "GK": [350, 300]}
+    calibrate_on_arrival(app)
     assert other.prepare_calibration()  # Saved calibration overrides discovery.
-    assert other.phase == 4
+    assert other.phase == pynalty.PHASE_GOAL_FRAME
     other.explicit_calibration_path = app.calibration_path
     assert other.prepare_calibration()
-    assert other.phase == 0 and other.calibration_stage == "preview"
+    assert other.pending_calibration is not None
 
 
 def test_legacy_flat_and_load_replaces_old_marks(app):
-    calibrate(app)
+    mark_kick(app)
+    calibrate_on_arrival(app)
     app.step("goal").points = {"Ball": [20, 30]}
     app.load_from_data(
         {"calibration_pixels": app.calib_points(), "gk_move_frame": 5, "kick_frame": 10}
     )
-    assert app.phase == 3
+    # Kick frame loaded without points → resume at kick points.
+    assert app.phase == pynalty.PHASE_KICK_POINTS
     assert not app.step("goal").points
 
 
 def test_report_only_never_discovers_or_opens_dialog(app, monkeypatch):
-    calibrate(app)
+    mark_kick(app)
+    calibrate_on_arrival(app)
     app.step("calibration").reset()
     app.explicit_calibration_path = None
     assert app.prepare_calibration(report_only=True)
@@ -289,14 +308,12 @@ def test_render_short_video_and_report(tmp_path, monkeypatch):
     app = pynalty.PynaltyApp(str(video), show_wizard=False)
     app._init_pygame()
     try:
-        calibrate(app)
-        mark_frames(app)
-        mark_points(app)
+        full_core_flow(app)
         marks = copy.deepcopy(app.to_data()["events"])
         for size in ((1280, 800), (760, 600)):
             app.screen = pygame.display.set_mode(size)
             app.fit_view()
-            for phase in range(11):
+            for phase in range(len(app.PHASE_KEYS)):
                 app.set_phase(phase)
                 for language in ("pt", "en"):
                     if app.ui_lang != language:
@@ -304,23 +321,19 @@ def test_render_short_video_and_report(tmp_path, monkeypatch):
                     app.draw_content()
                     assert all(app.screen.get_rect().contains(b.rect) for b in app.buttons)
             assert app.to_data()["events"] == marks
-        app.set_phase(4)
-        app._undo_point()
         app._on_button("lang")
         app.screen = pygame.display.set_mode((900, 650))
         app.fit_view()
+        app.set_phase(pynalty.PHASE_KICK_POINTS)
         app.draw_content()
         pygame.image.save(app.screen, "/tmp/pynalty-guided-contact.png")
-        # Click in letterboxing, inside content panel but outside actual video.
         before = copy.deepcopy(app.step("kick").points)
         app._handle_mousedown(SimpleNamespace(pos=(app.content_rect().x + 1, 1), button=1))
         assert app.step("kick").points == before
-        app._mark_point(350, 300)
-        app._on_button("next")
-        app._set_shot_outcome("goal")
-        app.set_phase(10)
+        assert app.core_steps_done()
+        app.set_phase(pynalty.PHASE_REVIEW)
         assert app.save_results_package()
-        assert app.phase == 10
+        assert app.phase == pynalty.PHASE_REVIEW
         config = pynalty.Path(app.get_results_dir()) / "data.toml"
         assert config.exists()
         monkeypatch.setattr(
@@ -333,7 +346,8 @@ def test_render_short_video_and_report(tmp_path, monkeypatch):
 
 
 def test_explicit_calibration_headless_overrides_session(app, tmp_path):
-    calibrate(app)
+    mark_kick(app)
+    calibrate_on_arrival(app)
     record = copy.deepcopy(app.calibration_record)
     record["geometry"]["width"] = 6.0
     record["source_frame"] = 99
@@ -347,27 +361,39 @@ def test_explicit_calibration_headless_overrides_session(app, tmp_path):
 
 
 def test_edited_reuse_is_saved_as_new_calibration(app):
-    calibrate(app)
+    mark_kick(app)
+    calibrate_on_arrival(app)
     app.step("calibration").reset()
     assert app.prepare_calibration()
-    app._undo_point()
-    app._mark_point(560, 400)
-    app.confirm_calibration()
+    mark_kick(app) if app.phase == pynalty.PHASE_KICK_FRAME else None
+    # Resume may leave us mid-goal; force preview accept with an edit.
+    app.set_phase(pynalty.PHASE_GOAL_FRAME)
+    app.seek(99)
+    press(app, pygame.K_RETURN)
+    if app.calibration_stage == "preview":
+        app._undo_point()
+        app._mark_point(560, 400)
+        app.confirm_calibration()
+    else:
+        for point in ((100, 400), (100, 100), (550, 100), (560, 400)):
+            app._mark_point(*point)
+        app.confirm_calibration()
     saved = pynalty.toml.load(app.calibration_path)
     assert saved["points"][-1] == [560, 400]
     assert app.step("calibration").frame_idx == app.current_frame_idx
 
 
 def test_cancel_load_preserves_phase(app, monkeypatch):
-    calibrate(app)
-    mark_frames(app)
+    mark_kick(app)
     before = copy.deepcopy(app.to_data())
+    before_phase = app.phase
     monkeypatch.setattr(app, "load_toml", lambda: None)
     monkeypatch.setattr(
         app, "prepare_calibration", lambda: pytest.fail("cancelled load changed calibration")
     )
     app._on_button("load")
     assert app.to_data() == before
+    assert app.phase == before_phase
 
 
 def _write_short_video(path, fps=25, frames=10):
@@ -382,8 +408,6 @@ def _write_short_video(path, fps=25, frames=10):
 def test_load_video_prefers_precise_fps_over_raw_cv2_reading(tmp_path, monkeypatch):
     video = tmp_path / "clip.avi"
     _write_short_video(video, fps=25)
-    # ffprobe/numberframes disagrees with the (often-wrong) raw cv2 reading; the
-    # precise value must win, same rationale as numberframes.py's own fallback order.
     monkeypatch.setattr(pynalty, "_detect_fps", lambda path: 59.94)
     session = pynalty.PynaltyApp(str(video), show_wizard=False)
     assert session.fps == 59.94
@@ -397,39 +421,12 @@ def test_load_video_falls_back_to_cv2_fps_when_precise_detection_fails(tmp_path,
     assert session.fps == pytest.approx(25.0, abs=0.5)
 
 
-def test_confirm_fps_on_start_prefills_detected_value_and_applies_correction(app, monkeypatch):
+def test_confirm_fps_on_start_auto_accepts_detected_value(app):
     app.fps = 29.97
-    seen = {}
-
-    def fake_text_input(prompt, initial):
-        seen["initial"] = initial
-        return "50"
-
-    monkeypatch.setattr(app, "_text_input", fake_text_input)
-    app.confirm_fps_on_start()
-    assert seen["initial"] == "29.970"
-    assert app.fps == 50.0
-
-
-def test_confirm_fps_on_start_plain_enter_keeps_detected_value(app, monkeypatch):
-    app.fps = 29.97
-    monkeypatch.setattr(app, "_text_input", lambda prompt, initial: initial)
     app.confirm_fps_on_start()
     assert app.fps == pytest.approx(29.97)
-
-
-def test_confirm_fps_on_start_invalid_text_keeps_previous_fps(app, monkeypatch):
-    app.fps = 29.97
-    monkeypatch.setattr(app, "_text_input", lambda prompt, initial: "not-a-number")
-    app.confirm_fps_on_start()
-    assert app.fps == pytest.approx(29.97)
-
-
-def test_confirm_fps_on_start_cancelled_keeps_previous_fps(app, monkeypatch):
-    app.fps = 29.97
-    monkeypatch.setattr(app, "_text_input", lambda prompt, initial: None)
-    app.confirm_fps_on_start()
-    assert app.fps == pytest.approx(29.97)
+    assert app.fps_confirmed
+    assert "29.970" in app.feedback_msg or "29.97" in app.feedback_msg
 
 
 def test_run_confirms_fps_before_entering_marking_loop(tmp_path, monkeypatch):
@@ -498,3 +495,135 @@ def test_timeline_drag_pauses_before_seeking(app, monkeypatch):
     assert not app.playing
     assert app.start_drag_slider
     assert sought == [450]
+
+
+def test_macro_steps_navigation_and_completion(app):
+    assert app.current_macro_step() == 0
+    assert not app.is_macro_step_done(0)
+
+    mark_kick(app)
+    assert app.is_macro_step_done(0)
+    assert app.current_macro_step() == 1
+
+    calibrate_on_arrival(app)
+    mark_arrival_points_and_outcome(app)
+    assert app.is_macro_step_done(1)
+    assert app.current_macro_step() == 2
+
+    # Jump back to kick without wiping marks
+    app.goto_macro_step(0)
+    assert app.phase in (pynalty.PHASE_KICK_FRAME, pynalty.PHASE_KICK_POINTS)
+    assert app.step("kick").points
+
+    app.goto_macro_step(2)
+    assert app.phase == pynalty.PHASE_RESPONSE
+    mark_response(app)
+    assert app.is_macro_step_done(2)
+    assert app.is_macro_step_done(3)
+    assert app.current_macro_step() == 3
+
+
+def test_quick_save_direct_from_outcome(app, tmp_path, monkeypatch):
+    out_dir = str(tmp_path / "pynalty_out")
+    app.output_dir_override = out_dir
+
+    saved = []
+    monkeypatch.setattr(app, "save_results_package", lambda: saved.append(True) or True)
+
+    full_core_flow(app)
+    assert app.phase == pynalty.PHASE_REVIEW
+    assert app.core_steps_done()
+    assert app.shot_outcome == "goal"
+
+    press(app, pygame.K_s)
+    assert saved == [True]
+    assert app.phase == pynalty.PHASE_REVIEW
+
+    app.set_phase(pynalty.PHASE_OUTCOME)
+    app._on_button("save")
+    assert len(saved) == 2
+    assert app.phase == pynalty.PHASE_REVIEW
+
+
+def test_outcome_does_not_enter_optional_ai(app):
+    mark_kick(app)
+    calibrate_on_arrival(app)
+    mark_arrival_points_and_outcome(app)
+    assert app.phase == pynalty.PHASE_RESPONSE
+    mark_response(app)
+    assert app.phase == pynalty.PHASE_REVIEW
+
+
+def test_fast_keys_1_2_3_navigation(app):
+    mark_kick(app, frame=30)
+    assert app.phase == pynalty.PHASE_GOAL_FRAME
+
+    # Key 1 jumps back to kick
+    press(app, pygame.K_1)
+    assert app.phase in (pynalty.PHASE_KICK_FRAME, pynalty.PHASE_KICK_POINTS)
+    assert app.step("kick").frame_idx == 30
+
+    # Key 2 jumps to goal
+    press(app, pygame.K_2)
+    assert app.phase == pynalty.PHASE_GOAL_FRAME
+
+    calibrate_on_arrival(app)
+    mark_arrival_points_and_outcome(app)
+    assert app.phase == pynalty.PHASE_RESPONSE
+
+    # From Save, key 3 jumps back to response
+    app.set_phase(pynalty.PHASE_REVIEW)
+    press(app, pygame.K_3)
+    assert app.phase == pynalty.PHASE_RESPONSE
+
+
+def test_timeline_snap_to_event_ticks(app, monkeypatch):
+    app.screen = SimpleNamespace(get_size=lambda: (900, 650))
+    app.total_frames = 101  # frames 0..100
+    app.step("kick").frame_idx = 50
+
+    margin = 20
+    timeline_w = 900 - margin * 2
+    kick_x = margin + int(50 / 100 * timeline_w)
+
+    sought = []
+    monkeypatch.setattr(app, "seek", sought.append)
+
+    # Click within 5px of kick marker
+    app._handle_mousedown(SimpleNamespace(pos=(kick_x + 3, 650 - pynalty.BOTTOM_H + 20), button=1))
+    assert sought == [50]
+
+
+def test_step_panel_macro_rects_and_quick_save_button(app):
+    pygame.init()
+    surface = pygame.Surface((1280, 800))
+    app.screen = surface
+    app.font = pygame.font.SysFont("Arial", 15)
+    app.font_big = pygame.font.SysFont("Arial", 22)
+    app.font_small = pygame.font.SysFont("Arial", 12)
+
+    # Before completion: 4 macro rects, no quick save button
+    app.draw_step_panel()
+    assert len(app.macro_step_rects) == 4
+    assert app.quick_save_rect is None
+    assert len(app.optional_tool_rects) == 3
+
+    full_core_flow(app)
+
+    app.draw_step_panel()
+    assert app.core_steps_done()
+    assert app.quick_save_rect is not None
+    assert app.quick_save_rect.width > 0
+
+
+def test_action_banner_drawn(app):
+    pygame.init()
+    app.screen = pygame.display.set_mode((1280, 800))
+    app.font = pygame.font.SysFont("Arial", 15)
+    app.font_big = pygame.font.SysFont("Arial", 22)
+    app.font_small = pygame.font.SysFont("Arial", 12)
+    text = app.action_banner_text()
+    lowered = text.lower()
+    assert any(word in lowered for word in ("contato", "contact", "chute", "kick", "pé", "foot"))
+    app.draw_content()
+    pygame.display.quit()

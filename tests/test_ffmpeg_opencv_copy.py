@@ -1,7 +1,7 @@
-"""OpenCV-decodable H.264 copy of videos OpenCV cannot read (e.g. AV1).
+"""OpenCV-decodable H.264 copy of videos OpenCV cannot read (e.g. AV1 / interlaced).
 
-Version: 0.4.7
-Update Date: 02 October 2026
+Version: 0.4.15
+Update Date: 08 November 2026
 """
 
 import shutil
@@ -18,6 +18,32 @@ pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="needs ff
 def _encode(path, codec_args):
     cmd = ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x120:rate=30"]
     subprocess.run([*cmd, "-t", "1", *codec_args, str(path)], check=True)
+
+
+def _encode_interlaced(path):
+    """Make a short interlaced H.264 clip (TFF) that triggers swscaler issues."""
+    cmd = [
+        "ffmpeg",
+        "-v",
+        "error",
+        "-y",
+        "-f",
+        "lavfi",
+        "-i",
+        "testsrc=size=320x240:rate=30",
+        "-t",
+        "1",
+        "-vf",
+        "tinterlace=interleave_top",
+        "-flags",
+        "+ilme+ildct",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        str(path),
+    ]
+    subprocess.run(cmd, check=True)
 
 
 def test_av1_gets_a_readable_h264_copy_with_every_frame(tmp_path):
@@ -45,3 +71,19 @@ def test_readable_video_is_opened_as_is(tmp_path, monkeypatch):
     _encode(src, ["-c:v", "libx264", "-pix_fmt", "yuv420p"])
     monkeypatch.setattr(ffmpeg_utils, "opencv_compatible_copy", lambda _p: pytest.fail("no copy"))
     assert getpixelvideo.ensure_decodable_video(str(src)) == str(src)
+
+
+def test_interlaced_video_needs_compatible_copy_and_yadif(tmp_path):
+    src = tmp_path / "interlaced.mp4"
+    _encode_interlaced(src)
+    assert ffmpeg_utils.video_is_interlaced(src)
+    assert ffmpeg_utils.opencv_needs_compatible_copy(src)
+    copy = ffmpeg_utils.opencv_compatible_copy(src)
+    assert copy == tmp_path / "interlaced_h264.mp4"
+    assert ffmpeg_utils.opencv_reads_video(copy)
+    assert not ffmpeg_utils.video_is_interlaced(copy)
+    assert not ffmpeg_utils.opencv_needs_compatible_copy(copy)
+    cap = cv2.VideoCapture(str(copy))
+    ok, frame = cap.read()
+    cap.release()
+    assert ok and frame is not None and int(frame.max()) > 0

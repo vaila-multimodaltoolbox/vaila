@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.5
+Version: 0.4.15
 Created: 06 February 2025
-Last Updated: 24 September 2026
+Last Updated: 09 November 2026
 
 To run:
   uv run viewc3d.py [path/to/file.c3d]
@@ -765,6 +765,62 @@ def assign_file_color(load_index, available_colors):
     if not available_colors:
         raise ValueError("available_colors must not be empty")
     return available_colors[load_index % len(available_colors)]
+
+
+def _norm_marker_name(name):
+    """Lower-case alphanumeric-only form of a marker name (separators dropped)."""
+    return "".join(ch for ch in str(name).strip().lower() if ch.isalnum())
+
+
+def resolve_skeleton_marker(target, marker_labels, selected_indices):
+    """
+    Resolve one marker token of a skeleton-connections JSON to a position in
+    the viewer's *selected* marker space (``None`` if it cannot be drawn).
+
+    vailá skeleton presets (``vaila/skeletons/*.json``) name markers ``pN``
+    with **0-based** N -- the numbering rec3d writes to its CSV/C3D
+    (``p0..pN-1``). Resolution order:
+
+    1. exact normalised label among the selected markers (covers ``p0..pN``
+       C3Ds, named-marker C3Ds and legacy ``p1..pN`` labels alike);
+    2. a ``pN`` token with no label of that name anywhere in the file is the
+       0-based marker index N (``None`` when N is out of range or not selected);
+    3. unique substring match for non-``pN`` names.
+
+    A label that exists in the file but is not selected yields ``None``; it is
+    never replaced by a neighbouring marker.
+    """
+    selected_indices = list(selected_indices)
+    norm_target = _norm_marker_name(target)
+
+    norm_to_pos = {}
+    for pos, idx in enumerate(selected_indices):
+        norm_to_pos.setdefault(_norm_marker_name(marker_labels[idx]), []).append(pos)
+
+    # 1. Exact label among the selected markers.
+    hits = norm_to_pos.get(norm_target)
+    if hits and len(hits) == 1:
+        return hits[0]
+
+    token = str(target).strip()
+    is_pn = len(token) >= 2 and token[0] in "pP" and token[1:].isdigit()
+    if is_pn:
+        # Label present in the file but deselected (or duplicated): do not guess.
+        if any(_norm_marker_name(lab) == norm_target for lab in marker_labels):
+            return None
+        # 2. Positional, 0-based.
+        index = int(token[1:])
+        if index < len(marker_labels) and index in selected_indices:
+            return selected_indices.index(index)
+        return None
+
+    # 3. Unique "contains" match for ordinary names.
+    candidates = []
+    for norm_sel, positions in norm_to_pos.items():
+        if norm_target in norm_sel or norm_sel in norm_target:
+            candidates.extend(positions)
+    candidates = list(dict.fromkeys(candidates))
+    return candidates[0] if len(candidates) == 1 else None
 
 
 class LoadedC3D:
@@ -2412,48 +2468,9 @@ def run_viewc3d(c3d_path=None):
             messagebox.showerror("Error", f"Failed to load JSON: {exc}")
             return False
 
-        def _norm(s: str) -> str:
-            s = s.strip().lower()
-            # remove separators
-            out = []
-            for ch in s:
-                if ch.isalnum():
-                    out.append(ch)
-            return "".join(out)
-
-        # Build normalized map from selected names to indices
-        norm_to_indices = {}
-        for idx, name in enumerate(selected_marker_names):
-            n = _norm(name)
-            norm_to_indices.setdefault(n, []).append(idx)
-
         def _resolve_name(target: str):
-            # Direct pN mapping to original marker index (1-based -> 0-based)
-            t = target.strip()
-            if len(t) >= 2 and (t[0] == "p" or t[0] == "P") and t[1:].isdigit():
-                n = int(t[1:])
-                global_idx = n - 1
-                if 0 <= global_idx < len(marker_labels):
-                    try:
-                        # map original index to selected space
-                        sel_pos = selected_indices.index(global_idx)
-                        return sel_pos
-                    except ValueError:
-                        # not selected; cannot map into current points subset
-                        return None
-            nt = _norm(target)
-            # Exact normalized match
-            if nt in norm_to_indices and len(norm_to_indices[nt]) == 1:
-                return norm_to_indices[nt][0]
-            # Heuristic: unique contains match
-            candidates = []
-            for nsel, idcs in norm_to_indices.items():
-                if nt in nsel or nsel in nt:
-                    candidates.extend(idcs)
-            candidates = list(dict.fromkeys(candidates))  # unique order
-            if len(candidates) == 1:
-                return candidates[0]
-            return None
+            # pN tokens are 0-based (vailá skeleton presets / rec3d p0..pN-1).
+            return resolve_skeleton_marker(target, marker_labels, selected_indices)
 
         mapped = []
         unresolved = []
@@ -3383,10 +3400,10 @@ def run_viewc3d(c3d_path=None):
         try:
             # Get selected marker names for template
             template_connections = [
+                ["p0", "p1"],
+                ["p0", "p4"],
                 ["p1", "p2"],
-                ["p1", "p5"],
                 ["p2", "p3"],
-                ["p3", "p4"],
                 ["p11", "p12"],
                 ["p11", "p23"],
                 ["p12", "p24"],
@@ -3399,7 +3416,7 @@ def run_viewc3d(c3d_path=None):
 
             template_data = {
                 "schema": "mediapipe_pose_33_pn",
-                "note": "pN is 1-based (p1=nose, p12=right_shoulder, p11=left_shoulder). Replace with your marker names.",
+                "note": "pN is 0-based (p0=nose, p11=left_shoulder, p12=right_shoulder), the same numbering rec3d writes. Replace with your marker names.",
                 "available_markers": selected_marker_names[:30],  # Show first 30
                 "connections": template_connections,
             }

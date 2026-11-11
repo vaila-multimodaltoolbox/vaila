@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - yolo_depth3d</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 860px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #212529; margin-top: 18px; }
+        .module-info { background: #e9ecef; padding: 14px 18px; border-radius: 6px; margin: 20px 0; }
+        .module-info p { margin: 6px 0; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; }
+        th { background: #e9ecef; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; }
+        pre { background: #f1f3f5; padding: 14px; border-radius: 6px; overflow-x: auto; }
+        pre code { background: none; padding: 0; }
+        ul { margin: 10px 0; padding-left: 24px; }
+        .note { background: #fff3cd; border-left: 4px solid #ffc107; padding: 12px 16px; margin: 16px 0; border-radius: 4px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+<h1><i>vailá</i> - yolo_depth3d</h1>
+<h2>Module information</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Category</strong></td>
+<td>Processing / Markerless 3D</td>
+</tr>
+<tr>
+<td><strong>File</strong></td>
+<td><code>vaila/yolo_depth3d.py</code></td>
+</tr>
+<tr>
+<td><strong>Version</strong></td>
+<td>0.4.15</td>
+</tr>
+<tr>
+<td><strong>Updated</strong></td>
+<td>11 November 2026</td>
+</tr>
+<tr>
+<td><strong>Author</strong></td>
+<td>Paulo Santiago</td>
+</tr>
+<tr>
+<td><strong>GUI</strong></td>
+<td>Yes — Frame B → <strong>Markerless 3D</strong> → <strong>YOLO26 Depth 3D</strong></td>
+</tr>
+<tr>
+<td><strong>CLI</strong></td>
+<td>Yes</td>
+</tr>
+<tr>
+<td><strong>Runtime</strong></td>
+<td>GPU recommended (about 50 ms per frame on an RTX 4090); the depth weights download on first use</td>
+</tr>
+</tbody>
+</table>
+<h2>What it does</h2>
+<p>Monocular 3D from <strong>one</strong> video in <i>vailá</i>: 2D keypoints, the metric depth map of the
+<a href="https://docs.ultralytics.com/tasks/depth">YOLO26 depth task</a> and, when the camera is calibrated,
+its DLT3D.</p>
+<p>The 2D keypoints come from YOLO26-pose (17 COCO points), or from any <i>vailá</i> pixel CSV given
+with <code>--pixels</code> (<code>frame,x1,y1,x2,y2,...</code>: MediaPipe, YOLO, Sapiens2, getpixelvideo).</p>
+<table>
+<thead>
+<tr>
+<th>Level</th>
+<th>You give</th>
+<th>You get</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1. No calibration</td>
+<td>the video</td>
+<td>3D in the camera frame (OpenCV axes: +X right, +Y down, +Z forward, metres). The focal length is <code>--focal-px</code>, <code>--fov-deg</code> or a guess (the image diagonal); the outputs say which</td>
+</tr>
+<tr>
+<td>2. Calibrated</td>
+<td><code>--dlt3d</code> (and optionally <code>--intrinsics-toml</code> from Chessboard Calib)</td>
+<td>3D in the lab frame: each keypoint sits on its exact pixel ray of the DLT camera</td>
+</tr>
+<tr>
+<td>3. Whole-trial fit</td>
+<td>the same <code>--dlt3d</code>; on by default (<code>--fit auto</code>) for 17 or 33 markers</td>
+<td>the depth of every point along its ray is solved for the whole trial at once</td>
+</tr>
+</tbody>
+</table>
+<h2>The whole-trial fit</h2>
+<p>Every point stays on its own pixel ray; only its distance along the ray is solved. One
+least-squares problem covers all the frames, with these pieces of evidence:</p>
+<ul>
+<li><strong>Segment lengths.</strong> Each segment keeps one length during the trial. The lengths are estimated
+from the trial itself, or given with <code>--segment-lengths</code>.</li>
+<li><strong>Order of the ends.</strong> With the length known, a segment has two possible depths: one end nearer
+or further than the other. The depth map decides the side. A MediaPipe <code>*_mp_norm.csv</code> (its z)
+decides it better: on the test clip its <strong>sign</strong> was right for the arm segments in 80 to 100 % of
+the frames, while its amount was 2 to 4 times too large. Only the sign is used.</li>
+<li><strong>Floor.</strong> A foot marker is never under its standing height above the plane Z = 0 of the lab,
+and is softly held on it (a lifted foot is allowed).</li>
+<li><strong>Balance.</strong> The trunk stays above the feet (a lean or a step is allowed). On the test clip the
+centre of the trunk was 1 to 2 cm from the centre of the feet. <code>--no-balance</code> turns it off.</li>
+<li><strong>Smooth depth in time.</strong></li>
+</ul>
+<p>The depth map is read in a square <strong>crop</strong> around the person (<code>--crop</code>, on by default): it puts
+several times more pixels on the body. The full-frame map sets the level of that crop.</p>
+<p>The file <code>&lt;video&gt;_segment_lengths.csv</code> holds the lengths that were used. It can be passed to
+another run of the same person with <code>--segment-lengths</code>, and so can a 3D CSV of that person with
+the same markers (for example a two-camera Rec3D).</p>
+<h2>What the depth is, and is not</h2>
+<ul>
+<li>The map is the depth of the <strong>visible surface</strong>, in metres along the optical axis. A joint
+centre is behind the skin, and an occluded keypoint gets the depth of what is in front of it.</li>
+<li>The <strong>absolute scale</strong> of the released weights is an estimate. Ultralytics reports 4 to 46 %
+off, depending on the camera. On the test clip it was 42 % and 48 % too short.</li>
+<li>The map is good at <strong>where the person is</strong> and poor at the <strong>depth between joints</strong>. The fit
+uses it for the first pass and for the order of the ends, not for the amount.</li>
+<li>Monocular 3D is an estimate, not a measurement. It does not replace a two-camera
+reconstruction.</li>
+</ul>
+<h2>Measured on a two-camera clip</h2>
+<p>Clip: one person 3.5 to 4 m from two phone cameras (1080 × 1920, 30 fps, 183 frames), standing,
+moving the arms, in loose trousers. 33 MediaPipe points per camera, DLT3D from an 8-point
+calibration object (0.9 × 0.9 × 1.8 m). Reference: the two-camera Rec3D reconstruction of the same
+points. Error = mean distance to that reference, over the 13 body joints (nose, shoulders, elbows,
+wrists, hips, knees, ankles) and over all 33 points; model <code>yolo26x-depth.pt</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Configuration</th>
+<th>Camera 1: 13 joints</th>
+<th>all 33</th>
+<th>Camera 2: 13 joints</th>
+<th>all 33</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--dlt3d</code> (the default: whole-trial fit, MediaPipe z found, lengths from the trial)</td>
+<td><strong>7.1 cm</strong></td>
+<td><strong>7.5 cm</strong></td>
+<td><strong>7.0 cm</strong></td>
+<td><strong>8.1 cm</strong></td>
+</tr>
+<tr>
+<td>the same + <code>--segment-lengths</code> from the two-camera reconstruction</td>
+<td><strong>6.8 cm</strong></td>
+<td><strong>7.0 cm</strong></td>
+<td><strong>4.9 cm</strong></td>
+<td><strong>5.7 cm</strong></td>
+</tr>
+<tr>
+<td><code>--dlt3d --pose-z none</code> (order from the depth map only)</td>
+<td>9.3 cm</td>
+<td>9.3 cm</td>
+<td>10.2 cm</td>
+<td>11.5 cm</td>
+</tr>
+<tr>
+<td>the same + <code>--segment-lengths</code></td>
+<td>8.6 cm</td>
+<td>8.3 cm</td>
+<td>7.9 cm</td>
+<td>8.8 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --no-balance</code></td>
+<td>9.5 cm</td>
+<td>10.7 cm</td>
+<td>5.9 cm</td>
+<td>7.1 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --no-crop</code></td>
+<td>8.3 cm</td>
+<td>8.9 cm</td>
+<td>11.1 cm</td>
+<td>14.9 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --fit off --scale floor-frame --smooth-hz 3</code></td>
+<td>14.2 cm</td>
+<td>13.0 cm</td>
+<td>10.7 cm</td>
+<td>12.6 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --fit off --scale floor-frame</code></td>
+<td>15.3 cm</td>
+<td>13.9 cm</td>
+<td>11.6 cm</td>
+<td>13.5 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --fit off --scale floor</code></td>
+<td>19.0 cm</td>
+<td>17.7 cm</td>
+<td>15.0 cm</td>
+<td>16.7 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --fit off --scale control</code> (thin calibration poles)</td>
+<td>66.6 cm</td>
+<td>63.5 cm</td>
+<td>29.6 cm</td>
+<td>26.9 cm</td>
+</tr>
+<tr>
+<td><code>--dlt3d --fit off</code> (scale as it comes from the network)</td>
+<td>155.0 cm</td>
+<td>152.3 cm</td>
+<td>163.8 cm</td>
+<td>160.8 cm</td>
+</tr>
+<tr>
+<td>No calibration (shape only, rigidly aligned to the reference)</td>
+<td>27.3 cm</td>
+<td>30.9 cm</td>
+<td>27.9 cm</td>
+<td>31.8 cm</td>
+</tr>
+</tbody>
+</table>
+<p>Two more runs on the same clip, on the 13 body joints:</p>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Camera 1</th>
+<th>Camera 2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>This module with YOLO26-pose (17 points, no pixel CSV), <code>--dlt3d</code></td>
+<td>9.0 cm</td>
+<td>9.6 cm</td>
+</tr>
+<tr>
+<td>SAM3+DINOv3 3D, then Monocular → DLT world</td>
+<td>11.8 cm</td>
+<td>8.0 cm</td>
+</tr>
+</tbody>
+</table>
+<p>The YOLO26-pose row also carries the difference between the two detectors' 2D points (about
+2 cm), because the reference is made of MediaPipe points.</p>
+<p>What these numbers say:</p>
+<ul>
+<li>With a DLT3D the lateral and vertical position of each point is right by construction (the
+point is on its ray). The error is along the camera's line of sight.</li>
+<li>Against the best run without the fit, the error on the 13 joints falls from 14.2 to 7.1 cm
+(camera 1) and from 10.7 to 7.0 cm (camera 2), and the segments vary by 1 to 2 % instead of
+5 to 6 %.</li>
+<li>The MediaPipe z matters for the arms. Without it the map decides the side, and it misreads a
+fast, blurred arm in front of a wall.</li>
+<li>What is left is mostly the <strong>depth of the whole person</strong>. It comes from the standing foot, and
+the assumed height of the foot markers moves it: here 1 cm of height is 4 to 5 cm of depth,
+because the cameras are low (0.96 m). The trousers hide the ankles in this clip. Giving the
+person's segment lengths removes most of that error, because the size of the body then fixes
+the depth.</li>
+<li><code>--scale control</code> failed here: the control points are on thin poles, and at two of the eight
+the map read the wall behind.</li>
+</ul>
+<p>One clip is one clip: a standing person in a room. Check the quality numbers of your own run.</p>
+<h2>Scale of the depth (<code>--scale</code>)</h2>
+<p>The fit starts from the floor-scaled map, so with the fit on <code>--scale none</code> means <code>floor-frame</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Needs</th>
+<th>How</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>none</code></td>
+<td>nothing</td>
+<td>the network's own scale</td>
+</tr>
+<tr>
+<td><code>floor</code></td>
+<td><code>--dlt3d</code></td>
+<td>one scale for the trial: the standing foot must be on the plane Z = 0 of the lab</td>
+</tr>
+<tr>
+<td><code>floor-frame</code></td>
+<td><code>--dlt3d</code></td>
+<td>the same, per frame (moving median over a third of a second)</td>
+</tr>
+<tr>
+<td><code>control</code></td>
+<td><code>--dlt3d</code>, <code>--ref3d</code>, <code>--control-video</code>, <code>--control-pixels</code></td>
+<td>compares the map with the true depth of the calibration control points. Use it only when those points are on surfaces the map resolves (not thin poles)</td>
+</tr>
+</tbody>
+</table>
+<p>Standing heights of the foot markers: MediaPipe ankle 0.12 m and heel 0.08 m; YOLO26-pose ankle
+0.10 m (it sits 2 to 3 cm lower than MediaPipe's on the test clip). <code>--foot-height</code> replaces
+them with one value. The summary reports how much the scale changes per centimetre of that
+height (<code>scale_change_per_cm_of_foot_height</code>).</p>
+<h2>Usage</h2>
+<pre><code class="language-bash"># window
+uv run --no-sync python -m vaila.yolo_depth3d
+
+# no calibration: YOLO26-pose + depth, camera frame
+uv run --no-sync python -m vaila.yolo_depth3d -i video.mp4
+
+# calibrated camera, MediaPipe pixel CSV: lab frame, whole-trial fit,
+# checked against a second camera
+uv run --no-sync python -m vaila.yolo_depth3d -i c1.mp4 --pixels c1_pixel_vaila.csv \
+    --dlt3d c1.dlt3d --check-dlt3d c2.dlt3d --check-pixels c2_pixel_vaila.csv
+
+# the same person's segment lengths from a two-camera reconstruction
+uv run --no-sync python -m vaila.yolo_depth3d -i c1.mp4 --pixels c1_pixel_vaila.csv \
+    --dlt3d c1.dlt3d --segment-lengths rec3d_two_cameras.csv
+
+# the real lens from Chessboard Calib (removes the distortion of the pixels)
+uv run --no-sync python -m vaila.yolo_depth3d -i video.mp4 \
+    --intrinsics-toml cam_intrinsics.toml
+</code></pre>
+<p>Main options:</p>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-i</code></td>
+<td>a video, or a folder of videos</td>
+</tr>
+<tr>
+<td><code>--pixels</code></td>
+<td>pixel CSV instead of YOLO26-pose (one video)</td>
+</tr>
+<tr>
+<td><code>--depth-model</code></td>
+<td><code>yolo26{n,s,m,l,x}-depth.pt</code> (default <code>x</code>; use a smaller one on CPU)</td>
+</tr>
+<tr>
+<td><code>--dlt3d</code></td>
+<td>the camera's <code>.dlt3d</code>: result in the lab frame, whole-trial fit</td>
+</tr>
+<tr>
+<td><code>--fit</code></td>
+<td><code>auto</code> (default), <code>on</code>, <code>off</code></td>
+</tr>
+<tr>
+<td><code>--pose-z</code></td>
+<td>MediaPipe <code>*_mp_norm.csv</code>; <code>auto</code> (default) looks for it beside the pixel CSV, in its <code>&lt;video&gt;/</code> folder and up to two folders below the video; <code>none</code> turns it off</td>
+</tr>
+<tr>
+<td><code>--segment-lengths</code></td>
+<td>the <code>*_segment_lengths.csv</code> of a previous run, or a 3D CSV of the same person and markers</td>
+</tr>
+<tr>
+<td><code>--no-balance</code></td>
+<td>do not assume that the trunk stays above the feet</td>
+</tr>
+<tr>
+<td><code>--crop</code> / <code>--no-crop</code>, <code>--crop-margin</code></td>
+<td>depth read in a crop around the person (default on, margin 0.25)</td>
+</tr>
+<tr>
+<td><code>--intrinsics-toml</code></td>
+<td>Chessboard Calib <code>&lt;camera&gt;_intrinsics.toml</code></td>
+</tr>
+<tr>
+<td><code>--focal-px</code>, <code>--fov-deg</code></td>
+<td>focal length with no calibration file</td>
+</tr>
+<tr>
+<td><code>--scale</code>, <code>--foot-height</code></td>
+<td>scale of the depth (see above)</td>
+</tr>
+<tr>
+<td><code>--mask</code></td>
+<td>read the depth only inside the person mask (<code>yolo26n-seg</code>)</td>
+</tr>
+<tr>
+<td><code>--check-dlt3d</code>, <code>--check-pixels</code></td>
+<td>a second camera, for an independent reprojection check</td>
+</tr>
+<tr>
+<td><code>--reference-3d</code></td>
+<td>a reference 3D CSV to compare with</td>
+</tr>
+<tr>
+<td><code>--preview</code>, <code>--pointcloud-every N</code></td>
+<td>depth video with the keypoints; <code>.ply</code> point clouds</td>
+</tr>
+<tr>
+<td><code>--all-people</code></td>
+<td>write every tracked person (YOLO26-pose), not only the longest track</td>
+</tr>
+</tbody>
+</table>
+<p>With <code>--fit off</code> the earlier pipeline runs: <code>--joint-depth</code> (part of the depth between joints
+that is kept, default 0.25), <code>--smooth-hz</code> (zero-lag low-pass of the depth) and <code>--bone-fix</code>
+(per-frame segment-length correction).</p>
+<h2>Outputs</h2>
+<p>A new <code>yolodepth3d_&lt;timestamp&gt;/</code> folder beside the video (or under <code>-o</code>):</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;video&gt;_yolodepth3d_world.csv</code></td>
+<td>lab frame (with <code>--dlt3d</code>), Rec3D layout <code>frame,p0_x,p0_y,p0_z,...</code></td>
+</tr>
+<tr>
+<td><code>&lt;video&gt;_yolodepth3d_cam.csv</code></td>
+<td>camera frame, same layout</td>
+</tr>
+<tr>
+<td><code>&lt;video&gt;_yolodepth3d_m.c3d</code></td>
+<td>C3D in metres</td>
+</tr>
+<tr>
+<td><code>&lt;video&gt;_segment_lengths.csv</code></td>
+<td>the segment lengths of the fit: <code>marker_a, marker_b, length_m, source</code></td>
+</tr>
+<tr>
+<td><code>&lt;video&gt;_depth_at_points.csv</code></td>
+<td>per frame and marker: pixel, confidence, depth read, depth used</td>
+</tr>
+<tr>
+<td><code>&lt;video&gt;_yolodepth3d_summary.json</code></td>
+<td>model, camera, scale, fit and the quality numbers</td>
+</tr>
+<tr>
+<td><code>configuration_used.toml</code></td>
+<td>the options of the run</td>
+</tr>
+<tr>
+<td><code>&lt;video&gt;_depth_preview.mp4</code>, <code>*_cloud_f*.ply</code></td>
+<td>optional</td>
+</tr>
+</tbody>
+</table>
+<p>A point with no keypoint (outside the image, low confidence) stays empty; nothing is filled in.</p>
+<p>Quality numbers in the summary: variation of the segment lengths, height of the lowest foot,
+fraction of points inside the calibrated volume (<code>--ref3d</code>), reprojection error in the second
+camera and distance to the reference reconstruction.</p>
+<h2>Limits</h2>
+<ul>
+<li>The depth of the whole person comes from the foot on the floor. A jump, a seated person or a
+hidden foot breaks that; a wrong foot height shifts the person along the line of sight.</li>
+<li>The balance term assumes an upright person. It is soft, but a long lean (a sprint start) is
+outside what it was checked on.</li>
+<li>Without a pose z (YOLO26-pose, other pixel CSVs) the order of the ends comes from the depth
+map alone, which fails on fast, blurred or thin limbs.</li>
+<li>The fit needs 17 (COCO) or 33 (MediaPipe) markers and a DLT3D. Other marker sets and the
+uncalibrated mode use the depth read at each joint.</li>
+<li>Several people are tracked by YOLO26-pose without re-identification.</li>
+<li>The first use downloads the weights from the Ultralytics release (network needed).</li>
+</ul>
+<h2>See also</h2>
+<ul>
+<li><code>monocular_dlt_align</code> (Markerless 3D → Monocular → DLT world): places a SAM 3D Body
+reconstruction in the lab frame.</li>
+<li><code>rec3d</code> / <code>rec3d_one_dlt3d</code>: reconstruction with two or more cameras.</li>
+<li><code>chessboard_calib</code>: lens and DLT3D from a chessboard.</li>
+</ul>
+
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

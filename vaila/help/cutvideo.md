@@ -16,6 +16,10 @@
 Interactive video cutting with frame-accurate navigation, TOML-based cut storage, and batch/sync workflows. Designed for biomechanics-grade precision with inclusive frame counts and high-resolution timestamps (.6f).
 
 ### Key Updates
+- **Interlaced broadcast preview (v0.4.15):** OpenCV's FFmpeg cannot convert interlaced
+  H.264 (common in TV soccer captures) to progressive BGR — the player would show a black
+  image and spam `Cannot convert interlaced to progressive frames`. Cut Video detects this
+  and offers a progressive H.264 re-encode with `yadif` deinterlace (`*_converted.mp4`).
 - **Inclusive end frame on irregular PTS (v0.4.12):** sync/TOML cuts select by decoded frame
   index (`select=between(n,start,end)`) and rewrite PTS. The old input `-ss` + output `-r` path
   could duplicate early frames and drop the marked final frame on fpsfix-style streams.
