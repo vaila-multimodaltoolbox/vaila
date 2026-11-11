@@ -1,6 +1,6 @@
 """CLI run hints for vailá menu entries (headless ``--cli`` mode).
 
-Version: 0.4.15
+Version: 0.4.16
 Update Date: 11 November 2026
 """
 

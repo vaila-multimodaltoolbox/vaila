@@ -5,8 +5,8 @@ The numbers come from a synthetic ``data/penalty_metrics.json`` that has the sha
 that the three counts of the prompt are reconciled by their own rates, that the two wrong speeds the
 prompt names (118 and 80 km/h) are explained with the file's numbers, and that the files are written.
 
-Version: 0.4.15
-Update Date: 09 November 2026
+Version: 0.4.16
+Update Date: 11 November 2026
 """
 
 from __future__ import annotations

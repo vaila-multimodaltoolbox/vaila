@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.15
+Version: 0.4.16
 Created: 27 October 2026
-Update Date: 09 November 2026
+Update Date: 11 November 2026
 
 Description:
     Every text the report, its figures, its animation and its interactive editor show outside

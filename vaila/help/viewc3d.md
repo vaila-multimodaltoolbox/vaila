@@ -4,8 +4,8 @@
 
 - **Category:** Visualization
 - **File:** `vaila\viewc3d.py`
-- **Version:** 0.4.15
-- **Updated:** 09 November 2026
+- **Version:** 0.4.16
+- **Updated:** 11 November 2026
 - **Author:** Paulo Santiago
 - **GUI Interface:** ✅ Yes
 

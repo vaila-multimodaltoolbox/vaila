@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.15
+Version: 0.4.16
 Created: 28 October 2026
-Update Date: 09 November 2026
+Update Date: 11 November 2026
 
 Description:
     ``freekiki.py kick-analysis`` (and the One-click button of section 5) turns two cut videos of

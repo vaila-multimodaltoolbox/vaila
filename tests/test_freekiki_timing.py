@@ -4,8 +4,8 @@ The numbers of the first test are the three counts of the Lescano x Carlos Migue
 of the main camera at 29.97 fps, 19 of the back camera (a replay captured at 50 fps) and 42 of the
 slow-motion camera (119.88 fps). Synthetic data otherwise.
 
-Version: 0.4.15
-Update Date: 09 November 2026
+Version: 0.4.16
+Update Date: 11 November 2026
 """
 
 from __future__ import annotations

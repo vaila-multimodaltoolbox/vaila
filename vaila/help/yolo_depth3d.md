@@ -6,7 +6,7 @@
 |-------|--------|
 | **Category** | Processing / Markerless 3D |
 | **File** | `vaila/yolo_depth3d.py` |
-| **Version** | 0.4.15 |
+| **Version** | 0.4.16 |
 | **Updated** | 11 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes — Frame B → **Markerless 3D** → **YOLO26 Depth 3D** |

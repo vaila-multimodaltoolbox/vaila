@@ -1,7 +1,7 @@
 """Unit tests for Pynalty pure-numpy analysis and report database helpers.
 
-Update Date: 09 November 2026
-Version: 0.4.15
+Update Date: 11 November 2026
+Version: 0.4.16
 """
 
 from __future__ import annotations

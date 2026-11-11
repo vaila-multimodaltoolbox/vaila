@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
-Update Date: 08 November 2026
-Version: 0.4.15
+Update Date: 11 November 2026
+Version: 0.4.16
 
 Description:
 Guided analysis of a penalty kick from a single broadcast or handheld camera.

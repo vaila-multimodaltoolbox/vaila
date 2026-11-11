@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 09 November 2026
-Update Date: 09 November 2026
-Version: 0.4.15
+Update Date: 11 November 2026
+Version: 0.4.16
 
 Description:
     A broadcast shows the same penalty from several cameras, and the frame counts differ because the
