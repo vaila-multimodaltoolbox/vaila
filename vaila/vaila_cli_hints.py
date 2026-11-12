@@ -1,7 +1,7 @@
 """CLI run hints for vailá menu entries (headless ``--cli`` mode).
 
-Version: 0.4.16
-Update Date: 11 November 2026
+Version: 0.4.17
+Update Date: 12 November 2026
 """
 
 from __future__ import annotations

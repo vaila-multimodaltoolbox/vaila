@@ -14,8 +14,8 @@ MediaPipe connection shifted by one marker (p11-p12 -> p10-p11).
 Expected values are hand-derived from that convention, independently of the
 implementation under test.
 
-Update Date: 11 November 2026
-Version: 0.4.16
+Update Date: 12 November 2026
+Version: 0.4.17
 ================================================================================
 """
 

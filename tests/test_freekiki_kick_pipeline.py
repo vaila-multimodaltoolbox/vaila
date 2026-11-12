@@ -5,8 +5,8 @@ write the files each stage must leave. The tests check the order of the stages, 
 (one or two cameras), the reuse of finished stages, a failing monocular analysis, the failure
 message and the parser. Nothing here needs a video, a model or a GPU.
 
-Version: 0.4.16
-Update Date: 11 November 2026
+Version: 0.4.17
+Update Date: 12 November 2026
 """
 
 from __future__ import annotations

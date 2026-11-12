@@ -15,7 +15,8 @@
 #                                                                                       #
 # Notes:                                                                                #
 #   - uv will be automatically installed if not present.                                #
-#   - Python 3.12.15 will be installed via `uv python install`.                         #
+#   - Always runs `uv self update` before pinning/installing Python.                    #
+#   - Python 3.12.16 will be installed via `uv python install`.                         #
 #   - Portable/git installs keep the committed uv.lock (so git pull keeps working).     #
 #   - Profile copies (~/vaila) may regenerate uv.lock; no git tree there.               #
 #                                                                                       #
@@ -385,21 +386,23 @@ if ! command -v uv &> /dev/null; then
     echo "uv installed successfully!"
 else
     echo "uv is already installed."
-    echo "Updating uv..."
-    uv self update || echo "Warning: Failed to update uv. Continuing with current version."
 fi
+
+# Always upgrade uv before Python pin/install so newest CPython builds are available.
+echo "Updating uv (uv self update)..."
+uv self update || echo "Warning: Failed to update uv. Continuing with current version."
 
 UV_VERSION=$(uv --version 2>/dev/null || echo "unknown")
 echo "uv version: $UV_VERSION"
 echo ""
 
-# Install Python 3.12.15 via uv if needed
+# Install Python 3.12.16 via uv if needed
 echo "Checking Python version..."
-if ! uv python list --only-installed | grep -q "3.12.15"; then
-    echo "Python 3.12.15 not found. Installing via uv..."
-    uv python install 3.12.15
+if ! uv python list --only-installed | grep -q "3.12.16"; then
+    echo "Python 3.12.16 not found. Installing via uv..."
+    uv python install 3.12.16
 else
-    echo "Python 3.12.15 found."
+    echo "Python 3.12.16 found."
 fi
 
 echo "Preparing destination directory..."
@@ -592,7 +595,7 @@ fi
 echo ""
 echo "Initializing uv project..."
 if [ ! -f ".python-version" ]; then
-    uv python pin 3.12.15
+    uv python pin 3.12.16
 fi
 
 # Create virtual environment
@@ -600,7 +603,7 @@ echo ""
 echo "Creating/updating virtual environment (.venv)..."
 if [ ! -d ".venv" ]; then
     echo "Creating new virtual environment..."
-    uv venv --python 3.12.15
+    uv venv --python 3.12.16
 else
     echo "Virtual environment already exists. uv sync will update it as needed."
 fi

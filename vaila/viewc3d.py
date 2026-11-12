@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.16
+Version: 0.4.17
 Created: 06 February 2025
-Last Updated: 11 November 2026
+Last Updated: 12 November 2026
 
 To run:
   uv run viewc3d.py [path/to/file.c3d]

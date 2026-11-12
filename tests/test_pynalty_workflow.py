@@ -1,7 +1,7 @@
 """Guided Pynalty workflow and reusable calibration regression tests.
 
-Update Date: 11 November 2026
-Version: 0.4.16
+Update Date: 12 November 2026
+Version: 0.4.17
 """
 
 import copy

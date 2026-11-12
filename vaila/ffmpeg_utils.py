@@ -7,8 +7,8 @@
 #
 # ffmpeg_utils.py
 #
-# Update Date: 11 November 2026
-# Version: 0.4.16
+# Update Date: 12 November 2026
+# Version: 0.4.17
 #
 # Central helper module for FFmpeg binary discovery and H.264 encoding helpers
 # shared by cutvideo, drawboxe, and related video tools.

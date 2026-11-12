@@ -5,8 +5,8 @@ known onset and steps forward, so his centre of mass, its speeds, the side, the 
 are known in closed form. Law 14 is checked from the 3D feet and from pixels through a known ground
 homography. Synthetic data only.
 
-Version: 0.4.16
-Update Date: 11 November 2026
+Version: 0.4.17
+Update Date: 12 November 2026
 """
 
 from __future__ import annotations

@@ -13,7 +13,8 @@
           else runs. If pwsh cannot be installed, generated shortcuts fall back to
           powershell.exe instead of failing silently.
         - uv will be automatically installed if not present.
-        - Python 3.12.15 will be installed via `uv python install`.
+        - Always runs `uv self update` before pinning/installing Python.
+        - Python 3.12.16 will be installed via `uv python install`.
         - Installation location (prompt; Enter = portable default):
           * [1] Current directory (Local/Portable) - default / recommended
           * [2] User profile or Program Files:
@@ -615,13 +616,15 @@ If (-Not $uvInstalled) {
     }
 } Else {
     Write-Host "uv is already installed." -ForegroundColor Green
-    Write-Host "Updating uv..." -ForegroundColor Yellow
-    Try {
-        & uv self update
-        Write-Host "uv updated successfully." -ForegroundColor Green
-    } Catch {
-        Write-Warning "Failed to update uv. Continuing with current version."
-    }
+}
+
+# Always upgrade uv before Python pin/install so newest CPython builds are available.
+Write-Host "Updating uv (uv self update)..." -ForegroundColor Yellow
+Try {
+    & uv self update
+    Write-Host "uv updated successfully." -ForegroundColor Green
+} Catch {
+    Write-Warning "Failed to update uv. Continuing with current version."
 }
 
 $uvVersion = & uv --version 2>$null
@@ -630,19 +633,19 @@ If ($uvVersion) {
 }
 Write-Host ""
 
-# Install Python 3.12.15 via uv if needed
+# Install Python 3.12.16 via uv if needed
 Write-Host "Checking Python version..." -ForegroundColor Yellow
 Try {
-    $pythonVersion = & uv python list --only-installed 2>$null | Select-String "3.12.15"
+    $pythonVersion = & uv python list --only-installed 2>$null | Select-String "3.12.16"
     If (-Not $pythonVersion) {
-        Write-Host "Python 3.12.15 not found. Installing via uv..." -ForegroundColor Yellow
-        & uv python install 3.12.15
-        Write-Host "Python 3.12.15 installed successfully." -ForegroundColor Green
+        Write-Host "Python 3.12.16 not found. Installing via uv..." -ForegroundColor Yellow
+        & uv python install 3.12.16
+        Write-Host "Python 3.12.16 installed successfully." -ForegroundColor Green
     } Else {
-        Write-Host "Python 3.12.15 found." -ForegroundColor Green
+        Write-Host "Python 3.12.16 found." -ForegroundColor Green
     }
 } Catch {
-    Write-Warning "Could not verify Python 3.12.15 installation. Continuing..."
+    Write-Warning "Could not verify Python 3.12.16 installation. Continuing..."
 }
 
 # Check if we're already in the installation directory
@@ -852,7 +855,7 @@ If ($useGPU) {
 Write-Host ""
 Write-Host "Initializing uv project..." -ForegroundColor Yellow
 If (-Not (Test-Path ".python-version")) {
-    & uv python pin 3.12.15
+    & uv python pin 3.12.16
 }
 
 # Create virtual environment
@@ -868,7 +871,7 @@ If (Test-Path ".venv") {
 }
 
 Try {
-    & uv venv --python 3.12.15
+    & uv venv --python 3.12.16
     If ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to create virtual environment."
         Exit 1

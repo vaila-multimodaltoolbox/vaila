@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 ================================================================================
 Author: Paulo Santiago
-Version: 0.4.16
+Version: 0.4.17
 Created: 10 November 2026
-Update Date: 11 November 2026
+Update Date: 12 November 2026
 
 ================================================================================
 Description
@@ -105,7 +105,7 @@ except ImportError:  # standalone: python vaila/yolo_depth3d.py
         load_dlt3d_file,
     )
 
-VERSION = "0.4.16"
+VERSION = "0.4.17"
 DEPTH_MODELS = (
     "yolo26n-depth.pt",
     "yolo26s-depth.pt",

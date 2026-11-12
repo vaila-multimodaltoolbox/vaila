@@ -35,7 +35,8 @@ bash install_vaila_linux.sh</code></pre>
       <h3>What <code>install_vaila_linux.sh</code> does</h3>
       <ol>
         <li>Installs system dependencies via <code>apt</code>; self-installs <code>uv</code> if missing.</li>
-        <li>Pins Python <code>3.12.15</code>.</li>
+        <li>Runs <code>uv self update</code> so the latest CPython builds (e.g. 3.12.16) are available.</li>
+        <li>Pins Python <code>3.12.16</code>.</li>
         <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
         <li>Picks the PyTorch dependency group (<code>--no-group cpu --group cuda</code> for NVIDIA CUDA 12.8, otherwise the default <code>cpu</code> group). The committed <code>pyproject.toml</code> is never modified.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic; verifies CUDA wheels and the Sapiens2 editable install when selected.</li>
@@ -69,7 +70,8 @@ powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1</code></pre>
       <h3>What <code>install_vaila_win.ps1</code> does</h3>
       <ol>
         <li>Self-installs <code>uv</code> (winget or official installer) if missing.</li>
-        <li>Pins Python <code>3.12.15</code>.</li>
+        <li>Runs <code>uv self update</code> so the latest CPython builds (e.g. 3.12.16) are available.</li>
+        <li>Pins Python <code>3.12.16</code>.</li>
         <li>Detects an NVIDIA GPU and prompts for optional extras (<code>gpu</code>, <code>sam</code>, <code>sapiens</code>, <code>fifa</code>).</li>
         <li>Picks the PyTorch dependency group (<code>--no-group cpu --group cuda</code> for NVIDIA CUDA 12.8, otherwise the default <code>cpu</code> group). The committed <code>pyproject.toml</code> is never modified.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>
@@ -97,7 +99,8 @@ bash install_vaila_mac.sh</code></pre>
       <h3>What <code>install_vaila_mac.sh</code> does</h3>
       <ol>
         <li>Installs system dependencies via Homebrew; self-installs <code>uv</code> if missing.</li>
-        <li>Pins Python <code>3.12.15</code>.</li>
+        <li>Runs <code>uv self update</code> so the latest CPython builds (e.g. 3.12.16) are available.</li>
+        <li>Pins Python <code>3.12.16</code>.</li>
         <li>Prompts for optional extras (<code>gpu</code>/<code>sam</code>/<code>sapiens</code>/<code>fifa</code> as applicable to Apple hardware).</li>
         <li>Uses the default <code>cpu</code> dependency group — on macOS the PyPI PyTorch wheel <em>is</em> the Metal/MPS build, so no file is swapped.</li>
         <li>Runs <code>uv lock</code> / <code>uv sync --extra ...</code> with fallback logic.</li>

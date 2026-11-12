@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.16
+Version: 0.4.17
 Created: 27 October 2026
-Update Date: 11 November 2026
+Update Date: 12 November 2026
 
 Description:
     The monocular ball is placed on the ground plane, so a ball in the air leaves the pitch. A

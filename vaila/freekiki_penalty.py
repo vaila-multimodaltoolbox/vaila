@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.16
+Version: 0.4.17
 Created: 28 October 2026
-Update Date: 11 November 2026
+Update Date: 12 November 2026
 
 Description:
     The penalty analysis of :mod:`pynalty_analysis` without the hand marking of the pynalty app. Every

@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 11 November 2026
-Version: 0.4.16
+Update Date: 12 November 2026
+Version: 0.4.17
 
 Description:
 This script performs batch processing of videos for cutting videos.

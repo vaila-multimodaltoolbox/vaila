@@ -8,7 +8,7 @@ support matrix) is linked, not duplicated, so the two pages can't drift apart.
 
 _vailá_'s single, official install method on every platform is
 **[uv](https://github.com/astral-sh/uv)** — no separate Python distribution or Conda
-needed. The install scripts below install `uv`, pin Python `3.12.15`, pick the right
+needed. The install scripts below install `uv`, pin Python `3.12.16`, pick the right
 PyTorch **dependency group** (`cpu` or `cuda`) for your hardware, and run `uv sync`.
 There is a single portable `pyproject.toml` / `uv.lock` for every machine and OS —
 nothing tracked by git is rewritten per computer.
@@ -56,14 +56,15 @@ bash install_vaila_linux.sh
 ### What `install_vaila_linux.sh` does
 
 1. Installs system dependencies via `apt` and self-installs `uv` if missing.
-2. Pins Python `3.12.15` (`uv python pin 3.12.15`).
-3. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
-4. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
+2. Runs `uv self update` so the latest CPython builds (e.g. 3.12.16) are available.
+3. Pins Python `3.12.16` (`uv python pin 3.12.16`).
+4. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
+5. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
    CUDA 12.8 + TensorRT, otherwise the default `cpu` group. No file is copied.
-5. Runs `uv sync --frozen ...` against the committed universal `uv.lock`, then
+6. Runs `uv sync --frozen ...` against the committed universal `uv.lock`, then
    verifies CUDA wheels and the Sapiens2 editable install if those extras were
    selected.
-6. Adds finishing touches: a desktop entry and SSH-transfer setup for the File Manager.
+7. Adds finishing touches: a desktop entry and SSH-transfer setup for the File Manager.
 
 For the auto-detecting alternative (same logic, callable any time you want to
 switch backend), see [`bin/setup_pyproject.sh`](../bin/setup_pyproject.sh) in
@@ -115,12 +116,13 @@ powershell -ExecutionPolicy Bypass -File .\install_vaila_win.ps1
 ### What `install_vaila_win.ps1` does
 
 1. Self-installs `uv` (winget or the official installer) if missing.
-2. Pins Python `3.12.15`.
-3. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
-4. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
+2. Runs `uv self update` so the latest CPython builds (e.g. 3.12.16) are available.
+3. Pins Python `3.12.16`.
+4. Detects an NVIDIA GPU and prompts for optional extras (`sam`, `sapiens`, `fifa`).
+5. Picks the PyTorch dependency group: `--no-group cpu --group cuda` for NVIDIA
    CUDA 12.8 + TensorRT, otherwise the default `cpu` group. No file is copied.
-5. Runs `uv sync --frozen ...` against the committed universal `uv.lock`.
-6. Adds finishing touches: PowerShell/batch launchers, Desktop and Start Menu
+6. Runs `uv sync --frozen ...` against the committed universal `uv.lock`.
+7. Adds finishing touches: PowerShell/batch launchers, Desktop and Start Menu
    shortcuts, and a Windows Terminal profile.
 
 ### GPU vs CPU-only
@@ -170,13 +172,14 @@ bash install_vaila_mac.sh
 ### What `install_vaila_mac.sh` does
 
 1. Installs system dependencies via Homebrew and self-installs `uv` if missing.
-2. Pins Python `3.12.15`.
-3. Prompts for optional extras (`sam`/`sapiens`/`fifa` as applicable to Apple
+2. Runs `uv self update` so the latest CPython builds (e.g. 3.12.16) are available.
+3. Pins Python `3.12.16`.
+4. Prompts for optional extras (`sam`/`sapiens`/`fifa` as applicable to Apple
    hardware).
-4. Uses the default `cpu` dependency group — on macOS the PyPI PyTorch wheel **is**
+5. Uses the default `cpu` dependency group — on macOS the PyPI PyTorch wheel **is**
    the Metal/MPS build, so no file is copied or swapped.
-5. Runs `uv sync --frozen ...` against the committed universal `uv.lock`.
-6. Builds a full `.app` bundle (with icon conversion) so _vailá_ can be launched from
+6. Runs `uv sync --frozen ...` against the committed universal `uv.lock`.
+7. Builds a full `.app` bundle (with icon conversion) so _vailá_ can be launched from
    Applications/Launchpad like a native app.
 
 ### GPU vs CPU-only

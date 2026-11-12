@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.16
+Version: 0.4.17
 Created: 27 October 2026
-Update Date: 11 November 2026
+Update Date: 12 November 2026
 
 Description:
     The SAM 3D Body skeleton keeps its own metric size, which comes out short (about 1.2 to 1.5 m

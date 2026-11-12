@@ -47,4 +47,4 @@ Scientific calculations remain in `pynalty_analysis.py`, vision in
 
 [Full bilingual help](../../vaila/help/pynalty_help.md)
 
-Version: 0.4.16 · Updated: 11 November 2026 · AGPLv3.0
+Version: 0.4.17 · Updated: 12 November 2026 · AGPLv3.0

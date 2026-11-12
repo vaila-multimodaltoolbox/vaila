@@ -3,8 +3,8 @@
 A physical flight is simulated, seen by one synthetic camera, and fitted back; the entry point from the
 goal homography is compared with the true crossing. Synthetic data only: no GPU, no model, no video.
 
-Version: 0.4.16
-Update Date: 11 November 2026
+Version: 0.4.17
+Update Date: 12 November 2026
 """
 
 from __future__ import annotations

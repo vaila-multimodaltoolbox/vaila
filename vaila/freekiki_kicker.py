@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.16
+Version: 0.4.17
 Created: 28 October 2026
-Update Date: 11 November 2026
+Update Date: 12 November 2026
 
 Description:
     The core kick metrics of one kicker, from ``poses_3d_binocular.csv`` (the triangulated
