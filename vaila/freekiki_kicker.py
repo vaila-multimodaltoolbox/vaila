@@ -354,6 +354,8 @@ def _value_at(series: np.ndarray, f: int) -> float:
 
 
 KICK_DIR_MIN_M = 0.5  # the ball has left its rest position when it is this far (metres) from it
+# Treat near-zero mean velocity as rest (macOS/Windows float residuals can be ~1e-12).
+KICK_DIR_VEL_EPS_MPS = 1e-6
 
 
 def _kick_direction(
@@ -367,7 +369,7 @@ def _kick_direction(
     """
     vel = _finite_mean(ball_vel[contact : contact + nw, :2])
     norm = float(np.linalg.norm(vel)) if np.isfinite(vel).all() else 0.0
-    if norm > 0:
+    if norm > KICK_DIR_VEL_EPS_MPS:
         return vel / norm
     if ball is None or not 0 <= contact < len(ball) or not np.isfinite(ball[contact, :2]).all():
         return None
