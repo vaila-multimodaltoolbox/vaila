@@ -6,8 +6,8 @@ Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 
 Creation Date: 01 August 2026
-Update Date: 05 November 2026
-Version: 0.4.14
+Update Date: 13 November 2026
+Version: 0.4.18
 
 Description:
     Monocular markerless **3D** human mesh/skeleton recovery from video, using
@@ -51,6 +51,10 @@ Usage:
     # Metric-accurate run with a known focal length (px) and mesh export:
     uv run python -u vaila/sam3dinov3.py \
         -i clip.mp4 -o /path/to/output --focal-px 1400 --save-mesh
+
+    # Or load Chessboard Calib lens (same <camera>_intrinsics.toml as yolo_depth3d):
+    uv run python -u vaila/sam3dinov3.py \
+        -i clip.mp4 -o /path/to/output --intrinsics-toml cam_intrinsics.toml
 
     # GUI: omit arguments, or Frame B -> YOLO + FB -> SAM3+DINOv3 3D
 
@@ -344,6 +348,7 @@ class Sam3dGuiSettings:
     weights_dir: Path | None
     recursive: bool = False
     depth: int = -1
+    intrinsics_toml: Path | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -618,6 +623,34 @@ def build_cam_int(focal_px: float, width: int, height: int) -> Any:
         ],
         dtype=torch.float32,
     )
+
+
+def build_cam_int_from_matrix(K: np.ndarray) -> Any:
+    """3x3 pinhole intrinsics tensor from a Chessboard Calib / OpenCV K matrix."""
+    import torch
+
+    Km = np.asarray(K, dtype=np.float64).reshape(3, 3)
+    return torch.tensor(
+        [
+            [
+                [float(Km[0, 0]), 0.0, float(Km[0, 2])],
+                [0.0, float(Km[1, 1]), float(Km[1, 2])],
+                [0.0, 0.0, 1.0],
+            ]
+        ],
+        dtype=torch.float32,
+    )
+
+
+def load_cam_int_from_intrinsics_toml(path: Path | str) -> Any:
+    """Load ``<camera>_intrinsics.toml`` from chessboard_calib into a cam_int tensor."""
+    try:
+        from .chessboard_calib import load_intrinsics_toml
+    except ImportError:
+        from chessboard_calib import load_intrinsics_toml  # ty: ignore[unresolved-import]
+
+    intr = load_intrinsics_toml(Path(path))
+    return build_cam_int_from_matrix(intr["K"])
 
 
 # --------------------------------------------------------------------------- #
@@ -1258,10 +1291,20 @@ def run_sam3d_from_sam(
     names = keypoint_names(len(MHR70_NAMES))
     edges = skeleton_edges(names)
 
+    # Priority: --cam-int-npy > --intrinsics-toml > --focal-px > default FOV
     cam_int = None
     if args.focal_px is not None:
         cam_int = build_cam_int(float(args.focal_px), width, height)
         _log(f"Using fixed intrinsics: f={float(args.focal_px):.1f} px, principal point centred")
+    toml_path = getattr(args, "intrinsics_toml", None)
+    if toml_path:
+        cam_int = load_cam_int_from_intrinsics_toml(toml_path)
+        K = cam_int[0].detach().cpu().numpy()
+        _log(
+            f"Using Chessboard Calib intrinsics from {Path(toml_path).name}: "
+            f"fx={float(K[0, 0]):.1f} fy={float(K[1, 1]):.1f} "
+            f"cx={float(K[0, 2]):.1f} cy={float(K[1, 2]):.1f}"
+        )
     cam_seq = None
     if getattr(args, "cam_int_npy", None):
         # Module-level numpy only: a local ``import numpy as np`` here made ``np`` local to
@@ -1427,6 +1470,9 @@ def run_sam3d_from_sam(
         "inference_type": str(args.inference_type),
         "mask_conditioned": not args.no_mask,
         "focal_px": None if args.focal_px is None else float(args.focal_px),
+        "intrinsics_toml": (
+            str(args.intrinsics_toml) if getattr(args, "intrinsics_toml", None) else None
+        ),
     }
     written.append(write_predictions_json(output_dir, stem, timeline, names, meta=meta))
     written.append(
@@ -1613,6 +1659,7 @@ def build_worker_command(
     _add_if_value(cmd, "--worker-sam-dir", sam_dir)
     _add_if_value(cmd, "--weights-dir", args.weights_dir)
     _add_if_value(cmd, "--focal-px", args.focal_px)
+    _add_if_value(cmd, "--intrinsics-toml", getattr(args, "intrinsics_toml", None))
     # Per-frame intrinsics from the DLT3D: without this the isolated batch drops them.
     _add_if_value(cmd, "--cam-int-npy", getattr(args, "cam_int_npy", None))
     _add_if_value(cmd, "--fov-estimator", args.fov_estimator or None)
@@ -1661,6 +1708,7 @@ def _build_dry_run_report(
         f"contour_margin   : {args.contour_margin}",
         f"max_persons      : {args.max_persons}",
         f"focal_px         : {args.focal_px if args.focal_px is not None else 'auto (default FOV)'}",
+        f"intrinsics_toml  : {getattr(args, 'intrinsics_toml', None) or '(none)'}",
         f"save_mesh        : {args.save_mesh}",
         f"overlay          : {not args.no_overlay}",
         "",
@@ -1719,6 +1767,8 @@ def _format_gui_cli(settings: Sam3dGuiSettings) -> list[str]:
         cmd.extend(["--weights-dir", str(settings.weights_dir)])
     if settings.focal_px is not None:
         cmd.extend(["--focal-px", str(settings.focal_px)])
+    if settings.intrinsics_toml is not None:
+        cmd.extend(["--intrinsics-toml", str(settings.intrinsics_toml)])
     if not settings.use_mask:
         cmd.append("--no-mask")
     if not settings.save_overlay:
@@ -1757,6 +1807,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             self.margin_var = tk.StringVar(value=str(DEFAULT_CONTOUR_MARGIN_PX))
             self.max_persons_var = tk.StringVar(value=str(DEFAULT_MAX_PERSONS))
             self.focal_var = tk.StringVar()
+            self.intrinsics_toml_var = tk.StringVar()
             self.mask_var = tk.BooleanVar(value=True)
             self.overlay_var = tk.BooleanVar(value=True)
             self.mesh_var = tk.BooleanVar(value=False)
@@ -1822,6 +1873,11 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             _entry_row("Contour margin (px)", self.margin_var)
             _entry_row("Max persons per frame", self.max_persons_var)
             _entry_row("Focal length px (blank = auto)", self.focal_var)
+            _path_row(
+                "Intrinsics TOML (optional)",
+                self.intrinsics_toml_var,
+                self._browse_intrinsics_toml,
+            )
 
             ttk.Label(frame, text="Inference type").grid(row=row, column=0, sticky="w", pady=3)
             ttk.Combobox(
@@ -1904,6 +1960,15 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
             if path:
                 self.weights_var.set(path)
 
+        def _browse_intrinsics_toml(self) -> None:
+            path = filedialog.askopenfilename(
+                parent=self,
+                title="Select Chessboard Calib <camera>_intrinsics.toml",
+                filetypes=[("TOML", "*.toml"), ("All", "*.*")],
+            )
+            if path:
+                self.intrinsics_toml_var.set(path)
+
         def _open_help(self) -> None:
             if _help_path().is_file():
                 webbrowser.open_new_tab(_help_path().as_uri())
@@ -1950,6 +2015,10 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                 focal_px = float(focal_raw) if focal_raw else None
                 if focal_px is not None and focal_px <= 0:
                     raise ValueError("Focal length must be a positive number of pixels.")
+                toml_raw = self.intrinsics_toml_var.get().strip()
+                intrinsics_toml = Path(toml_raw).expanduser() if toml_raw else None
+                if intrinsics_toml is not None and not intrinsics_toml.is_file():
+                    raise ValueError(f"Intrinsics TOML not found: {intrinsics_toml}")
                 result = Sam3dGuiSettings(
                     input_path=input_path,
                     output_parent=output_parent,
@@ -1968,6 +2037,7 @@ def run_sam3dinov3(existing_root: Any | None = None) -> None:
                     save_overlay=bool(self.overlay_var.get()),
                     save_mesh=bool(self.mesh_var.get()),
                     focal_px=focal_px,
+                    intrinsics_toml=intrinsics_toml,
                     weights_dir=weights_dir,
                 )
             except (ValueError, RuntimeError) as exc:
@@ -2091,12 +2161,21 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--intrinsics-toml",
+        type=Path,
+        default=None,
+        help=(
+            "Chessboard Calib <camera>_intrinsics.toml (fx,fy,cx,cy,…). Same file as "
+            "yolo_depth3d --intrinsics-toml. Overrides --focal-px; --cam-int-npy still wins."
+        ),
+    )
+    parser.add_argument(
         "--cam-int-npy",
         default=None,
         help=(
             "Per-frame pinhole intrinsics, (n, 3, 3) float32 .npy, indexed by frame "
             "(written by freekiki detect-3d from the field DLT3D). NaN frames fall back "
-            "to --focal-px or the default FOV."
+            "to --intrinsics-toml, --focal-px or the default FOV."
         ),
     )
     parser.add_argument(
@@ -2316,6 +2395,8 @@ def main() -> None:
         parser.error("--bbox-padding must be >= 0")
     if args.focal_px is not None and args.focal_px <= 0:
         parser.error("--focal-px must be > 0")
+    if args.intrinsics_toml is not None and not Path(args.intrinsics_toml).is_file():
+        parser.error(f"--intrinsics-toml not found: {args.intrinsics_toml}")
     if args.stride < 1:
         parser.error("--stride must be >= 1")
     if args.fresh and args.resume is not None:

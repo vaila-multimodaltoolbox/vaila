@@ -3,8 +3,8 @@
 ## Module information
 
 - **Category:** Markerless 3D / Meta (Facebook)
-- **Version:** 0.4.14
-- **Updated:** 2026-11-05
+- **Version:** 0.4.18
+- **Updated:** 2026-11-13
 - **GUI:** Frame B → **Markerless 3D** → **SAM3+DINOv3 3D**
 - **CLI:** Yes
 - **Runtime:** NVIDIA CUDA required (the upstream estimator moves its batch to `cuda` unconditionally)
@@ -98,6 +98,10 @@ uv run python -u vaila/sam3dinov3.py -i /path/to/videos -o /path/to/output \
 uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /path/to/output \
     --focal-px 1400 --save-mesh
 
+# Same Chessboard Calib TOML as yolo_depth3d (monocular or multi-cam run)
+uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /path/to/output \
+    --intrinsics-toml processed_chessboard_calib_*/cam_intrinsics.toml
+
 # Validate paths, weights and the plan without touching the GPU
 uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run
 ```
@@ -111,6 +115,7 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run
 | `--weights-dir`          | auto      | SAM 3D Body weights dir                                        |
 | `--inference-type`       | `full`    | `full` (body+hand), `body`, or `hand`                          |
 | `--focal-px`             | auto      | Known focal length in px — see *Scale caveat*                   |
+| `--intrinsics-toml`      | –         | Chessboard Calib `<camera>_intrinsics.toml` (overrides `--focal-px`) |
 | `--fov-estimator`        | –         | Optional upstream FOV estimator (e.g. `moge2`); extra weights   |
 | `--no-mask`              | off       | Use SAM boxes/IDs but skip mask-conditioned inference           |
 | `--stride`               | `1`       | Run inference every Nth frame                                   |
@@ -187,9 +192,11 @@ Use the **`xcam_*` columns** for inter-person distances and depth; the wide
 
 > ### Scale caveat
 >
-> Monocular depth is metric only up to the assumed camera intrinsics. Without
-> `--focal-px` the model falls back to a default FOV (`f = sqrt(W² + H²)`), so
-> absolute depth inherits that assumption. Supply the true focal length in pixels
+> Monocular depth is metric only up to the assumed camera intrinsics. Prefer
+> `--intrinsics-toml` from Chessboard Calib (one-video run is enough) or
+> `--focal-px`. Without either, the model falls back to a default FOV
+> (`f = sqrt(W² + H²)`), so absolute depth inherits that assumption.
+> Priority: `--cam-int-npy` > `--intrinsics-toml` > `--focal-px` > default FOV. Supply the true focal length in pixels
 > (or a FOV estimator) whenever absolute distances matter. Relative joint
 > geometry within one person is far less sensitive to this than absolute depth.
 

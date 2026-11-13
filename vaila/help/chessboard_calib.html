@@ -191,17 +191,19 @@
 
     <main class="main-content">
       <header id="intro">
-        <h1>Chessboard Calib <span class="version-badge">v0.4.15</span></h1>
+        <h1>Chessboard Calib <span class="version-badge">v0.4.18</span></h1>
         <p>
-          Calibrates several cameras from chessboard videos (one video per camera, same
-          session) and exports the files that <i>vailá</i> needs for 3D reconstruction.
+          Calibrates one or several cameras from chessboard videos and exports the files
+          that <i>vailá</i> needs for 3D reconstruction. One video is enough (monocular):
+          the same <code>.dlt3d</code> and <code>_intrinsics.toml</code> are written for
+          YOLO Depth 3D and SAM3+DINOv3 3D.
         </p>
         <div class="meta">
           <strong>Module:</strong> <code>vaila/chessboard_calib.py</code><br />
           <strong>Button:</strong> Frame C-A &rarr; <strong>Chessboard Calib</strong> (below DLT/REC 2D-3D)<br />
           <strong>Category:</strong> Processing &middot;
-          <strong>Version:</strong> 0.4.15 &middot;
-          <strong>Updated:</strong> 08 November 2026 &middot;
+          <strong>Version:</strong> 0.4.18 &middot;
+          <strong>Updated:</strong> 13 November 2026 &middot;
           <strong>Author:</strong> Paulo Santiago &middot;
           <strong>License:</strong> AGPL-3.0
         </div>
@@ -213,15 +215,18 @@
         <table>
           <thead><tr><th>File</th><th>Used by</th></tr></thead>
           <tbody>
-            <tr><td><code>&lt;camera&gt;.dlt3d</code></td><td>Rec3D 1DLT / MultiDLT</td></tr>
-            <tr><td><code>&lt;camera&gt;_intrinsics.toml</code> (fx, fy, cx, cy, k1, k2, k3, p1, p2)</td><td>Distort Video; <code>--intrinsics-toml-dir</code> of a later run</td></tr>
+            <tr><td><code>&lt;camera&gt;.dlt3d</code></td><td>Rec3D 1DLT / MultiDLT; YOLO Depth 3D (<code>--dlt3d</code>)</td></tr>
+            <tr><td><code>&lt;camera&gt;_intrinsics.toml</code> (fx, fy, cx, cy, k1, k2, k3, p1, p2)</td><td>Distort Video; YOLO Depth 3D / SAM3+DINOv3 (<code>--intrinsics-toml</code>); <code>--intrinsics-toml-dir</code> of a later run</td></tr>
             <tr><td><code>&lt;camera&gt;_board_pixels.csv</code></td><td>detected corners, <i>vailá</i> pixel format</td></tr>
             <tr><td><code>cameras.json</code></td><td>K, distortion, R, t, camera centre and frame offset per camera</td></tr>
             <tr><td><code>calibration_report.json</code>, <code>README_calibration.txt</code></td><td>errors, offsets, world frame, validation</td></tr>
-            <tr><td><code>validation_board_3d.csv</code></td><td>board corners triangulated with the exported DLTs</td></tr>
+            <tr><td><code>validation_board_3d.csv</code></td><td>board corners triangulated with the exported DLTs (multi-camera only)</td></tr>
             <tr><td><code>qa/&lt;camera&gt;_coverage.png</code></td><td>corners used; the calibration is measured inside the red outline</td></tr>
           </tbody>
         </table>
+        <p><strong>Monocular (one video):</strong> sync and bundle adjustment are skipped;
+          world = board at the lowest-PnP-error frame. <code>--world control</code> needs
+          at least two cameras.</p>
       </section>
 
       <section id="pipeline">

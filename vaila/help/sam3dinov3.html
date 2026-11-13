@@ -23,7 +23,7 @@
 <body><div class="container">
   <h1>SAM3+DINOv3 3D (<code>sam3dinov3.py</code>)</h1>
   <div class="info">
-    <strong>Version:</strong> 0.4.14 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-11-05<br>
+    <strong>Version:</strong> 0.4.18 &nbsp;|&nbsp; <strong>Updated:</strong> 2026-11-13<br>
     <strong>Category:</strong> Markerless 3D / Meta (Facebook)<br>
     <strong>GUI:</strong> Frame B → Markerless 3D → <strong>SAM3+DINOv3 3D</strong><br>
     <strong>Runtime:</strong> NVIDIA CUDA required; SAM 3 and SAM 3D Body optional stacks.
@@ -107,6 +107,10 @@ uv run python -u vaila/sam3dinov3.py -i /path/to/videos -o /path/to/output \
 uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /path/to/output \
     --focal-px 1400 --save-mesh
 
+# Same Chessboard Calib TOML as yolo_depth3d (monocular or multi-cam run)
+uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /path/to/output \
+    --intrinsics-toml processed_chessboard_calib_*/cam_intrinsics.toml
+
 # Validate paths, weights and the plan without touching the GPU
 uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
 
@@ -118,6 +122,7 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
     <tr><td><code>--weights-dir</code></td><td>auto</td><td>SAM 3D Body weights dir</td></tr>
     <tr><td><code>--inference-type</code></td><td><code>full</code></td><td><code>full</code> (body+hand), <code>body</code>, or <code>hand</code></td></tr>
     <tr><td><code>--focal-px</code></td><td>auto</td><td>Known focal length in px — see <em>Scale caveat</em></td></tr>
+    <tr><td><code>--intrinsics-toml</code></td><td>–</td><td>Chessboard Calib <code>&lt;camera&gt;_intrinsics.toml</code> (overrides <code>--focal-px</code>)</td></tr>
     <tr><td><code>--fov-estimator</code></td><td>–</td><td>Optional upstream FOV estimator (e.g. <code>moge2</code>); extra weights</td></tr>
     <tr><td><code>--no-mask</code></td><td>off</td><td>Use SAM boxes/IDs but skip mask-conditioned inference</td></tr>
     <tr><td><code>--stride</code></td><td><code>1</code></td><td>Run inference every Nth frame</td></tr>
@@ -180,11 +185,12 @@ uv run python -u vaila/sam3dinov3.py -i clip.mp4 -o /tmp/out --dry-run</pre>
 
   <div class="warn">
     <strong>Scale caveat.</strong> Monocular depth is metric only up to the assumed
-    camera intrinsics. Without <code>--focal-px</code> the model falls back to a default
-    FOV (<code>f = sqrt(W² + H²)</code>), so absolute depth inherits that assumption.
-    Supply the true focal length in pixels (or a FOV estimator) whenever absolute
-    distances matter. Relative joint geometry within one person is far less sensitive
-    to this than absolute depth.
+    camera intrinsics. Prefer <code>--intrinsics-toml</code> from Chessboard Calib
+    (one-video run is enough) or <code>--focal-px</code>. Without either, the model
+    falls back to a default FOV (<code>f = sqrt(W² + H²)</code>). Priority:
+    <code>--cam-int-npy</code> &gt; <code>--intrinsics-toml</code> &gt;
+    <code>--focal-px</code> &gt; default FOV. Relative joint geometry within one person
+    is far less sensitive to this than absolute depth.
   </div>
 
   <h2>Performance notes</h2>

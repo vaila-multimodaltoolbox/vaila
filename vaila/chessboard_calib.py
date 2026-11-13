@@ -5,13 +5,17 @@ Authors: Paulo Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 06 November 2026
-Update Date: 08 November 2026
-Version: 0.4.15
+Update Date: 13 November 2026
+Version: 0.4.18
 
 Description:
-    Multi-camera calibration from chessboard videos, exported for vailá 3D reconstruction.
+    Multi-camera (or single-camera) calibration from chessboard videos, exported for
+    vailá 3D reconstruction.
 
-    One video per camera (same session, same chessboard). The pipeline:
+    One video per camera (same session, same chessboard). With a single video the
+    multi-view sync / bundle-adjustment steps are skipped; the same
+    ``<stem>.dlt3d`` and ``<stem>_intrinsics.toml`` files are still written for
+    ``yolo_depth3d`` and ``sam3dinov3``. The pipeline:
 
     1. Detect the inner corners in every ``--step``-th frame. When the board is small, the
        detector retries on an upscaled crop around the last detection (``--zoom``). Corners
@@ -1016,14 +1020,187 @@ def _json_ready(obj: Any) -> Any:
     return obj
 
 
+def _finish_monocular_calibration(
+    *,
+    args: argparse.Namespace,
+    out_dir: Path,
+    obj: np.ndarray,
+    cols: int,
+    rows: int,
+    square: float,
+    d: CameraDetections,
+    ci: dict[str, Any],
+    poses: dict[int, tuple[np.ndarray, np.ndarray]],
+    errs: dict[int, float],
+) -> dict[str, Any]:
+    """Export the same DLT/TOML artifacts from one camera (PnP board world, no BA)."""
+    if getattr(args, "world", "board") == "control":
+        raise ValueError(
+            "--world control needs at least two cameras; use --world board for a single video"
+        )
+    if not poses:
+        raise RuntimeError(
+            f"{d.name}: no usable board PnP poses (all views above {PNP_MAX_ERROR_PX} px)"
+        )
+
+    # World = board at the lowest-reprojection PnP frame (camera away from origin).
+    f_world = min(poses, key=lambda f: errs.get(f, float("inf")))
+    R_bc, t_bc = poses[f_world]
+    board_T = _to_mat4(R_bc, t_bc)  # board -> camera
+    M = UPRIGHT_AXES if args.board_axes == "upright" else np.eye(3)
+    # Same framing as multi-cam with a single reference camera (cam_T = I):
+    # T_world_ref = M @ inv(board_T); cams_world = inv(T_world_ref) = board_T @ inv(M)
+    Tw = board_T @ np.linalg.inv(_to_mat4(M, np.zeros(3)))
+    R, t = Tw[:3, :3], Tw[:3, 3]
+    U, _, Vt = np.linalg.svd(R)
+    R = U @ Vt
+
+    dlt = write_dlt3d(out_dir / f"{d.name}.dlt3d", ci["K"], R, t)
+    write_intrinsics_toml(out_dir / f"{d.name}_intrinsics.toml", ci, (d.width, d.height))
+    write_board_pixels(out_dir / f"{d.name}_board_pixels.csv", d.corners)
+    save_coverage_image(out_dir / "qa" / f"{d.name}_coverage.png", d.path, d.corners)
+    center = (-R.T @ t).ravel()
+
+    # Validation: PnP reprojection + DLT reprojects undistorted corners at f_world.
+    err_vals = np.array(list(errs.values()), dtype=float) if errs else np.array([])
+    und = undistort_pixels(d.corners[f_world], ci["K"], ci["dist"])
+    # Ideal pinhole projection of object points in the upright/board world.
+    obj_w = (M @ obj.T).T  # board object -> world
+    ones = np.ones((len(obj_w), 1))
+    Xh = np.hstack([obj_w, ones])
+    P = np.vstack([ci["K"] @ np.column_stack([R, t.ravel()]), [0.0, 0.0, 0.0, 1.0]])
+    proj = (P[:3] @ Xh.T).T
+    proj_uv = proj[:, :2] / proj[:, 2:3]
+    reproj = float(np.sqrt(np.mean(np.sum((proj_uv - und) ** 2, axis=1))))
+
+    # Neighbour lengths from PnP camera-frame 3D (sanity; should match square size).
+    per_frame_val: list[dict[str, float]] = []
+    for _f, (Rb, tb) in poses.items():
+        xyz_cam = (Rb @ obj.T).T + tb.ravel()
+        v = board_validation(xyz_cam, cols, rows, square)
+        if v is not None:
+            per_frame_val.append(v)
+    dist_errs = np.array([p["rmse_m"] for p in per_frame_val]) if per_frame_val else np.array([])
+
+    cameras_json = {
+        d.name: {
+            "video": d.path,
+            "image_size": [d.width, d.height],
+            "fps": d.fps,
+            "K": ci["K"],
+            "dist_k1_k2_p1_p2_k3": ci["dist"],
+            "R_world_to_camera": R,
+            "t_world_to_camera_m": t,
+            "camera_center_world_m": center,
+            "frame_offset": 0,
+            "intrinsics": {k: v for k, v in ci.items() if k not in ("K", "dist")},
+            "board_views": len(d.corners),
+            "ba_rms_px": None,
+            "pnp_world_frame": int(f_world),
+            "dlt_reproj_rms_px": reproj,
+        }
+    }
+    sync_report: dict[str, Any] = {
+        "mode": "monocular",
+        "frame_offsets": {d.name: 0},
+    }
+    world_report: dict[str, Any] = {
+        "mode": "board",
+        "board_frame": int(f_world),
+        "board_axes": args.board_axes,
+        "origin": "board corner 0 (top-left inner corner of the upright board)",
+        "cameras": 1,
+    }
+    ba_report: dict[str, Any] = {
+        "mode": "monocular_pnp",
+        "status": 1,
+        "rms_px": float(np.median(err_vals)) if len(err_vals) else float("nan"),
+        "nfev": 0,
+        "views_rejected": 0,
+        "reject_limit_px": PNP_MAX_ERROR_PX,
+        "per_camera_rms_px": {0: float(np.median(err_vals)) if len(err_vals) else None},
+        "world_frame_pnp_rms_px": float(errs.get(f_world, float("nan"))),
+        "dlt_reproj_rms_px": reproj,
+    }
+    validation: dict[str, Any] = {
+        "kind": (
+            "monocular: PnP reprojection and neighbour-corner lengths from board poses "
+            "(no multi-view triangulation)"
+        ),
+        "frames": int(len(per_frame_val)),
+        "square_m": square,
+        "pnp_rms_median_px": float(np.median(err_vals)) if len(err_vals) else None,
+        "pnp_rms_p95_px": float(np.percentile(err_vals, 95)) if len(err_vals) else None,
+        "dlt_reproj_rms_px": reproj,
+        "distance_rmse_median_m": float(np.median(dist_errs)) if len(dist_errs) else None,
+        "distance_rmse_p95_m": float(np.percentile(dist_errs, 95)) if len(dist_errs) else None,
+        "distance_mean_error_median_m": (
+            float(np.median([p["mean_error_m"] for p in per_frame_val])) if per_frame_val else None
+        ),
+        "planarity_rms_median_m": (
+            float(np.nanmedian([p["planarity_rms_m"] for p in per_frame_val]))
+            if per_frame_val
+            else None
+        ),
+        "holdout": {"enabled": False, "skipped": "monocular calibration has no holdout blocks"},
+    }
+    report: dict[str, Any] = {
+        "schema": "vaila_chessboard_calib_v1",
+        "created": datetime.now().isoformat(timespec="seconds"),
+        "input": str(args.input),
+        "pattern_inner_corners": [cols, rows],
+        "square_m": square,
+        "step": args.step,
+        "zoom": args.zoom,
+        "intrinsics_mode": args.intrinsics,
+        "mode": "monocular",
+        "reference_camera_for_ba": d.name,
+        "frame_numbering": {
+            "rule": FRAME_NUMBERING_RULE,
+            "per_camera": {
+                d.name: {"numbering": d.numbering, "dropped_frames": d.dropped},
+            },
+        },
+        "sync": sync_report,
+        "world": world_report,
+        "bundle_adjustment": ba_report,
+        "validation": validation,
+        "cameras": cameras_json,
+        "pnp_rms_median_px": {
+            d.name: float(np.median(list(errs.values()))) if errs else None,
+        },
+        "dlt_coefficients": dlt.tolist(),
+    }
+    (out_dir / "cameras.json").write_text(
+        json.dumps(_json_ready(cameras_json), indent=2) + "\n", encoding="utf-8"
+    )
+    (out_dir / "calibration_report.json").write_text(
+        json.dumps(_json_ready(report), indent=2) + "\n", encoding="utf-8"
+    )
+    _write_readme(out_dir, report, [d.name])
+    log(
+        f"monocular: world board frame {f_world}, PnP rms median "
+        f"{ba_report['rms_px']:.3f} px, DLT reproj {reproj:.3f} px"
+    )
+    if len(dist_errs):
+        log(
+            "validation (monocular): neighbour-corner distance error median "
+            f"{np.median(dist_errs) * 1000:.2f} mm "
+            f"(p95 {np.percentile(dist_errs, 95) * 1000:.2f} mm) for {square * 1000:.0f} mm squares"
+        )
+    log(f"done -> {out_dir}")
+    report["output_dir"] = str(out_dir)
+    return report
+
+
 def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
     pattern = parse_pattern(args.pattern)
     cols, rows = pattern
     square = float(args.square)
     obj = board_object_points(cols, rows, square)
     videos = find_videos(Path(args.input))
-    if len(videos) < 2:
-        raise ValueError(f"need at least two camera videos in {args.input}")
+    if not videos:
+        raise ValueError(f"no camera videos found in {args.input}")
     out_parent = (
         Path(args.output)
         if args.output
@@ -1031,9 +1208,8 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
     )
     out_dir = out_parent / f"processed_chessboard_calib_{datetime.now():%Y%m%d_%H%M%S}"
     (out_dir / "qa").mkdir(parents=True, exist_ok=True)
-    log(
-        f"{len(videos)} cameras; pattern {cols}x{rows} inner corners; square {square} m -> {out_dir}"
-    )
+    mode_label = "monocular" if len(videos) == 1 else f"{len(videos)} cameras"
+    log(f"{mode_label}; pattern {cols}x{rows} inner corners; square {square} m -> {out_dir}")
 
     # 1. detection (one process per video)
     jobs = [
@@ -1069,8 +1245,11 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
             f"WARNING: fewer than {MIN_VIEWS_INTRINSICS} board views, camera left out: {dropped_cams}"
         )
         dets = [d for d in dets if d.name not in dropped_cams]
-    if len(dets) < 2:
-        raise RuntimeError("fewer than two cameras saw the board often enough")
+    if not dets:
+        raise RuntimeError("no camera saw the board often enough for intrinsics")
+    monocular = len(dets) == 1
+    if monocular:
+        log("one camera: monocular path (intrinsics + PnP board world; no sync/BA)")
 
     # 2. intrinsics
     intr: list[dict[str, Any]] = []
@@ -1139,7 +1318,21 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
                 "--intrinsics-toml-dir <processed_chessboard_calib_* folder>."
             )
 
-    # 4. frame offsets
+    if monocular:
+        return _finish_monocular_calibration(
+            args=args,
+            out_dir=out_dir,
+            obj=obj,
+            cols=cols,
+            rows=rows,
+            square=square,
+            d=dets[0],
+            ci=intr[0],
+            poses=pnp[0],
+            errs=pnp_err[0],
+        )
+
+    # 4. frame offsets (multi-camera)
     n_cams = len(dets)
     n_frames = max(d.n_frames for d in dets)
     sync_report: dict[str, Any] = {"mode": args.sync}
@@ -1531,11 +1724,22 @@ def _write_readme(out_dir: Path, report: dict[str, Any], names: list[str]) -> No
     lines += [
         "",
         "Per camera:",
-        "  <camera>.dlt3d             DLT for Rec3D 1DLT / MultiDLT (ideal pinhole pixels)",
-        "  <camera>_intrinsics.toml   fx, fy, cx, cy, k1, k2, k3, p1, p2 (Distort Video format)",
+        "  <camera>.dlt3d             DLT for Rec3D 1DLT / MultiDLT / yolo_depth3d (ideal pinhole)",
+        "  <camera>_intrinsics.toml   fx, fy, cx, cy, k1, k2, k3, p1, p2 (Distort Video; "
+        "yolo_depth3d / sam3dinov3)",
         "  <camera>_board_pixels.csv  detected board corners (distorted pixels, vailá pixel format)",
         "  qa/<camera>_coverage.png   corners used; the calibration is measured inside the red outline",
         "",
+    ]
+    if report.get("mode") == "monocular" or report["sync"].get("mode") == "monocular":
+        lines += [
+            "Mode: monocular (one video). Sync and bundle adjustment were skipped; the world",
+            "  frame is the board at the lowest-PnP-error frame. Use:",
+            "    yolo_depth3d --intrinsics-toml <camera>_intrinsics.toml --dlt3d <camera>.dlt3d",
+            "    sam3dinov3 --intrinsics-toml <camera>_intrinsics.toml",
+            "",
+        ]
+    lines += [
         "3D reconstruction:",
         "  1. Undistort the pixel CSVs with this calibration (each name starts with or contains the",
         "     camera video name):",
@@ -1575,8 +1779,16 @@ def _write_readme(out_dir: Path, report: dict[str, Any], names: list[str]) -> No
         ]
     elif report["sync"].get("rife_note"):
         lines.append(f"Video alignment with RIFE: {report['sync']['rife_note']}.")
+    ba = report.get("bundle_adjustment") or {}
+    if ba.get("mode") == "monocular_pnp":
+        rms = ba.get("rms_px")
+        rms_txt = "n/a" if rms is None or not np.isfinite(rms) else f"{float(rms):.3f} px"
+        lines.append(f"Monocular PnP rms (median): {rms_txt} (no multi-camera bundle adjustment)")
+        if ba.get("dlt_reproj_rms_px") is not None:
+            lines.append(f"DLT reprojection at world frame: {ba['dlt_reproj_rms_px']:.3f} px")
+    elif ba.get("rms_px") is not None:
+        lines.append(f"Bundle adjustment rms: {ba['rms_px']:.3f} px")
     lines += [
-        f"Bundle adjustment rms: {report['bundle_adjustment']['rms_px']:.3f} px",
         "",
         f"Frame numbers: {report['frame_numbering']['rule']}.",
     ]
@@ -1624,7 +1836,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Multi-camera chessboard calibration -> .dlt3d + intrinsics TOML for vailá Rec3D.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    p.add_argument("-i", "--input", help="Folder with one chessboard video per camera.")
+    p.add_argument(
+        "-i",
+        "--input",
+        help="Folder with chessboard videos (one per camera), or a single video file "
+        "(monocular: same .dlt3d + _intrinsics.toml for yolo_depth3d / sam3dinov3).",
+    )
     p.add_argument("-o", "--output", help="Output parent folder (default: the input folder).")
     p.add_argument(
         "--pattern", default="6x8", help="Inner corners per row x per column (default 6x8)."

@@ -7,8 +7,8 @@
 | **Category** | Processing |
 | **File** | `vaila/chessboard_calib.py` |
 | **Button** | Frame C-A → **Chessboard Calib** (below DLT/REC 2D-3D) |
-| **Version** | 0.4.15 |
-| **Updated** | 08 November 2026 |
+| **Version** | 0.4.18 |
+| **Updated** | 13 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes |
 | **CLI** | Yes |
@@ -17,19 +17,23 @@
 
 ## What it does
 
-Calibrates several cameras from chessboard videos (one video per camera, same session) and exports what *vailá* needs for 3D reconstruction:
+Calibrates one or several cameras from chessboard videos (one video per camera, same session) and exports what *vailá* needs for 3D reconstruction. **One video is enough** (monocular path): sync and bundle adjustment are skipped, but the same `<camera>.dlt3d` and `<camera>_intrinsics.toml` files are written for **YOLO Depth 3D** and **SAM3+DINOv3 3D**.
 
 | Output | Used by |
 |--------|---------|
-| `<camera>.dlt3d` | **Rec3D 1DLT / MultiDLT** (`rec3d_one_dlt3d.py`, `rec3d.py`) |
-| `<camera>_intrinsics.toml` (`fx, fy, cx, cy, k1, k2, k3, p1, p2`) | **Distort Video** (`vaila_lensdistortvideo.py`); `--intrinsics-toml-dir` of a later run |
+| `<camera>.dlt3d` | **Rec3D 1DLT / MultiDLT**; **YOLO Depth 3D** (`--dlt3d`) |
+| `<camera>_intrinsics.toml` (`fx, fy, cx, cy, k1, k2, k3, p1, p2`) | **Distort Video**; **YOLO Depth 3D** / **SAM3+DINOv3** (`--intrinsics-toml`); `--intrinsics-toml-dir` of a later run |
 | `<camera>_board_pixels.csv` | detected board corners, *vailá* pixel format (`frame, p1_x, p1_y, …`) |
 | `cameras.json` | K, distortion, R, t, camera centre and frame offset per camera |
 | `calibration_report.json`, `README_calibration.txt` | errors, offsets, world frame, validation |
-| `validation_board_3d.csv` | board corners triangulated with the exported DLTs |
+| `validation_board_3d.csv` | board corners triangulated with the exported DLTs (multi-camera only) |
 | `qa/<camera>_coverage.png` | corners used; the calibration is measured inside the red outline |
 
 Results go to `<output>/processed_chessboard_calib_YYYYMMDD_HHMMSS/`.
+
+### Monocular (one video)
+
+When the input is a single video (or a folder with one video), the module still estimates the lens and a board-frame DLT via PnP (world = board at the lowest-error view). There is no camera sync, multi-view BA, triangulation validation, or holdout. `--world control` needs at least two cameras.
 
 ## Pipeline
 
@@ -129,7 +133,7 @@ On NVIDIA/CUDA workstations use `uv run --no-sync`.
 
 | Option | Default | Meaning |
 |---|---|---|
-| `-i/--input` | — | folder with one video per camera |
+| `-i/--input` | — | folder with videos (one per camera), or a single video file (monocular) |
 | `-o/--output` | input folder | output parent folder |
 | `--pattern` | `6x8` | inner corners per row x per column (a board of 7 x 9 squares is `6x8`) |
 | `--square` | `0.098` | square side in metres (the lab board); sets the scale of everything |

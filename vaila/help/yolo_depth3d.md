@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing / Markerless 3D |
 | **File** | `vaila/yolo_depth3d.py` |
-| **Version** | 0.4.17 |
-| **Updated** | 12 November 2026 |
+| **Version** | 0.4.18 |
+| **Updated** | 13 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes — Frame B → **Markerless 3D** → **YOLO26 Depth 3D** |
 | **CLI** | Yes |
@@ -219,4 +219,5 @@ camera and distance to the reference reconstruction.
 - `monocular_dlt_align` (Markerless 3D → Monocular → DLT world): places a SAM 3D Body
   reconstruction in the lab frame.
 - `rec3d` / `rec3d_one_dlt3d`: reconstruction with two or more cameras.
-- `chessboard_calib`: lens and DLT3D from a chessboard.
+- `chessboard_calib`: lens and DLT3D from a chessboard (one video is enough for
+  monocular `--intrinsics-toml` / `--dlt3d`).
