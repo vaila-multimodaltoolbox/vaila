@@ -1,10 +1,10 @@
 # Chessboard Calib Button
 
-The **Chessboard Calib** button (Frame C-A, below **DLT/REC 2D-3D**) calibrates several cameras at once from chessboard videos and writes the files that *vailá*'s 3D reconstruction uses.
+The **Chessboard Calib** button (Frame C-A, below **DLT/REC 2D-3D**) calibrates one or several cameras from chessboard videos and writes the files that *vailá*'s 3D reconstruction uses.
 
 ## Overview
 
-Record one video per camera of the same session while a person shows a chessboard to the cameras. The module (`vaila/chessboard_calib.py`) finds the board corners, estimates each camera's lens (intrinsics), the frame offsets between cameras and the camera positions (extrinsics), and exports a `.dlt3d` file per camera for **Rec3D 1DLT / MultiDLT**.
+Record one video per camera of the same session while a person shows a chessboard to the cameras. The module (`vaila/chessboard_calib.py`) finds the board corners, estimates each camera's lens (intrinsics), and — with two or more cameras — the frame offsets and multi-view extrinsics. It always exports `<camera>.dlt3d` and `<camera>_intrinsics.toml` for **Rec3D**, **YOLO Depth 3D**, and **SAM3+DINOv3 3D**. A **single video** is supported (monocular path: intrinsics + PnP board world; no sync/BA).
 
 ## Key Features
 
@@ -20,7 +20,7 @@ Record one video per camera of the same session while a person shows a chessboar
 ## Usage
 
 1. Click **Chessboard Calib** in Frame C-A.
-2. Choose the folder with one chessboard video per camera.
+2. Choose the folder with chessboard videos (one per camera), or a single video file.
 3. Set the inner corners (for a board of 7 x 9 squares: `6x8`) and the square side in metres (default 0.098, the lab board; measure yours over several squares).
 4. Click **Run calibration**. The terminal prints the equivalent command and the progress.
 

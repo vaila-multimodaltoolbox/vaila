@@ -262,6 +262,66 @@ def _write_video(path: Path, frames: list[np.ndarray], fps: float = 30.0) -> Non
     vw.release()
 
 
+def test_end_to_end_monocular_synthetic_video(tmp_path):
+    """One video: same .dlt3d + _intrinsics.toml as multi-cam (for yolo_depth3d / sam3dinov3)."""
+    size = (960, 540)
+    K = np.array([[650.0, 0, 479.5], [0, 650.0, 269.5], [0, 0, 1]])
+    Rc, tc = cameras(1, radius=3.0)[0]
+    n = 50
+    vids = tmp_path / "videos"
+    vids.mkdir()
+    frames = [render(K, Rc, tc, *board_pose(0.6 * f), size) for f in range(n)]
+    _write_video(vids / "cam_mono.avi", frames)
+    out = tmp_path / "out"
+    rc = cc.main(
+        [
+            "-i",
+            str(vids),
+            "-o",
+            str(out),
+            "--workers",
+            "1",
+            "--holdout-block",
+            "0",
+            "--square",
+            str(SQ),
+        ]
+    )
+    assert rc == 0
+    run = next(out.glob("processed_chessboard_calib_*"))
+    for suffix in (".dlt3d", "_intrinsics.toml", "_board_pixels.csv"):
+        assert (run / f"cam_mono{suffix}").is_file()
+    assert (run / "qa" / "cam_mono_coverage.png").is_file()
+    report = json.loads((run / "calibration_report.json").read_text())
+    assert report["mode"] == "monocular"
+    assert report["sync"]["mode"] == "monocular"
+    assert report["bundle_adjustment"]["mode"] == "monocular_pnp"
+    assert report["validation"]["holdout"]["enabled"] is False
+    assert report["validation"]["pnp_rms_median_px"] is not None
+    assert report["validation"]["pnp_rms_median_px"] < 1.0
+    assert report["validation"]["dlt_reproj_rms_px"] < 1.0
+    f = report["cameras"]["cam_mono"]["K"][0][0]
+    assert abs(f - 650.0) / 650.0 < 0.05
+    # Exported DLT reprojects a board corner near the detection (ideal pinhole after undistort)
+    dlt = np.loadtxt(run / "cam_mono.dlt3d", delimiter=",", skiprows=1)
+    L = dlt[1:]
+    X = OBJ[COLS + 1]  # an interior corner, not the origin
+    cam = report["cameras"]["cam_mono"]
+    K_est = np.array(cam["K"])
+    R = np.array(cam["R_world_to_camera"])
+    t = np.array(cam["t_world_to_camera_m"])
+    M = cc.UPRIGHT_AXES if report["world"]["board_axes"] == "upright" else np.eye(3)
+    Xw = M @ X
+    den = L[8] * Xw[0] + L[9] * Xw[1] + L[10] * Xw[2] + 1
+    u = (L[0] * Xw[0] + L[1] * Xw[1] + L[2] * Xw[2] + L[3]) / den
+    v = (L[4] * Xw[0] + L[5] * Xw[1] + L[6] * Xw[2] + L[7]) / den
+    p = K_est @ (R @ Xw + t)
+    assert np.allclose([u, v], p[:2] / p[2], atol=1e-4)
+    readme = (run / "README_calibration.txt").read_text()
+    assert "monocular" in readme.lower()
+    assert "yolo_depth3d" in readme and "sam3dinov3" in readme
+
+
 def test_end_to_end_synthetic_videos(tmp_path):
     size = (960, 540)
     K = np.array([[650.0, 0, 479.5], [0, 650.0, 269.5], [0, 0, 1]])

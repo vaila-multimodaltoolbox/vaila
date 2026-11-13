@@ -642,6 +642,43 @@ def test_worker_command_forwards_per_frame_intrinsics(tmp_path: Path):
     assert cmd[cmd.index("--cam-int-npy") + 1] == str(npy)
 
 
+def test_worker_command_forwards_intrinsics_toml(tmp_path: Path):
+    from vaila.sam3dinov3 import _build_parser, build_worker_command
+
+    toml = tmp_path / "cam_intrinsics.toml"
+    toml.write_text(
+        "fx = 1000\nfy = 1000\ncx = 960\ncy = 540\nk1 = 0\nk2 = 0\nk3 = 0\np1 = 0\np2 = 0\n"
+    )
+    args = _build_parser().parse_args(
+        ["-i", "clip.mp4", "-o", str(tmp_path), "--intrinsics-toml", str(toml)]
+    )
+    cmd = build_worker_command(Path("clip.mp4"), tmp_path, tmp_path / "clip", args, sam_dir=None)
+    assert cmd[cmd.index("--intrinsics-toml") + 1] == str(toml)
+
+
+def test_load_cam_int_from_intrinsics_toml(tmp_path: Path):
+    from vaila import chessboard_calib as cc
+    from vaila.sam3dinov3 import load_cam_int_from_intrinsics_toml
+
+    K = np.array([[1080.5, 0, 961.2], [0, 1079.0, 541.7], [0, 0, 1]])
+    path = tmp_path / "cam_intrinsics.toml"
+    cc.write_intrinsics_toml(
+        path,
+        {
+            "K": K,
+            "dist": np.array([-0.31, 0.05, 0.001, -0.002, 0.0]),
+            "mode": "standard",
+            "rms_px": 0.3,
+            "coverage": 0.4,
+        },
+        (1920, 1080),
+    )
+    cam = load_cam_int_from_intrinsics_toml(path)
+    got = cam[0].detach().cpu().numpy()
+    assert np.allclose(got[0, 0], 1080.5) and np.allclose(got[1, 1], 1079.0)
+    assert np.allclose(got[0, 2], 961.2) and np.allclose(got[1, 2], 541.7)
+
+
 def test_parser_rejects_invalid_values(tmp_path: Path):
     from vaila.sam3dinov3 import _build_parser
 
@@ -696,6 +733,7 @@ def test_worker_namespace_has_every_attribute_the_pipeline_reads(tmp_path: Path)
         "weights_dir",
         "fov_estimator",
         "focal_px",
+        "intrinsics_toml",
         "stride",
         "min_sam_score",
         "min_sam_area",

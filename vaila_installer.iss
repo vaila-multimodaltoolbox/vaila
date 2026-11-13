@@ -6,7 +6,7 @@
 ; (Program Files\vaila); portable mode uses $PSScriptRoot == {app}.
 
 #define MyAppName "vaila"
-#define MyAppVersion "0.4.17"
+#define MyAppVersion "0.4.18"
 #define MyAppPublisher "Prof. Dr. Paulo R. P. Santiago"
 #define MyAppURL "https://github.com/vaila-multimodaltoolbox/vaila"
 

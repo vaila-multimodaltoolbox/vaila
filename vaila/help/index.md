@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 141 | **Categories:** 7 | **Generated on:** 12/11/2026 (v0.4.17)
+**Documented topics:** 141 | **Categories:** 7 | **Generated on:** 13/11/2026 (v0.4.18)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -114,7 +114,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 
 ## Processing (25)
 
-- **chessboard_calib** — Calibrates several cameras from chessboard videos (one video per camera, same session) and exports what vailá needs for 3D reconstruction:
+- **chessboard_calib** — Calibrates one or several cameras from chessboard videos and exports `.dlt3d` + `_intrinsics.toml` for Rec3D, YOLO Depth 3D and SAM3+DINOv3:
   - [HTML](chessboard_calib.html) · [Markdown](chessboard_calib.md)
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)

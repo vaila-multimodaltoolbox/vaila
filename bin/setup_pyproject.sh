@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bin/setup_pyproject.sh
-# Updated: 12 November 2026; Version: 0.4.17.
+# Updated: 13 November 2026; Version: 0.4.18.
 #
 # Unified interactive bootstrap for vailá: detects OS/arch/NVIDIA, picks the
 # PyTorch dependency group (`cpu` or `cuda`) and the optional extras, then runs
