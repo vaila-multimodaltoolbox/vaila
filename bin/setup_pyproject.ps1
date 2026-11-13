@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     Unified interactive bootstrap for vailá on Windows (PowerShell).
-    Updated: 30 October 2026; Version: 0.4.14.
+    Updated: 12 November 2026; Version: 0.4.17.
 
 .DESCRIPTION
     Detects OS / architecture / NVIDIA GPU, picks the PyTorch dependency group
