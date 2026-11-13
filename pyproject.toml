@@ -198,8 +198,11 @@ default-groups = ["dev", "cpu"]
 conflicts = [
     [{ group = "cpu" }, { group = "cuda" }],
 ]
+# setuptools: neurokit2 caps setuptools<82, but 84.1.0 fixes GHSA-xmj3-9gf7-h52w.
+# pygame 2.6.1 imports pkg_resources inside try/except, so 84.x is safe for it.
 override-dependencies = [
     "regex>=2025.11.3",
+    "setuptools>=84.1.0",
 ]
 
 [tool.uv.workspace]
