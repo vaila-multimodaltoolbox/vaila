@@ -359,3 +359,32 @@ Detailed per-change session notes moved out of `CLAUDE.md` (2026-08-16) to keep 
   - **Gotchas:** run several fits in parallel with one BLAS thread each (the module uses
     `threadpoolctl`); 24 threads on these small sparse products were ~10x slower. `np.load` of a
     compressed `.npz` decompresses the whole array on EVERY `d["maps"]` access.
+- **getpixelvideo 1-line mode: right click + one row over several videos (`vaila/getpixelvideo.py`, v0.4.18, 2026-11-14)**:
+  - **Bug:** a right click in `Mode: 1-line` did not remove the last point. The click handler appended the point
+    without selecting it, the per-tick clamp then parked the selection on the FIRST point of the frame, so right
+    click "removed" p0; the draw loop ignored `deleted_markers`, so nothing changed on screen, and the CSV got a
+    blank `p0`. Saving with no points crashed (`os.path.basename(None)`).
+  - **Model now:** module-level pure helpers (`one_line_place`, `one_line_remove`, `one_line_remove_frame`,
+    `one_line_carry`, `write_one_line_files`, `read_one_line_csv`, ...). A marker is `(frame, x, y)` when clicked
+    in the open video and `(frame, x, y, source)` when it came from another video; never unpack 3 values from
+    `one_line_markers`. `selected_marker_idx` is a slot of the whole row or `-1` (click appends, right click
+    removes the last). Removing the last point truncates the list (no trailing empty slots); a removed middle
+    point leaves an empty slot that stays selected.
+  - **Several videos:** F8 with 1-line on returns a 6th tuple item from `play_video_with_controls`
+    (`{"markers", "deleted", "editor_mode"}`) that `run_getpixelvideo` passes back as `initial_one_line`;
+    `--one-line CSV` does the same from a file. Save writes `<video>_markers_1_line.csv` + a `.toml` with the
+    video/frame/exact x,y of every point (TOML, not CSV, so batch CSV tools do not pick it up).
+  - **Help audit:** `D` deletes ALL markers of the frame (an earlier `K_d` branch shadowed `R or D`); `Delete`
+    only worked in FreeKiki, now it is `remove_marker()` elsewhere; the "1 Line Save" file name was wrong.
+  - **Testing the window headless:** `tests/test_getpixelvideo_one_line.py` runs the real loop in a subprocess
+    with `SDL_VIDEODRIVER=dummy`, posts events from a thread (`pygame.key.set_mods` for Ctrl), and fakes the F8
+    dialog by setting `sys.platform` to a non-linux value so the Tk branch (monkeypatched) is used.
+- **getpixelvideo: Open button, H help in EN/PT, toolbar hints, REF3D builder (`vaila/getpixelvideo.py`, `vaila/getpixelvideo_help.py`, `vaila/ref3d_builder.py`, v0.4.18, 2026-11-15)**:
+  - **Help content lives in `getpixelvideo_help.py`** (pure data): `HelpEntry(section, en, pt, keys, mouse, button)`, `now_steps(HelpContext)` per mode, `TOOLBAR_HINTS` by button id. `draw_controls()` fills the module-level `TOOLBAR_HIT_RECTS` (id -> rect in window coords) every frame; the hover hint and the headless tests (`button:<id>` action) use it. A new toolbar button needs: rect in `draw_controls`, id in that dict, entry in `TOOLBAR_HINTS` (a test enforces it), click handler. Language is `HELP_STATE["lang"]`.
+  - **F8 / Open** share `open_another_media()`; with 1-line points the button reads **Add video** (the user renamed it from "Next video").
+  - **Bug:** `Ctrl+M` (Model dialog) never fired because the bare `K_m` branch came first; now `K_m and not Ctrl`.
+  - **REF3D builder:** templates box / pole / triad -> `Ref3dPoint` list (order documented in the module). In the window it rides on 1-line mode (`ref3d_mode` is cleared every tick when 1-line is off); the F8 hand-over dict carries `"ref3d": {template, points, source}`. `fit_and_check` re-solves only when the clicked pixels change (key cached). Verified on the walkway data of 13 Nov: X 0.55 -> fx 3359 / fy 1339 "NOT A REAL CAMERA", X 1.38 -> fx 1349 / fy 1343 OK, same 0.9 px error both ways (the error alone cannot catch a wrong measure).
+  - **Headless typing in `show_input_dialog`:** post KEYDOWN with `unicode`; the dialog starts with its default text, so Backspace it first (typing "1" over the Save menu's default "1" gives "11").
+  - **REF3D follow-up (2026-11-15):** the panel sketch was left-handed (X drawn down-right, Y down-left, Z up gives X x Y = -Z); now `ref3d_builder.sketch_projection` / `SKETCH_AXES` draw X right, Y away, Z up, with a test on the 2D cross product. **Hide panel / Show panel** button (`ref3d_panel_open`; the toggle rect is also `TOOLBAR_HIT_RECTS["ref3d_panel"]`). Headless screenshots taken from the driver thread can catch a half-drawn frame (video blitted, overlays not yet): take several and keep one that has the overlay.
+  - **Illustrated guide (2026-11-15):** `vaila/help/ref3d_guide{,_pt}.{md,html}` with SVG figures in `vaila/help/images/ref3d/`. Template drawings come from `ref3d_builder.template_svg` / `axes_svg` (same `sketch_projection` and point order as the tool); workflow / screen / check figures are drawn in `bin/make_ref3d_guide_svgs.py`. Rewrite with `--force`; `--check` (used by a test) fails when the committed SVGs differ from what the code draws, so regenerate after changing the templates or the projection. F1 with REF3D on and the panel's **Guide** button call `open_help_page(ref3d_guide_page(lang))`; the headless driver fakes `webbrowser.open` and prints the URL.
+  - **Template file (2026-11-15):** the measures live in `ref3d_template.toml` (constant `ref3d_builder.TEMPLATE_FILE_NAME`) in the folder of the video: commented TOML with `kind` plus `[pole]` / `[box]` / `[triad]` sections (`rect = [X, Y]` or `positions`). `template_toml_text` writes it, `write_blank_template` never overwrites, `read_template` -> `template_from_dict` names the bad key (`[pole] unknown key 'mark'`, rect+positions, bad kind) and still reads the older flat `.template.toml`. The REF3D dialog: **N** writes it + `open_in_editor` (module level; xdg-open/open/startfile, faked in the headless driver which also gained `text:<answer>`), **T** loads folder file, then `<video>_markers_1_line.template.toml`, else a `.toml` browser; T is the default when a file exists. The dialog does not watch the file: after editing, REF3D off/on + Enter. CLI `--new-template` / `--template-file`. Only xdg-open path exercised (faked); macOS/Windows openers untested.

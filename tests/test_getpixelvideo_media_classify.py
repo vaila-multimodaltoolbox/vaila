@@ -109,7 +109,9 @@ def test_single_png_frame_source_reads_jpeg(tmp_path: Path) -> None:
     assert frame.shape[:2] == (3, 5)
 
 
-def test_run_getpixelvideo_opens_selected_jpeg(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_run_getpixelvideo_opens_selected_jpeg(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import cv2
 
     jpg = tmp_path / "photo.jpeg"
@@ -251,19 +253,20 @@ def test_classify_media_path_missing_returns_none(tmp_path: Path) -> None:
 
 
 def test_show_help_dialog_entries_structure() -> None:
-    """Ensure all help_entries in show_help_dialog have correct (key, desc, kind) structure."""
+    """The H screen draws getpixelvideo_help: key/mouse, button and text in their own columns."""
     import inspect
 
-    src = inspect.getsource(gpv.play_video_with_controls)
-    # Check that help_entries contains properly ordered tuples
-    assert '("Space", "Play / Pause video playback", "item")' in src
-    assert '("=== VIDEO PLAYER & PLAYBACK CONTROLS ===", "", "header")' in src
-    assert '("", "", "blank")' in src
+    from vaila import getpixelvideo_help as gh
 
-    # Verify that the unpack loop uses (col1, col2, kind) and kind == "item" renders desc
-    assert "for idx, (col1, col2, kind) in enumerate(help_entries):" in src
-    assert "txt_d = font_desc.render(col2, True, (230, 230, 235))" in src
-    assert "overlay.blit(txt_d, (col_x + key_w, curr_y + 3))" in src
+    src = inspect.getsource(gpv.play_video_with_controls)
+    assert "gpv_help.now_steps(context)" in src
+    assert "gpv_help.help_entries(section.id)" in src
+    space = next(e for e in gh.help_entries("player") if e.keys == ("Space",))
+    assert space.text("en") == "Play / pause the video."
+    assert space.text("pt") == "Reproduz / pausa o vídeo."
+    for entry in gh.help_entries():
+        assert entry.en and entry.pt, entry
+        assert entry.keys or entry.mouse or entry.button, entry
 
 
 def test_generic_csv_load_does_not_activate_fifa_mode(tmp_path: Path) -> None:
@@ -467,8 +470,17 @@ def test_mouse_play_tracking_button_and_hotkey_wiring() -> None:
 
     # 4. Click handling and hotkey M wiring
     assert "mouse_play_button_rect.collidepoint(x, rel_y):" in source
-    assert "elif event.key == pygame.K_m:" in source
+    # Ctrl+M opens the Model dialog, so bare M must not take it first.
+    assert (
+        "elif event.key == pygame.K_m and not (pygame.key.get_mods() & pygame.KMOD_CTRL):" in source
+    )
 
-    # 5. In-app help dialog entry
-    assert "\"M  /  'MousePlay' button\"" in source
-    assert "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)" in source
+    # 5. In-app help (H) entry and toolbar hint
+    from vaila import getpixelvideo_help as gh
+
+    entry = next(e for e in gh.help_entries("modes") if e.button == "MousePlay")
+    assert entry.keys == ("M",)
+    assert gh.toolbar_hint("mouse_play", "en") == (
+        ("M",),
+        "Mark with the mouse while the video plays",
+    )

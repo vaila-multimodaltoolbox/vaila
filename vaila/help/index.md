@@ -8,7 +8,7 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 141 | **Categories:** 7 | **Generated on:** 13/11/2026 (v0.4.18)
+**Documented topics:** 144 | **Categories:** 7 | **Generated on:** 15/11/2026 (v0.4.18)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
@@ -114,7 +114,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 
 ## Processing (25)
 
-- **chessboard_calib** — Calibrates one or several cameras from chessboard videos and exports `.dlt3d` + `_intrinsics.toml` for Rec3D, YOLO Depth 3D and SAM3+DINOv3:
+- **chessboard_calib** — Calibrates one or several cameras from chessboard videos (one video per camera, same session) and exports what vailá needs for 3D reconstruction. One video i...
   - [HTML](chessboard_calib.html) · [Markdown](chessboard_calib.md)
 - **data_processing** — Determines the number of header lines in a CSV file.
   - [HTML](data_processing.html) · [Markdown](data_processing.md)
@@ -165,7 +165,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolo_depth3d** — Monocular 3D from one video in vailá: 2D keypoints, the metric depth map of the
   - [HTML](yolo_depth3d.html) · [Markdown](yolo_depth3d.md)
 
-## Tools (47)
+## Tools (48)
 
 - **ai_tracker_train** — Offline fine-tuning for vailá Track AI assets under vaila/models/ai_tracker/,
   - [HTML](ai_tracker_train.html) · [Markdown](ai_tracker_train.md)
@@ -221,6 +221,8 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](numstepsmp.html) · [Markdown](numstepsmp.md)
 - **planar_geometry_tracker** — For a stabilized video from fixed pixel markers, use [Video Stabilizer](video_stabilizer.md).
   - [HTML](planar_geometry_tracker.html) · [Markdown](planar_geometry_tracker.md)
+- **ref3d_builder** — A DLT3D calibration (dlt3d.py) needs two files with the same points p0, p1, ...:
+  - [HTML](ref3d_builder.html) · [Markdown](ref3d_builder.md)
 - **resize_video** — This script provides tools for improving pose detection in videos: 1. Batch resize videos to higher resolutions (2x-8x) 2. Crop specific regions of interest...
   - [HTML](resize_video.html) · [Markdown](resize_video.md)
 - **rotation** — This Python script provides a comprehensive set of tools for performing 3D rotation and transformation operations using numpy and scipy. It includes methods...
@@ -302,7 +304,7 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **viewc3d_pyvista** — VTK-based 3D viewer for C3D and CSV marker data. Timeline, interactive marker picking (left-click to select), skeleton connections, trails, export (screensho...
   - [HTML](viewc3d_pyvista.html) · [Markdown](viewc3d_pyvista.md)
 
-## Guides (6)
+## Guides (8)
 
 - **BRAINSTORM_GUIDE** — The Brainstorm tool is an AI-powered creative assistant that transforms your voice recordings into music, art prompts, and creative ideas. Version 0.3.0 brin...
   - [Markdown](BRAINSTORM_GUIDE.md)
@@ -310,6 +312,10 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](gpu_guide.html) · [Markdown](gpu_guide.md)
 - **markerless2d_yolo26** — This tool provides 2D pose estimation using YOLOv26/v11 models.
   - [HTML](markerless2d_yolo26.html) · [Markdown](markerless2d_yolo26.md)
+- **ref3d_guide** — Step-by-step DLT3D calibration with the REF3D button of getpixelvideo, with schematic drawings of the axes, the templates, the screen and the camera check.
+  - [HTML](ref3d_guide.html) · [Markdown](ref3d_guide.md)
+- **ref3d_guide_pt** — Passo a passo da calibração DLT3D com o botão REF3D do getpixelvideo, com desenhos esquemáticos dos eixos, dos gabaritos, da tela e da conferência da câmera.
+  - [HTML](ref3d_guide_pt.html) · [Markdown](ref3d_guide_pt.md)
 - **soccerfield** — This module has been merged into vaila/drawsportsfields.py.
   - [HTML](soccerfield.html) · [Markdown](soccerfield.md)
 - **sports_fields_courts** — Main GUI button: Draw Sports (Frame C, visualization column).

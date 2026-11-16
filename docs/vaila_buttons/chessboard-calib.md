@@ -4,7 +4,7 @@ The **Chessboard Calib** button (Frame C-A, below **DLT/REC 2D-3D**) calibrates 
 
 ## Overview
 
-Record one video per camera of the same session while a person shows a chessboard to the cameras. The module (`vaila/chessboard_calib.py`) finds the board corners, estimates each camera's lens (intrinsics), and — with two or more cameras — the frame offsets and multi-view extrinsics. It always exports `<camera>.dlt3d` and `<camera>_intrinsics.toml` for **Rec3D**, **YOLO Depth 3D**, and **SAM3+DINOv3 3D**. A **single video** is supported (monocular path: intrinsics + PnP board world; no sync/BA).
+Record one video per camera of the same session while a person shows a chessboard to the cameras. The module (`vaila/chessboard_calib.py`) finds the board corners, estimates each camera's lens (intrinsics), and — with two or more cameras — the frame offsets and multi-view extrinsics. It always exports `<camera>.dlt3d` and `<camera>_intrinsics.toml` for **Rec3D**, **YOLO Depth 3D**, and **SAM3+DINOv3 3D**. A **single video** is supported (monocular path: intrinsics + PnP board world; no sync/BA). `--pattern` counts inner corners (a board of 7 x 9 squares is `6x8`); a board fixed on a wall is detected but never moves, so the lens is not determined: for `yolo_depth3d` record a video where the board is moved and tilted.
 
 ## Key Features
 

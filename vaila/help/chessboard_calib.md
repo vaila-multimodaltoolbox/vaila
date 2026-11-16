@@ -35,9 +35,17 @@ Results go to `<output>/processed_chessboard_calib_YYYYMMDD_HHMMSS/`.
 
 When the input is a single video (or a folder with one video), the module still estimates the lens and a board-frame DLT via PnP (world = board at the lowest-error view). There is no camera sync, multi-view BA, triangulation validation, or holdout. `--world control` needs at least two cameras.
 
+**"no camera saw the board often enough for intrinsics."** The message lists the frames with the board per video. Check, in this order:
+
+1. `--pattern` counts **inner corners** (per row x per column), not squares: a board of 7 x 9 squares is `6x8`. A wrong pattern finds nothing.
+2. The whole board must be in view and not covered; at least 8 frames are needed. A board with squares under about 6 px is not found.
+3. A board **fixed on a wall** is found, but every frame is the same view: the run finishes, with the board-tilt warning, and the focal length and `k1` it prints are not determined. To calibrate the lens for `yolo_depth3d`, record a short video of the same camera and settings where the board is moved and tilted, then pass its `<camera>_intrinsics.toml` to `yolo_depth3d --intrinsics-toml`.
+
+The world frame of a monocular run is the board's, not the floor: with a board on a wall, a standing person's feet are below Z = 0 (about -0.6 m for the lab test video), so `yolo_depth3d` floor options (`--scale floor`) need a `.dlt3d` whose Z = 0 is the floor.
+
 ## Pipeline
 
-1. **Corners.** Every `--step`-th frame is searched. While the board was seen recently, only an upscaled crop around it is searched (`--zoom`, default 2), which finds small boards and is fast; otherwise the full frame is searched every `--search-every` frames. Corners are refined to sub-pixel accuracy and numbered from the top-left corner of the upright board, rows left to right, so a physical corner has the same number in every camera.
+1. **Corners.** Every `--step`-th frame is searched. While the board was seen recently, only an upscaled crop around it is searched (`--zoom`, default 2), which finds small boards and is fast; otherwise the full frame is searched every `--search-every` frames, first with OpenCV's fast pre-check and then, if that gives up, with the complete search (the pre-check alone misses a small board: squares of about 10 px gave 0 of 257 frames, the complete search 153). Corners are refined to sub-pixel accuracy and numbered from the top-left corner of the upright board, rows left to right, so a physical corner has the same number in every camera.
 
    **Frame numbers are video timestamps:** frame = round(t × fps), first frame 0, the numbering of getpixelvideo and of a constant-frame-rate copy. Network cameras sometimes drop frames (gaps in the timestamps), and a frame after a gap may also fail to decode. Those numbers are missing, and the log, `calibration_report.json` (`frame_numbering`) and the README list them per camera. Counting frames while reading would shift every later frame by the number of drops, by a different amount in each camera. When an MP4 reports a lower average rate only because of the drops, the nominal rate (`r_frame_rate`) is used.
 2. **Intrinsics** per camera (`cv2.calibrateCameraExtended`). The lens model depends on how much of the image the corners cover (`--intrinsics auto`):
@@ -173,7 +181,8 @@ uv run pytest tests/test_chessboard_calib.py tests/test_video_timestamp_numberin
 
 Synthetic cameras and boards with known truth. The tests cover:
 
-- corner order and detection of a small board with zoom;
+- corner order and detection of a small board with zoom, and of a small board with no crop yet (the full-frame search that starts the tracking), also in a soft, noisy frame;
+- the error of a video without the board names the counts, the pattern and the likely causes;
 - intrinsics and bundle adjustment;
 - frame offsets, including a lag of a fraction of a frame;
 - TOML format compatibility and DLT export;

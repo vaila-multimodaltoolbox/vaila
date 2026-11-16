@@ -204,6 +204,12 @@ def detect_board(
         found, c = cv2.findChessboardCorners(
             gray, pattern, flags=DETECT_FLAGS | cv2.CALIB_CB_FAST_CHECK
         )
+        if not found:
+            # FAST_CHECK gives up on a small board (squares of ~10 px: a wall board seen from a
+            # few metres). On the lab test video it found 0 of 257 frames, the search without it
+            # 153, so the run stopped before the crop tracking could ever start. The full search
+            # costs about 50 ms per 1080p frame, paid once per ``--search-every`` frames.
+            found, c = cv2.findChessboardCorners(gray, pattern, flags=DETECT_FLAGS)
         if found:
             corners = c.reshape(-1, 2)
     if not found or corners is None:
@@ -1238,6 +1244,7 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         if d.numbering != "timestamp":
             msg += "; no usable timestamps, frames counted in decode order"
         log(msg)
+    seen = {d.name: (len(d.corners), d.n_frames, d.width, d.height) for d in dets}
     have_toml = bool(args.intrinsics_toml_dir)
     dropped_cams = [d.name for d in dets if len(d.corners) < MIN_VIEWS_INTRINSICS and not have_toml]
     if dropped_cams:
@@ -1246,7 +1253,17 @@ def run_calibration(args: argparse.Namespace) -> dict[str, Any]:
         )
         dets = [d for d in dets if d.name not in dropped_cams]
     if not dets:
-        raise RuntimeError("no camera saw the board often enough for intrinsics")
+        counts = ", ".join(
+            f"{name}: {n} of {total} frames ({w}x{h})" for name, (n, total, w, h) in seen.items()
+        )
+        raise RuntimeError(
+            "no camera saw the board often enough for intrinsics "
+            f"(needs >= {MIN_VIEWS_INTRINSICS} frames; {counts}). Check --pattern {cols}x{rows} "
+            "(inner corners per row x per column, NOT squares: a board of 7 x 9 squares is 6x8), "
+            "that the whole board is in view and not covered, and its size: squares under "
+            "~6 px are not found. A board fixed on a wall is found, but every frame is the same "
+            "view: to calibrate the lens, record a video where the board is moved and tilted."
+        )
     monocular = len(dets) == 1
     if monocular:
         log("one camera: monocular path (intrinsics + PnP board world; no sync/BA)")

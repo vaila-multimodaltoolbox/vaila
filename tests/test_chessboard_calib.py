@@ -128,6 +128,60 @@ def test_detect_board_small_board_with_zoom_roi():
     assert err.mean() < 0.3 and err.max() < 0.5
 
 
+def _small_board_frame() -> tuple[np.ndarray, np.ndarray]:
+    """A 1080p frame with a small (under 90 px) board, and the true corner positions."""
+    K = np.array([[700.0, 0, 960], [0, 700.0, 540], [0, 0, 1]])
+    Rc, tc = look_at(np.array([0.0, -6.5, 1.2]))
+    Rb, tb = board_pose(1.0)
+    truth, _, _ = project(K, np.zeros(5), Rc, tc, Rb, tb)
+    return render(K, Rc, tc, Rb, tb, (1920, 1080)), truth
+
+
+def test_detect_board_finds_a_small_board_with_the_full_frame_search():
+    """No ROI yet (the first search of a video): a small board must still be found.
+
+    ``CALIB_CB_FAST_CHECK`` alone rejects boards with squares of ~10 px (a wall board seen from
+    a few metres): the lab test video gave 0 of 257 frames, and the whole run stopped with "no
+    camera saw the board often enough" although the board was in view all the time.
+    """
+    img, truth = _small_board_frame()
+    assert np.ptp(truth[:, 0]) < 90
+    pattern = (COLS, ROWS)
+    # the fast pre-check alone misses it, so the fallback is what this test protects
+    assert not cv2.findChessboardCorners(
+        img, pattern, flags=cc.DETECT_FLAGS | cv2.CALIB_CB_FAST_CHECK
+    )[0]
+    got = cc.detect_board(img, pattern, roi=None, full_frame=True)
+    assert got is not None
+    assert np.linalg.norm(got - truth, axis=1).mean() < 0.5
+    # a soft, noisy frame (video compression) is found as well
+    rng = np.random.default_rng(0)
+    soft = cv2.GaussianBlur(img, (0, 0), 1.2).astype(np.float32) + rng.normal(0, 4, img.shape)
+    assert cc.detect_board(np.clip(soft, 0, 255).astype(np.uint8), pattern, roi=None) is not None
+
+
+def test_detect_video_starts_tracking_from_a_small_board(tmp_path):
+    """The full-frame search finds the board once; the crop around it then follows it."""
+    img, truth = _small_board_frame()
+    path = tmp_path / "small_board.avi"
+    _write_video(path, [img] * 25)
+    det = cc.detect_video(path, (COLS, ROWS), step=1, search_every=10)
+    assert len(det.corners) >= 20, f"board in {len(det.corners)} of {det.n_frames} frames"
+
+
+def test_no_board_error_says_what_was_seen_and_what_to_check(tmp_path):
+    """A video without the board: the error names the counts, the pattern and the likely causes."""
+    vids = tmp_path / "videos"
+    vids.mkdir()
+    _write_video(vids / "cam_empty.avi", [np.full((540, 960), 110, np.uint8)] * 12)
+    with pytest.raises(RuntimeError) as info:
+        cc.main(["-i", str(vids), "-o", str(tmp_path / "out"), "--workers", "1"])
+    msg = str(info.value)
+    assert "no camera saw the board often enough for intrinsics" in msg
+    assert "cam_empty: 0" in msg and "6x8" in msg
+    assert "inner corners" in msg
+
+
 def test_bundle_adjust_recovers_poses_noise_free():
     """Vectorized projection must match cv2.projectPoints: noise-free data -> ~0 px."""
     K = np.array([[1000.0, 0, 960], [0, 1000.0, 540], [0, 0, 1]])

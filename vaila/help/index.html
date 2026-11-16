@@ -243,10 +243,10 @@
                 <input id="toolSearch" type="text"
                     placeholder="Type a script name (e.g. imu, SAM, rec3d, tugturn)...">
             </div>
-            <span class="pill">141 topics · 7 categories</span>
+            <span class="pill">144 topics · 7 categories</span>
         </div>
 
-        <pre class="banner">Generated on 13/11/2026 · v0.4.18 · uv run python bin/generate_help_index.py</pre>
+        <pre class="banner">Generated on 15/11/2026 · v0.4.18 · uv run python bin/generate_help_index.py</pre>
 
             <h2>Analysis (29)</h2>
             <div class="grid-container">
@@ -490,7 +490,7 @@
             <div class="grid-container">
                 <div class="tool-card" data-name="chessboard_calib chessboard_calib">
                     <div class="tool-title">chessboard_calib</div>
-                    <p class="muted text-sm mb-sm">Calibrates one or several cameras from chessboard videos and exports .dlt3d + _intrinsics.toml for Rec3D, YOLO Depth 3D and SAM3+DINOv3:</p>
+                    <p class="muted text-sm mb-sm">Calibrates one or several cameras from chessboard videos (one video per camera, same session) and exports what vailá needs for 3D reconstruction. One video i...</p>
                     <div class="tool-links"><a href="chessboard_calib.html">HTML</a> | <a href="chessboard_calib.md">MD</a></div>
                 </div>
                 <div class="tool-card" data-name="data_processing data_processing">
@@ -615,7 +615,7 @@
                 </div>
             </div>
 
-            <h2>Tools (47)</h2>
+            <h2>Tools (48)</h2>
             <div class="grid-container">
                 <div class="tool-card" data-name="ai_tracker_train train ai tracker">
                     <div class="tool-title">ai_tracker_train</div>
@@ -751,6 +751,11 @@
                     <div class="tool-title">planar_geometry_tracker</div>
                     <p class="muted text-sm mb-sm">For a stabilized video from fixed pixel markers, use [Video Stabilizer](video_stabilizer.md).</p>
                     <div class="tool-links"><a href="planar_geometry_tracker.html">HTML</a> | <a href="planar_geometry_tracker.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="ref3d_builder ref3d builder (ref3d_builder.py)">
+                    <div class="tool-title">ref3d_builder</div>
+                    <p class="muted text-sm mb-sm">A DLT3D calibration (dlt3d.py) needs two files with the same points p0, p1, ...:</p>
+                    <div class="tool-links"><a href="ref3d_builder.html">HTML</a> | <a href="ref3d_builder.md">MD</a></div>
                 </div>
                 <div class="tool-card" data-name="resize_video resize_video">
                     <div class="tool-title">resize_video</div>
@@ -947,7 +952,7 @@
                 </div>
             </div>
 
-            <h2>Guides (6)</h2>
+            <h2>Guides (8)</h2>
             <div class="grid-container">
                 <div class="tool-card" data-name="brainstorm_guide brainstorm - ai creative assistant guide">
                     <div class="tool-title">BRAINSTORM_GUIDE</div>
@@ -963,6 +968,16 @@
                     <div class="tool-title">markerless2d_yolo26</div>
                     <p class="muted text-sm mb-sm">This tool provides 2D pose estimation using YOLOv26/v11 models.</p>
                     <div class="tool-links"><a href="markerless2d_yolo26.html">HTML</a> | <a href="markerless2d_yolo26.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="ref3d_guide ref3d calibration guide (illustrated)">
+                    <div class="tool-title">ref3d_guide</div>
+                    <p class="muted text-sm mb-sm">Step-by-step DLT3D calibration with the REF3D button of getpixelvideo, with schematic drawings of the axes, the templates, the screen and the camera check.</p>
+                    <div class="tool-links"><a href="ref3d_guide.html">HTML</a> | <a href="ref3d_guide.md">MD</a></div>
+                </div>
+                <div class="tool-card" data-name="ref3d_guide_pt guia de calibração ref3d (ilustrado)">
+                    <div class="tool-title">ref3d_guide_pt</div>
+                    <p class="muted text-sm mb-sm">Passo a passo da calibração DLT3D com o botão REF3D do getpixelvideo, com desenhos esquemáticos dos eixos, dos gabaritos, da tela e da conferência da câmera.</p>
+                    <div class="tool-links"><a href="ref3d_guide_pt.html">HTML</a> | <a href="ref3d_guide_pt.md">MD</a></div>
                 </div>
                 <div class="tool-card" data-name="soccerfield soccer field visualization">
                     <div class="tool-title">soccerfield</div>
