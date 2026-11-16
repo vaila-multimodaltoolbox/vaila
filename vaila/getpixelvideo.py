@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 12 November 2026
-Version: 0.4.17
+Update: 15 November 2026
+Version: 0.4.18
 Python Version: 3.12.16
 
 Description:
@@ -70,6 +70,18 @@ FIFA mode (``--fifa`` / ``--fifa-dataset DIR`` / **Template:FIFA** toolbar butto
   can walk and mark those named points; FIFA-dataset labeling still uses
   ``soccerfield_ref3d_fifa_dataset.csv`` when ``prefer_fifa_dataset=True``.
   Same left/right click, TAB, and **Ctrl+G** (Go KP) behaviour as with the guide off.
+
+1-line mode (``C`` / toolbar **Mode: 1-line**), one row of points p0..pN:
+  The pixel file of a DLT2D / DLT3D calibration (``dlt2d.py`` / ``dlt3d.py``). Left
+  click adds the next point, right click removes the last one, TAB selects a point
+  to re-place or remove. Every point shows on every frame (green = clicked in this
+  frame, cyan ring = another frame or video). **F8** with 1-line on opens the next
+  video (**Add video** button) and keeps the points, so one row can be built over
+  several videos (fixed camera, calibration object moved between them);
+  ``--one-line CSV`` opens a video
+  with the points of a saved file. Save writes ``<video>_markers_1_line.csv`` next
+  to the video open at that moment, plus a ``.toml`` with the video and frame of
+  each point.
 
 Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
   **CALIB** first (optional): Line (2 clicks + length), Plane (4 clicks +
@@ -222,6 +234,16 @@ try:
 except ImportError:
     import skeleton_catalog  # ty: ignore[unresolved-import]
 
+try:
+    from . import getpixelvideo_help as gpv_help
+except ImportError:
+    import getpixelvideo_help as gpv_help  # ty: ignore[unresolved-import]
+
+try:
+    from . import ref3d_builder
+except ImportError:
+    import ref3d_builder  # ty: ignore[unresolved-import]
+
 if platform.system() == "Linux":
     os.environ["SDL_VIDEODRIVER"] = "x11"
     os.environ["SDL_RENDER_DRIVER"] = "software"
@@ -302,7 +324,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.17"
+GETPIXELVIDEO_VERSION = "0.4.18"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 
@@ -314,7 +336,104 @@ def blit_translucent(surface, rect, rgb, alpha: int) -> None:
     surface.blit(box, rect.topleft)
 
 
-GETPIXELVIDEO_UPDATE_DATE = "12 November 2026"
+# Toolbar buttons as last drawn: id -> rect in window coordinates. The hint shown when
+# the mouse is over a button looks it up here (ids are the keys of
+# ``getpixelvideo_help.TOOLBAR_HINTS``).
+TOOLBAR_HIT_RECTS: dict[str, Any] = {}
+
+# Language of the H help screen and of the toolbar hints ("en" | "pt"); L in the help
+# screen changes it, and it stays for the videos opened afterwards with F8.
+HELP_STATE: dict[str, str] = {"lang": "en"}
+
+
+def ref3d_guide_page(lang: str) -> str:
+    """The illustrated REF3D calibration guide (vaila/help) in the help language."""
+    return "ref3d_guide_pt.html" if lang == "pt" else "ref3d_guide.html"
+
+
+def open_help_page(name: str) -> str:
+    """Open ``vaila/help/<name>`` in the web browser; returns the file path."""
+    import webbrowser
+
+    path = os.path.abspath(os.path.join(os.path.dirname(__file__), "help", name))
+    webbrowser.open(f"file://{path}")
+    return path
+
+
+def open_in_editor(path: str) -> None:
+    """Open a text file (the REF3D template) in the editor of the system."""
+    if sys.platform.startswith("win"):
+        os.startfile(path)
+        return
+    opener = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.Popen(
+        [opener, path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True
+    )
+
+
+_KEYCAP_H = 18
+
+
+def keycaps_width(font, combos: tuple[str, ...]) -> int:
+    """Width in pixels of ``draw_keycaps`` for these key combinations."""
+    width = 0
+    for n, combo in enumerate(combos):
+        if n:
+            width += font.size(" / ")[0]
+        tokens = combo.split("+") if len(combo) > 1 else [combo]
+        for t, token in enumerate(tokens):
+            if t:
+                width += font.size("+")[0] + 4
+            width += font.size(token)[0] + 12
+    return width
+
+
+def draw_keycaps(surface, font, combos: tuple[str, ...], x: int, y: int) -> int:
+    """Draw key combinations as keyboard keys ("Ctrl" + "I"); returns the x after them.
+
+    Alternatives are separated by "/": ``("Right", "Left")`` reads Right / Left.
+    """
+    for n, combo in enumerate(combos):
+        if n:
+            sep = font.render(" / ", True, (150, 160, 180))
+            surface.blit(sep, (x, y + (_KEYCAP_H - sep.get_height()) // 2))
+            x += sep.get_width()
+        tokens = combo.split("+") if len(combo) > 1 else [combo]
+        for t, token in enumerate(tokens):
+            if t:
+                plus = font.render("+", True, (150, 160, 180))
+                surface.blit(plus, (x + 2, y + (_KEYCAP_H - plus.get_height()) // 2))
+                x += plus.get_width() + 4
+            label = font.render(token, True, (20, 24, 32))
+            cap = pygame.Rect(x, y, label.get_width() + 12, _KEYCAP_H)
+            pygame.draw.rect(surface, (232, 236, 244), cap, border_radius=4)
+            pygame.draw.rect(surface, (120, 130, 150), cap, width=1, border_radius=4)
+            pygame.draw.line(  # a darker lower edge, so it reads as a key and not a label
+                surface,
+                (120, 130, 150),
+                (cap.x + 3, cap.bottom - 2),
+                (cap.right - 4, cap.bottom - 2),
+            )
+            surface.blit(label, label.get_rect(center=(cap.centerx, cap.centery - 1)))
+            x = cap.right
+    return x
+
+
+def draw_help_chip(surface, font, text: str, x: int, y: int, *, mouse: bool = False) -> int:
+    """Draw a toolbar-button label (or a mouse action) as a chip; returns the x after it."""
+    label = font.render(text, True, (255, 255, 255))
+    chip = pygame.Rect(x, y, label.get_width() + 14, _KEYCAP_H)
+    if mouse:
+        pygame.draw.rect(surface, (38, 96, 70), chip, border_radius=9)
+        pygame.draw.rect(surface, (90, 170, 130), chip, width=1, border_radius=9)
+    else:
+        pygame.draw.rect(surface, (70, 82, 112), chip)
+        pygame.draw.rect(surface, (120, 135, 170), chip, width=1)
+    surface.blit(label, label.get_rect(center=chip.center))
+    return chip.right
+
+
+GETPIXELVIDEO_UPDATE_DATE = "15 November 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -412,6 +531,262 @@ def clamp_selected_marker_index_sparse(
     if selected_marker_idx in marker_indices:
         return selected_marker_idx
     return marker_indices[-1]
+
+
+# --- 1-line mode -------------------------------------------------------------------
+# One output row of points p0..pN, in click order. A marker is ``(frame, x, y)`` when
+# it was clicked in the open video and ``(frame, x, y, source)`` when it came from
+# another video (F8 with 1-line on, ``--one-line``, or Load of another video's file):
+# ``source`` is that video's file name. A slot whose x/y are None is empty.
+# ``selected_marker_idx`` is a slot of this list, or -1: the next left click appends
+# and the next right click removes the last point.
+
+ONE_LINE_CSV_SUFFIX = "_markers_1_line"
+
+
+def one_line_marker_source(marker: Any) -> str | None:
+    """File name of the video a carried 1-line marker came from, else None."""
+    if len(marker) > 3 and marker[3]:
+        return str(marker[3])
+    return None
+
+
+def one_line_marker_in_frame(marker: Any, frame: int) -> bool:
+    """True when the marker was clicked in this frame of the open video."""
+    if one_line_marker_source(marker) is not None:
+        return False
+    try:
+        return int(marker[0]) == int(frame)
+    except (TypeError, ValueError, IndexError):
+        return False
+
+
+def one_line_live_indices(markers: list[Any], deleted: set[int] | None) -> list[int]:
+    """Slots that hold a point (not removed, not empty), in order."""
+    gone = deleted or set()
+    return [
+        idx
+        for idx, m in enumerate(markers)
+        if idx not in gone and len(m) > 2 and m[1] is not None and m[2] is not None
+    ]
+
+
+def one_line_selectable_indices(markers: list[Any], selected_marker_idx: int) -> list[int]:
+    """Slots the selection may stay on: itself when it names a slot, else none (-1)."""
+    if 0 <= selected_marker_idx < len(markers):
+        return [selected_marker_idx]
+    return []
+
+
+def one_line_place(
+    markers: list[Any],
+    deleted: set[int],
+    selected_marker_idx: int,
+    frame: int,
+    x: float,
+    y: float,
+) -> int:
+    """Left click in 1-line mode; returns the slot written.
+
+    With a slot selected the click re-places that point (also an empty or removed
+    one, which keeps its number); with no selection it appends the next point.
+    """
+    if 0 <= selected_marker_idx < len(markers):
+        markers[selected_marker_idx] = (int(frame), x, y)
+        deleted.discard(selected_marker_idx)
+        return selected_marker_idx
+    markers.append((int(frame), x, y))
+    return len(markers) - 1
+
+
+def one_line_remove_target(
+    markers: list[Any], deleted: set[int] | None, selected_marker_idx: int
+) -> int | None:
+    """Slot a right click removes: the selected point, else the last point."""
+    live = one_line_live_indices(markers, deleted)
+    if 0 <= selected_marker_idx < len(markers):
+        return selected_marker_idx if selected_marker_idx in live else None
+    return live[-1] if live else None
+
+
+def one_line_remove(
+    markers: list[Any], deleted: set[int], selected_marker_idx: int
+) -> tuple[int | None, int]:
+    """Right click in 1-line mode; returns ``(removed slot or None, new selection)``.
+
+    The last point is dropped from the list, with any empty slot left before it, so
+    the next click takes its number again. A point in the middle leaves an empty slot
+    that stays selected: the other points keep their numbers and the next click
+    re-places it.
+    """
+    target = one_line_remove_target(markers, deleted, selected_marker_idx)
+    if target is None:
+        return None, selected_marker_idx
+    deleted.add(target)
+    live = one_line_live_indices(markers, deleted)
+    keep = live[-1] + 1 if live else 0
+    if target < keep:
+        return target, target
+    del markers[keep:]
+    for idx in [i for i in deleted if i >= keep]:
+        deleted.discard(idx)
+    return target, -1
+
+
+def one_line_remove_frame(markers: list[Any], deleted: set[int], frame: int) -> int:
+    """Remove every point clicked in this frame of the open video; returns how many."""
+    hit = [
+        idx
+        for idx in one_line_live_indices(markers, deleted)
+        if one_line_marker_in_frame(markers[idx], frame)
+    ]
+    deleted.update(hit)
+    live = one_line_live_indices(markers, deleted)
+    keep = live[-1] + 1 if live else 0
+    del markers[keep:]
+    for idx in [i for i in deleted if i >= keep]:
+        deleted.discard(idx)
+    return len(hit)
+
+
+def one_line_carry(markers: list[Any], media_path: str | None) -> list[Any]:
+    """Markers as they travel to another video: each one names the video it is from."""
+    name = os.path.basename(str(media_path).rstrip(os.sep)) if media_path else ""
+    carried = []
+    for m in markers:
+        source = one_line_marker_source(m) or name
+        carried.append((m[0], m[1], m[2], source) if source else (m[0], m[1], m[2]))
+    return carried
+
+
+def one_line_points(
+    markers: list[Any], deleted: set[int] | None, media_path: str | None
+) -> list[dict[str, Any]]:
+    """One record per point: its number, the video and frame it was clicked in, x, y."""
+    name = os.path.basename(str(media_path).rstrip(os.sep)) if media_path else ""
+    return [
+        {
+            "marker": idx,
+            "video": one_line_marker_source(markers[idx]) or name,
+            "frame": int(markers[idx][0]),
+            "x": float(markers[idx][1]),
+            "y": float(markers[idx][2]),
+        }
+        for idx in one_line_live_indices(markers, deleted)
+    ]
+
+
+def write_one_line_files(
+    media_path: str, markers: list[Any], deleted: set[int] | None = None
+) -> str | None:
+    """Save the 1-line points next to the open media; returns the CSV path.
+
+    ``<base>_markers_1_line.csv`` is the one row DLT2D/DLT3D read (``frame`` and
+    ``pN_x``/``pN_y`` in whole pixels, an empty slot left blank). The ``.toml`` with
+    the same name records where each point was clicked (video, frame, exact x/y), so
+    a set built over several videos can be checked and loaded again.
+    """
+    points = one_line_points(markers, deleted, media_path)
+    if not points:
+        print("No 1-line points to save.")
+        return None
+
+    path = str(media_path).rstrip(os.sep)
+    base_name = os.path.splitext(os.path.basename(path))[0]
+    stem = os.path.join(os.path.dirname(path), f"{base_name}{ONE_LINE_CSV_SUFFIX}")
+    output_file = f"{stem}.csv"
+
+    n_slots = points[-1]["marker"] + 1
+    header = ["frame"]
+    for i in range(n_slots):
+        header.extend([f"p{i}_x", f"p{i}_y"])
+    row: list[int | str] = [points[0]["frame"]] + [""] * (2 * n_slots)
+    for p in points:
+        row[2 * p["marker"] + 1] = int(round(p["x"]))
+        row[2 * p["marker"] + 2] = int(round(p["y"]))
+    pd.DataFrame([row], columns=pd.Index(header)).to_csv(output_file, index=False)
+
+    lines = [
+        "# vaila getpixelvideo, 1-line mode: where each point of the CSV was clicked.",
+        "# frame is 0-based; x and y are pixels of that video.",
+        f"csv = {json.dumps(os.path.basename(output_file), ensure_ascii=False)}",
+    ]
+    for p in points:
+        lines += [
+            "",
+            "[[point]]",
+            f"marker = {p['marker']}",
+            f"video = {json.dumps(p['video'], ensure_ascii=False)}",
+            f"frame = {p['frame']}",
+            f"x = {p['x']!r}",
+            f"y = {p['y']!r}",
+        ]
+    with open(f"{stem}.toml", "w", encoding="utf-8") as fh:
+        fh.write("\n".join(lines) + "\n")
+
+    videos = sorted({p["video"] for p in points})
+    print(f"1-line points saved to: {output_file}")
+    print(f"  {len(points)} points from {len(videos)} video(s): {', '.join(videos)}")
+    print(f"  where each point was clicked: {stem}.toml")
+    return output_file
+
+
+def read_one_line_csv(csv_path: str, media_path: str | None) -> tuple[list[Any], set[int]]:
+    """Load a 1-line CSV as ``(markers, deleted)``, keeping every point's number.
+
+    A blank ``pN`` stays an empty slot. Points clicked in another video come back
+    as carried markers (shown on every frame); which video and frame each point is
+    from is read from the ``.toml`` saved with the CSV, when it still matches it.
+    """
+    df = pd.read_csv(csv_path)
+    if df.empty or "frame" not in df.columns:
+        raise ValueError(f"not a 1-line CSV (needs a 'frame' column and one row): {csv_path}")
+    row = df.iloc[0]
+    csv_frame = int(row["frame"])
+
+    found: dict[int, tuple[float, float]] = {}
+    for col in df.columns:
+        m = re.fullmatch(r"p(\d+)_?x", str(col))
+        if m is None:
+            continue
+        y_col = str(col)[:-1] + "y"
+        if y_col in df.columns and pd.notna(row[col]) and pd.notna(row[y_col]):
+            found[int(m.group(1))] = (float(row[col]), float(row[y_col]))
+    if not found:
+        raise ValueError(f"no pN_x / pN_y points in {csv_path}")
+
+    media_name = os.path.basename(str(media_path).rstrip(os.sep)) if media_path else ""
+    media_stem = os.path.splitext(media_name)[0]
+    csv_stem = os.path.splitext(os.path.basename(csv_path))[0]
+    owner = csv_stem.removesuffix(ONE_LINE_CSV_SUFFIX)
+
+    origin: dict[int, dict[str, Any]] = {}
+    sidecar = os.path.splitext(csv_path)[0] + ".toml"
+    if os.path.isfile(sidecar):
+        try:
+            with open(sidecar, "rb") as fh:
+                entries = tomllib.load(fh).get("point", [])
+            origin = {int(p["marker"]): p for p in entries}
+        except (OSError, ValueError, KeyError, TypeError):
+            origin = {}
+
+    markers: list[Any] = []
+    for idx in range(max(found) + 1):
+        if idx not in found:
+            markers.append((csv_frame, None, None))
+            continue
+        x, y = found[idx]
+        frame, video = csv_frame, (media_name if owner == media_stem else owner)
+        rec = origin.get(idx)
+        # The CSV is what DLT reads: a .toml that no longer agrees with it is ignored.
+        if rec is not None and abs(rec["x"] - x) <= 1.0 and abs(rec["y"] - y) <= 1.0:
+            x, y = float(rec["x"]), float(rec["y"])
+            frame, video = int(rec["frame"]), str(rec["video"])
+        if video == media_name:
+            markers.append((frame, x, y))
+        else:
+            markers.append((frame, x, y, video))
+    return markers, set()
 
 
 def template_button_caption(
@@ -2428,6 +2803,7 @@ def play_video_with_controls(
     initial_frame: int = 0,
     freekiki_options: dict | None = None,
     initial_track_csv: str | None = None,
+    initial_one_line: dict | None = None,
 ):
     if frame_source is not None:
         cap = frame_source
@@ -2626,8 +3002,32 @@ def play_video_with_controls(
 
     # Variables for the "1 line" mode (one-line marker mode)
     one_line_mode = False
-    one_line_markers = []  # Each item: (frame_number, x, y)
+    one_line_markers = []  # (frame, x, y), or (frame, x, y, source) from another video
     deleted_markers = set()  # Keep track of deleted marker indices
+    # REF3D builder (button REF3D / Shift+R): the 3D points of the calibration object,
+    # clicked as 1-line points in the same order (p0, p1, ...).
+    ref3d_mode = False
+    ref3d_template: Any = None  # ref3d_builder.Ref3dTemplate, or None for a loaded file
+    ref3d_points: list[Any] = []  # ref3d_builder.Ref3dPoint
+    ref3d_source = ""  # what the points came from, for the panel title
+    ref3d_check: Any = None  # ref3d_builder.DltCheck, or a sentence why there is none
+    ref3d_check_key: Any = None
+    ref3d_row_rects: list[tuple[int, Any]] = []
+    ref3d_panel_rect: Any = None
+    ref3d_panel_open = True  # Hide / Show button on the panel
+    ref3d_toggle_rect: Any = None
+    ref3d_guide_rect: Any = None  # "Guide" button: the illustrated guide in the browser
+    if initial_one_line and (initial_one_line.get("markers") or initial_one_line.get("ref3d")):
+        # 1-line points that came with the user from another video (F8 / --one-line).
+        one_line_mode = True
+        one_line_markers = [tuple(m) for m in initial_one_line.get("markers", ())]
+        deleted_markers = set(initial_one_line.get("deleted", ()))
+        selected_marker_idx = -1
+        if initial_one_line.get("ref3d"):
+            ref3d_mode = True
+            ref3d_template = initial_one_line["ref3d"]["template"]
+            ref3d_points = list(initial_one_line["ref3d"]["points"])
+            ref3d_source = initial_one_line["ref3d"]["source"]
 
     # If no coordinates were loaded, initialize a dictionary with an empty list per frame.
     if coordinates is None:
@@ -2644,6 +3044,8 @@ def play_video_with_controls(
     # VISUAL (safe browse, default) vs INSERT (edit markers). Ctrl+I / EditMode button.
     # Helpers + initial restore snapshot are wired after bboxes / HUD banners exist.
     editor_mode = "visual"  # "visual" | "insert"
+    if initial_one_line and initial_one_line.get("editor_mode") == "insert":
+        editor_mode = "insert"  # keep editing: the points are being appended across videos
     undo_stack: list[dict[str, Any]] = []
     restore_snapshot: dict[str, Any] | None = None
 
@@ -3067,7 +3469,7 @@ def play_video_with_controls(
             "1 = Line (2 clicks + length)\n"
             "2 = Plane (4 clicks + width/height → DLT2D)\n"
             "3 = REF3D (drop axis → planar DLT2D)\n"
-            "4 = DLT3D (11 params — coming soon)\n"
+            "4 = REF3D builder -> DLT3D (same as the REF3D button)\n"
             "L = Load .dlt2d / REF2D / REF3D file\n"
             "0 = Clear / stay in pixels",
             "1",
@@ -3083,12 +3485,8 @@ def play_video_with_controls(
             session.calibration_skipped = True
             return "Calib: cleared — MEASURE stays in PIXELS until you calibrate."
 
-        if choice in ("4", "dlt3d", "3d"):
-            return (
-                "Calib: DLT3D (11 parameters) is not available yet. "
-                "When one world axis is held at 0 (e.g. Z), that model will "
-                "also serve planar 2D. Use Line / Plane / REF3D for now."
-            )
+        if choice in ("4", "dlt3d", "3d", "ref3d"):
+            return "Calib: " + toggle_ref3d()
 
         if choice in ("l", "load", "file", "c"):
             calib, msg = quickmeasure._ask_calibration_via_dialog(
@@ -3694,8 +4092,9 @@ def play_video_with_controls(
 
                 # Draw markers (coordinates)
                 if one_line_mode:
-                    for idx, (f_num, x, y) in enumerate(one_line_markers):
-                        if f_num == frame_idx and x is not None and y is not None:
+                    for idx in one_line_live_indices(one_line_markers, deleted_markers):
+                        x, y = one_line_markers[idx][1], one_line_markers[idx][2]
+                        if one_line_marker_in_frame(one_line_markers[idx], frame_idx):
                             # Draw marker circle (green in BGR)
                             cv2.circle(frame, (int(x), int(y)), 5, (0, 255, 0), -1)
                             if template_mode != "free":
@@ -6352,8 +6751,7 @@ def play_video_with_controls(
         )
 
         if one_line_mode:
-            frame_markers = [m for m in one_line_markers if m[0] == frame_count]
-            total_markers = len(frame_markers)
+            total_markers = 0
         else:
             if template_mode != "free" and fifa_fixed_keypoints:
                 total_markers = max(1, int(fifa_fixed_keypoints))
@@ -6361,7 +6759,36 @@ def play_video_with_controls(
                 total_markers = 0 if coordinates is None else len(coordinates[frame_count])
 
         marker_info = None
-        if total_markers > 0:
+        if ref3d_mode:
+            _r3_next = _ref3d_next_index()
+            _r3_n = len(_ref3d_pixels())
+            if _r3_next < len(ref3d_points):
+                _r3_p = ref3d_points[_r3_next]
+                _r3_txt = (
+                    f"click = p{_r3_next} {_r3_p.label} ({_r3_p.x:g}, {_r3_p.y:g}, {_r3_p.z:g})"
+                )
+            else:
+                _r3_txt = "all points clicked - Save writes .ref3d + .dlt3d"
+            marker_info = font.render(
+                f"REF3D {_r3_n}/{len(ref3d_points)} · {_r3_txt}", True, (255, 200, 60)
+            )
+        elif one_line_mode:
+            # 1-line: how many points the row has and what the next clicks do.
+            _ol_n = len(one_line_live_indices(one_line_markers, deleted_markers))
+            if selected_marker_idx in one_line_live_indices(one_line_markers, deleted_markers):
+                _ol_next = f"p{selected_marker_idx} selected: click re-places, right-click removes"
+            elif 0 <= selected_marker_idx < len(one_line_markers):
+                _ol_next = f"p{selected_marker_idx} is empty: click places it"
+            else:
+                _ol_next = f"click = p{len(one_line_markers)}"
+                if _ol_n:
+                    _ol_next += ", right-click removes last"
+            marker_info = font.render(
+                f"1-line: {_ol_n} pts · {_ol_next}",
+                True,
+                (255, 200, 60) if selected_marker_idx >= 0 else (255, 255, 255),
+            )
+        elif total_markers > 0:
             if template_mode != "free" and selected_marker_idx >= 0:
                 marker_idx = int(fifa_start_keypoint) + selected_marker_idx + int(fifa_index_base)
                 marker_total_display = (
@@ -6380,10 +6807,10 @@ def play_video_with_controls(
         if not one_line_mode and selected_marker_idx >= 0 and len(mf_other) > 0:
             marked_cnt_label = (
                 f"M{selected_marker_idx}:{len(mf_selected)} · other:{len(mf_other)}"
-                " · click strip · Shift+←/→"
+                " · click strip · Shift+Left/Right"
             )
         else:
-            marked_cnt_label = f"Marked:{len(mf_timeline)} · click strip · Shift+←/→"
+            marked_cnt_label = f"Marked:{len(mf_timeline)} · click strip · Shift+Left/Right"
         marked_cnt_txt = font.render(
             marked_cnt_label,
             True,
@@ -6639,6 +7066,7 @@ def play_video_with_controls(
         click_pass_button_width = 58 if is_compact else 66
         labeling_button_width = 58 if is_compact else 66
         calib_button_width = 48 if is_compact else 54  # CALIB — Shift+Q
+        ref3d_button_width = 46 if is_compact else 54  # REF3D builder — Shift+R
         measure_button_width = 50 if is_compact else 58  # MEASURE — hotkey Q
         measure_overlay_toggle_size = 10 if is_compact else 12
         measure_clear_button_width = 36 if is_compact else 44  # Clear measure feedback
@@ -6663,6 +7091,16 @@ def play_video_with_controls(
         restore_button_width = 54 if is_compact else 62
         dataset_button_width = 52 if is_compact else 58
         rename_markers_button_width = 58 if is_compact else 66
+        # Open another video (F8). With 1-line points to carry it reads "Add video".
+        open_media_carries = one_line_mode and bool(
+            one_line_live_indices(one_line_markers, deleted_markers)
+        )
+        if open_media_carries:
+            open_media_label = "Add" if is_compact else "Add video"
+            open_media_button_width = 40 if is_compact else 78
+        else:
+            open_media_label = "Open"
+            open_media_button_width = 40 if is_compact else 50
 
         # Top row: VISUAL/INSERT + Template + annotation modes + Help
         total_top_width = (
@@ -6674,6 +7112,7 @@ def play_video_with_controls(
             + click_pass_button_width
             + labeling_button_width
             + calib_button_width
+            + ref3d_button_width
             + measure_button_width
             + 4
             + measure_overlay_toggle_size
@@ -6684,7 +7123,7 @@ def play_video_with_controls(
             + guide_toggle_size
             + help_button_width
             + help_web_button_width
-            + (button_gap * 13)
+            + (button_gap * 14)
         )
 
         # Bottom row: Tracking, Model Weights, File I/O (Load/Save/Restore/Dataset)
@@ -6704,6 +7143,8 @@ def play_video_with_controls(
             + track_cfg_button_width
             + button_gap
             + track_weights_button_width
+            + button_gap
+            + open_media_button_width  # Open / Add video (F8)
             + button_gap
             + button_width  # Load
             + button_gap
@@ -6865,6 +7306,14 @@ def play_video_with_controls(
         calib_text = _top_btn_font.render(calib_label, True, (255, 255, 255))
         control_surface.blit(calib_text, calib_text.get_rect(center=calib_button_rect.center))
 
+        ref3d_button_rect = pygame.Rect(current_x, cluster_y_top, ref3d_button_width, button_height)
+        current_x += ref3d_button_width + button_gap
+        pygame.draw.rect(
+            control_surface, (190, 120, 30) if ref3d_mode else (100, 100, 100), ref3d_button_rect
+        )
+        ref3d_text = _top_btn_font.render("REF3D", True, (255, 255, 255))
+        control_surface.blit(ref3d_text, ref3d_text.get_rect(center=ref3d_button_rect.center))
+
         measure_button_rect = pygame.Rect(
             current_x,
             cluster_y_top,
@@ -7021,7 +7470,7 @@ def play_video_with_controls(
         current_x += bbox_coords_button_width + button_gap
 
         pygame.draw.rect(control_surface, (120, 80, 160), bbox_coords_button_rect)
-        bbox_coords_text = btn_font.render("BBox→Coords", True, (255, 255, 255))
+        bbox_coords_text = btn_font.render("BBox>Coords", True, (255, 255, 255))
         control_surface.blit(
             bbox_coords_text, bbox_coords_text.get_rect(center=bbox_coords_button_rect.center)
         )
@@ -7128,6 +7577,21 @@ def play_video_with_controls(
             weights_text, weights_text.get_rect(center=track_weights_button_rect.center)
         )
 
+        # 5b. Open another video or image (F8); amber when 1-line points go with it
+        open_media_button_rect = pygame.Rect(
+            current_x, cluster_y_bottom, open_media_button_width, button_height
+        )
+        current_x += open_media_button_width + button_gap
+        pygame.draw.rect(
+            control_surface,
+            (190, 120, 30) if open_media_carries else (60, 95, 130),
+            open_media_button_rect,
+        )
+        open_media_text = btn_font.render(open_media_label, True, (255, 255, 255))
+        control_surface.blit(
+            open_media_text, open_media_text.get_rect(center=open_media_button_rect.center)
+        )
+
         # 6. Load button (Steel blue)
         load_button_rect = pygame.Rect(current_x, cluster_y_bottom, button_width, button_height)
         current_x += button_width + button_gap
@@ -7210,6 +7674,52 @@ def play_video_with_controls(
 
         marker_timeline_rect = pygame.Rect(slider_margin_left, heat_y, slider_width, heat_h)
         screen.blit(control_surface, (0, window_height))
+        # Where each button is, for the hint under the mouse (ids = TOOLBAR_HINTS keys).
+        TOOLBAR_HIT_RECTS.clear()
+        TOOLBAR_HIT_RECTS.update(
+            {
+                button_id: rect.move(0, window_height)
+                for button_id, rect in (
+                    ("editor_mode", editor_mode_button_rect),
+                    ("template", template_button_rect),
+                    ("marker_mode", marker_mode_button_rect),
+                    ("persist", persist_button_rect),
+                    ("mouse_play", mouse_play_button_rect),
+                    ("click_pass", click_pass_button_rect),
+                    ("labeling", labeling_button_rect),
+                    ("calib", calib_button_rect),
+                    ("ref3d", ref3d_button_rect),
+                    ("measure", measure_button_rect),
+                    ("measure_overlay", measure_overlay_toggle_rect),
+                    ("measure_clear", measure_clear_button_rect),
+                    ("fps", fps_button_rect),
+                    ("guide", guide_button_rect),
+                    ("guide_toggle", guide_toggle_rect),
+                    ("help", help_button_rect),
+                    ("help_web", help_web_button_rect),
+                    ("tracking_csv", tracking_csv_button_rect),
+                    ("tracking_show", show_tracking_indicator_rect),
+                    ("bbox_coords", bbox_coords_button_rect),
+                    ("ai_track", track_rts_button_rect),
+                    ("ai_deep", track_deep_button_rect),
+                    ("ai_shape", track_shape_button_rect),
+                    ("ai_cfg", track_cfg_button_rect),
+                    ("ai_model", track_weights_button_rect),
+                    ("open_next" if open_media_carries else "open", open_media_button_rect),
+                    ("load", load_button_rect),
+                    ("save", save_button_rect),
+                    ("restore", restore_button_rect),
+                    ("dataset", dataset_button_rect),
+                    ("rename", rename_markers_button_rect),
+                    ("goto_marker", goto_marker_button_rect),
+                    ("lock_marker", lock_marker_button_rect),
+                    ("delete_range", delete_range_button_rect),
+                    ("gap_fill", gap_fill_button_rect),
+                    ("swap_range", swap_range_button_rect),
+                    ("geo_homog", geom_tracker_button_rect),
+                )
+            }
+        )
         return (
             template_button_rect,
             marker_mode_button_rect,
@@ -7246,6 +7756,8 @@ def play_video_with_controls(
             gap_fill_button_rect,  # Kalman/RTS or linear gap fill for marker
             swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
             geom_tracker_button_rect,  # Geo Homog: standalone planar homography tracker
+            open_media_button_rect,  # Open another video / Add video (F8)
+            ref3d_button_rect,  # REF3D builder (Shift+R)
             marker_timeline_rect,
             slider_margin_left,
             slider_y,
@@ -7637,445 +8149,283 @@ def play_video_with_controls(
             shown = selected_marker_idx
         return True, f"Marker selected: {shown}"
 
+    def _help_context():
+        """Where the user is, for the "what to do now" steps of the help."""
+        if calib_mode:
+            mode = "calib"
+        elif measure_mode:
+            mode = "measure"
+        elif labeling_mode:
+            mode = "labeling"
+        elif freekiki_session is not None:
+            mode = "freekiki"
+        elif ref3d_mode:
+            mode = "ref3d"
+        elif one_line_mode:
+            mode = "1-line"
+        elif sequential_mode:
+            mode = "seq"
+        else:
+            mode = "mark"
+        return gpv_help.HelpContext(
+            mode=mode,
+            insert=editor_mode == "insert",
+            ai_track=bool(track_ai_active),
+            n_points=len(one_line_live_indices(one_line_markers, deleted_markers)),
+            next_point=len(one_line_markers),
+            selected=(
+                selected_marker_idx
+                if one_line_mode and 0 <= selected_marker_idx < len(one_line_markers)
+                else -1
+            ),
+            ref3d_total=len(ref3d_points) if ref3d_mode else 0,
+            ref3d_next=_ref3d_next_text() if ref3d_mode else "",
+        )
+
     def show_help_dialog():
-        """Display comprehensive interactive single-column scrollable help overlay."""
-        help_entries: list[tuple[str, str, str]] = [
-            ("=== VIDEO PLAYER & PLAYBACK CONTROLS ===", "", "header"),
-            ("Space", "Play / Pause video playback", "item"),
-            ("Right Arrow", "Next frame (when paused); hold = continuous step", "item"),
-            ("Left Arrow", "Previous frame (when paused); hold = continuous step", "item"),
-            ("Shift + Right / Left", "Jump to next / previous frame with visible markers", "item"),
-            (
-                "Up Arrow / Down Arrow",
-                "Jump ±nav_jump frames (default 60); hold = keep jumping",
-                "item",
-            ),
-            ("Cfg → Nav jump", "Change Up/Down step size (10–600, default 60)", "item"),
-            ("+  /  -", "Zoom In / Zoom Out on video viewport", "item"),
-            ("Mouse Wheel (over video)", "Zoom In / Zoom Out centered at cursor position", "item"),
-            ("Middle Click & Drag", "Pan / move zoomed video canvas smoothly", "item"),
-            ("[  /  ]", "Decrease / increase video playback rate", "item"),
-            (
-                "Scrub Bar (bottom slider)",
-                "Click or drag slider to jump directly to any frame",
-                "item",
-            ),
-            ("", "", "blank"),
-            ("=== MARKER PLACEMENT & EDITING ===", "", "header"),
-            (
-                "VISUAL / INSERT button  /  Ctrl+I",
-                "Toggle safe browse (VISUAL, default) vs edit markers (INSERT)",
-                "item",
-            ),
-            (
-                "Ctrl + Z",
-                "Undo last marker/bbox edit (INSERT only; stack depth 50)",
-                "item",
-            ),
-            (
-                "Restore button",
-                "Revert markers to session open or last successful Save; cleared on quit",
-                "item",
-            ),
-            (
-                "Left Click (on video)",
-                "Place or update selected marker at clicked pixel position (INSERT)",
-                "item",
-            ),
-            (
-                "Right Click (on video)",
-                "Remove selected marker (or last marker on current frame) (INSERT)",
-                "item",
-            ),
-            ("TAB  /  Shift + TAB", "Select next / previous marker slot on current frame", "item"),
-            ("Ctrl + G  /  'Go KP'", "Open jump-to-keypoint dialog by number", "item"),
-            ("Delete  /  Backspace", "Delete selected marker on current frame", "item"),
-            ("D", "Delete ALL markers on current frame (INSERT)", "item"),
-            (
-                "Del Range button",
-                "Delete marker N, list N,M,K, or range A:B across a frame span",
-                "item",
-            ),
-            ("Swap Range button", "Swap paired marker lists / ranges across a frame span", "item"),
-            ("A", "Add new empty marker slot to dataset (INSERT)", "item"),
-            ("R", "Remove selected marker slot from current frame (INSERT)", "item"),
-            (
-                "B  /  Lock button",
-                "Lock/unlock selected marker — pins TAB, Go KP, R-delete selection, "
-                "sequential advance, and AI Track target to that slot "
-                "(blue Lock (B) / amber LOCKED Mn (B); cyan ring on marker)",
-                "item",
-            ),
-            (
-                "Gap Fill button",
-                "Fill interior gaps on a marker with Kalman/RTS prediction "
-                "(or linear interp); same family as interp_smooth_split / AI Track RTS",
-                "item",
-            ),
-            ("", "", "blank"),
-            ("=== MARKER MODES & TEMPLATES ===", "", "header"),
-            (
-                "Template button",
-                "Open Tpl dialog: Free / Soccer-Kiki / pose presets from vaila/skeletons/",
-                "item",
-            ),
-            (
-                "Template Right-Click / K",
-                "Soccer-Kiki: load/edit TOML. Other modes: same Tpl skeleton picker",
-                "item",
-            ),
-            (
-                "Mode button",
-                "Cycle Mode: Mark (normal) / Seq (sequential) / 1-line (outline)",
-                "item",
-            ),
-            ("C", "Toggle 1-Line mode (creates sequence of points on single frame)", "item"),
-            (
-                "S  /  O",
-                "Toggle Sequential mode (auto-advances marker index on each click)",
-                "item",
-            ),
-            (
-                "M  /  'MousePlay' button",
-                "Toggle Mouse-Play tracking (marks at mouse cursor during video playback)",
-                "item",
-            ),
-            (
-                "ClickPass button",
-                "Advance to next frame automatically after placing marker",
-                "item",
-            ),
-            (
-                "Guide (G key / button)",
-                "Translucent overlay for active template (Soccer-Kiki pitch or pose skeleton)",
-                "item",
-            ),
-            ("V (when Guide ON)", "Toggle reference pitch map in upper-right corner", "item"),
-            (
-                "Shift+G",
-                "Toggle Geo Homog wireframe overlay (after a Geo Homog run)",
-                "item",
-            ),
-            (
-                "Geo Homog button",
-                "Wizard: TOML profile or rectangle + W/H; maps markers; fits "
-                "per-frame homography; reloads imputed points; draws wireframe; "
-                "writes debug_projected_wireframe.mp4",
-                "item",
-            ),
-            (
-                "P  /  'Persist' button",
-                "Toggle persistence overlay (shows markers from previous frames)",
-                "item",
-            ),
-            ("1  /  2 (when Persist ON)", "Decrease / increase persistence history frames", "item"),
-            ("3 (when Persist ON)", "Toggle full persistence (show all marked frames)", "item"),
-            ("", "", "blank"),
-            ("=== AI TRACKING (FRAME-BY-FRAME & BATCH) ===", "", "header"),
-            (
-                "T  /  'AI Track' button",
-                "Toggle interactive frame-by-frame AI tracking (ON/OFF)",
-                "item",
-            ),
-            (
-                "  AI Track button color",
-                "Green = active, Red = off",
-                "item",
-            ),
-            (
-                "Model button / Ctrl+M / Ctrl+W",
-                "Select model weights (.pt / .pth) from models/ai_tracker or disk; "
-                "supports ResNet, MobileNet, EfficientNet and custom checkpoints",
-                "item",
-            ),
-            (
-                "  resnet_variant (TOML)",
-                "Or set directly in the Cfg profile TOML -- no local file required"
-                " (auto-downloads from Torch Hub)",
-                "item",
-            ),
-            (
-                "  Online Adaptation",
-                "Every click is an anchor: retrains online model without wiping history",
-                "item",
-            ),
-            (
-                "Shp: Cir/Box + drag",
-                "Drag on video to set circle/box size; marker at region centroid",
-                "item",
-            ),
-            (
-                "Shift+T  /  Shift+Click",
-                "Run full-video bidirectional batch tracking + RTS smoother",
-                "item",
-            ),
-            (
-                "Deep checkbox (right of AI Track)",
-                "Optional deep-backbone features for AI Track (OFF = NCC/CPU; ON = ResNet etc.)",
-                "item",
-            ),
-            (
-                "'Cfg' button  /  Ctrl+T",
-                "Save/load tracking TOML + nav_jump; weights selection with 'Weights (W)'",
-                "item",
-            ),
-            ("", "", "blank"),
-            ("=== MARKER TIMELINE STRIP ===", "", "header"),
-            (
-                "Timeline Strip (above slider)",
-                "Green = SELECTED marker's frames; Blue = other markers' frames;"
-                " Gold line = current frame",
-                "item",
-            ),
-            (
-                "  Switch marker (TAB)",
-                "Recolors the strip for the newly selected marker slot",
-                "item",
-            ),
-            (
-                "Click / Drag on Strip",
-                "Jump directly to frame (snaps to middle of marked frame cluster)",
-                "item",
-            ),
-            (
-                "Footer Status Row",
-                "Shows Marked count, active modes, and hover pixel coordinates (x,y); "
-                "in MEASURE/CALIB with calibration also shows real-world hover coords",
-                "item",
-            ),
-            ("", "", "blank"),
-            ("=== CALIB + MEASURE ===", "", "header"),
-            (
-                "Shift+Q  /  'CALIB' button",
-                "Toggle CALIB mode: Line / Plane DLT2D / REF3D→planar / load file; "
-                "scope = default (whole video) or this frame",
-                "item",
-            ),
-            (
-                "Q  /  'MEASURE' button",
-                "Toggle MEASURE mode (distance / area / angle / velocity / accel / level)",
-                "item",
-            ),
-            (
-                "Clear button  /  Backspace",
-                "Wipe MEASURE draft, points, and drawn results (keeps calibration)",
-                "item",
-            ),
-            (
-                "Ctrl+Z  /  Ctrl+Y",
-                "Undo / redo MEASURE actions (while MEASURE is on)",
-                "item",
-            ),
-            (
-                "I  /  'FPS' button",
-                "Override or calibrate video sampling rate (Hz) for velocity/accel",
-                "item",
-            ),
-            (
-                "Left Click  /  Right Click",
-                "Add measurement point / Undo last placed point",
-                "item",
-            ),
-            (
-                "1 / 2 / 3 / 4 / 5 / 6",
-                "Measure: Distance, Area, Angle, Velocity, Accel, Level (H+V tape)",
-                "item",
-            ),
-            ("Enter", "Close Area polygon or open MEASURE save / classify menu", "item"),
-            ("", "", "blank"),
-            ("=== OBJECT LABELING & BOUNDING BOXES ===", "", "header"),
-            (
-                "L  /  'Labeling' button",
-                "Toggle Bounding Box Labeling mode for YOLO object detection",
-                "item",
-            ),
-            ("Click & Drag (on video)", "Draw bounding box for current object class", "item"),
-            ("Z", "Undo / remove last bounding box", "item"),
-            ("N", "Rename current object class label", "item"),
-            (
-                "F5  /  Save button",
-                "Export object detection dataset (train / val / test splits)",
-                "item",
-            ),
-            (
-                "F6  /  F7",
-                "Load labeling JSON project / Load dataset folder to append (multi-video)",
-                "item",
-            ),
-            ("F8", "Switch to another video while retaining active dataset", "item"),
-            ("", "", "blank"),
-            ("=== DATASET & VIDEO EXPORTS (SAVE & EXPORT HUB) ===", "", "header"),
-            (
-                "Save button  /  Ctrl+S",
-                "Open Unified Save & Export Hub: Quick Save [1], Markers CSV [2], "
-                "YOLO Pose [3], YOLO Detect [4], Export Video [5], FreeKiki [6], Multi-video [7]",
-                "item",
-            ),
-            (
-                "Ctrl + N  /  'Rename'",
-                "Rename marker slots p0/p1… to COCO-80 or custom (pose kpts / detect classes)",
-                "item",
-            ),
-            (
-                "BBox->Coords button",
-                "Convert loaded tracking bounding boxes into marker coordinate CSVs",
-                "item",
-            ),
-            (
-                "Load button",
-                "Import CSV marker coordinates (<video>_markers.csv)",
-                "item",
-            ),
-            (
-                "Model button  /  Ctrl+M",
-                "Select AI Track model weights (.pt/.pth) from models/ai_tracker or disk",
-                "item",
-            ),
-            ("", "", "blank"),
-            ("=== GENERAL SHORTCUTS ===", "", "header"),
-            ("H", "Open this interactive scrollable help screen", "item"),
-            ("F1  /  ?", "Open complete HTML documentation in web browser", "item"),
-            ("? button", "Open complete HTML documentation in web browser", "item"),
-            ("ESC", "Close active dialog, exit mode, or cancel tracking", "item"),
-        ]
+        """Help screen (H): what to do now, then every key and button, in EN or PT.
 
+        Content comes from ``getpixelvideo_help``: key / mouse action, toolbar button
+        and description are separate columns. L changes the language, the digit keys
+        jump to a section.
+        """
+        nonlocal running
+        context = _help_context()
         total_screen_h = window_height + control_panel_height
-        header_h = 44
+
+        font_title = pygame.font.SysFont("verdana,arial,helvetica", 14, bold=True)
+        font_head = pygame.font.SysFont("verdana,arial,helvetica", 13, bold=True)
+        font_key = pygame.font.SysFont("verdana,arial,helvetica", 11, bold=True)
+        font_text = pygame.font.SysFont("verdana,arial,helvetica", 13)
+        font_small = pygame.font.SysFont("verdana,arial,helvetica", 11)
+
+        content_w = max(420, min(1040, window_width - 36))
+        col_x = max(12, (window_width - content_w) // 2)
+        wide = content_w >= 820
+        num_w = 26  # step number of the "now" block
+        key_w = 236 if wide else 170
+        btn_w = 150 if wide else 104
+        text_x = col_x + num_w + key_w + btn_w
+        text_w = max(120, content_w - num_w - key_w - btn_w - 8)
+        line_h = 20
         footer_h = 32
-        viewport_y = header_h
+
+        def _key_lines(entry, lang):
+            """Keys and mouse action of an entry, split into lines that fit the column."""
+            parts = []  # (kind, payload, width)
+            if entry.keys:
+                parts.append(("keys", entry.keys, keycaps_width(font_key, entry.keys)))
+            if entry.mouse:
+                label = entry.mouse_label(lang)
+                parts.append(("mouse", label, font_key.size(label)[0] + 14))
+            lines, line, used = [], [], 0
+            for part in parts:
+                if line and used + part[2] + 6 > key_w - 8:
+                    lines.append(line)
+                    line, used = [], 0
+                line.append(part)
+                used += part[2] + 6
+            if line:
+                lines.append(line)
+            return lines
+
+        def _build_rows(lang):
+            """Rows with their height and y, plus the y of each section title."""
+            rows, section_y, y = [], {}, 8
+
+            def _add(kind, **kw):
+                nonlocal y
+                rows.append({"kind": kind, "y": y, **kw})
+                y += kw["h"]
+
+            steps = gpv_help.now_steps(context)
+            _add("now_title", text=gpv_help.now_title(context, lang), h=30)
+            for n, entry in enumerate(steps, start=1):
+                text_lines = gpv_help.wrap_text(
+                    entry.text(lang), text_w, lambda t: font_text.size(t)[0]
+                )
+                key_lines = _key_lines(entry, lang)
+                _add(
+                    "step",
+                    entry=entry,
+                    num=n,
+                    text_lines=text_lines,
+                    key_lines=key_lines,
+                    h=max(len(text_lines), len(key_lines), 1) * line_h + 6,
+                )
+            now_bottom = y
+            y += 10
+            for section in gpv_help.SECTIONS:
+                section_y[section.id] = y
+                _add("section", text=section.title(lang), h=32)
+                for entry in gpv_help.help_entries(section.id):
+                    text_lines = gpv_help.wrap_text(
+                        entry.text(lang), text_w, lambda t: font_text.size(t)[0]
+                    )
+                    key_lines = _key_lines(entry, lang)
+                    _add(
+                        "item",
+                        entry=entry,
+                        text_lines=text_lines,
+                        key_lines=key_lines,
+                        h=max(len(text_lines), len(key_lines), 1) * line_h + 6,
+                    )
+                y += 8
+            return rows, section_y, now_bottom, y + 12
+
+        def _layout_tabs(lang):
+            """Section tabs "1 Video" ... wrapped to the window width."""
+            tabs, x, line = [], col_x, 0
+            for n, section in enumerate(gpv_help.SECTIONS):
+                digit = str((n + 1) % 10)
+                label = section.tab(lang)
+                w = font_small.size(label)[0] + font_key.size(digit)[0] + 26
+                if x + w > col_x + content_w and x > col_x:
+                    x, line = col_x, line + 1
+                tabs.append((section.id, digit, label, pygame.Rect(x, 30 + line * 24, w, 20)))
+                x += w + 6
+            return tabs, line + 1
+
+        lang = HELP_STATE["lang"]
+        rows, section_y, now_bottom, content_h = _build_rows(lang)
+        tabs, tab_lines = _layout_tabs(lang)
+        header_h = 30 + tab_lines * 24 + 22  # title, tabs, column captions
         viewport_h = total_screen_h - header_h - footer_h
+        max_scroll = max(0, content_h - viewport_h)
+        scroll_offset = 0
+        clock = pygame.time.Clock()
+        overlay = pygame.Surface((window_width, total_screen_h))
+        digit_keys = {
+            pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3, pygame.K_5: 4,
+            pygame.K_6: 5, pygame.K_7: 6, pygame.K_8: 7, pygame.K_9: 8, pygame.K_0: 9,
+            pygame.K_KP1: 0, pygame.K_KP2: 1, pygame.K_KP3: 2, pygame.K_KP4: 3, pygame.K_KP5: 4,
+            pygame.K_KP6: 5, pygame.K_KP7: 6, pygame.K_KP8: 7, pygame.K_KP9: 8, pygame.K_KP0: 9,
+        }  # fmt: skip
 
-        # Calculate line positions and heights
-        line_heights: list[int] = []
-        for _text1, _text2, kind in help_entries:
-            if kind == "header":
-                line_heights.append(34)
-            elif kind == "blank":
-                line_heights.append(14)
+        def _open_html_help_doc() -> None:
+            if ref3d_mode:
+                open_help_page(ref3d_guide_page(lang))
             else:
-                line_heights.append(24)
+                open_help_page("getpixelvideo_pt.html" if lang == "pt" else "getpixelvideo.html")
 
-        total_content_height = sum(line_heights) + 20
-
-        font_header = pygame.font.SysFont("verdana,arial,helvetica", 13, bold=True)
-        font_key = pygame.font.SysFont("verdana,arial,helvetica", 12, bold=True)
-        font_desc = pygame.font.SysFont("verdana,arial,helvetica", 12)
-        font_bar = pygame.font.SysFont("verdana,arial,helvetica", 11)
-
-        col_x = max(24, (window_width - 860) // 2)
-        key_w = 260
+        def _draw_entry(row, y0):
+            x0 = col_x + num_w
+            for n, parts in enumerate(row["key_lines"]):
+                x, y = x0, y0 + 3 + n * line_h
+                for kind, payload, _w in parts:
+                    if kind == "keys":
+                        x = draw_keycaps(overlay, font_key, payload, x, y) + 6
+                    else:
+                        x = draw_help_chip(overlay, font_key, payload, x, y, mouse=True) + 6
+            if row["entry"].button:
+                draw_help_chip(overlay, font_key, row["entry"].button, x0 + key_w, y0 + 3)
+            for n, text_line in enumerate(row["text_lines"]):
+                txt = font_text.render(text_line, True, (232, 234, 240))
+                overlay.blit(txt, (text_x, y0 + 3 + n * line_h))
 
         waiting_for_input = True
-        scroll_offset = 0
-        max_scroll = max(0, total_content_height - viewport_h)
-        clock = pygame.time.Clock()
-
-        overlay = pygame.Surface((window_width, total_screen_h))
-
         while waiting_for_input:
             overlay.fill((16, 16, 22))
+            top = header_h - scroll_offset
 
-            # Render scrollable content clipped to viewport
-            curr_y = viewport_y + 10 - scroll_offset
-            for idx, (col1, col2, kind) in enumerate(help_entries):
-                lh = line_heights[idx]
-                if curr_y + lh >= viewport_y and curr_y <= viewport_y + viewport_h:
-                    if kind == "header":
-                        # Section ribbon
-                        ribbon_rect = pygame.Rect(
-                            col_x - 10, curr_y + 3, min(860, window_width - 40), 26
-                        )
-                        pygame.draw.rect(overlay, (32, 38, 52), ribbon_rect, border_radius=4)
-                        pygame.draw.rect(
-                            overlay, (55, 70, 95), ribbon_rect, width=1, border_radius=4
-                        )
-                        txt = font_header.render(col1, True, (255, 215, 80))
-                        overlay.blit(txt, (col_x, curr_y + 6))
-                    elif kind == "item":
-                        is_sub = col1.startswith("  ")
-                        key_col = (100, 180, 230) if is_sub else (130, 225, 255)
-                        txt_k = font_key.render(col1, True, key_col)
-                        overlay.blit(txt_k, (col_x, curr_y + 3))
-                        txt_d = font_desc.render(col2, True, (230, 230, 235))
-                        overlay.blit(txt_d, (col_x + key_w, curr_y + 3))
-                curr_y += lh
+            # The "now" block: one panel behind its title and steps.
+            now_rect = pygame.Rect(col_x - 8, top + 4, content_w + 16, now_bottom - 2)
+            pygame.draw.rect(overlay, (22, 40, 32), now_rect, border_radius=6)
+            pygame.draw.rect(overlay, (70, 150, 110), now_rect, width=1, border_radius=6)
 
-            # Fixed top header
-            top_bar = pygame.Rect(0, 0, window_width, header_h)
-            pygame.draw.rect(overlay, (24, 26, 36), top_bar)
+            for row in rows:
+                y0 = top + row["y"]
+                if y0 + row["h"] < header_h or y0 > total_screen_h - footer_h:
+                    continue
+                if row["kind"] == "now_title":
+                    txt = font_title.render(row["text"], True, (255, 220, 90))
+                    overlay.blit(txt, (col_x, y0 + 6))
+                elif row["kind"] == "section":
+                    ribbon = pygame.Rect(col_x - 8, y0 + 3, content_w + 16, 26)
+                    pygame.draw.rect(overlay, (32, 38, 52), ribbon, border_radius=4)
+                    pygame.draw.rect(overlay, (55, 70, 95), ribbon, width=1, border_radius=4)
+                    txt = font_head.render(row["text"], True, (255, 215, 80))
+                    overlay.blit(txt, (col_x, y0 + 7))
+                else:
+                    if row["kind"] == "step":
+                        badge = font_key.render(str(row["num"]), True, (16, 30, 24))
+                        center = (col_x + 9, y0 + 3 + _KEYCAP_H // 2)
+                        pygame.draw.circle(overlay, (120, 215, 160), center, 9)
+                        overlay.blit(badge, badge.get_rect(center=center))
+                    _draw_entry(row, y0)
+
+            # Fixed header: title, language, section tabs, column captions.
+            pygame.draw.rect(overlay, (24, 26, 36), pygame.Rect(0, 0, window_width, header_h))
             pygame.draw.line(
                 overlay, (50, 55, 75), (0, header_h - 1), (window_width, header_h - 1), 1
             )
-            t_title = font_header.render(
-                "vailá  –  Pixel Coordinate Tool  (Quick Reference Help)",
-                True,
-                (255, 255, 255),
+            title = (
+                "vailá - Pixel Coordinate Tool: teclas e botões"
+                if lang == "pt"
+                else "vailá - Pixel Coordinate Tool: keys and buttons"
             )
-            overlay.blit(t_title, (col_x, 8))
-            t_sub = font_bar.render(
-                "Scroll: Mouse Wheel / Up / Down / PgDn  |  Close: ESC, H, or Left Click",
-                True,
-                (160, 175, 200),
-            )
-            overlay.blit(t_sub, (col_x, 26))
-
-            # Fixed bottom footer with interactive button to open HTML documentation in browser
-            bot_bar = pygame.Rect(0, total_screen_h - footer_h, window_width, footer_h)
-            pygame.draw.rect(overlay, (24, 26, 36), bot_bar)
+            overlay.blit(font_title.render(title, True, (255, 255, 255)), (col_x, 7))
+            lang_label = font_small.render("English  |  Português", True, (200, 210, 230))
+            lang_rect = pygame.Rect(0, 5, lang_label.get_width() + 46, 20)
+            lang_rect.right = col_x + content_w
+            pygame.draw.rect(overlay, (40, 48, 68), lang_rect, border_radius=4)
+            draw_keycaps(overlay, font_key, ("L",), lang_rect.x + 4, lang_rect.y + 1)
+            overlay.blit(lang_label, (lang_rect.x + 34, lang_rect.y + 3))
+            # Underline the language in use.
+            en_w = font_small.size("English")[0]
+            pt_w = font_small.size("Português")[0]
+            mark_x = lang_rect.x + 34 + (0 if lang == "en" else lang_label.get_width() - pt_w)
             pygame.draw.line(
                 overlay,
-                (50, 55, 75),
-                (0, total_screen_h - footer_h),
-                (window_width, total_screen_h - footer_h),
-                1,
+                (255, 215, 80),
+                (mark_x, lang_rect.bottom - 2),
+                (mark_x + (en_w if lang == "en" else pt_w), lang_rect.bottom - 2),
+                2,
             )
-            t_bot = font_bar.render(
-                "Press ESC, H, or Left Click to close  |  Press F1 or '?' to open Complete HTML Help in browser",
-                True,
-                (130, 220, 170),
-            )
-            overlay.blit(t_bot, (col_x, total_screen_h - footer_h + 8))
+            for _sid, digit, label, rect in tabs:
+                pygame.draw.rect(overlay, (36, 42, 58), rect, border_radius=4)
+                draw_keycaps(overlay, font_key, (digit,), rect.x + 3, rect.y + 1)
+                overlay.blit(
+                    font_small.render(label, True, (215, 222, 238)),
+                    (rect.x + font_key.size(digit)[0] + 20, rect.y + 3),
+                )
+            cap_y = header_h - 18
+            for cap_x, cap in (
+                (col_x + num_w, "TECLA / MOUSE" if lang == "pt" else "KEY / MOUSE"),
+                (col_x + num_w + key_w, "BOTÃO" if lang == "pt" else "BUTTON"),
+                (text_x, "O QUE FAZ" if lang == "pt" else "WHAT IT DOES"),
+            ):
+                overlay.blit(font_small.render(cap, True, (140, 155, 185)), (cap_x, cap_y))
 
-            # Interactive [Open HTML Help (F1)] button on right side of footer
-            btn_open_html_rect = pygame.Rect(
-                window_width - 240, total_screen_h - footer_h + 4, 220, footer_h - 8
+            # Fixed footer.
+            foot_y = total_screen_h - footer_h
+            pygame.draw.rect(overlay, (24, 26, 36), pygame.Rect(0, foot_y, window_width, footer_h))
+            pygame.draw.line(overlay, (50, 55, 75), (0, foot_y), (window_width, foot_y), 1)
+            foot = (
+                "ESC ou H: fechar  |  L: English  |  roda do mouse, Up, Down: rolar  |  1…0: seção"
+                if lang == "pt"
+                else "ESC or H: close  |  L: Português  |  wheel, Up, Down: scroll  |  1…0: section"
             )
-            mpos = pygame.mouse.get_pos()
-            btn_hover = btn_open_html_rect.collidepoint(mpos)
+            overlay.blit(font_small.render(foot, True, (130, 220, 170)), (col_x, foot_y + 9))
+            html_label = "Manual completo (F1)" if lang == "pt" else "Complete manual (F1)"
+            btn_open_html_rect = pygame.Rect(window_width - 190, foot_y + 4, 176, footer_h - 8)
+            btn_hover = btn_open_html_rect.collidepoint(pygame.mouse.get_pos())
             pygame.draw.rect(
                 overlay,
                 (45, 115, 180) if btn_hover else (32, 75, 120),
                 btn_open_html_rect,
                 border_radius=4,
             )
-            pygame.draw.rect(
-                overlay,
-                (70, 160, 235) if btn_hover else (50, 105, 165),
-                btn_open_html_rect,
-                width=1,
-                border_radius=4,
-            )
-            t_open_html = font_bar.render("📖 Open HTML Help (F1 / ?)", True, (255, 255, 255))
-            overlay.blit(
-                t_open_html,
-                (
-                    btn_open_html_rect.centerx - t_open_html.get_width() // 2,
-                    btn_open_html_rect.centery - t_open_html.get_height() // 2,
-                ),
-            )
+            html_txt = font_small.render(html_label, True, (255, 255, 255))
+            overlay.blit(html_txt, html_txt.get_rect(center=btn_open_html_rect.center))
 
-            # Scrollbar
             if max_scroll > 0:
                 sb_x = window_width - 12
-                sb_track_y = viewport_y
-                sb_track_h = viewport_h
                 pygame.draw.rect(
-                    overlay, (25, 25, 32), (sb_x, sb_track_y, 8, sb_track_h), border_radius=3
+                    overlay, (25, 25, 32), (sb_x, header_h, 8, viewport_h), border_radius=3
                 )
-
-                ratio = viewport_h / total_content_height
-                thumb_h = max(28, int(viewport_h * ratio))
-                thumb_y = sb_track_y + int((scroll_offset / max_scroll) * (sb_track_h - thumb_h))
+                thumb_h = max(28, int(viewport_h * viewport_h / content_h))
+                thumb_y = header_h + int((scroll_offset / max_scroll) * (viewport_h - thumb_h))
                 pygame.draw.rect(
                     overlay, (85, 95, 120), (sb_x, thumb_y, 8, thumb_h), border_radius=3
                 )
@@ -8084,22 +8434,20 @@ def play_video_with_controls(
             pygame.display.flip()
             clock.tick(60)
 
-            def _open_html_help_doc() -> None:
-                import webbrowser
-
-                html_path = os.path.abspath(
-                    os.path.join(os.path.dirname(__file__), "help", "getpixelvideo.html")
-                )
-                webbrowser.open(f"file://{html_path}")
-
+            switch_lang = False
             for event in pygame.event.get():
                 if event.type == pygame.KEYDOWN:
                     if event.key in (pygame.K_ESCAPE, pygame.K_h):
                         waiting_for_input = False
+                    elif event.key == pygame.K_l:
+                        switch_lang = True
                     elif event.key in (pygame.K_F1, pygame.K_QUESTION) or (
                         event.key == pygame.K_SLASH and (pygame.key.get_mods() & pygame.KMOD_SHIFT)
                     ):
                         _open_html_help_doc()
+                    elif event.key in digit_keys:
+                        section = gpv_help.SECTIONS[digit_keys[event.key]]
+                        scroll_offset = min(max_scroll, section_y[section.id])
                     elif event.key == pygame.K_DOWN:
                         scroll_offset = min(max_scroll, scroll_offset + 36)
                     elif event.key == pygame.K_UP:
@@ -8116,8 +8464,13 @@ def play_video_with_controls(
                     scroll_offset = max(0, min(max_scroll, scroll_offset - event.y * 48))
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
+                        tab_hit = next((t for t in tabs if t[3].collidepoint(event.pos)), None)
                         if btn_open_html_rect.collidepoint(event.pos):
                             _open_html_help_doc()
+                        elif lang_rect.collidepoint(event.pos):
+                            switch_lang = True
+                        elif tab_hit is not None:
+                            scroll_offset = min(max_scroll, section_y[tab_hit[0]])
                         else:
                             waiting_for_input = False
                     elif event.button == 4:
@@ -8126,8 +8479,17 @@ def play_video_with_controls(
                         scroll_offset = min(max_scroll, scroll_offset + 36)
                 elif event.type == pygame.QUIT:
                     waiting_for_input = False
-                    nonlocal running
                     running = False
+
+            if switch_lang:
+                lang = "pt" if lang == "en" else "en"
+                HELP_STATE["lang"] = lang
+                rows, section_y, now_bottom, content_h = _build_rows(lang)
+                tabs, tab_lines = _layout_tabs(lang)
+                header_h = 30 + tab_lines * 24 + 22
+                viewport_h = total_screen_h - header_h - footer_h
+                max_scroll = max(0, content_h - viewport_h)
+                scroll_offset = min(scroll_offset, max_scroll)
 
     def show_persistence_settings():
         """Show a dialog to adjust persistence frames"""
@@ -8571,6 +8933,8 @@ def play_video_with_controls(
             for idx, marker in enumerate(one_line_markers):
                 if idx not in marker_index_set or idx in deleted_markers:
                     continue
+                if one_line_marker_source(marker) is not None:
+                    continue  # clicked in another video: not in this frame range
                 try:
                     f_num, x_val, y_val = int(marker[0]), marker[1], marker[2]
                 except (TypeError, ValueError, IndexError):
@@ -10259,7 +10623,7 @@ def play_video_with_controls(
 
     def _count_marked_frames() -> int:
         if one_line_mode and one_line_markers:
-            return len(one_line_markers)
+            return len(one_line_live_indices(one_line_markers, deleted_markers))
         if not isinstance(coordinates, dict):
             return 0
         return sum(
@@ -10382,7 +10746,7 @@ def play_video_with_controls(
 
         _media_dir, base_v = _media_out_dir_and_stem()
         if one_line_mode:
-            csv_target = f"{base_v}_1_line.csv"
+            csv_target = f"{base_v}{ONE_LINE_CSV_SUFFIX}.csv"
         elif template_mode != "free" and fifa_fixed_keypoints == 49:
             csv_target = f"{base_v}_kiki49.csv"  # the 49 points; <base>_markers.csv is the ball
         else:
@@ -10394,6 +10758,11 @@ def play_video_with_controls(
             default_desc = f"Save BBox labeling project ({len(bboxes)} annotated frames)"
         elif csv_loaded and tracking_data and not bbox_converted_to_markers:
             default_desc = f"Export YOLO BBox dataset ({len(tracking_data)} frames)"
+        elif one_line_mode and ref3d_mode:
+            default_desc = (
+                f"Save REF3D: {csv_target} + .ref3d + .dlt3d "
+                f"({n_marked_frames} of {len(ref3d_points)} points)"
+            )
         elif one_line_mode:
             default_desc = f"Save 1-line coordinates CSV -> {csv_target} ({n_marked_frames} points)"
         elif n_marked_frames > 0:
@@ -10505,11 +10874,7 @@ def play_video_with_controls(
                 showing_save_message = True
                 save_message_timer = 120
             elif one_line_mode:
-                output_file = save_1_line_coordinates(video_path, one_line_markers, deleted_markers)
-                saved = True
-                _refresh_restore_snapshot()
-                undo_stack.clear()
-                save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                save_message_text = _save_one_line()
                 showing_save_message = True
                 save_message_timer = 90
             else:
@@ -10527,11 +10892,7 @@ def play_video_with_controls(
 
         elif choice == "2":
             if one_line_mode:
-                output_file = save_1_line_coordinates(video_path, one_line_markers, deleted_markers)
-                saved = True
-                _refresh_restore_snapshot()
-                undo_stack.clear()
-                save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                save_message_text = _save_one_line()
             else:
                 save_message_text = "Saving markers / Quick Measure..."
                 showing_save_message = True
@@ -11115,62 +11476,519 @@ def play_video_with_controls(
             showing_save_message = True
             save_message_timer = 120
 
-    def save_1_line_coordinates(video_path, one_line_markers, deleted_markers=None):
-        """Save markers created in one-line mode to a CSV file."""
-        if not one_line_markers:
-            print("No one line markers to save.")
-            return
+    def _save_one_line() -> str:
+        """Save the 1-line points (CSV + .toml); returns the line for the banner."""
+        nonlocal saved
+        output_file = write_one_line_files(video_path, one_line_markers, deleted_markers)
+        if output_file is None:
+            return "1-line: no points to save"
+        saved = True
+        _refresh_restore_snapshot()
+        undo_stack.clear()
+        n_pts = len(one_line_live_indices(one_line_markers, deleted_markers))
+        if ref3d_mode and ref3d_points:
+            return _save_ref3d_files(output_file)
+        return f"Saved {n_pts} points: {os.path.basename(output_file)} (+ .toml)"
 
-        if deleted_markers is None:
-            deleted_markers = set()
-
-        base_name = os.path.splitext(os.path.basename(video_path))[0]
-        video_dir = os.path.dirname(video_path)
-        output_file = os.path.join(video_dir, f"{base_name}_markers_1_line.csv")
-
-        # Find largest marker index (accounting for deleted ones)
-        max_marker = max(
-            [idx for idx, _ in enumerate(one_line_markers) if idx not in deleted_markers],
-            default=0,
+    def _save_ref3d_files(pixel_csv: str) -> str:
+        """Next to the pixel CSV: the .ref3d, its template and the checked .dlt3d."""
+        stem = os.path.splitext(pixel_csv)[0]
+        targets = [f"{stem}.ref3d", f"{stem}.template.toml", f"{stem}.dlt3d"]
+        _backup_before_overwrite(targets)
+        ref3d_builder.write_ref3d(ref3d_points, targets[0])
+        if ref3d_template is not None:
+            ref3d_builder.write_template(ref3d_template, targets[1])
+        check = ref3d_builder.fit_and_check(ref3d_points, _ref3d_pixels())
+        extra = len(one_line_markers) - len(ref3d_points)
+        print(">> vaila/getpixelvideo REF3D:")
+        print(f"   {len(ref3d_points)} 3D points ({ref3d_source}) -> {targets[0]}")
+        if extra > 0:
+            print(f"   warning: {extra} clicks after p{len(ref3d_points) - 1} have no 3D point")
+        if isinstance(check, str):
+            print(f"   no .dlt3d: {check}")
+            return f"Saved .ref3d + pixels; no DLT3D yet: {check}"
+        ref3d_builder.write_dlt3d(check.L, targets[2])
+        print(f"   {check.summary()}")
+        for i in check.used:
+            print(f"     p{i}: {check.error_px[i]:.2f} px")
+        for warning in check.warnings:
+            print(f"   warning: {warning}")
+        print(f"   DLT3D -> {targets[2]}")
+        verdict = "camera OK" if check.ok else "NOT A REAL CAMERA - check the measures"
+        return (
+            f"Saved .ref3d + pixels + .dlt3d: error {check.mean_px:.1f} px, "
+            f"fx {check.fx:.0f} / fy {check.fy:.0f} - {verdict}"
         )
 
-        # Create header: frame column and p0_x, p0_y, p1_x, p1_y, ...
-        header = ["frame"]
-        for i in range(max_marker + 1):
-            header.extend([f"p{i}_x", f"p{i}_y"])
-
-        # Get the frame number from the first non-deleted marker
-        if deleted_markers is None:
-            deleted_markers = set()
-
-        # Get the frame number from the first non-deleted marker
-        first_marker = next(
-            (m for idx, m in enumerate(one_line_markers) if idx not in deleted_markers),
-            None,
+    def _backup_before_overwrite(paths: list[str]) -> None:
+        """Copy files that are about to be replaced into .vaila_markers_history/."""
+        existing = [path for path in paths if os.path.isfile(path)]
+        if not existing:
+            return
+        video_dir, base_name = _media_out_dir_and_stem()
+        history_dir = os.path.join(
+            marker_history_dir_override or os.path.join(video_dir, ".vaila_markers_history"),
+            base_name,
         )
-        if first_marker is None:
-            print("No valid markers to save after deletions.")
+        os.makedirs(history_dir, exist_ok=True)
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        for path in existing:
+            root, ext = os.path.splitext(os.path.basename(path))
+            shutil.copy2(path, os.path.join(history_dir, f"{root}_bk_{stamp}{ext}"))
+
+    def _ref3d_pixels() -> dict[int, tuple[float, float]]:
+        """Clicked pixel of each REF3D point (empty and removed points left out)."""
+        return {
+            idx: (float(one_line_markers[idx][1]), float(one_line_markers[idx][2]))
+            for idx in one_line_live_indices(one_line_markers, deleted_markers)
+            if idx < len(ref3d_points)
+        }
+
+    def _ref3d_next_index() -> int:
+        """The point the next left click writes."""
+        if 0 <= selected_marker_idx < len(one_line_markers):
+            return selected_marker_idx
+        return len(one_line_markers)
+
+    def _ref3d_next_text() -> str:
+        idx = _ref3d_next_index()
+        if idx >= len(ref3d_points):
+            return ""
+        p = ref3d_points[idx]
+        return f"p{idx} = {p.label} ({p.x:g}, {p.y:g}, {p.z:g})"
+
+    def _ref3d_update_check() -> None:
+        """Solve the DLT3D again when the clicked points changed."""
+        nonlocal ref3d_check, ref3d_check_key
+        pixels = _ref3d_pixels()
+        key = (id(ref3d_points), tuple(sorted(pixels.items())))
+        if key != ref3d_check_key:
+            ref3d_check_key = key
+            ref3d_check = ref3d_builder.fit_and_check(ref3d_points, pixels)
+
+    def _ref3d_pick_file(
+        start: str, title: str, extensions: list[str], kind: str, pattern: str
+    ) -> str:
+        """File browser of the window on Linux, Tk dialog elsewhere; "" when cancelled."""
+        if sys.platform == "linux":
+            return show_file_browser(start, title=title, extensions=extensions) or ""
+        from tkinter import Tk, filedialog
+
+        root = Tk()
+        root.withdraw()
+        path = filedialog.askopenfilename(
+            title=title, initialdir=start, filetypes=[(kind, pattern), ("All files", "*.*")]
+        )
+        root.destroy()
+        return path or ""
+
+    def _ref3d_ask_template() -> tuple[Any, list[Any], str] | str:
+        """Dialogs: which object and its measures. Returns (template, points, source)."""
+        stem = os.path.join(*_media_out_dir_and_stem())
+        # Defaults: the template saved next to this video, else the one in use.
+        last = ref3d_builder.Ref3dTemplate("none")
+        if isinstance(ref3d_template, ref3d_builder.Ref3dTemplate):
+            last = ref3d_template
+        saved_template = f"{stem}{ONE_LINE_CSV_SUFFIX}.template.toml"
+        folder_template = os.path.join(
+            os.path.dirname(stem) or os.getcwd(), ref3d_builder.TEMPLATE_FILE_NAME
+        )
+        if os.path.isfile(saved_template):
+            with contextlib.suppress(OSError, ValueError, KeyError):
+                last = ref3d_builder.read_template(saved_template)
+        # T loads the template the user fills in (one per folder), else the saved one.
+        found = next((f for f in (folder_template, saved_template) if os.path.isfile(f)), None)
+        found_text = ""
+        if found:
+            try:
+                found_text = ref3d_builder.read_template(found).describe()
+            except (ref3d_builder.Ref3dError, OSError) as exc:
+                found_text = f"cannot read it: {exc}"
+        kind_default = {"box": "1", "pole": "2", "triad": "3"}.get(last.kind, "2")
+        answer = show_input_dialog(
+            "REF3D - what is the calibration object?\n"
+            + (
+                f"T = Template {os.path.basename(found)}: {found_text}\n"
+                if found
+                else "T = Load a template .toml with the measures\n"
+            )
+            + f"N = New template: write {ref3d_builder.TEMPLATE_FILE_NAME} here to fill in\n"
+            "1 = Box: a volume X x Y x Z (+ marks on its edges)\n"
+            "2 = Pole: a rod with marks at known heights, moved over floor positions\n"
+            "3 = Triad: arms X (side), Y (forward), Z (up) with marks, moved like the pole\n"
+            "L = Load an existing .ref3d file\n"
+            "Points are numbered p0, p1, ... in this order: click them in the same order.",
+            "T" if found else kind_default,
+        )
+        if answer is None:
+            return "REF3D: cancelled"
+        choice = str(answer).strip().lower()
+        if choice in ("n", "new"):
+            current = last if last.kind in ref3d_builder.TEMPLATES else None
+            if os.path.isfile(folder_template):
+                note = "exists - opened it"
+            else:
+                try:
+                    ref3d_builder.write_blank_template(folder_template, current)
+                except (ref3d_builder.Ref3dError, OSError) as exc:
+                    return f"REF3D: {exc}"
+                note = "written"
+                print(
+                    ">> uv run --no-sync python -m vaila.ref3d_builder --new-template "
+                    + shlex.quote(folder_template)
+                )
+            try:
+                open_in_editor(folder_template)
+            except OSError as exc:
+                note += f" (open it yourself: {exc})"
+            return (
+                f"REF3D template {note}: {folder_template} - fill in the measures, save, "
+                "then REF3D + Enter"
+            )
+        template_path = None
+        if choice in ("t", "template"):
+            template_path = found
+            if template_path is None:
+                start = os.path.dirname(stem) or os.getcwd()
+                template_path = _ref3d_pick_file(
+                    start, "Select the REF3D template", [".toml"], "TOML template", "*.toml"
+                )
+                if not template_path:
+                    return "REF3D: cancelled"
+        elif choice.endswith(".toml"):
+            template_path = os.path.expanduser(str(answer).strip().strip("'\""))
+        if template_path is not None:
+            try:
+                template = ref3d_builder.read_template(template_path)
+                points = template.points()
+            except (ref3d_builder.Ref3dError, OSError) as exc:
+                return f"REF3D: {os.path.basename(template_path)}: {exc}"
+            print(
+                ">> uv run --no-sync python -m vaila.ref3d_builder --template-file "
+                + shlex.quote(template_path)
+                + " -o "
+                + shlex.quote(f"{stem}{ONE_LINE_CSV_SUFFIX}.ref3d")
+            )
+            return template, points, f"{os.path.basename(template_path)}: {template.describe()}"
+
+        def ask(prompt: str, default: str) -> str | None:
+            value = show_input_dialog(prompt, default)
+            return None if value is None else str(value)
+
+        def same(kind: str) -> bool:
+            return last.kind == kind
+
+        def lengths(values) -> str:
+            return ", ".join(f"{v:g}" for v in values)
+
+        def positions_text(template) -> str:
+            return "; ".join(f"{x:g},{y:g}" for x, y in template.positions)
+
+        try:
+            if choice in ("l", "load"):
+                start = os.path.dirname(stem) or os.getcwd()
+                path = _ref3d_pick_file(
+                    start,
+                    "Select the .ref3d file",
+                    [".ref3d", ".txt", ".csv"],
+                    "REF3D",
+                    "*.ref3d *.txt *.csv",
+                )
+                if not path:
+                    return "REF3D: cancelled"
+                points = ref3d_builder.read_ref3d_points(path)
+                if [p.index for p in points] != list(range(len(points))):
+                    return "REF3D: the file skips point numbers; number them p0, p1, ... in order"
+                return None, points, os.path.basename(path)
+            if choice == "1":
+                size = ask(
+                    "Box size X x Y x Z in metres (X side, Y forward, Z up), e.g. 0.55 x 5 x 1:",
+                    " x ".join(f"{v:g}" for v in last.size) if same("box") else "",
+                )
+                if size is None:
+                    return "REF3D: cancelled"
+                divs = []
+                for axis in ("x", "y", "z"):
+                    prev = getattr(last, f"div_{axis}") if same("box") else ()
+                    value = ask(
+                        f"Marks along {axis.upper()} between 0 and the size (m), "
+                        "e.g. 1, 2, 3 - Enter = none:",
+                        lengths(prev),
+                    )
+                    if value is None:
+                        return "REF3D: cancelled"
+                    divs.append(ref3d_builder.parse_lengths(value))
+                template = ref3d_builder.Ref3dTemplate(
+                    "box",
+                    size=ref3d_builder.parse_size(size),
+                    div_x=divs[0],
+                    div_y=divs[1],
+                    div_z=divs[2],
+                )
+            elif choice == "2":
+                marks = ask(
+                    "Pole: heights of the marks from the floor (m), bottom to top, e.g. 0, 0.5, 1:",
+                    lengths(last.marks) if same("pole") else "0, 1",
+                )
+                if marks is None:
+                    return "REF3D: cancelled"
+                pos = ask(
+                    "Where the pole stands: 'rect X x Y' = the 4 corners of a rectangle\n"
+                    "(order: 0,0 / X,0 / 0,Y / X,Y), or a list 'x,y; x,y; ...' (m):",
+                    positions_text(last) if same("pole") else "rect 1 x 5",
+                )
+                if pos is None:
+                    return "REF3D: cancelled"
+                template = ref3d_builder.Ref3dTemplate(
+                    "pole",
+                    marks=ref3d_builder.parse_lengths(marks),
+                    positions=ref3d_builder.parse_positions(pos),
+                )
+            elif choice == "3":
+                arms = []
+                for axis, side in (("X", "side"), ("Y", "forward"), ("Z", "up")):
+                    prev = getattr(last, f"arms_{axis.lower()}") if same("triad") else ()
+                    value = ask(
+                        f"Triad arm {axis} ({side}): distances of its marks from the origin (m), "
+                        "e.g. 0.25, 0.5:",
+                        lengths(prev),
+                    )
+                    if value is None:
+                        return "REF3D: cancelled"
+                    arms.append(ref3d_builder.parse_lengths(value))
+                pos = ask(
+                    "Where the triad origin stands: 'rect X x Y' (4 corners), a list "
+                    "'x,y; x,y', or Enter = only at 0,0:",
+                    positions_text(last) if same("triad") else "",
+                )
+                if pos is None:
+                    return "REF3D: cancelled"
+                template = ref3d_builder.Ref3dTemplate(
+                    "triad",
+                    arms_x=arms[0],
+                    arms_y=arms[1],
+                    arms_z=arms[2],
+                    positions=ref3d_builder.parse_positions(pos),
+                )
+            else:
+                return f"REF3D: unknown option {answer!r} (1, 2, 3 or L)"
+            points = template.points()
+        except (ref3d_builder.Ref3dError, OSError) as exc:
+            return f"REF3D: {exc}"
+        return template, points, template.describe()
+
+    def toggle_ref3d() -> str:
+        """REF3D on (ask the object, click its points in order) or off."""
+        nonlocal ref3d_mode, ref3d_template, ref3d_points, ref3d_source, ref3d_check_key
+        nonlocal one_line_mode, sequential_mode, pitch_guide_mode, selected_marker_idx
+        if ref3d_mode:
+            ref3d_mode = False
+            return "REF3D off - the clicks stay as 1-line points (C leaves 1-line)"
+        if labeling_mode or freekiki_session is not None:
+            return "REF3D: leave Labeling / FreeKiki first"
+        result = _ref3d_ask_template()
+        if isinstance(result, str):
+            return result
+        ref3d_template, ref3d_points, ref3d_source = result
+        ref3d_check_key = None
+        if template_mode != "free":
+            _apply_template_mode("free")
+        one_line_mode = True
+        sequential_mode = False
+        pitch_guide_mode = False
+        ref3d_mode = True
+        selected_marker_idx = -1
+        flat = (
+            " - WARNING: all points on one plane, no DLT3D"
+            if ref3d_builder.points_are_coplanar(ref3d_points)
+            else ""
+        )
+        n_done = len(_ref3d_pixels())
+        return (
+            f"REF3D: {len(ref3d_points)} points ({ref3d_source}); "
+            + (f"{n_done} already clicked; " if n_done else "")
+            + f"click {_ref3d_next_text() or 'Save'}"
+            + ("" if editor_mode == "insert" else " - Ctrl+I to edit")
+            + flat
+        )
+
+    def _draw_ref3d_overlay() -> None:
+        """REF3D: projections of the DLT3D, the panel with the points and a 3D sketch."""
+        nonlocal ref3d_row_rects, ref3d_panel_rect, ref3d_toggle_rect, ref3d_guide_rect
+        ref3d_row_rects = []
+        ref3d_panel_rect = None
+        ref3d_toggle_rect = None
+        ref3d_guide_rect = None
+        TOOLBAR_HIT_RECTS.pop("ref3d_guide", None)
+        if not ref3d_mode or not ref3d_points:
+            return
+        _ref3d_update_check()
+        check = ref3d_check if isinstance(ref3d_check, ref3d_builder.DltCheck) else None
+        small = pygame.font.SysFont("verdana,arial,helvetica", 11)
+        bold = pygame.font.SysFont("verdana,arial,helvetica", 12, bold=True)
+        pixels = _ref3d_pixels()
+        next_idx = _ref3d_next_index()
+
+        def to_screen(u: float, v: float) -> tuple[int, int]:
+            return video_to_screen_coords(
+                u, v, zoom_level=zoom_level, crop_x=crop_x, crop_y=crop_y, pad_x=pad_x, pad_y=pad_y
+            )
+
+        # Where the DLT3D puts every 3D point; a click far from it is suspect.
+        if check is not None:
+            for idx, (u, v) in check.projected.items():
+                sx, sy = to_screen(u, v)
+                if idx in pixels:
+                    err = check.error_px.get(idx, 0.0)
+                    colour = (
+                        (60, 220, 90) if err < 2 else (240, 200, 40) if err < 5 else (240, 60, 60)
+                    )
+                    cx, cy = to_screen(*pixels[idx])
+                    pygame.draw.line(screen, colour, (cx, cy), (sx, sy), 1)
+                    pygame.draw.circle(screen, colour, (sx, sy), 6, 1)
+                else:
+                    colour = (255, 220, 60) if idx == next_idx else (220, 120, 255)
+                    pygame.draw.circle(screen, colour, (sx, sy), 7 if idx == next_idx else 5, 1)
+                    label = small.render(f"p{idx}?", True, colour)
+                    screen.blit(label, (sx + 6, sy + 2))
+
+        if not ref3d_panel_open:
+            # Collapsed: a small tab with the count and the camera verdict.
+            if check is not None:
+                verdict, tab_colour = (
+                    ("OK", (60, 150, 80)) if check.ok else ("NOT REAL", (170, 50, 50))
+                )
+            else:
+                verdict, tab_colour = "no DLT yet", (70, 80, 100)
+            caption = bold.render(
+                f"REF3D {len(pixels)}/{len(ref3d_points)} · {verdict} · Show panel",
+                True,
+                (255, 255, 255),
+            )
+            tab = pygame.Rect(0, 8, caption.get_width() + 16, 24)
+            tab.right = window_width - 8
+            blit_translucent(screen, tab, tab_colour, 225)
+            pygame.draw.rect(screen, (200, 210, 230), tab, width=1)
+            screen.blit(caption, caption.get_rect(center=tab.center))
+            ref3d_panel_rect = ref3d_toggle_rect = tab
+            TOOLBAR_HIT_RECTS["ref3d_panel"] = tab
             return
 
-        # Fill the row with values, preserving marker indices even with deletions
-        # Initialize all positions with empty values
-        row_values: list[int | float | str] = [int(first_marker[0])]
-        for _ in range(max_marker + 1):
-            row_values.extend(["", ""])  # Empty x, y values
+        # Side panel.
+        panel_w = min(330, max(240, window_width // 4))
+        panel = pygame.Rect(window_width - panel_w - 8, 8, panel_w, max(200, window_height - 16))
+        ref3d_panel_rect = panel
+        blit_translucent(screen, panel, (14, 18, 28), 215)
+        pygame.draw.rect(screen, (90, 110, 150), panel, width=1)
+        x0, y = panel.x + 8, panel.y + 6
+        hide_caption = small.render("Hide panel", True, (255, 255, 255))
+        hide = pygame.Rect(0, panel.y + 4, hide_caption.get_width() + 12, 18)
+        hide.right = panel.right - 6
+        pygame.draw.rect(screen, (70, 82, 112), hide)
+        pygame.draw.rect(screen, (140, 155, 190), hide, width=1)
+        screen.blit(hide_caption, hide_caption.get_rect(center=hide.center))
+        ref3d_toggle_rect = hide
+        TOOLBAR_HIT_RECTS["ref3d_panel"] = hide
+        guide_caption = small.render("Guide", True, (255, 255, 255))
+        guide = pygame.Rect(0, hide.y, guide_caption.get_width() + 12, hide.height)
+        guide.right = hide.x - 4
+        pygame.draw.rect(screen, (40, 96, 150), guide)
+        pygame.draw.rect(screen, (140, 175, 215), guide, width=1)
+        screen.blit(guide_caption, guide_caption.get_rect(center=guide.center))
+        ref3d_guide_rect = guide
+        TOOLBAR_HIT_RECTS["ref3d_guide"] = guide
+        title_w = guide.x - x0 - 6
+        title = f"REF3D · {ref3d_source}"
+        while len(title) > 6 and bold.size(title)[0] > title_w:
+            title = title[:-2]
+        screen.blit(bold.render(title, True, (255, 220, 90)), (x0, y))
+        y += 18
+        screen.blit(
+            small.render(
+                f"clicked {len(pixels)} of {len(ref3d_points)} points", True, (220, 225, 235)
+            ),
+            (x0, y),
+        )
+        y += 16
+        if check is not None:
+            colour = (90, 230, 120) if check.ok else (255, 90, 90)
+            lines = [
+                f"error {check.mean_px:.1f} px (max {check.max_px:.1f})",
+                f"fx {check.fx:.0f} px  fy {check.fy:.0f} px  (fy/fx {check.fy / check.fx:.2f})",
+                "camera OK" if check.ok else "NOT A REAL CAMERA: check the measures",
+            ]
+        else:
+            colour = (190, 195, 210)
+            lines = gpv_help.wrap_text(
+                str(ref3d_check or ""), panel_w - 16, lambda t: small.size(t)[0]
+            )
+        for line in lines:
+            screen.blit(small.render(line, True, colour), (x0, y))
+            y += 15
+        y += 4
 
-        # Fill in the non-deleted marker positions
-        for idx, (_, x, y) in enumerate(one_line_markers):
-            if idx not in deleted_markers and x is not None and y is not None:
-                # Marker indices are 0-based in the CSV (p0, p1, ...)
-                row_values[idx * 2 + 1] = int(round(x))
-                row_values[idx * 2 + 2] = int(round(y))
-            # Se for None, deixar como vazio (já inicializado como "")
+        # 3D sketch, right-handed (X x Y = Z): X red to the right, Y green going away,
+        # Z blue up; next point blinking.
+        sketch = pygame.Rect(x0, y, panel_w - 16, 150)
+        pygame.draw.rect(screen, (24, 30, 44), sketch)
+        xyz = np.array([p.xyz for p in ref3d_points], dtype=float)
+        iso = ref3d_builder.sketch_projection(xyz)
+        lo = np.minimum(iso.min(axis=0), 0.0)  # keep the origin (axes) in view
+        hi = np.maximum(iso.max(axis=0), 0.0)
+        span = np.maximum(hi - lo, 1e-6)
+        scale = min((sketch.width - 30) / span[0], (sketch.height - 30) / span[1])
+        mid = (lo + hi) / 2
 
-        df = pd.DataFrame([row_values], columns=pd.Index(header))
-        df.to_csv(output_file, index=False)
+        def sk(px: float, py: float) -> tuple[int, int]:
+            return (
+                int(sketch.centerx + (px - mid[0]) * scale),
+                int(sketch.centery + (py - mid[1]) * scale),
+            )
 
-        print(f"1 line coordinates saved to: {output_file}")
-        return output_file
+        origin = sk(0.0, 0.0)
+        reach = float(max(np.abs(xyz).max(), 1e-6)) * 0.35
+        for axis, colour in (("x", (230, 80, 80)), ("y", (80, 210, 100)), ("z", (90, 140, 255))):
+            dx, dy = ref3d_builder.SKETCH_AXES[axis]
+            end = sk(dx * reach, dy * reach)
+            pygame.draw.line(screen, colour, origin, end, 2)
+            screen.blit(small.render(axis.upper(), True, colour), (end[0] + 3, end[1] - 7))
+        screen.blit(
+            small.render("X x Y = Z (right-handed)", True, (150, 160, 185)),
+            (sketch.x + 4, sketch.bottom - 15),
+        )
+        blink = (pygame.time.get_ticks() // 400) % 2 == 0
+        for p, (ix, iy) in zip(ref3d_points, iso, strict=True):
+            pt = sk(ix, iy)
+            if p.index == next_idx:
+                if blink:
+                    pygame.draw.circle(screen, (255, 220, 60), pt, 6)
+            elif p.index in pixels:
+                pygame.draw.circle(screen, (60, 220, 90), pt, 3)
+            else:
+                pygame.draw.circle(screen, (150, 155, 170), pt, 3, 1)
+        y = sketch.bottom + 6
+
+        # The list: a window of rows around the next point; click a row to select it.
+        row_h = 16
+        n_rows = max(3, (panel.bottom - y - 4) // row_h)
+        first = max(0, min(next_idx - n_rows // 3, len(ref3d_points) - n_rows))
+        for p in ref3d_points[first : first + n_rows]:
+            row = pygame.Rect(panel.x + 2, y, panel_w - 4, row_h)
+            if p.index == next_idx:
+                pygame.draw.rect(screen, (70, 60, 20), row)
+            if p.index in pixels:
+                err = check.error_px.get(p.index) if check is not None else None
+                state, colour = (f"{err:.1f}px" if err is not None else "ok"), (90, 230, 120)
+            elif p.index < len(one_line_markers):
+                state, colour = "empty", (170, 170, 180)
+            else:
+                state, colour = "-", (200, 205, 215)
+            text = f"p{p.index}  {p.label}  ({p.x:g}, {p.y:g}, {p.z:g})"
+            screen.blit(small.render(text[:44], True, colour), (x0, y + 1))
+            st = small.render(state, True, colour)
+            screen.blit(st, (panel.right - st.get_width() - 8, y + 1))
+            ref3d_row_rects.append((p.index, row))
+            y += row_h
 
     def add_new_marker():
         """Adiciona um novo marcador vazio após o último marcador visível"""
@@ -11188,19 +12006,19 @@ def play_video_with_controls(
         _push_undo()
 
         if one_line_mode:
-            # In one-line mode, find the largest visible marker index
-            visible_markers = []
-            for idx, _ in enumerate(one_line_markers):
-                if idx not in deleted_markers:
-                    visible_markers.append(idx)
-
-            new_idx = max(visible_markers) + 1 if visible_markers else 0
-
-            # Add empty marker at the current frame (using None instead of 0,0)
+            # An empty slot at the end, selected: the next click fills it, and a
+            # point that is not visible in the video keeps its number (blank in the CSV).
             one_line_markers.append((frame_count, None, None))
+            new_idx = len(one_line_markers) - 1
             selected_marker_idx = new_idx
 
-            save_message_text = f"Added new empty marker {new_idx}"
+            save_message_text = f"Added empty p{new_idx}: click fills it, Tab skips it"
+            if ref3d_mode:
+                # REF3D: a point the camera cannot see stays empty; go on to the next.
+                selected_marker_idx = -1
+                save_message_text = (
+                    f"p{new_idx} not visible (left empty) - next click = p{new_idx + 1}"
+                )
             showing_save_message = True
             save_message_timer = 60
         else:
@@ -11241,7 +12059,7 @@ def play_video_with_controls(
         make_backup()
 
     def remove_marker():
-        """Remove the selected marker only in the current frame"""
+        """Remove the selected marker in the current frame (1-line: selected or last point)."""
         nonlocal \
             coordinates, \
             one_line_markers, \
@@ -11251,46 +12069,53 @@ def play_video_with_controls(
             save_message_text
         if not _require_insert():
             return
-        _push_undo()
         if one_line_mode:
-            if selected_marker_idx >= 0:
-                # Find and remove the selected marker only in the current frame
-                for i, (f_num, _, _) in enumerate(one_line_markers):
-                    if i == selected_marker_idx and f_num == frame_count:
-                        # Instead of removing completely, add to the deleted markers list
-                        deleted_markers.add(selected_marker_idx)
-                        save_message_text = (
-                            f"Removed marker {selected_marker_idx} in the current frame"
-                        )
-                        showing_save_message = True
-                        save_message_timer = 60
-                        if not marker_selection_locked:
-                            # Move selection backwards for quick repeated deletes.
-                            selected_marker_idx = max(0, selected_marker_idx - 1)
-                        break
+            # The selected point, else the last one, whatever frame or video it is from.
+            if (
+                one_line_remove_target(one_line_markers, deleted_markers, selected_marker_idx)
+                is None
+            ):
+                save_message_text = (
+                    f"p{selected_marker_idx} is already empty: click to place it"
+                    if selected_marker_idx >= 0
+                    else "1-line: no points to remove"
+                )
+                showing_save_message = True
+                save_message_timer = 60
+                return
+            _push_undo()
+            removed_idx, selected_marker_idx = one_line_remove(
+                one_line_markers, deleted_markers, selected_marker_idx
+            )
+            n_left = len(one_line_live_indices(one_line_markers, deleted_markers))
+            save_message_text = f"Removed p{removed_idx} ({n_left} points left)" + (
+                f": next click re-places p{selected_marker_idx}"
+                if selected_marker_idx >= 0
+                else f": next click = p{len(one_line_markers)}"
+            )
+            showing_save_message = True
+            save_message_timer = 60
+            make_backup()
+            return
+        _push_undo()
+        if selected_marker_idx >= 0 and coordinates is not None:
+            # Add the selected marker to the deleted list only in the current frame
+            if selected_marker_idx < len(coordinates[frame_count]):
+                deleted_positions[frame_count].add(selected_marker_idx)
+                save_message_text = f"Removed marker {selected_marker_idx} in the current frame"
+                showing_save_message = True
+                save_message_timer = 60
+                if not marker_selection_locked:
+                    # Move selection backwards for quick repeated deletes.
+                    selected_marker_idx = max(0, selected_marker_idx - 1)
             else:
-                save_message_text = "No marker selected to remove"
+                save_message_text = "Marker does not exist in this frame"
                 showing_save_message = True
                 save_message_timer = 60
         else:
-            if selected_marker_idx >= 0 and coordinates is not None:
-                # Add the selected marker to the deleted list only in the current frame
-                if selected_marker_idx < len(coordinates[frame_count]):
-                    deleted_positions[frame_count].add(selected_marker_idx)
-                    save_message_text = f"Removed marker {selected_marker_idx} in the current frame"
-                    showing_save_message = True
-                    save_message_timer = 60
-                    if not marker_selection_locked:
-                        # Move selection backwards for quick repeated deletes.
-                        selected_marker_idx = max(0, selected_marker_idx - 1)
-                else:
-                    save_message_text = "Marker does not exist in this frame"
-                    showing_save_message = True
-                    save_message_timer = 60
-            else:
-                save_message_text = "No marker selected to remove"
-                showing_save_message = True
-                save_message_timer = 60
+            save_message_text = "No marker selected to remove"
+            showing_save_message = True
+            save_message_timer = 60
 
         # Make automatic backup of the original file
         make_backup()
@@ -11693,26 +12518,18 @@ def play_video_with_controls(
                         )
             is_one_line_csv = "_1_line" in input_file and "frame" in df.columns
             if is_one_line_csv:
-                one_line_markers = []
-                deleted_markers = set()
-
-                for _, row in df.iterrows():
-                    frame_num = int(row["frame"])
-                    for i in range(0, 1001):  # Supports p0 and p1 legacy one-line files.
-                        candidate_cols = ((f"p{i}_x", f"p{i}_y"), (f"p{i}x", f"p{i}y"))
-                        for x_col, y_col in candidate_cols:
-                            if (
-                                x_col in df.columns
-                                and y_col in df.columns
-                                and pd.notna(row[x_col])
-                                and pd.notna(row[y_col])
-                            ):
-                                one_line_markers.append((frame_num, row[x_col], row[y_col]))
-                                break
-
-                save_message_text = f"Loaded 1 line file: {os.path.basename(input_file)}"
+                one_line_markers, deleted_markers = read_one_line_csv(input_file, video_path)
+                _ol_live = one_line_live_indices(one_line_markers, deleted_markers)
+                _ol_other = sum(
+                    one_line_marker_source(one_line_markers[i]) is not None for i in _ol_live
+                )
+                save_message_text = (
+                    f"Loaded 1-line: {os.path.basename(input_file)} ({len(_ol_live)} points"
+                    + (f", {_ol_other} from other videos" if _ol_other else "")
+                    + f") - next click = p{len(one_line_markers)}"
+                )
                 one_line_mode = True
-                selected_marker_idx = 0
+                selected_marker_idx = -1
             else:
                 coordinates, loaded_labels, load_msg = load_marker_csv_df(
                     df,
@@ -11764,10 +12581,10 @@ def play_video_with_controls(
     # --- Key binding reference (main window only; check for overlaps when adding new keys) ---
     # ESC=quit | Space=play/pause | Left/Right/Up/Down=seek | Shift+Left/Right=marked frames
     # marker timeline strip: click/drag to jump (control panel)
-    # C=1-line mode | M=auto-marking | D=remove last marker | L=labeling mode
+    # C=1-line mode | M=auto-marking | D=delete all markers of the frame | L=labeling mode
     # Z=remove last bbox (labeling) | N=rename label (labeling) | F5=Save project | F6=Load project
     # F7=Load dataset folder | F8=Open another video | Tab=next marker | P=persistence
-    # 1/2/3=persistence frames | H=help | A=add marker | R or D=remove last marker
+    # 1/2/3=persistence frames | H=help | A=add marker | R / Delete=remove selected marker
     # ]=speed x2 | [=speed /2 | J=pose (MediaPipe) | W=swap dialog | O or S=sequential mode
     # (Save/Load coordinates = buttons only; no key overlap)
     running = True
@@ -11775,6 +12592,14 @@ def play_video_with_controls(
     showing_save_message = False
     save_message_timer = 0
     save_message_text = ""
+    if one_line_mode and one_line_markers:
+        save_message_text = (
+            f"1-line: {len(one_line_live_indices(one_line_markers, deleted_markers))} points "
+            f"kept (cyan rings) - next click = p{len(one_line_markers)}"
+            + ("" if editor_mode == "insert" else " - Ctrl+I to edit")
+        )
+        showing_save_message = True
+        save_message_timer = 300
 
     def _clone_marker_state() -> dict[str, Any]:
         return clone_marker_editor_state(
@@ -11818,6 +12643,85 @@ def play_video_with_controls(
         showing_save_message = True
         save_message_timer = 45
         return False
+
+    def _draw_toolbar_hint() -> None:
+        """Say what the toolbar button under the mouse does, and its shortcut key."""
+        mouse_xy = pygame.mouse.get_pos()
+        for button_id, rect in TOOLBAR_HIT_RECTS.items():
+            if not rect.collidepoint(mouse_xy):
+                continue
+            hint = gpv_help.toolbar_hint(button_id, HELP_STATE["lang"])
+            if hint is None:
+                return
+            keys, text = hint
+            hint_font = pygame.font.SysFont("verdana,arial,helvetica", 12)
+            key_font = pygame.font.SysFont("verdana,arial,helvetica", 11, bold=True)
+            label = hint_font.render(text, True, (240, 242, 248))
+            keys_w = keycaps_width(key_font, keys) + 10 if keys else 0
+            box = pygame.Rect(0, 0, label.get_width() + keys_w + 16, _KEYCAP_H + 10)
+            box.midbottom = (rect.centerx, rect.top - 4)
+            box.clamp_ip(screen.get_rect())
+            pygame.draw.rect(screen, (22, 26, 36), box, border_radius=5)
+            pygame.draw.rect(screen, (95, 110, 145), box, width=1, border_radius=5)
+            screen.blit(label, (box.x + 8, box.centery - label.get_height() // 2))
+            if keys:
+                draw_keycaps(screen, key_font, keys, box.x + 8 + label.get_width() + 10, box.y + 5)
+            return
+
+    def open_another_media() -> None:
+        """Open another video or still image in this window (F8 / Open button).
+
+        The dataset folder stays; with 1-line mode on, the points go to the new video.
+        """
+        nonlocal switch_to_video, running
+        nonlocal showing_save_message, save_message_text, save_message_timer
+        n_carried = _count_marked_frames() if one_line_mode else 0
+        title = (
+            f"Select video to ADD ({n_carried} 1-line points go with you)"
+            if n_carried
+            else "Select another video or still image"
+        )
+        start_dir = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+        still_exts = sorted(STILL_IMAGE_EXTENSIONS)
+        if sys.platform == "linux":
+            new_path = show_file_browser(
+                start_dir,
+                title=title,
+                extensions=[".mp4", ".avi", ".mkv", ".mov", ".webm", *still_exts],
+            )
+        else:
+            new_path = None
+            try:
+                from tkinter import Tk, filedialog
+
+                root = Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                still_globs = _still_image_dialog_globs()
+                new_path = filedialog.askopenfilename(
+                    title=title,
+                    initialdir=start_dir,
+                    filetypes=[
+                        ("Video", "*.mp4 *.avi *.mkv *.mov *.webm"),
+                        ("Still image", still_globs),
+                        ("All files", "*.*"),
+                    ],
+                )
+                root.destroy()
+            except Exception:
+                pass
+        if new_path and os.path.isfile(new_path) and new_path != video_path:
+            switch_to_video = new_path
+            running = False
+            if n_carried:
+                print(
+                    f"1-line: {n_carried} points go to "
+                    f"{os.path.basename(new_path)} (not saved yet: Save there)"
+                )
+        elif new_path:
+            save_message_text = "Select a different video file."
+            showing_save_message = True
+            save_message_timer = 60
 
     def _toggle_editor_mode() -> None:
         nonlocal editor_mode, showing_save_message, save_message_text, save_message_timer
@@ -12459,12 +13363,14 @@ def play_video_with_controls(
         # current frame has no data yet for that marker. No-op when
         # marker_selection_locked is True (clamp_selected_marker_index's
         # own contract); guards against any future mutation site.
+        if ref3d_mode and not one_line_mode:
+            ref3d_mode = False  # leaving 1-line (C / Mode button) also leaves REF3D
         if one_line_mode:
-            markers_in_frame = [i for i, m in enumerate(one_line_markers) if m[0] == frame_count]
+            # A 1-line selection is a slot of the whole row (or -1), on any frame.
             selected_marker_idx = clamp_selected_marker_index_sparse(
                 selected_marker_idx,
                 marker_selection_locked,
-                markers_in_frame,
+                one_line_selectable_indices(one_line_markers, selected_marker_idx),
             )
         else:
             cur_list = coordinates.get(frame_count) if isinstance(coordinates, dict) else None
@@ -12635,9 +13541,10 @@ def play_video_with_controls(
 
             if one_line_mode:
                 # In one_line mode, collect marker positions by their index
-                for idx, (f_num, x, y) in enumerate(one_line_markers):
-                    if idx in deleted_markers:
-                        continue  # Skip deleted markers
+                for idx in one_line_live_indices(one_line_markers, deleted_markers):
+                    if one_line_marker_source(one_line_markers[idx]) is not None:
+                        continue  # clicked in another video: no trail in this one
+                    f_num, x, y = one_line_markers[idx][:3]
 
                     if start_frame <= f_num <= frame_count:
                         if idx not in marker_trails:
@@ -12762,39 +13669,41 @@ def play_video_with_controls(
         # Draw current frame markers
 
         if one_line_mode:
-            for idx, (f_num, x, y) in enumerate(one_line_markers):
-                if f_num == frame_count:
-                    # Skip rendering if marker is empty/None
-                    if x is None or y is None:
-                        continue
+            # Every point of the row, on every frame: green when it was clicked in this
+            # frame, a cyan ring when it is from another frame or another video.
+            for idx in one_line_live_indices(one_line_markers, deleted_markers):
+                x, y = one_line_markers[idx][1], one_line_markers[idx][2]
+                screen_x, screen_y = video_to_screen_coords(
+                    x,
+                    y,
+                    zoom_level=zoom_level,
+                    crop_x=crop_x,
+                    crop_y=crop_y,
+                    pad_x=pad_x,
+                    pad_y=pad_y,
+                )
 
-                    screen_x, screen_y = video_to_screen_coords(
-                        x,
-                        y,
-                        zoom_level=zoom_level,
-                        crop_x=crop_x,
-                        crop_y=crop_y,
-                        pad_x=pad_x,
-                        pad_y=pad_y,
-                    )
+                # Outline-only rings (no filled disc) so the click pixel stays visible.
+                if idx == selected_marker_idx:
+                    pygame.draw.circle(
+                        screen, (255, 165, 0), (screen_x, screen_y), 5, 1
+                    )  # Orange ring
+                    if marker_selection_locked:
+                        pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 7, 2)
 
-                    # Highlight selected marker only in one_line_mode
-                    # Outline-only rings (no filled disc) so the click pixel stays visible.
-                    if idx == selected_marker_idx:
-                        pygame.draw.circle(
-                            screen, (255, 165, 0), (screen_x, screen_y), 5, 1
-                        )  # Orange ring
-                        if marker_selection_locked:
-                            pygame.draw.circle(screen, (40, 200, 255), (screen_x, screen_y), 7, 2)
-
+                if one_line_marker_in_frame(one_line_markers[idx], frame_count):
                     _core_r = 2 if idx == selected_marker_idx else 3
                     pygame.draw.circle(screen, (0, 255, 0), (screen_x, screen_y), _core_r)
-                    if template_mode != "free":
-                        display_idx = int(fifa_start_keypoint) + idx + int(fifa_index_base)
-                    else:
-                        display_idx = idx
-                    text_surface = font.render(str(display_idx), True, (255, 255, 255))
-                    screen.blit(text_surface, (screen_x + 5, screen_y - 15))
+                    _label_rgb = (255, 255, 255)
+                else:
+                    pygame.draw.circle(screen, (0, 200, 255), (screen_x, screen_y), 4, 1)
+                    _label_rgb = (150, 225, 255)
+                if template_mode != "free":
+                    display_idx = int(fifa_start_keypoint) + idx + int(fifa_index_base)
+                else:
+                    display_idx = idx
+                text_surface = font.render(str(display_idx), True, _label_rgb)
+                screen.blit(text_surface, (screen_x + 5, screen_y - 15))
         else:
             for i, (x, y) in enumerate(coordinates[frame_count]):
                 if i in deleted_positions[frame_count]:
@@ -13072,6 +13981,8 @@ def play_video_with_controls(
             gap_fill_button_rect,  # Kalman/RTS or linear gap fill for marker
             swap_range_button_rect,  # Swap marker/keypoint pairs across a frame range
             geom_tracker_button_rect,  # Geo Homog: standalone planar homography tracker
+            open_media_button_rect,  # Open another video / Add video (F8)
+            ref3d_button_rect,  # REF3D builder (Shift+R)
             marker_timeline_rect,
             slider_x,
             slider_y,
@@ -13281,6 +14192,8 @@ def play_video_with_controls(
                 blit_translucent(screen, rect, btn_color, 210)
                 txt = btn_font.render(caption, True, (255, 255, 255))
                 screen.blit(txt, txt.get_rect(center=rect.center))
+        _draw_ref3d_overlay()
+        _draw_toolbar_hint()
         pygame.display.flip()
 
         # Auto-marking logic - mark points automatically during playback
@@ -13408,11 +14321,7 @@ def play_video_with_controls(
                             showing_save_message = True
                             save_message_timer = 60
                     elif one_line_mode:
-                        output_file = save_1_line_coordinates(
-                            video_path, one_line_markers, deleted_markers
-                        )
-                        saved = True
-                        save_message_text = f"Saved to: {os.path.basename(output_file)}"
+                        save_message_text = _save_one_line()
                         showing_save_message = True
                         save_message_timer = 90  # Show for about 3 seconds at 30fps
                     else:
@@ -13562,8 +14471,16 @@ def play_video_with_controls(
                     one_line_mode = not one_line_mode
                     if one_line_mode:
                         pitch_guide_mode = False
+                        save_message_text = (
+                            "Mode: 1-line - click adds a point, right-click removes the last, "
+                            "Add video (F8) keeps the points"
+                        )
+                    else:
+                        save_message_text = "Mode: Mark"
+                    showing_save_message = True
+                    save_message_timer = 120
                     selected_marker_idx = -1  # Reset selected marker when changing modes
-                elif event.key == pygame.K_m:
+                elif event.key == pygame.K_m and not (pygame.key.get_mods() & pygame.KMOD_CTRL):
                     auto_marking_mode = not auto_marking_mode
                     if auto_marking_mode:
                         pitch_guide_mode = False
@@ -13706,10 +14623,26 @@ def play_video_with_controls(
                         )
                         showing_save_message = True
                         save_message_timer = 60
+                elif event.key == pygame.K_DELETE:
+                    remove_marker()  # same as R / right click
                 elif event.key == pygame.K_d:
                     # Delete all markers
                     if not _require_insert():
                         pass
+                    elif one_line_mode:
+                        # The row has no per-frame slots: drop the points of this frame.
+                        _push_undo()
+                        _ol_gone = one_line_remove_frame(
+                            one_line_markers, deleted_markers, frame_count
+                        )
+                        selected_marker_idx = -1
+                        save_message_text = (
+                            f"1-line: removed the {_ol_gone} points of this frame"
+                            if _ol_gone
+                            else "1-line: no points were clicked in this frame"
+                        )
+                        showing_save_message = True
+                        save_message_timer = 60
                     elif frame_count in coordinates:
                         _push_undo()
                         deleted_positions[frame_count] = set(range(len(coordinates[frame_count])))
@@ -13804,45 +14737,7 @@ def play_video_with_controls(
                     # Load dataset folder (next Save will append to it; multi-video)
                     load_dataset_folder()
                 elif event.key == pygame.K_F8:
-                    # Open another video or still image (keep dataset if set)
-                    start_dir = (
-                        os.path.dirname(video_path) if video_path else os.path.expanduser("~")
-                    )
-                    still_exts = sorted(STILL_IMAGE_EXTENSIONS)
-                    if sys.platform == "linux":
-                        new_path = show_file_browser(
-                            start_dir,
-                            title="Select another video or still image",
-                            extensions=[".mp4", ".avi", ".mkv", ".mov", ".webm", *still_exts],
-                        )
-                    else:
-                        new_path = None
-                        try:
-                            from tkinter import Tk, filedialog
-
-                            root = Tk()
-                            root.withdraw()
-                            root.attributes("-topmost", True)
-                            still_globs = _still_image_dialog_globs()
-                            new_path = filedialog.askopenfilename(
-                                title="Select another video or still image",
-                                initialdir=start_dir,
-                                filetypes=[
-                                    ("Video", "*.mp4 *.avi *.mkv *.mov *.webm"),
-                                    ("Still image", still_globs),
-                                    ("All files", "*.*"),
-                                ],
-                            )
-                            root.destroy()
-                        except Exception:
-                            pass
-                    if new_path and os.path.isfile(new_path) and new_path != video_path:
-                        switch_to_video = new_path
-                        running = False
-                    elif new_path:
-                        save_message_text = "Select a different video file."
-                        showing_save_message = True
-                        save_message_timer = 60
+                    open_another_media()
                 elif event.key == pygame.K_F9:
                     save_pose_dataset()
                 elif event.key == pygame.K_e and (pygame.key.get_mods() & pygame.KMOD_CTRL):
@@ -13910,84 +14805,29 @@ def play_video_with_controls(
                         continue
                     # Completely revamped marker navigation
                     if one_line_mode:
-                        # Get all marker indices in current frame, including deleted ones
-                        frame_marker_indices = []
-                        deleted_frame_markers = []
-
-                        # Collect available markers and the maximum index
-                        max_marker_index = -1
-                        for idx, (f_num, _, _) in enumerate(one_line_markers):
-                            if idx > max_marker_index:
-                                max_marker_index = idx
-
-                            if f_num == frame_count:
-                                if idx in deleted_markers:
-                                    deleted_frame_markers.append(idx)
-                                else:
-                                    frame_marker_indices.append(idx)
-
-                        # If no direction set (first tab press), start from 0 or current
-                        if pygame.key.get_mods() & pygame.KMOD_SHIFT:
-                            # Previous marker
-                            if selected_marker_idx == -1:
-                                # If no selection, go to the last available marker
-                                if frame_marker_indices:
-                                    selected_marker_idx = frame_marker_indices[-1]
-                                elif deleted_frame_markers:
-                                    selected_marker_idx = deleted_frame_markers[-1]
-                                elif max_marker_index >= 0:
-                                    # If no marker in this frame, go to max index
-                                    selected_marker_idx = max_marker_index
-                            else:
-                                # Find the previous marker (lower index)
-                                prev_visible = [
-                                    idx for idx in frame_marker_indices if idx < selected_marker_idx
-                                ]
-                                prev_deleted = [
-                                    idx
-                                    for idx in deleted_frame_markers
-                                    if idx < selected_marker_idx
-                                ]
-                                prev_indices = prev_visible + prev_deleted
-
-                                if prev_indices:
-                                    selected_marker_idx = max(prev_indices)
-                                else:
-                                    # Wrap around to max marker
-                                    all_markers = frame_marker_indices + deleted_frame_markers
-                                    if all_markers:
-                                        selected_marker_idx = max(all_markers)
-                                    else:
-                                        selected_marker_idx = max_marker_index
+                        # Walk the slots of the row (any frame, any video), with one
+                        # extra stop, -1, where a click appends the next point.
+                        _ol_stops = [*range(len(one_line_markers)), -1]
+                        _ol_step = -1 if pygame.key.get_mods() & pygame.KMOD_SHIFT else 1
+                        _ol_at = (
+                            _ol_stops.index(selected_marker_idx)
+                            if selected_marker_idx in _ol_stops
+                            else len(_ol_stops) - 1
+                        )
+                        selected_marker_idx = _ol_stops[(_ol_at + _ol_step) % len(_ol_stops)]
+                        if selected_marker_idx < 0:
+                            save_message_text = (
+                                f"1-line: next click = p{len(one_line_markers)} (new point)"
+                            )
                         else:
-                            # Next marker
-                            if selected_marker_idx == -1:
-                                # If no selection, start with the first marker
-                                if frame_marker_indices:
-                                    selected_marker_idx = min(frame_marker_indices)
-                                elif deleted_frame_markers:
-                                    selected_marker_idx = min(deleted_frame_markers)
-                                elif max_marker_index >= 0:
-                                    # If no marker in this frame, start from 0
-                                    selected_marker_idx = 0
-                            else:
-                                # Find the next marker (higher index)
-                                next_visible = [
-                                    idx for idx in frame_marker_indices if idx > selected_marker_idx
-                                ]
-                                next_deleted = [
-                                    idx
-                                    for idx in deleted_frame_markers
-                                    if idx > selected_marker_idx
-                                ]
-                                next_indices = next_visible + next_deleted
-
-                                if next_indices:
-                                    selected_marker_idx = min(next_indices)
-                                else:
-                                    # Wrap around to first marker
-                                    all_markers = frame_marker_indices + deleted_frame_markers
-                                    selected_marker_idx = min(all_markers) if all_markers else 0
+                            _ol_m = one_line_markers[selected_marker_idx]
+                            _ol_from = one_line_marker_source(_ol_m) or f"frame {int(_ol_m[0]) + 1}"
+                            save_message_text = (
+                                f"p{selected_marker_idx} selected ({_ol_from}): "
+                                "click re-places it, right-click removes it"
+                            )
+                        showing_save_message = True
+                        save_message_timer = 90
                     else:
                         # Regular mode navigation
                         # Get indices of all markers in current frame
@@ -14127,16 +14967,14 @@ def play_video_with_controls(
                 elif event.key == pygame.K_h:
                     show_help_dialog()
 
-                # Open complete HTML documentation in browser with F1 or ?
+                # Open the HTML documentation in the browser with F1 or ?; with REF3D on,
+                # the illustrated calibration guide.
                 elif event.key in (pygame.K_F1, pygame.K_QUESTION) or (
                     event.key == pygame.K_SLASH and (pygame.key.get_mods() & pygame.KMOD_SHIFT)
                 ):
-                    import webbrowser
-
-                    help_url = "file://" + os.path.abspath(
-                        os.path.join(os.path.dirname(__file__), "help", "getpixelvideo.html")
+                    open_help_page(
+                        ref3d_guide_page(HELP_STATE["lang"]) if ref3d_mode else "getpixelvideo.html"
                     )
-                    webbrowser.open(help_url)
 
                 # Define video frequency manually (Hz); P remains persistence only.
                 # Ctrl+I toggles VISUAL ↔ INSERT (bare I stays FPS dialog).
@@ -14152,7 +14990,11 @@ def play_video_with_controls(
                     add_new_marker()
 
                 # Remover marcador
-                elif event.key == pygame.K_r or event.key == pygame.K_d:
+                elif event.key == pygame.K_r and (pygame.key.get_mods() & pygame.KMOD_SHIFT):
+                    save_message_text = toggle_ref3d()
+                    showing_save_message = True
+                    save_message_timer = 180
+                elif event.key == pygame.K_r:
                     remove_marker()
 
                 elif event.key == pygame.K_RIGHTBRACKET:  # ]
@@ -14326,6 +15168,42 @@ def play_video_with_controls(
                     _nav_hold_key = None
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 x, y = event.pos
+                if (
+                    ref3d_panel_rect is not None
+                    and ref3d_panel_rect.collidepoint(x, y)
+                    and y < window_height
+                    and event.button in (1, 3)
+                ):
+                    # REF3D panel: Hide / Show, or a click on a row selects that point.
+                    hit = next((i for i, r in ref3d_row_rects if r.collidepoint(x, y)), -1)
+                    if (
+                        event.button == 1
+                        and ref3d_toggle_rect is not None
+                        and ref3d_toggle_rect.collidepoint(x, y)
+                    ):
+                        ref3d_panel_open = not ref3d_panel_open
+                    elif (
+                        event.button == 1
+                        and ref3d_guide_rect is not None
+                        and ref3d_guide_rect.collidepoint(x, y)
+                    ):
+                        open_help_page(ref3d_guide_page(HELP_STATE["lang"]))
+                        save_message_text = "Guide opened in the web browser"
+                        showing_save_message = True
+                        save_message_timer = 60
+                    elif event.button == 1 and hit >= 0:
+                        if hit < len(one_line_markers):
+                            selected_marker_idx = hit
+                            save_message_text = f"p{hit} selected: click its place on the video"
+                        else:
+                            selected_marker_idx = -1
+                            save_message_text = (
+                                f"Points go in order: the next click is p{len(one_line_markers)}"
+                                " (A leaves a point empty)"
+                            )
+                        showing_save_message = True
+                        save_message_timer = 60
+                    continue
                 # Toolbar / control panel: primary (left) button only — ignore
                 if freekiki_session is not None and event.button in (1, 3):
                     if event.button == 1 and any(
@@ -14351,7 +15229,9 @@ def play_video_with_controls(
                 elif y >= window_height:
                     # Clique na área de controles
                     rel_y = y - window_height
-                    if load_button_rect.collidepoint(x, rel_y):
+                    if open_media_button_rect.collidepoint(x, rel_y):
+                        open_another_media()
+                    elif load_button_rect.collidepoint(x, rel_y):
                         # Carregar novo arquivo
                         if editor_mode == "insert":
                             _push_undo()
@@ -14475,6 +15355,10 @@ def play_video_with_controls(
                         save_message_text = _toggle_calib_mode()
                         showing_save_message = True
                         save_message_timer = 90
+                    elif ref3d_button_rect.collidepoint(x, rel_y):
+                        save_message_text = toggle_ref3d()
+                        showing_save_message = True
+                        save_message_timer = 180
                     elif measure_button_rect.collidepoint(x, rel_y):
                         save_message_text = _toggle_measure_mode()
                         showing_save_message = True
@@ -14652,12 +15536,7 @@ def play_video_with_controls(
                         save_message_timer = 40
                     elif help_web_button_rect.collidepoint(x, rel_y):
                         # Open documentation in browser
-                        import webbrowser
-
-                        help_url = "file://" + os.path.abspath(
-                            os.path.join(os.path.dirname(__file__), "help", "getpixelvideo.html")
-                        )
-                        webbrowser.open(help_url)
+                        open_help_page("getpixelvideo.html")
 
                     elif slider_y <= rel_y <= slider_y + slider_height:
                         dragging_slider = True
@@ -14766,9 +15645,25 @@ def play_video_with_controls(
                             track_shape_drag_origin = (float(video_x), float(video_y))
                             track_shape_drag_current = (float(video_x), float(video_y))
                         elif one_line_mode:
-                            # Simply append the new marker
+                            # Append the next point, or re-place the selected one.
                             _push_undo()
-                            one_line_markers.append((frame_count, video_x, video_y))
+                            _ol_idx = one_line_place(
+                                one_line_markers,
+                                deleted_markers,
+                                selected_marker_idx,
+                                frame_count,
+                                video_x,
+                                video_y,
+                            )
+                            if not marker_selection_locked:
+                                selected_marker_idx = -1
+                            save_message_text = (
+                                f"p{_ol_idx} @ frame {frame_count + 1} "
+                                f"({video_x:.0f}, {video_y:.0f}) - next click = "
+                                f"p{len(one_line_markers)}"
+                            )
+                            showing_save_message = True
+                            save_message_timer = 60
                         else:
                             _push_undo()
                             placed_marker_idx = -1
@@ -15001,13 +15896,10 @@ def play_video_with_controls(
                         # selection pinned regardless of the current
                         # frame's marker count.
                         if one_line_mode:
-                            markers_in_frame = [
-                                i for i, m in enumerate(one_line_markers) if m[0] == frame_count
-                            ]
                             selected_marker_idx = clamp_selected_marker_index_sparse(
                                 selected_marker_idx,
                                 marker_selection_locked,
-                                markers_in_frame,
+                                one_line_selectable_indices(one_line_markers, selected_marker_idx),
                             )
                         else:
                             cur_list = (
@@ -15430,12 +16322,29 @@ def play_video_with_controls(
             freekiki_api.save_review_session(freekiki_session)
         cap.release()
         # Do not pygame.quit() so run_getpixelvideo can reopen with new video
+        # 1-line mode on: the points go to the next video (one calibration row built
+        # over several videos). Each one keeps the name of the video it was clicked in.
+        carried_one_line = None
+        if one_line_mode and (
+            ref3d_mode or one_line_live_indices(one_line_markers, deleted_markers)
+        ):
+            carried_one_line = {
+                "markers": one_line_carry(one_line_markers, video_path),
+                "deleted": set(deleted_markers),
+                "editor_mode": editor_mode,
+                "ref3d": (
+                    {"template": ref3d_template, "points": ref3d_points, "source": ref3d_source}
+                    if ref3d_mode
+                    else None
+                ),
+            }
         return (
             "switch_video",
             switch_to_video,
             current_dataset_dir,
             labeling_mode,
             switch_freekiki_run,
+            carried_one_line,
         )
 
     cap.release()
@@ -16878,8 +17787,8 @@ def sorted_frames_with_visible_markers(
     if one_line_mode:
         frames_hit: set[int] = set()
         for idx, m in enumerate(one_line_markers):
-            if idx in del_one:
-                continue
+            if idx in del_one or one_line_marker_source(m) is not None:
+                continue  # removed, or clicked in another video
             try:
                 f_num, x, y = int(m[0]), m[1], m[2]
             except (TypeError, ValueError, IndexError):
@@ -18567,6 +19476,7 @@ def run_getpixelvideo(
     initial_start_frame: int = 0,
     freekiki_options: dict | None = None,
     initial_track_csv: str | None = None,
+    initial_one_line_csv: str | None = None,
 ):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
@@ -18632,6 +19542,20 @@ def run_getpixelvideo(
         coordinates = None
         labels = []
 
+    # --one-line CSV: open in 1-line mode with the points of that file, to add to them.
+    initial_one_line = None
+    if initial_one_line_csv:
+        try:
+            ol_markers, ol_deleted = read_one_line_csv(initial_one_line_csv, video_path)
+        except (OSError, ValueError) as exc:
+            print(f"Error: --one-line: {exc}")
+            return
+        initial_one_line = {"markers": ol_markers, "deleted": ol_deleted}
+        print(
+            f"1-line: {len(one_line_live_indices(ol_markers, ol_deleted))} points from "
+            f"{initial_one_line_csv}; Ctrl+I to edit, the next click is p{len(ol_markers)}"
+        )
+
     while True:
         initial_labeling_mode = getattr(run_getpixelvideo, "_initial_labeling_mode", None)
         result = play_video_with_controls(
@@ -18646,8 +19570,11 @@ def run_getpixelvideo(
             initial_frame=start_frame,
             freekiki_options=freekiki_options,
             initial_track_csv=initial_track_csv,
+            initial_one_line=initial_one_line,
         )
         initial_track_csv = None  # the preset track is for the first video only
+        # F8 with 1-line on hands the points over to the next video.
+        initial_one_line = result[5] if result and len(result) > 5 else None
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
             if len(result) > 4 and result[4]:
@@ -18719,7 +19646,8 @@ if __name__ == "__main__":
             "  --freekiki-videos DIR  Review videos in a folder\n"
             "  --freekiki-run DIR  FreeKiki Load: open a freekiki detect run/batch folder (finds the video)\n"
             "  --track-csv PATH  Load a tracking CSV at start-up (no dialog), e.g. a FreeKiki ball track\n"
-            "  --track-csv PATH  Load a tracking CSV at start-up (no dialog), e.g. a FreeKiki ball track\n"
+            "  --one-line CSV  Open in 1-line mode with the points of a *_markers_1_line.csv and add\n"
+            "                  to them (build one DLT calibration row over several videos; F8 = next)\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
             "Run without arguments to open one file picker (type auto-detected).\n"
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
@@ -18913,6 +19841,15 @@ if __name__ == "__main__":
         if not os.path.isfile(initial_track_csv):
             raise SystemExit(f"--track-csv file not found: {initial_track_csv}")
 
+    initial_one_line_csv = None
+    if "--one-line" in sys.argv:
+        pos = sys.argv.index("--one-line")
+        if pos + 1 >= len(sys.argv) or sys.argv[pos + 1].startswith("-"):
+            raise SystemExit("--one-line requires a *_markers_1_line.csv path")
+        initial_one_line_csv = sys.argv[pos + 1]
+        if not os.path.isfile(initial_one_line_csv):
+            raise SystemExit(f"--one-line file not found: {initial_one_line_csv}")
+
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,
         initial_media_path=initial_media_path,
@@ -18921,4 +19858,5 @@ if __name__ == "__main__":
         initial_start_frame=initial_start_frame,
         freekiki_options=freekiki_options,
         initial_track_csv=initial_track_csv,
+        initial_one_line_csv=initial_one_line_csv,
     )

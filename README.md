@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.18 (see `vaila.py`). **Package version:** 0.4.18 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-13
+**Last updated:** 2026-11-15
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -207,6 +207,17 @@ cd path\to\vaila
 
 ## What's new
 
+GetPixelVideo **REF3D** (Shift+R, or CALIB option 4) builds the 3D points of a DLT3D calibration
+from the measures of a box, a pole with marks or a triad, shows which point to click next, and
+saves the pixels, the `.ref3d` and a checked `.dlt3d` together; the panel warns **NOT A REAL
+CAMERA** when fx and fy disagree (a wrong measure). The measures live in `ref3d_template.toml`
+next to the videos: **N** writes it to fill in, **T** (Enter) loads it; CLI
+`python -m vaila.ref3d_builder --new-template FILE` / `--template-file FILE -o calib.ref3d`.
+An [illustrated guide](vaila/help/ref3d_guide.html) ([PT](vaila/help/ref3d_guide_pt.html)) opens
+with F1 or the panel's **Guide** button. 1-line points can span several videos (F8 / **Add
+video**), and **H** shows a bilingual help of the current mode. Chessboard Calib now finds small
+boards (full search when the fast check fails) and explains why intrinsics failed.
+
 FreeKiki `openplay-report` also accepts a two-camera dribble manifest:
 `--manifest MANIFEST.json --output RESULTS --kind dribble --lang pt --animation`.
 It writes a natural-speed SAM 3D Body overlay, a 60-second subtitled TV explanation,
@@ -334,7 +345,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 13.Nov.2026 v0.4.18 (Python 3.12.16)
+vailá - 15.Nov.2026 v0.4.18 (Python 3.12.16)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -1120,7 +1131,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.18`** (13 November 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.18`** (15 November 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

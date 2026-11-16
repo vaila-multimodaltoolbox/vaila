@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>vailá Manual | REF3D calibration guide</title>
+<style>
+  :root { --primary:#2563eb; --text:#1e293b; --muted:#64748b; --bg:#f8fafc; --card:#ffffff; --code-bg:#e2e8f0; --line:#cbd5e1; --ok:#2f9e44; --bad:#e03131; --accent:#f08c00; }
+  @media (prefers-color-scheme: dark) { :root { --primary:#93c5fd; --text:#e2e8f0; --muted:#94a3b8; --bg:#0f172a; --card:#1e293b; --code-bg:#1e293b; --line:#334155; --ok:#69db7c; --bad:#ff8787; --accent:#ffa94d; } }
+  body { font-family:"Segoe UI",system-ui,sans-serif; line-height:1.6; color:var(--text); background:var(--bg); margin:0; }
+  main { max-width:960px; margin:0 auto; padding:24px 16px 48px; }
+  h1, h2 { color:var(--primary); }
+  h2 { margin-top:2.2em; border-bottom:1px solid var(--line); padding-bottom:4px; }
+  pre { background:var(--code-bg); padding:10px 12px; border-radius:8px; overflow-x:auto; line-height:1.4; }
+  pre code { padding:0; background:none; }
+  code { background:var(--code-bg); padding:1px 4px; border-radius:4px; }
+  figure { margin:16px 0 20px; }
+  figure img { display:block; max-width:100%; height:auto; border-radius:10px; }
+  figcaption { color:var(--muted); font-size:0.93em; margin-top:6px; }
+  .wide { overflow-x:auto; }
+  .wide img { max-width:none; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap:16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .lang { float:right; font-size:0.9em; }
+  ol li, ul li { margin:4px 0; }
+  .ok { color:var(--ok); font-weight:600; } .bad { color:var(--bad); font-weight:600; } .key { background:var(--code-bg); border:1px solid var(--line); border-radius:4px; padding:0 5px; font-family:monospace; }
+  table { border-collapse:collapse; width:100%; margin:8px 0; display:block; overflow-x:auto; }
+  th, td { border:1px solid var(--line); padding:6px 8px; text-align:left; vertical-align:top; }
+</style>
+</head>
+<body>
+<main>
+<p class="lang"><a href="ref3d_guide_pt.html">Português</a></p>
+<h1>REF3D calibration guide (illustrated)</h1>
+<p><strong>Version:</strong> 0.4.18 <strong>Date:</strong> 15 November 2026 <strong>Updated:</strong> 15 November 2026 <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox</p>
+<p>Keep this page open next to <code>getpixelvideo</code> while you calibrate. In the window, <span class="key">F1</span> (with REF3D on) or the <strong>Guide</strong> button of the REF3D panel opens it. Reference of the tool: <a href="ref3d_builder.html">REF3D builder</a>; keys: <a href="getpixelvideo.html">getpixelvideo</a>.</p>
+
+<figure class="wide"><img src="images/ref3d/workflow_en.svg" width="934" height="170" alt="Six steps: measure, REF3D, click, move, check, save" /><figcaption>The whole calibration in six steps.</figcaption></figure>
+
+<h2>1. What you are calibrating</h2>
+<p>A DLT3D calibration links the <strong>3D position</strong> of known points (metres, in the <code>.ref3d</code>) to their <strong>pixels</strong> in the video. With it, <code>rec3d</code> turns the pixels of any marker into metres. You need at least <strong>6 points that are not all on one plane</strong>; use 8 to 12, spread over the volume where the movement happens.</p>
+
+<h2>2. The axes and the origin</h2>
+<figure><img src="images/ref3d/axes_en.svg" width="560" height="340" alt="X sideways, Y forward, Z up, right-handed" /><figcaption>Right-handed axes: X sideways, Y forward (away from the camera), Z up. Turning the fingers of the right hand from X to Y, the thumb points to Z (X × Y = Z).</figcaption></figure>
+<ul>
+  <li>Put the origin <code>(0, 0, 0)</code> on the floor at a corner you can see in every video.</li>
+  <li>X along the width, Y along the length (direction of walking or running), Z up. Units: metres.</li>
+  <li>Swapping X and Y makes a left-handed system: the 3D reconstruction comes out mirrored.</li>
+</ul>
+
+<h2>3. Choose the object (template)</h2>
+<p>The REF3D button builds the list of points from the measures of the object. The drawings below come from the same code: the numbers <code>p0, p1, …</code> are the order in which REF3D asks you to click.</p>
+<div class="grid">
+  <div class="card"><strong>2 · Pole on a rectangle</strong> (walkway)
+    <figure><img src="images/ref3d/pole_rect.svg" width="560" height="380" alt="Pole with marks at 0 and 1 m at the four corners of a 1.38 by 5 m rectangle, points p0 to p7" /><figcaption>Marks <code>0, 1</code>, positions <code>rect 1.38 x 5</code>: for each corner, the bottom mark then the top one. The corners go 0,0 → X,0 → 0,Y → X,Y (dashed arrows). The orange point (p6) is the next one, as in the panel.</figcaption></figure></div>
+  <div class="card"><strong>1 · Box</strong> (a frame or cube of known size)
+    <figure><img src="images/ref3d/box.svg" width="560" height="380" alt="Box 1.38 by 5 by 1 m with corners p0 to p7" /><figcaption>Size <code>1.38 x 5 x 1</code>: floor corners first (p0–p3), then the top (p4–p7); inside each layer Y, then X. Marks along an axis add the points of the edges.</figcaption></figure></div>
+  <div class="card"><strong>3 · Triad</strong> (three arms from one origin)
+    <figure><img src="images/ref3d/triad.svg" width="560" height="380" alt="Triad with X arm 0.5 m, Y arm 0.5 and 1 m, Z arm 0.5 and 1 m" /><figcaption>X <code>0.5</code>, Y <code>0.5, 1</code>, Z <code>0.5, 1</code>: origin, then the X marks, the Y marks, the Z marks. Like the pole, it can be moved over a rectangle.</figcaption></figure></div>
+</div>
+<p><strong>L</strong> loads a <code>.ref3d</code> you already have (points of any shape).</p>
+<h3 id="template">The measures go in a template file</h3>
+<p>Instead of typing the measures in the window, write them once in <code>ref3d_template.toml</code>, next to the calibration videos (one file serves every <code>calib_pos*</code> video of the folder). In the first REF3D dialog, <strong>N</strong> writes the file with the three objects (pole, box, triad) and opens it in the text editor; set <code>kind</code>, fill in the section of your object, save. Then REF3D + <span class="key">Enter</span>: <strong>T</strong> is the default and the dialog shows what the file holds (<code>T = Template ref3d_template.toml: pole, marks 0, 1 m, 4 positions</code>). A typo in a key or value is named in the message (<code>[pole] unknown key 'mark'</code>). The pole of the walkway:</p>
+<pre><code>kind = &quot;pole&quot;             # &quot;pole&quot;, &quot;box&quot; or &quot;triad&quot;
+
+[pole]                    # a rod with marks, stood at several floor positions
+marks = [0, 1]            # heights of the marks, bottom to top
+rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
+# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order</code></pre>
+<p>Options 1, 2, 3 (type the measures in dialogs) still work. Without a window: <code>python -m vaila.ref3d_builder --new-template ref3d_template.toml</code>, then <code>--template-file ref3d_template.toml -o calib.ref3d</code>.</p>
+
+<h2>4. Step by step in getpixelvideo</h2>
+<ol>
+  <li><strong>Measure</strong> the object with a tape: the width and length of the rectangle, the heights of the pole marks. Write them in <code>ref3d_template.toml</code> (REF3D <strong>N</strong> creates it; see <a href="#template">the template</a>). A wrong measure is the most common error (section 6).</li>
+  <li>Open the first calibration video. Press <span class="key">Ctrl+I</span> (INSERT), then the <strong>REF3D</strong> button (or <span class="key">Shift+R</span>, or CALIB option 4), and <span class="key">Enter</span>: <strong>T</strong> loads the template. (Or <strong>1</strong> Box, <strong>2</strong> Pole, <strong>3</strong> Triad to type the measures, <strong>L</strong> to load a <code>.ref3d</code>.)</li>
+  <li><strong>Click</strong> the point that is lit in the panel (orange in the list, blinking in the 3D sketch); the info line of the toolbar says <code>click = pN label (x, y, z)</code>. Then the next one, in order.</li>
+  <li>Point hidden in this video? <span class="key">A</span> leaves it empty and moves on. Wrong click? Right click removes the last one; a click on a row of the list selects that point to place it again.</li>
+  <li><strong>Move</strong> the pole to the next corner. If that position is in another video, press <strong>Add video</strong> (<span class="key">F8</span>): the points already clicked go along and the list continues.</li>
+  <li><strong>Check</strong> the rings and the camera in the panel (sections 5 and 6).</li>
+  <li><strong>Save</strong> (or <span class="key">Esc</span>): the pixels, the <code>.ref3d</code> and the <code>.dlt3d</code> are written next to the video (section 8).</li>
+</ol>
+
+<h2>5. Reading the screen</h2>
+<figure class="wide"><img src="images/ref3d/screen_en.svg" width="760" height="420" alt="getpixelvideo window with REF3D on: rings, next point, side panel, toolbar" /><figcaption>From 6 points off one plane, the DLT3D is solved at every click. Each clicked point gets a ring where the DLT puts it: <span class="ok">green</span> under 2 px, yellow under 5 px, <span class="bad">red</span> farther. <code>pN?</code> shows where the points not clicked yet should be: a good guide for the next click. <strong>Hide panel</strong> turns the panel into a small tab that still shows the count and the verdict.</figcaption></figure>
+
+<h2>6. Is it a real camera?</h2>
+<figure class="wide"><img src="images/ref3d/check_en.svg" width="760" height="300" alt="Right width gives square pixels; wrong width still fits the clicks but gives fx different from fy" /><figcaption>The 11 DLT parameters bend to fit almost any measure: the click error alone hides a wrong measure. A real camera has square pixels (fx ≈ fy: 1349 vs 1343 px with the right width). When fx and fy disagree, the panel says <span class="bad">NOT A REAL CAMERA</span>: check the measures with the tape. (The case of 13 November 2026: width typed 0.55 m, really 1.38 m.)</figcaption></figure>
+<table>
+  <tr><th>Panel says</th><th>Meaning</th><th>What to do</th></tr>
+  <tr><td><span class="ok">camera OK</span>, rings green</td><td>measures and clicks agree</td><td>Save</td></tr>
+  <tr><td>one ring red</td><td>that click is off</td><td>select the row, click again</td></tr>
+  <tr><td><span class="bad">NOT A REAL CAMERA</span>, rings green</td><td>a measure of the object is wrong, or X and Y are swapped</td><td>measure again; check the order of the corners</td></tr>
+  <tr><td>needs 6 / all points on one plane</td><td>too few points, or all on the floor</td><td>add points with height (pole top, Z arm)</td></tr>
+</table>
+
+<h2>7. Several videos (one position per video)</h2>
+<p>When the pole was filmed at each corner in a different video (for example <code>calib_pos1 … calib_pos4</code>), click the points of pos1 in the first video, press <strong>Add video</strong> (<span class="key">F8</span>), open the next one, and go on: the list continues at the next point. The camera must not move between the videos.</p>
+
+<h2>8. Files and next step</h2>
+<table>
+  <tr><th>File (next to the video on screen)</th><th>Content</th></tr>
+  <tr><td><code>&lt;video&gt;_markers_1_line.csv</code> + <code>.toml</code></td><td>the pixels of p0, p1, … and where each one was clicked</td></tr>
+  <tr><td><code>&lt;video&gt;_markers_1_line.ref3d</code></td><td>the 3D points, in metres</td></tr>
+  <tr><td><code>ref3d_template.toml</code> (folder of the videos)</td><td>the measures you fill in; REF3D N writes it, T loads it</td></tr>
+  <tr><td><code>&lt;video&gt;_markers_1_line.template.toml</code></td><td>the measures used, in the same format (T loads it when there is no <code>ref3d_template.toml</code>)</td></tr>
+  <tr><td><code>&lt;video&gt;_markers_1_line.dlt3d</code></td><td>the 11 DLT3D coefficients</td></tr>
+</table>
+<p>Then use the <code>.dlt3d</code> in <strong>DLT/REC 2D-3D</strong> (<code>rec3d</code>), or make it again from the pair <code>.csv</code> + <code>.ref3d</code> with <code>dlt3d.py</code>. Files that already existed are copied to <code>.vaila_markers_history/</code> first.</p>
+
+<h2>9. Common mistakes</h2>
+<ul>
+  <li><strong>A measure typed wrong</strong> (0.55 instead of 1.38): rings green, camera NOT REAL. Measure again.</li>
+  <li><strong>X and Y swapped</strong>, or the corners clicked in another order than 0,0 → X,0 → 0,Y → X,Y: follow the lit point in the panel.</li>
+  <li><strong>All points on the floor</strong>: no 3D calibration. Use the top of the pole or the Z arm.</li>
+  <li><strong>Fewer than 6 points</strong>, or 6 exactly: no check. Use 8 to 12.</li>
+  <li><strong>A hidden point clicked at a guess</strong>: use <span class="key">A</span> to leave it empty.</li>
+  <li><strong>Strong lens distortion</strong> (wide angle): the 11-parameter DLT does not model it; keep the points away from the image edges.</li>
+</ul>
+<p style="color:var(--muted)">The drawings are schematic (a fixed oblique view, not the view of your camera). They are made by <code>bin/make_ref3d_guide_svgs.py</code> from <code>vaila/ref3d_builder.py</code>, so the order of the points is the one the tool uses.</p>
+</main>
+</body>
+</html>

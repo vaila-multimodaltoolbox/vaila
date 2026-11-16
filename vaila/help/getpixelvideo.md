@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.15
+**Version:** 0.4.18
 **Date:** 22 July 2025  
-**Updated:** 06 November 2026
+**Updated:** 15 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -123,9 +123,10 @@ uv run vaila/getpixelvideo.py -d /path/to/image_folder    # same as --sequence; 
 uv run vaila/getpixelvideo.py --sequence /path/to/frames
 uv run vaila/getpixelvideo.py -f VIDEO.mp4 --fifa-dataset /path/to/unified
 uv run vaila/getpixelvideo.py -f VIDEO.mp4 --dataset /path/to/vaila_dataset
+uv run vaila/getpixelvideo.py -f POS2.mp4 --one-line POS1_markers_1_line.csv   # add points to a saved 1-line row
 ```
 
-Flags include `--fifa`, `--fifa-dataset [DIR]`, `--dataset DIR` (see module docstring in `vaila/getpixelvideo.py` for the full list).
+Flags include `--fifa`, `--fifa-dataset [DIR]`, `--dataset DIR`, `--one-line CSV` (see module docstring in `vaila/getpixelvideo.py` for the full list).
 
 ## Interface
 
@@ -239,11 +240,82 @@ frame,p1_x,p1_y,p2_x,p2_y
 
 ### 1 Line Mode (C key)
 
-- Creates points in sequence in one frame
-- Each click adds a new marker in sequential order
-- **Use case:** Tracing contours, paths, or outlines
-- **Activation:** Press C key to toggle
-- **Behavior:** Each click creates a new sequential marker
+One CSV row of points `p0 … pN`, in the order you click them, on any frames. It is
+the pixel file of a DLT2D / DLT3D calibration (`dlt2d.py`, `dlt3d.py`): the same
+`pN` of the `.ref2d` / `.ref3d` file is the same point.
+
+- **Activation:** press **C**, or the toolbar **Mode** button until it reads
+  `Mode: 1-line`. Editing needs **INSERT** (`Ctrl+I`).
+- **Left click** adds the next point. The status line shows what the next click
+  writes (`click = p4`).
+- **Right click** (or **R**) removes the **last** point; click again to redo it.
+  Right click again removes the one before, and so on. `Ctrl+Z` undoes.
+- **TAB** / **SHIFT+TAB** select a point of the row, on any frame. With a point
+  selected, a left click **re-places** it (it keeps its number) and a right click
+  removes it, leaving its slot empty for the next click. One more **TAB** after the
+  last point returns to "next click adds a point".
+- **A** adds an empty point: a point of the reference file that is not visible in
+  the video keeps its number (blank in the CSV).
+- Every point is drawn on every frame: **green** when it was clicked in the frame on
+  screen, a **cyan ring** when it is from another frame or another video.
+
+#### One calibration row from several videos
+
+With a fixed camera and a calibration object moved between recordings (a pole at
+each corner, a frame moved along a walkway), each position can be its own video:
+
+1. Open the first video, press **C**, click its points.
+2. Press **F8** and choose the next video. With `Mode: 1-line` on, the points go
+   with you (cyan rings) and the next click continues the numbering.
+3. Repeat for every video, then **Save** (or **ESC**) in the last one.
+
+The file is saved next to the video open at that moment, as
+`{video_name}_markers_1_line.csv`, with a `{video_name}_markers_1_line.toml` beside
+it that lists the video and frame of every point. To start a new row in the next
+video instead, leave 1-line mode (**C**) before **F8**. To continue a saved row
+later: **Load** its CSV, or `--one-line CSV` on the command line.
+
+### REF3D: build the DLT3D calibration (button **REF3D**, Shift+R)
+
+Builds the 3D control points (`.ref3d`) from the measures of the calibration object,
+shows each point while you click it, and saves the pixels, the `.ref3d` and the
+`.dlt3d` together. Also option **4** of **CALIB**. Details:
+[ref3d_builder.md](ref3d_builder.md). **Illustrated step-by-step guide** (axes,
+templates with the order of the points, screen, camera check):
+[ref3d_guide.md](ref3d_guide.md); with REF3D on, **F1** or the **Guide** button of the
+panel opens it in the browser.
+
+![REF3D calibration in six steps](images/ref3d/workflow_en.svg)
+
+1. **Ctrl+I** (INSERT), then **REF3D**. Load the measures from a template file, or type
+   them (Enter keeps the value shown):
+   - **Template file** (the quick way): **N** writes `ref3d_template.toml` in the folder
+     of the video (pole, box and triad sections) and opens it in the text editor; set
+     `kind`, fill in, save. Then REF3D + **Enter** loads it (**T** is the default). See
+     [the template](ref3d_guide.md#the-measures-go-in-a-template-file).
+   - **1 Box**: X x Y x Z, plus marks along each axis (points of the edges).
+   - **2 Pole**: heights of the marks (`0, 0.5, 1`) and where it stands:
+     `rect X x Y` (the 4 corners, order 0,0 / X,0 / 0,Y / X,Y) or `x,y; x,y; ...`.
+   - **3 Triad**: marks of the X (side), Y (forward) and Z (up) arms, and where its
+     origin stands (like the pole). Order: origin, X marks, Y marks, Z marks.
+   - **L**: load an existing `.ref3d`.
+2. Click the points in the order shown: the panel on the right lists them, draws the
+   object in 3D with the next point blinking, and the status line says
+   `click = p5 pos3 · mark 1 m (0, 5, 1)`. Right click removes the last point, **A**
+   leaves a point that is not visible empty, TAB or a click on a row of the panel
+   selects a point to re-place. **Hide panel** (top right of the panel) leaves only a
+   small tab with the count and the camera verdict; click it to show the panel again.
+   The sketch is right-handed: X to the right, Y away, Z up (X × Y = Z).
+3. From 6 points off one plane, the DLT3D is solved at every click: a ring shows where
+   each 3D point falls (green = the click agrees, red = far away; pink `pN?` = points
+   still to click), and the panel shows the error and **fx / fy**. A real camera has
+   fx ≈ fy; **NOT A REAL CAMERA** means a measure of the object (or a click) is wrong.
+   The error alone does not show it: the 11 parameters absorb a wrong measure.
+4. When the object is in another video, **F8** / **Add video**: the points go with you.
+5. **Save** (or ESC) writes next to the video on screen:
+   `<video>_markers_1_line.csv` (+ `.toml`), `<video>_markers_1_line.ref3d`,
+   `<video>_markers_1_line.template.toml` and `<video>_markers_1_line.dlt3d`. Files
+   that already exist are copied to `.vaila_markers_history/` first.
 
 ### Sequential Mode (S or O key)
 
@@ -445,14 +517,14 @@ Velocity/Acceleration require the points to be on different frames and use the v
 | **Ctrl+Z**      | Undo last marker/bbox edit (INSERT only) |
 | **Restore**     | Revert to session open or last successful Save |
 | **Left Click**  | Add/update marker at **selected** slot (INSERT) |
-| **Right Click** | Remove **selected** marker in current frame (then select previous) |
-| **TAB**         | Next marker in current frame     |
+| **Right Click** | Remove **selected** marker in current frame (then select previous). In **1 Line** mode: remove the selected point, else the **last** point |
+| **TAB**         | Next marker in current frame (1 Line mode: next point of the row, any frame) |
 | **SHIFT+TAB**   | Previous marker in current frame |
 | **Ctrl+G**      | Go KP — jump to a keypoint index by number |
-| **DELETE**      | Delete selected marker           |
+| **DELETE**      | Delete selected marker (same as **R**) |
 | **A**           | Add new empty marker to file (INSERT) |
 | **R**           | Remove **selected** marker in current frame (same as right click) |
-| **D**           | Delete **ALL** markers on the **current frame** (INSERT) |
+| **D**           | Delete **ALL** markers on the **current frame** (INSERT). In 1 Line mode: the points clicked in this frame |
 | **B** / **Lock (B)** | Lock/unlock selected marker — blue **Lock (B)** / amber **LOCKED Mn (B)**; cyan ring on the point while locked. Blocks TAB / Go KP / sequential advance; **R** keeps the same id; **AI Track** stays pinned. Auto-locks when AI Track turns ON; Track AI / Deep OFF do **not** unlock. |
 | **Gap Fill**    | Fill interior gaps on one marker (Kalman/RTS prediction or linear). Dialog: frame range, marker, method, max gap. Same family as `interp_smooth_split` / AI Track RTS. |
 | **Geo Homog**   | Interactive wizard then runs `vaila/planar_geometry_tracker.py`. Mode **1** = TOML + `marker:geom` map + optional `W,H`; mode **2** = 4 corners + width/height. **Edit pause** for session TOML/CSV, then per-frame DLT2D full-geometry reprojection. Reloads imputed points, live wireframe (**Shift+G**), optional save to new `*_geom_dlt_markers.csv`, `debug_projected_wireframe.mp4`, and `geometry_animation.html`. See [planar_geometry_tracker.md](planar_geometry_tracker.md). |
@@ -470,7 +542,7 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 
 | Key             | Action                                            |
 | --------------- | ------------------------------------------------- |
-| **C**           | Toggle "1 Line" mode                              |
+| **C**           | Toggle "1 Line" mode (one row of points for DLT calibration) |
 | **M** / **MousePlay** | Toggle Mouse-Play tracking — marks at mouse cursor continuously during video playback |
 | **O** or **S**  | Toggle Sequential mode (Normal mode only)        |
 | **P**           | Toggle Persistence mode                           |
@@ -484,7 +556,8 @@ Current speed is shown in the top-right corner of the window. Speed resets to 1�
 | **F5**          | Save Labeling Project & export dataset (Labeling Mode Only) |
 | **F6**          | Load Labeling Project (JSON) (Labeling Mode Only) |
 | **F7**          | Load dataset folder – next Save appends (Labeling Mode Only) |
-| **F8**          | Open another video (keeps dataset; no need to close app) |
+| **F8** / **Open** | Open another video (keeps dataset; no need to close app). With 1 Line mode on, the button reads **Add video** and the points go with you |
+| **Shift+R** / **REF3D** | REF3D builder: `.ref3d` from the object's measures, click its points, Save writes `.ref3d` + `.dlt3d` |
 | **F9**          | Export YOLO-pose dataset from clicked markers (see Pose dataset section) |
 | **Ctrl+N** / **Rename** | Rename marker slots to COCO/custom (pose kpts or detect classes) |
 | **Ctrl+E**      | Save ML: pose|detect + split + PNG dataset + `all_labels/` |
@@ -584,9 +657,13 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
 #### 1 Line Save
 
-- **Format:** `frame, p0_x, p0_y, p1_x, p1_y, ...`
-- **File:** `{video_name}_markers_sequential.csv`
-- **Use:** For path tracing and contour data
+- **Format:** one row, `frame, p0_x, p0_y, p1_x, p1_y, ...`, whole pixels; an empty
+  point is left blank. `frame` is the frame of the first point (0-based).
+- **File:** `{video_name}_markers_1_line.csv`, next to the video open when you save.
+- **Companion:** `{video_name}_markers_1_line.toml` lists, for every point, the video
+  and frame it was clicked in and its exact x/y. **Load** uses it to bring the points
+  back as they were; if the CSV was edited by hand afterwards, the CSV wins.
+- **Use:** pixel file for `dlt2d.py` / `dlt3d.py`; also paths and contours.
 
 #### Sequential Save
 
@@ -720,6 +797,40 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.18 (15 November 2026) — 1 Line mode: right click, and one row from several videos
+
+- **UI:** with 1 Line mode on and points to carry, the F8 toolbar button reads
+  **Add video** (was **Next video**).
+- **Bug fix:** in 1 Line mode a right click did not remove the last point. It removed
+  the first point of the frame instead, kept drawing it, and left its column blank in
+  the CSV. Right click now removes the last point (or the one selected with TAB) and
+  the next click takes that number again.
+- **Bug fix:** saving in 1 Line mode with no points closed the window with an error.
+- **New:** with 1 Line mode on, **F8** / **Add video** takes the points to another
+  video, so one calibration row can be clicked over several videos; `--one-line CSV`
+  opens a video with the points of a saved row. Points from other frames or videos
+  show as cyan rings. Saving also writes a `.toml` with the video and frame of every
+  point.
+- TAB walks every point of the row; a click with a point selected re-places it.
+- The help page named the wrong file for the 1 Line save.
+- **New: REF3D builder** (button **REF3D**, Shift+R, CALIB option 4): box, pole or
+  triad template from your measures, a side panel with the points and a 3D sketch,
+  the DLT3D solved at each click with the projection of every point and the fx / fy
+  check, and Save writing `.ref3d`, pixels and `.dlt3d` together
+  (`vaila/ref3d_builder.py`, also a command line).
+- **New:** toolbar button **Open** (F8) to open another video; **H** help redone:
+  "what to do now" steps for the current mode, key / button / description in columns,
+  English and Portuguese (**L**), digit keys jump to a section; every toolbar button
+  shows what it does and its key when the mouse is over it.
+- **Bug fix:** Ctrl+M did not open the AI Track model dialog (M took it first).
+- REF3D panel: **Hide panel** / **Show panel** button; the 3D sketch now draws a
+  right-handed system (X × Y = Z; it had X and Y swapped).
+- Illustrated REF3D calibration guide (`ref3d_guide.html`, EN and PT) with schematic
+  drawings; **F1** with REF3D on, or the **Guide** button of the panel, opens it.
+- REF3D measures in a template file: **N** writes `ref3d_template.toml` next to the video
+  and opens it in the editor, **T** (Enter) loads it; CLI `--new-template` /
+  `--template-file`.
 
 ### Version 0.4.15 (06 November 2026) — Frame numbers in videos with dropped frames
 

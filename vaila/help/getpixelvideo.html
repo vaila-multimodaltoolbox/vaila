@@ -237,9 +237,9 @@
       </section>
 
       <div class="version-info">
-        <strong>Version:</strong> 0.4.15<br />
+        <strong>Version:</strong> 0.4.18<br />
         <strong>Date:</strong> 22 July 2025<br />
-        <strong>Updated:</strong> 06 November 2026<br />
+        <strong>Updated:</strong> 15 November 2026<br />
         <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M.
         Monteiro<br />
         <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox<br />
@@ -608,7 +608,8 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               <table>
                 <tr><td><span class="key">F5</span>–<span class="key">F9</span></td><td>Labeling / dataset / pose export</td></tr>
                 <tr><td><span class="key">Ctrl+E</span></td><td>Save ML</td></tr>
-                <tr><td><span class="key">F8</span></td><td>Open another video</td></tr>
+                <tr><td><span class="key">F8</span></td><td>Open another video (button <strong>Open</strong> / <strong>Add video</strong>)</td></tr>
+                <tr><td><span class="key">Shift+R</span></td><td>REF3D builder (button <strong>REF3D</strong>)</td></tr>
                 <tr><td><span class="key">H</span></td><td>In-app help</td></tr>
                 <tr><td><span class="key">?</span></td><td>HTML help in browser</td></tr>
                 <tr><td><span class="key">Esc</span></td><td>Save and exit</td></tr>
@@ -693,11 +694,11 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">Right Click</span></td>
-                <td>Remove <strong>selected</strong> marker in current frame (then select previous)</td>
+                <td>Remove <strong>selected</strong> marker in current frame (then select previous). In <strong>1 Line</strong> mode: remove the selected point, else the <strong>last</strong> point</td>
               </tr>
               <tr>
                 <td><span class="key">TAB</span></td>
-                <td>Next marker in current frame</td>
+                <td>Next marker in current frame (1 Line mode: next point of the row, any frame)</td>
               </tr>
               <tr>
                 <td><span class="key">SHIFT+TAB</span></td>
@@ -709,7 +710,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">DELETE</span></td>
-                <td>Delete selected marker</td>
+                <td>Delete selected marker (same as <strong>R</strong>)</td>
               </tr>
               <tr>
                 <td><span class="key">Del Range button</span></td>
@@ -729,7 +730,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">D</span></td>
-                <td>Remove <strong>selected</strong> marker in current frame (same as <strong>R</strong> and right click)</td>
+                <td>Delete <strong>ALL</strong> markers on the <strong>current frame</strong> (INSERT). In 1 Line mode: the points clicked in this frame</td>
               </tr>
               <tr>
                 <td><span class="key">B</span> / <strong>Lock (B)</strong></td>
@@ -769,7 +770,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">F8</span></td>
-                <td>Open another video (keeps dataset; no need to close app)</td>
+                <td>Open another video (keeps dataset; no need to close app). With 1 Line mode on, the button reads <strong>Add video</strong> and the points go with you</td>
               </tr>
               <tr>
                 <td><span class="key">F9</span></td>
@@ -838,7 +839,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
             <table>
               <tr>
                 <td><span class="key">C</span></td>
-                <td>Toggle "1 Line" mode</td>
+                <td>Toggle "1 Line" mode (one row of points for DLT calibration)</td>
               </tr>
               <tr>
                 <td><span class="key">O</span> or <span class="key">S</span></td>
@@ -894,7 +895,7 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
               </tr>
               <tr>
                 <td><span class="key">F8</span></td>
-                <td>Open another video (keeps dataset; no need to close app)</td>
+                <td>Open another video (keeps dataset; no need to close app). With 1 Line mode on, the button reads <strong>Add video</strong> and the points go with you</td>
               </tr>
               <tr>
                 <td><span class="key">F9</span></td>
@@ -1087,19 +1088,51 @@ uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpi
 
         <h3>1 Line Mode (C key)</h3>
         <p>
-          Creates points in sequence in one frame. Each click adds a new marker.
-          Ideal for tracing paths or outlines.
+          One CSV row of points <code>p0 … pN</code>, in the order you click them, on
+          any frames. It is the pixel file of a DLT2D / DLT3D calibration
+          (<code>dlt2d.py</code>, <code>dlt3d.py</code>): the same <code>pN</code> of
+          the <code>.ref2d</code> / <code>.ref3d</code> file is the same point.
         </p>
         <ul>
-          <li>
-            <strong>Use case:</strong> Tracing contours, paths, or outlines
-          </li>
-          <li><strong>Activation:</strong> Press C key to toggle</li>
-          <li>
-            <strong>Behavior:</strong> Each click creates a new sequential
-            marker
-          </li>
+          <li><strong>Activation:</strong> press <span class="key">C</span>, or the toolbar <strong>Mode</strong> button until it reads <code>Mode: 1-line</code>. Editing needs <strong>INSERT</strong> (<span class="key">Ctrl+I</span>).</li>
+          <li><strong>Left click</strong> adds the next point. The status line shows what the next click writes (<code>click = p4</code>).</li>
+          <li><strong>Right click</strong> (or <span class="key">R</span>) removes the <strong>last</strong> point; click again to redo it. Right click again removes the one before, and so on. <span class="key">Ctrl+Z</span> undoes.</li>
+          <li><span class="key">TAB</span> / <span class="key">SHIFT+TAB</span> select a point of the row, on any frame. With a point selected, a left click <strong>re-places</strong> it (it keeps its number) and a right click removes it, leaving its slot empty for the next click. One more <span class="key">TAB</span> after the last point returns to "next click adds a point".</li>
+          <li><span class="key">A</span> adds an empty point: a point of the reference file that is not visible in the video keeps its number (blank in the CSV).</li>
+          <li>Every point is drawn on every frame: <strong>green</strong> when it was clicked in the frame on screen, a <strong>cyan ring</strong> when it is from another frame or another video.</li>
         </ul>
+        <h4>One calibration row from several videos</h4>
+        <p>
+          With a fixed camera and a calibration object moved between recordings (a
+          pole at each corner, a frame moved along a walkway), each position can be
+          its own video:
+        </p>
+        <ol>
+          <li>Open the first video, press <span class="key">C</span>, click its points.</li>
+          <li>Press <span class="key">F8</span> and choose the next video. With <code>Mode: 1-line</code> on, the points go with you (cyan rings) and the next click continues the numbering.</li>
+          <li>Repeat for every video, then <strong>Save</strong> (or <span class="key">ESC</span>) in the last one.</li>
+        </ol>
+        <p>
+          The file is saved next to the video open at that moment, as
+          <code>{video_name}_markers_1_line.csv</code>, with a
+          <code>{video_name}_markers_1_line.toml</code> beside it that lists the video
+          and frame of every point. To start a new row in the next video instead,
+          leave 1-line mode (<span class="key">C</span>) before
+          <span class="key">F8</span>. To continue a saved row later:
+          <strong>Load</strong> its CSV, or <code>--one-line CSV</code> on the command
+          line.
+        </p>
+
+        <h3>REF3D: build the DLT3D calibration (button <strong>REF3D</strong>, Shift+R)</h3>
+        <p> Builds the 3D control points (<code>.ref3d</code>) from the measures of the calibration object, shows each point while you click it, and saves the pixels, the <code>.ref3d</code> and the <code>.dlt3d</code> together. Also option <strong>4</strong> of <strong>CALIB</strong>. Details: <a href="ref3d_builder.html">ref3d_builder.md</a>. <strong>Illustrated step-by-step guide</strong> (axes, templates with the order of the points, screen, camera check): <a href="ref3d_guide.html">REF3D calibration guide</a>; with REF3D on, <strong>F1</strong> or the <strong>Guide</strong> button of the panel opens it in the browser.</p>
+        <p><img src="images/ref3d/workflow_en.svg" width="934" height="170" style="max-width:100%;height:auto" alt="REF3D calibration in six steps" /></p>
+        <ol>
+          <li><strong>Ctrl+I</strong> (INSERT), then <strong>REF3D</strong>. Load the measures from a template file, or type them (Enter keeps the value shown):<ul><li><strong>Template file</strong> (the quick way): <strong>N</strong> writes <code>ref3d_template.toml</code> in the folder of the video, with the pole, box and triad sections, and opens it in the text editor; set <code>kind</code>, fill in the measures, save. From then on REF3D + <strong>Enter</strong> loads it (<strong>T</strong> is the default and the dialog shows what the file holds). Details: <a href="ref3d_guide.html#template">the template</a>.</li><li><strong>1 Box</strong>: X x Y x Z, plus marks along each axis (points of the edges).</li><li><strong>2 Pole</strong>: heights of the marks (<code>0, 0.5, 1</code>) and where it stands: <code>rect X x Y</code> (the 4 corners, order 0,0 / X,0 / 0,Y / X,Y) or <code>x,y; x,y; ...</code>.</li><li><strong>3 Triad</strong>: marks of the X (side), Y (forward) and Z (up) arms, and where its origin stands (like the pole). Order: origin, X marks, Y marks, Z marks.</li><li><strong>L</strong>: load an existing <code>.ref3d</code>.</li></ul></li>
+          <li>Click the points in the order shown: the panel on the right lists them, draws the object in 3D with the next point blinking, and the status line says <code>click = p5 pos3 · mark 1 m (0, 5, 1)</code>. Right click removes the last point, <strong>A</strong> leaves a point that is not visible empty, TAB or a click on a row of the panel selects a point to re-place. <strong>Hide panel</strong> (top right of the panel) leaves only a small tab with the count and the camera verdict; click it to show the panel again. The sketch is right-handed: X to the right, Y away, Z up (X × Y = Z). <strong>Guide</strong> (next to Hide panel) opens the illustrated guide.</li>
+          <li>From 6 points off one plane, the DLT3D is solved at every click: a ring shows where each 3D point falls (green = the click agrees, red = far away; pink <code>pN?</code> = points still to click), and the panel shows the error and <strong>fx / fy</strong>. A real camera has fx ≈ fy; <strong>NOT A REAL CAMERA</strong> means a measure of the object (or a click) is wrong. The error alone does not show it: the 11 parameters absorb a wrong measure.</li>
+          <li>When the object is in another video, <strong>F8</strong> / <strong>Add video</strong>: the points go with you.</li>
+          <li><strong>Save</strong> (or ESC) writes next to the video on screen: <code>&lt;video&gt;_markers_1_line.csv</code> (+ <code>.toml</code>), <code>&lt;video&gt;_markers_1_line.ref3d</code>, <code>&lt;video&gt;_markers_1_line.template.toml</code> and <code>&lt;video&gt;_markers_1_line.dlt3d</code>. Files that already exist are copied to <code>.vaila_markers_history/</code> first.</li>
+        </ol>
 
         <h3>Sequential Mode (S or O key)</h3>
         <p>
@@ -1551,11 +1584,12 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
         </div>
 
         <h3>1 Line Save</h3>
-        <p>Saves sequential markers from 1 Line mode.</p>
+        <p>Saves the one row of points from 1 Line mode.</p>
         <ul>
-          <li><strong>Format:</strong> frame, p0_x, p0_y, p1_x, p1_y, ...</li>
-          <li><strong>File:</strong> {video_name}_markers_sequential.csv</li>
-          <li><strong>Use:</strong> For path tracing and contour data</li>
+          <li><strong>Format:</strong> one row, frame, p0_x, p0_y, p1_x, p1_y, ..., whole pixels; an empty point is left blank. <code>frame</code> is the frame of the first point (0-based).</li>
+          <li><strong>File:</strong> {video_name}_markers_1_line.csv, next to the video open when you save.</li>
+          <li><strong>Companion:</strong> {video_name}_markers_1_line.toml lists, for every point, the video and frame it was clicked in and its exact x/y. <strong>Load</strong> uses it to bring the points back as they were; if the CSV was edited by hand afterwards, the CSV wins.</li>
+          <li><strong>Use:</strong> pixel file for <code>dlt2d.py</code> / <code>dlt3d.py</code>; also paths and contours.</li>
         </ul>
 
         <h3>Sequential Save</h3>
@@ -1834,6 +1868,21 @@ frame,p6_x,p6_y,p7_x,p7_y,p8_x,p8_y,p9_x,p9_y,p10_x,p10_y,p11_x,p11_y,p12_x,p12_
 
       <section id="version-history">
         <h2>11. Version History</h2>
+
+        <h3>Version 0.4.18 (15 November 2026) &mdash; 1 Line mode: right click, and one row from several videos</h3>
+        <ul>
+          <li><strong>UI:</strong> with 1 Line mode on and points to carry, the F8 toolbar button reads <strong>Add video</strong> (was <strong>Next video</strong>).</li>
+          <li><strong>Bug fix:</strong> in 1 Line mode a right click did not remove the last point. It removed the first point of the frame instead, kept drawing it, and left its column blank in the CSV. Right click now removes the last point (or the one selected with TAB) and the next click takes that number again.</li>
+          <li><strong>Bug fix:</strong> saving in 1 Line mode with no points closed the window with an error.</li>
+          <li><strong>New:</strong> with 1 Line mode on, <strong>F8</strong> / <strong>Add video</strong> takes the points to another video, so one calibration row can be clicked over several videos; <code>--one-line CSV</code> opens a video with the points of a saved row. Points from other frames or videos show as cyan rings. Saving also writes a <code>.toml</code> with the video and frame of every point.</li>
+          <li>TAB walks every point of the row; a click with a point selected re-places it.</li>
+          <li>The help page named the wrong file for the 1 Line save.</li>
+          <li><strong>New: REF3D builder</strong> (button <strong>REF3D</strong>, Shift+R, CALIB option 4): box, pole or triad template from your measures, a side panel with the points and a 3D sketch, the DLT3D solved at each click with the projection of every point and the fx / fy check, and Save writing <code>.ref3d</code>, pixels and <code>.dlt3d</code> together (<code>vaila/ref3d_builder.py</code>, also a command line).</li>
+          <li>REF3D panel: <strong>Hide panel</strong> / <strong>Show panel</strong> and <strong>Guide</strong> buttons; right-handed 3D sketch (X × Y = Z). Illustrated calibration guide <a href="ref3d_guide.html">ref3d_guide.html</a> (EN and PT), opened by <strong>F1</strong> with REF3D on.</li>
+          <li>REF3D measures in a template file: <strong>N</strong> writes <code>ref3d_template.toml</code> next to the video and opens it in the editor, <strong>T</strong> (Enter) loads it; CLI <code>--new-template</code> / <code>--template-file</code>.</li>
+          <li><strong>New:</strong> toolbar button <strong>Open</strong> (F8) to open another video; <strong>H</strong> help redone: "what to do now" steps for the current mode, key / button / description in columns, English and Portuguese (<strong>L</strong>), digit keys jump to a section; every toolbar button shows what it does and its key when the mouse is over it.</li>
+          <li><strong>Bug fix:</strong> Ctrl+M did not open the AI Track model dialog (M took it first).</li>
+        </ul>
 
         <h3>Version 0.4.15 (06 November 2026) &mdash; Frame numbers in videos with dropped frames</h3>
         <ul>

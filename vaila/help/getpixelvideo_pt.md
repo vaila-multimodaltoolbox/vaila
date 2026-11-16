@@ -4,9 +4,9 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.4.8  
+**Versão:** 0.4.18  
 **Data:** 28 de Maio de 2026  
-**Atualizado:** 07 de Outubro de 2026  
+**Atualizado:** 15 de Novembro de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** *vailá* - Multimodal Toolbox
 
@@ -133,11 +133,86 @@ frame,p1_x,p1_y,p2_x,p2_y
 
 ### Modo 1 Line (tecla C)
 
-- Cria pontos em sequência em um único quadro
-- Cada clique adiciona um novo marcador em ordem sequencial
-- **Caso de uso:** Traçar contornos, caminhos ou outlines
-- **Ativação:** Pressione tecla C para alternar
-- **Comportamento:** Cada clique cria um novo marcador sequencial
+Uma linha de CSV com os pontos `p0 … pN`, na ordem dos cliques, em quaisquer
+quadros. É o arquivo de pixels de uma calibração DLT2D / DLT3D (`dlt2d.py`,
+`dlt3d.py`): o `pN` do arquivo `.ref2d` / `.ref3d` é o mesmo ponto.
+
+- **Ativação:** tecla **C**, ou o botão **Mode** até aparecer `Mode: 1-line`. Para
+  editar, ligue o **INSERT** (`Ctrl+I`).
+- **Clique esquerdo** adiciona o próximo ponto. A linha de status mostra o que o
+  próximo clique grava (`click = p4`).
+- **Clique direito** (ou **R**) remove o **último** ponto; clique de novo para
+  refazê-lo. Outro clique direito remove o anterior, e assim por diante. `Ctrl+Z`
+  desfaz.
+- **TAB** / **SHIFT+TAB** selecionam um ponto da linha, em qualquer quadro. Com um
+  ponto selecionado, o clique esquerdo **recoloca** esse ponto (o número não muda)
+  e o clique direito o remove, deixando a posição vazia para o próximo clique. Mais
+  um **TAB** depois do último ponto volta para "o próximo clique adiciona um ponto".
+- **A** adiciona um ponto vazio: um ponto do arquivo de referência que não aparece
+  no vídeo mantém o número (em branco no CSV).
+- Todos os pontos aparecem em todos os quadros: **verde** quando foi clicado no
+  quadro que está na tela, **anel ciano** quando é de outro quadro ou de outro vídeo.
+
+#### Uma linha de calibração a partir de vários vídeos
+
+Com a câmera parada e o objeto de calibração mudando de lugar entre as gravações
+(um poste em cada canto, uma estrutura deslocada ao longo da pista), cada posição
+pode ser um vídeo:
+
+1. Abra o primeiro vídeo, pressione **C** e clique os pontos dele.
+2. Pressione **F8** e escolha o próximo vídeo. Com `Mode: 1-line` ligado, os pontos
+   vão junto (anéis cianos) e o próximo clique continua a numeração.
+3. Repita para cada vídeo e use **Save** (ou **ESC**) no último.
+
+O arquivo é salvo ao lado do vídeo aberto naquele momento, como
+`{nome_do_video}_markers_1_line.csv`, com um `{nome_do_video}_markers_1_line.toml`
+que lista o vídeo e o quadro de cada ponto. Para começar uma linha nova no próximo
+vídeo, saia do modo 1 Line (**C**) antes do **F8**. Para continuar depois uma linha
+já salva: **Load** no CSV, ou `--one-line CSV` na linha de comando.
+
+### REF3D: montar a calibração DLT3D (botão **REF3D**, Shift+R)
+
+Monta os pontos 3D de controle (`.ref3d`) a partir das medidas do objeto de
+calibração, mostra cada ponto na hora de clicar e salva juntos os pixels, o `.ref3d`
+e o `.dlt3d`. Também é a opção **4** do **CALIB**. Detalhes:
+[ref3d_builder.md](ref3d_builder.md). **Guia ilustrado passo a passo** (eixos,
+gabaritos com a ordem dos pontos, tela, conferência da câmera):
+[ref3d_guide_pt.md](ref3d_guide_pt.md); com o REF3D ligado, **F1** ou o botão **Guide**
+do painel abre o guia no navegador.
+
+![Calibração REF3D em seis passos](images/ref3d/workflow_pt.svg)
+
+1. **Ctrl+I** (INSERT) e depois **REF3D**. Carregue as medidas de um arquivo de
+   template, ou digite-as (Enter mantém o valor mostrado):
+   - **Arquivo de template** (o jeito rápido): **N** grava o `ref3d_template.toml` na
+     pasta do vídeo (seções de poste, caixa e triedro) e o abre no editor de texto;
+     escolha o `kind`, preencha e salve. Depois, REF3D + **Enter** carrega (**T** é o
+     padrão). Veja [o template](ref3d_guide_pt.md#as-medidas-ficam-num-arquivo-de-template).
+   - **1 Caixa**: X x Y x Z e marcas em cada eixo (pontos das arestas).
+   - **2 Poste/bastão**: alturas das marcas (`0, 0.5, 1`) e onde ele fica:
+     `rect X x Y` (os 4 cantos, ordem 0,0 / X,0 / 0,Y / X,Y) ou `x,y; x,y; ...`.
+   - **3 Triedro**: marcas das hastes X (lateral), Y (frente) e Z (para cima) e onde
+     fica a origem (como o poste). Ordem: origem, marcas de X, de Y, de Z.
+   - **L**: carregar um `.ref3d` existente.
+2. Clique os pontos na ordem mostrada: o painel à direita lista os pontos, desenha o
+   objeto em 3D com o próximo ponto piscando, e a linha de status diz
+   `click = p5 pos3 · mark 1 m (0, 5, 1)`. Clique direito remove o último ponto, **A**
+   deixa vazio um ponto que não aparece, TAB ou um clique numa linha do painel
+   seleciona um ponto para recolocar. **Hide panel** (no alto do painel) deixa só uma
+   aba pequena com a contagem e o veredito da câmera; clique nela para mostrar o painel.
+   O desenho segue a regra da mão direita: X para a direita, Y para longe, Z para cima
+   (X × Y = Z).
+3. A partir de 6 pontos fora de um mesmo plano, o DLT3D é calculado a cada clique:
+   um anel mostra onde cada ponto 3D cai (verde = o clique confere, vermelho = longe;
+   rosa `pN?` = pontos ainda por clicar) e o painel mostra o erro e **fx / fy**. Uma
+   câmera real tem fx ≈ fy; **NOT A REAL CAMERA** quer dizer que uma medida do objeto
+   (ou um clique) está errada. O erro sozinho não mostra isso: os 11 parâmetros
+   absorvem uma medida errada.
+4. Se o objeto está em outro vídeo, **F8** / **Add video**: os pontos vão junto.
+5. **Save** (ou ESC) grava ao lado do vídeo na tela: `<video>_markers_1_line.csv`
+   (+ `.toml`), `<video>_markers_1_line.ref3d`, `<video>_markers_1_line.template.toml`
+   e `<video>_markers_1_line.dlt3d`. Arquivos que já existem são copiados antes para
+   `.vaila_markers_history/`.
 
 ### Modo Sequencial (tecla S)
 
@@ -227,14 +302,14 @@ Rastreamento semi-automático de alta performance baseado em Correlação Cruzad
 | Tecla               | Ação                                     |
 | ------------------- | ---------------------------------------- |
 | **Clique Esquerdo** | Adicionar/atualizar marcador no slot **selecionado** |
-| **Clique Direito**  | Remover marcador **selecionado** no quadro atual (vai ao anterior) |
+| **Clique Direito**  | Remover marcador **selecionado** no quadro atual (vai ao anterior). No modo **1 Line**: remove o ponto selecionado ou, sem seleção, o **último** |
 | **TAB**             | Próximo marcador no quadro atual         |
 | **SHIFT+TAB**       | Marcador anterior no quadro atual        |
 | **Ctrl+G**          | Go KP — saltar para um keypoint pelo número |
-| **DELETE**          | Excluir marcador selecionado             |
+| **DELETE**          | Excluir marcador selecionado (igual a **R**) |
 | **A**               | Adicionar novo marcador vazio ao arquivo |
 | **R**               | Remover marcador **selecionado** no quadro atual (igual ao clique direito) |
-| **D**               | Remover marcador **selecionado** no quadro atual (igual a **R** e clique direito) |
+| **D**               | Excluir **TODOS** os marcadores do **quadro atual** (INSERT). No modo 1 Line: os pontos clicados neste quadro |
 
 ### Velocidade de Reprodução
 
@@ -264,7 +339,8 @@ A velocidade atual é exibida no canto superior direito da janela. Ela volta a 1
 | **F5**          | Salvar Projeto e exportar dataset (Apenas Modo Labeling)  |
 | **F6**          | Carregar Projeto de Labeling (JSON) (Apenas Modo Labeling) |
 | **F7**          | Carregar pasta do dataset – próximo Save anexa (Modo Labeling) |
-| **F8**          | Abrir outro vídeo (mantém dataset; não precisa fechar o app) |
+| **F8** / **Open** | Abrir outro vídeo (mantém dataset; não precisa fechar o app). Com o modo 1 Line ligado, o botão vira **Add video** e os pontos vão junto |
+| **Shift+R** / **REF3D** | Construtor de REF3D: `.ref3d` com as medidas do objeto, clique os pontos, o Save grava `.ref3d` + `.dlt3d` |
 | **F9**          | Exportar dataset YOLO-pose a partir dos marcadores (ver seção acima) |
 | **Ctrl+E**      | Salvar ML: escolher split, exportar dataset PNG + `all_labels/` |
 | **1**           | Diminuir quadros de persistência                           |
@@ -387,9 +463,14 @@ Cada arquivo JSON contém:
 
 #### Salvamento 1 Line
 
-- **Formato:** `frame, p1_x, p1_y, p2_x, p2_y, ...`
-- **Arquivo:** `{nome_do_video}_markers_sequential.csv`
-- **Uso:** Para traçado de caminhos e dados de contorno
+- **Formato:** uma linha, `frame, p0_x, p0_y, p1_x, p1_y, ...`, em pixels inteiros;
+  um ponto vazio fica em branco. `frame` é o quadro do primeiro ponto (começa em 0).
+- **Arquivo:** `{nome_do_video}_markers_1_line.csv`, ao lado do vídeo aberto na hora
+  de salvar.
+- **Acompanha:** `{nome_do_video}_markers_1_line.toml`, com o vídeo e o quadro em que
+  cada ponto foi clicado e o x/y exato. O **Load** usa esse arquivo para trazer os
+  pontos de volta como estavam; se o CSV foi editado à mão depois, vale o CSV.
+- **Uso:** arquivo de pixels para `dlt2d.py` / `dlt3d.py`; também caminhos e contornos.
 
 #### Salvamento Sequencial
 
@@ -499,6 +580,41 @@ Sistema de backup integrado para segurança dos dados:
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.4.18 (15 de Novembro de 2026) — Modo 1 Line: clique direito e uma linha a partir de vários vídeos
+
+- **UI:** com o modo 1 Line ligado e pontos para levar, o botão F8 da barra passa a
+  **Add video** (antes **Next video**).
+- **Correção:** no modo 1 Line o clique direito não removia o último ponto. Removia
+  o primeiro ponto do quadro, continuava desenhando esse ponto e deixava a coluna
+  dele em branco no CSV. Agora remove o último ponto (ou o selecionado com TAB) e o
+  próximo clique reaproveita o número.
+- **Correção:** salvar no modo 1 Line sem nenhum ponto fechava a janela com erro.
+- **Novo:** com o modo 1 Line ligado, o **F8** / **Add video** leva os pontos para
+  outro vídeo, e uma linha de calibração pode ser clicada em vários vídeos;
+  `--one-line CSV` abre um vídeo com os pontos de uma linha já salva. Pontos de
+  outros quadros ou vídeos aparecem como anéis cianos. O salvamento também grava um
+  `.toml` com o vídeo e o quadro de cada ponto.
+- O TAB percorre todos os pontos da linha; com um ponto selecionado, o clique o recoloca.
+- A ajuda citava o arquivo errado no salvamento 1 Line.
+- **Novo: construtor de REF3D** (botão **REF3D**, Shift+R, opção 4 do CALIB):
+  gabarito caixa, poste ou triedro com as suas medidas, painel lateral com os pontos
+  e desenho 3D, DLT3D calculado a cada clique com a projeção de cada ponto e a
+  conferência fx / fy, e o Save gravando `.ref3d`, pixels e `.dlt3d` juntos
+  (`vaila/ref3d_builder.py`, também pela linha de comando).
+- **Novo:** botão **Open** (F8) na barra para abrir outro vídeo; ajuda **H** refeita:
+  passos "o que fazer agora" para o modo atual, tecla / botão / descrição em colunas,
+  inglês e português (**L**), teclas numéricas vão para a seção; cada botão da barra
+  mostra o que faz e a tecla quando o mouse passa por cima.
+- **Correção:** Ctrl+M não abria o seletor de modelo do AI Track (a tecla M pegava antes).
+- Painel do REF3D: botão **Hide panel** / **Show panel**; o desenho 3D agora segue a
+  regra da mão direita (X × Y = Z; antes X e Y estavam trocados).
+- Guia ilustrado da calibração REF3D (`ref3d_guide_pt.html`, PT e EN) com desenhos
+  esquemáticos; **F1** com o REF3D ligado, ou o botão **Guide** do painel, abre o guia.
+- Medidas do REF3D num arquivo de template: **N** grava o `ref3d_template.toml` ao lado do
+  vídeo e o abre no editor, **T** (Enter) carrega; CLI `--new-template` /
+  `--template-file`.
+- Os outros recursos adicionados depois da 0.4.8 estão descritos na página em inglês.
 
 ### Versão 0.3.46 (10 de Junho de 2026)
 

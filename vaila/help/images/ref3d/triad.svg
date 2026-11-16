@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 380" width="560" height="380" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-label="triad X 0.5 | Y 0.5, 1 | Z 0.5, 1 m, 1 positions">
+<defs><marker id="arrow-x" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#d6453d"/></marker><marker id="arrow-y" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f9e44"/></marker><marker id="arrow-z" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f6fd6"/></marker><marker id="arrow-seq" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>
+<rect x="0.5" y="0.5" width="559" height="379" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+<text x="196.1" y="346.0" font-size="12" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke">pos1</text>
+<line x1="210.1" y1="300.0" x2="337.1" y2="300.0" stroke="#d6453d" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="210.1" y1="300.0" x2="349.9" y2="198.4" stroke="#2f9e44" stroke-width="2.5" stroke-linecap="round"/>
+<line x1="210.1" y1="300.0" x2="210.1" y2="46.0" stroke="#2f6fd6" stroke-width="2.5" stroke-linecap="round"/>
+<circle cx="210.1" cy="300.0" r="4.5" fill="#1e293b" stroke="#ffffff" stroke-width="1.5"/>
+<text x="201.1" y="316.0" font-size="14" fill="#1e293b" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700" text-anchor="end">p0</text>
+<text x="201.1" y="329.0" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke" text-anchor="end">(0, 0, 0)</text>
+<circle cx="337.1" cy="300.0" r="4.5" fill="#1e293b" stroke="#ffffff" stroke-width="1.5"/>
+<text x="346.1" y="316.0" font-size="14" fill="#1e293b" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700" text-anchor="start">p1</text>
+<text x="346.1" y="329.0" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke" text-anchor="start">(0.5, 0, 0)</text>
+<circle cx="280.0" cy="249.2" r="4.5" fill="#1e293b" stroke="#ffffff" stroke-width="1.5"/>
+<text x="289.0" y="265.2" font-size="14" fill="#1e293b" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700" text-anchor="start">p2</text>
+<text x="289.0" y="278.2" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke" text-anchor="start">(0, 0.5, 0)</text>
+<circle cx="349.9" cy="198.4" r="4.5" fill="#1e293b" stroke="#ffffff" stroke-width="1.5"/>
+<text x="358.9" y="190.4" font-size="14" fill="#1e293b" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700" text-anchor="start">p3</text>
+<text x="358.9" y="176.4" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke" text-anchor="start">(0, 1, 0)</text>
+<circle cx="210.1" cy="173.0" r="4.5" fill="#1e293b" stroke="#ffffff" stroke-width="1.5"/>
+<text x="201.1" y="165.0" font-size="14" fill="#1e293b" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700" text-anchor="end">p4</text>
+<text x="201.1" y="151.0" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke" text-anchor="end">(0, 0, 0.5)</text>
+<circle cx="210.1" cy="46.0" r="4.5" fill="#1e293b" stroke="#ffffff" stroke-width="1.5"/>
+<text x="201.1" y="38.0" font-size="14" fill="#1e293b" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700" text-anchor="end">p5</text>
+<text x="201.1" y="24.0" font-size="11" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke" text-anchor="end">(0, 0, 1)</text>
+<line x1="390.0" y1="358.0" x2="424.0" y2="358.0" stroke="#d6453d" stroke-width="2.5" marker-end="url(#arrow-x)"/>
+<text x="428.0" y="362.0" font-size="13" fill="#d6453d" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700">X</text>
+<line x1="390.0" y1="358.0" x2="417.5" y2="338.0" stroke="#2f9e44" stroke-width="2.5" marker-end="url(#arrow-y)"/>
+<text x="421.5" y="342.0" font-size="13" fill="#2f9e44" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700">Y</text>
+<line x1="390.0" y1="358.0" x2="390.0" y2="324.0" stroke="#2f6fd6" stroke-width="2.5" marker-end="url(#arrow-z)"/>
+<text x="394.0" y="328.0" font-size="13" fill="#2f6fd6" stroke="#ffffff" stroke-width="3" paint-order="stroke" font-weight="700">Z</text>
+<text x="450.0" y="362.0" font-size="12" fill="#64748b" stroke="#ffffff" stroke-width="3" paint-order="stroke">X × Y = Z</text>
+</svg>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 300" width="760" height="300" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-label="Right and wrong measure: both fit the clicks, only one is a real camera">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>
+<rect x="0.5" y="0.5" width="759" height="299" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+<rect x="20" y="20" width="350" height="230" rx="8" fill="#f8fafc" stroke="#2f9e44" stroke-width="2"/>
+<text x="34" y="44" font-size="14" fill="#1e293b" font-weight="700" text-anchor="start">Measure right: width 1.38 m</text>
+<rect x="160.0" y="80.0" width="70.0" height="70.0" fill="none" stroke="#2f9e44" stroke-width="3"/>
+<text x="195" y="170.0" font-size="12" fill="#64748b" font-weight="600" text-anchor="middle">camera pixel: fx = fy</text>
+<text x="34" y="210" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">clicks fit: ~1 px</text>
+<text x="34" y="232" font-size="13" fill="#2f9e44" font-weight="700" text-anchor="start">fx 1349 vs fy 1343 → camera OK</text>
+<rect x="390" y="20" width="350" height="230" rx="8" fill="#f8fafc" stroke="#e03131" stroke-width="2"/>
+<text x="404" y="44" font-size="14" fill="#1e293b" font-weight="700" text-anchor="start">Measure wrong: width typed 0.55 m</text>
+<rect x="481.0" y="80.0" width="168.0" height="66.5" fill="none" stroke="#e03131" stroke-width="3"/>
+<text x="565" y="166.5" font-size="12" fill="#64748b" font-weight="600" text-anchor="middle">camera pixel: fx ≠ fy</text>
+<text x="404" y="210" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">clicks fit: ~1 px</text>
+<text x="404" y="232" font-size="13" fill="#e03131" font-weight="700" text-anchor="start">fx 3359 vs fy 1339 → NOT A REAL CAMERA</text>
+<text x="380.0" y="278" font-size="12.5" fill="#64748b" font-weight="400" text-anchor="middle">The 11 DLT parameters bend to fit any measure; only fx / fy shows the error.</text>
+</svg>

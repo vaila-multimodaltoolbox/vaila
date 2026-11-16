@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 934 170" width="934" height="170" font-family="Segoe UI, system-ui, sans-serif" role="img" aria-label="Calibração REF3D em seis passos">
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#64748b"/></marker></defs>
+<rect x="0.5" y="0.5" width="933" height="169" rx="10" fill="#ffffff" stroke="#cbd5e1"/>
+<rect x="16" y="20" width="132" height="128" rx="9" fill="#f8fafc" stroke="#2563eb" stroke-width="2"/>
+<circle cx="36" cy="42" r="13" fill="#2563eb"/>
+<text x="36" y="47" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+<text x="56" y="47" font-size="15" fill="#1e293b" font-weight="700" text-anchor="start">Medir</text>
+<text x="28" y="82" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">Trena no objeto;</text>
+<text x="28" y="101" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">anote no .toml</text>
+<text x="28" y="120" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">(REF3D N)</text>
+<line x1="151" y1="84.0" x2="167" y2="84.0" stroke="#64748b" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="170" y="20" width="132" height="128" rx="9" fill="#f8fafc" stroke="#f08c00" stroke-width="2"/>
+<circle cx="190" cy="42" r="13" fill="#f08c00"/>
+<text x="190" y="47" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+<text x="210" y="47" font-size="15" fill="#1e293b" font-weight="700" text-anchor="start">REF3D</text>
+<text x="182" y="82" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">Ctrl+I (INSERT),</text>
+<text x="182" y="101" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">botão REF3D,</text>
+<text x="182" y="120" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">Enter = T carrega</text>
+<line x1="305" y1="84.0" x2="321" y2="84.0" stroke="#64748b" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="324" y="20" width="132" height="128" rx="9" fill="#f8fafc" stroke="#2563eb" stroke-width="2"/>
+<circle cx="344" cy="42" r="13" fill="#2563eb"/>
+<text x="344" y="47" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+<text x="364" y="47" font-size="15" fill="#1e293b" font-weight="700" text-anchor="start">Clicar</text>
+<text x="336" y="82" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">o ponto aceso</text>
+<text x="336" y="101" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">no painel, na</text>
+<text x="336" y="120" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">ordem p0, p1…</text>
+<line x1="459" y1="84.0" x2="475" y2="84.0" stroke="#64748b" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="478" y="20" width="132" height="128" rx="9" fill="#f8fafc" stroke="#2563eb" stroke-width="2"/>
+<circle cx="498" cy="42" r="13" fill="#2563eb"/>
+<text x="498" y="47" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle">4</text>
+<text x="518" y="47" font-size="15" fill="#1e293b" font-weight="700" text-anchor="start">Mover</text>
+<text x="490" y="82" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">o poste ao próximo</text>
+<text x="490" y="101" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">canto: Add video</text>
+<text x="490" y="120" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">(F8) se outro vídeo</text>
+<line x1="613" y1="84.0" x2="629" y2="84.0" stroke="#64748b" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="632" y="20" width="132" height="128" rx="9" fill="#f8fafc" stroke="#2f9e44" stroke-width="2"/>
+<circle cx="652" cy="42" r="13" fill="#2f9e44"/>
+<text x="652" y="47" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle">5</text>
+<text x="672" y="47" font-size="15" fill="#1e293b" font-weight="700" text-anchor="start">Conferir</text>
+<text x="644" y="82" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">anéis verdes,</text>
+<text x="644" y="101" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">fx ≈ fy,</text>
+<text x="644" y="120" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">camera OK</text>
+<line x1="767" y1="84.0" x2="783" y2="84.0" stroke="#64748b" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="786" y="20" width="132" height="128" rx="9" fill="#f8fafc" stroke="#2563eb" stroke-width="2"/>
+<circle cx="806" cy="42" r="13" fill="#2563eb"/>
+<text x="806" y="47" font-size="14" fill="#ffffff" font-weight="700" text-anchor="middle">6</text>
+<text x="826" y="47" font-size="15" fill="#1e293b" font-weight="700" text-anchor="start">Salvar</text>
+<text x="798" y="82" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">.ref3d + pixels</text>
+<text x="798" y="101" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">+ .dlt3d →</text>
+<text x="798" y="120" font-size="12.5" fill="#1e293b" font-weight="400" text-anchor="start">dlt3d.py / rec3d</text>
+</svg>
