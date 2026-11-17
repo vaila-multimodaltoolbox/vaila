@@ -1,8 +1,8 @@
 """REF3D builder: control points from the measures of a box, pole or triad.
 
 Author: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
-Update Date: 15 November 2026
-Version: 0.4.18
+Update Date: 16 November 2026
+Version: 0.4.19
 """
 
 from __future__ import annotations
@@ -360,3 +360,39 @@ def test_cli_new_template_then_template_file(tmp_path: Path, capsys) -> None:
         for p in rb.read_template(path).points()
     ]
     assert "points (triad" in capsys.readouterr().out
+
+
+def test_videos_table_maps_each_video_to_its_floor_position(tmp_path: Path) -> None:
+    """[videos] names the floor position of each video; it round-trips and is checked."""
+    path = tmp_path / "t.toml"
+    path.write_text(
+        'kind = "pole"\n[pole]\nmarks = [0, 1]\nrect = [1.38, 5]\n'
+        '[videos]\n"pos1.mp4" = [0, 0]\n"pos2.mp4" = [1.38, 0]\n',
+        encoding="utf-8",
+    )
+    template = rb.read_template(path)
+    assert dict(template.video_positions) == {"pos1.mp4": (0.0, 0.0), "pos2.mp4": (1.38, 0.0)}
+    assert template.describe().endswith("2 videos")
+    copy = tmp_path / "copy.toml"
+    rb.write_template(template, copy)
+    assert dict(rb.read_template(copy).video_positions) == dict(template.video_positions)
+
+
+def test_videos_table_rejects_a_position_the_object_does_not_have(tmp_path: Path) -> None:
+    path = tmp_path / "t.toml"
+    path.write_text(
+        'kind = "pole"\n[pole]\nmarks = [0, 1]\nrect = [1.38, 5]\n[videos]\n"pos2.mp4" = [1.4, 0]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(rb.Ref3dError, match="not one of the floor positions"):
+        rb.read_template(path)
+
+
+def test_videos_table_is_not_for_a_box(tmp_path: Path) -> None:
+    path = tmp_path / "t.toml"
+    path.write_text(
+        'kind = "box"\n[box]\nsize = [1, 5, 1]\n[videos]\n"pos1.mp4" = [0, 0]\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(rb.Ref3dError, match="only for pole and triad"):
+        rb.read_template(path)

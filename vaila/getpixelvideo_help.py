@@ -6,8 +6,8 @@ Pixel Coordinate Tool - help content (getpixelvideo_help.py)
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 14 November 2026
-Update: 15 November 2026
-Version: 0.4.18
+Update: 16 November 2026
+Version: 0.4.19
 Python Version: 3.12.16
 
 Description:

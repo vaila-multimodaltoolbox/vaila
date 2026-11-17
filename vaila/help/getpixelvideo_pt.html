@@ -155,9 +155,9 @@
         <h1>getpixelvideo.py - Documentação Completa</h1>
 
         <div class="version-info">
-            <strong>Versão:</strong> 0.4.18<br>
+            <strong>Versão:</strong> 0.4.19<br>
             <strong>Data:</strong> 28 de Maio de 2026<br>
-            <strong>Atualizado:</strong> 15 de Novembro de 2026<br>
+            <strong>Atualizado:</strong> 16 de Novembro de 2026<br>
             <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro<br>
             <strong>Projeto:</strong> <i>vailá</i> - Multimodal Toolbox<br>
             <strong>Novo na 0.5.0:</strong> <strong>F9</strong> exporta dataset YOLO-pose a partir dos marcadores
@@ -223,7 +223,7 @@
             <ul>
                 <li><strong>Python 3.12+</strong></li>
                 <li><strong>OpenCV (cv2):</strong> Processamento de vídeo</li>
-                <li><strong>Pygame:</strong> GUI e visualização</li>
+                <li><strong>pygame-ce:</strong> GUI e visualização (<code>import pygame</code>)</li>
                 <li><strong>Pandas:</strong> Manipulação de dados CSV</li>
                 <li><strong>NumPy:</strong> Operações numéricas</li>
                 <li><strong>Tkinter:</strong> Diálogos de arquivo (geralmente incluído com Python)</li>
@@ -237,12 +237,12 @@
             </div>
             <p>Dependências avulsas:</p>
             <div class="code">
-                pip install opencv-python pygame pandas numpy
+                pip install opencv-python pygame-ce pandas numpy
             </div>
 
             <div class="warning">
-                <strong>Nota:</strong> Em alguns sistemas, o pygame pode exigir dependências adicionais do sistema.
-                Se encontrar problemas, consulte a documentação de instalação do pygame para sua plataforma específica.
+                <strong>Nota:</strong> Em alguns sistemas, o pygame-ce pode exigir dependências adicionais do sistema.
+                Se encontrar problemas, consulte a documentação de instalação do pygame-ce para sua plataforma específica.
             </div>
         </section>
 
@@ -624,7 +624,7 @@
             <p> Monta os pontos 3D de controle (<code>.ref3d</code>) a partir das medidas do objeto de calibração, mostra cada ponto na hora de clicar e salva juntos os pixels, o <code>.ref3d</code> e o <code>.dlt3d</code>. Também é a opção <strong>4</strong> do <strong>CALIB</strong>. Detalhes: <a href="ref3d_builder.html">ref3d_builder.md</a>. <strong>Guia ilustrado passo a passo</strong> (eixos, gabaritos com a ordem dos pontos, tela, conferência da câmera): <a href="ref3d_guide_pt.html">guia de calibração REF3D</a>; com o REF3D ligado, <strong>F1</strong> ou o botão <strong>Guide</strong> do painel abre o guia no navegador.</p>
             <p><img src="images/ref3d/workflow_pt.svg" width="934" height="170" style="max-width:100%;height:auto" alt="Calibração REF3D em seis passos" /></p>
             <ol>
-              <li><strong>Ctrl+I</strong> (INSERT) e depois <strong>REF3D</strong>. Carregue as medidas de um arquivo de template, ou digite-as (Enter mantém o valor mostrado):<ul><li><strong>Arquivo de template</strong> (o jeito rápido): <strong>N</strong> grava o <code>ref3d_template.toml</code> na pasta do vídeo, com as seções de poste, caixa e triedro, e o abre no editor de texto; escolha o <code>kind</code>, preencha as medidas e salve. Daí em diante, REF3D + <strong>Enter</strong> carrega o arquivo (<strong>T</strong> é o padrão e o diálogo mostra o que ele contém). Detalhes: <a href="ref3d_guide_pt.html#template">o template</a>.</li><li><strong>1 Caixa</strong>: X x Y x Z e marcas em cada eixo (pontos das arestas).</li><li><strong>2 Poste/bastão</strong>: alturas das marcas (<code>0, 0.5, 1</code>) e onde ele fica: <code>rect X x Y</code> (os 4 cantos, ordem 0,0 / X,0 / 0,Y / X,Y) ou <code>x,y; x,y; ...</code>.</li><li><strong>3 Triedro</strong>: marcas das hastes X (lateral), Y (frente) e Z (para cima) e onde fica a origem (como o poste). Ordem: origem, marcas de X, de Y, de Z.</li><li><strong>L</strong>: carregar um <code>.ref3d</code> existente.</li></ul></li>
+              <li><strong>Ctrl+I</strong> (INSERT) e depois <strong>REF3D</strong>. Carregue as medidas de um arquivo de template, ou digite-as (Enter mantém o valor mostrado):<ul><li><strong>Arquivo de template</strong> (o jeito rápido): <strong>N</strong> grava o <code>ref3d_template.toml</code> na pasta do vídeo (seções de poste, caixa e triedro, com comentários) e o abre no editor; escolha o <code>kind</code>, preencha e salve. A tabela opcional <code>[videos]</code> liga cada clipe ao canto no chão. Daí em diante, REF3D + <strong>Enter</strong> carrega (<strong>T</strong> é o padrão). Detalhes: <a href="ref3d_guide_pt.html#template">o template</a>.</li><li><strong>1 Caixa</strong>: X x Y x Z e marcas em cada eixo (pontos das arestas).</li><li><strong>2 Poste/bastão</strong>: alturas das marcas (<code>0, 0.5, 1</code>) e onde ele fica: <code>rect X x Y</code> (os 4 cantos, ordem 0,0 / X,0 / 0,Y / X,Y) ou <code>x,y; x,y; ...</code>.</li><li><strong>3 Triedro</strong>: marcas das hastes X (lateral), Y (frente) e Z (para cima) e onde fica a origem (como o poste). Ordem: origem, marcas de X, de Y, de Z.</li><li><strong>L</strong>: carregar um <code>.ref3d</code> existente.</li></ul></li>
               <li>Clique os pontos na ordem mostrada: o painel à direita lista os pontos, desenha o objeto em 3D com o próximo ponto piscando, e a linha de status diz <code>click = p5 pos3 · mark 1 m (0, 5, 1)</code>. Clique direito remove o último ponto, <strong>A</strong> deixa vazio um ponto que não aparece, TAB ou um clique numa linha do painel seleciona um ponto para recolocar. <strong>Hide panel</strong> (no alto do painel) deixa só uma aba pequena com a contagem e o veredito da câmera; clique nela para mostrar o painel. O desenho segue a regra da mão direita: X para a direita, Y para longe, Z para cima (X × Y = Z). <strong>Guide</strong> (ao lado de Hide panel) abre o guia ilustrado.</li>
               <li>A partir de 6 pontos fora de um mesmo plano, o DLT3D é calculado a cada clique: um anel mostra onde cada ponto 3D cai (verde = o clique confere, vermelho = longe; rosa <code>pN?</code> = pontos ainda por clicar) e o painel mostra o erro e <strong>fx / fy</strong>. Uma câmera real tem fx ≈ fy; <strong>NOT A REAL CAMERA</strong> quer dizer que uma medida do objeto (ou um clique) está errada. O erro sozinho não mostra isso: os 11 parâmetros absorvem uma medida errada.</li>
               <li>Se o objeto está em outro vídeo, <strong>F8</strong> / <strong>Add video</strong>: os pontos vão junto.</li>
@@ -906,7 +906,14 @@
         <section id="changelog">
             <h2>11. Histórico de Versões</h2>
 
-            <h3>Versão 0.4.18 (15 de Novembro de 2026) &mdash; Modo 1 Line: clique direito e uma linha a partir de vários vídeos</h3>
+            <h3>Versão 0.4.19 (16 de Novembro de 2026) &mdash; Template REF3D <code>[videos]</code> e padrões mais claros</h3>
+<ul>
+  <li>Template em branco do REF3D (<strong>N</strong>) explica cada chave nos comentários; o poste padrão é <code>marks = [0, 0.25, 0.5, 0.75, 1]</code> em <code>rect = [1.4, 5]</code>.</li>
+  <li>Tabela opcional <code>[videos]</code>: <code>&quot;arquivo.mp4&quot; = [x, y]</code> (posição no chão do poste/triedro). Com REF3D + <strong>T</strong>, os cliques daquele vídeo vão para os pontos daquele canto, não para o p0.</li>
+  <li>O guia ilustrado e a ajuda do REF3D builder documentam a tabela e os dois fluxos com vários vídeos (<code>[videos]</code> vs ordem da lista + F8).</li>
+</ul>
+
+<h3>Versão 0.4.18 (15 de Novembro de 2026) &mdash; Modo 1 Line: clique direito e uma linha a partir de vários vídeos</h3>
             <ul>
                 <li><strong>UI:</strong> com o modo 1 Line ligado e pontos para levar, o botão F8 da barra passa a <strong>Add video</strong> (antes <strong>Next video</strong>).</li>
                 <li><strong>Correção:</strong> no modo 1 Line o clique direito não removia o último ponto. Removia o primeiro ponto do quadro, continuava desenhando esse ponto e deixava a coluna dele em branco no CSV. Agora remove o último ponto (ou o selecionado com TAB) e o próximo clique reaproveita o número.</li>

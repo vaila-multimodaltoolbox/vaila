@@ -2,9 +2,9 @@
 
 Step-by-step DLT3D calibration with the REF3D button of getpixelvideo, with schematic drawings of the axes, the templates, the screen and the camera check.
 
-**Version:** 0.4.18
-**Date:** 15 November 2026
-**Updated:** 15 November 2026
+**Version:** 0.4.19
+**Date:** 16 November 2026
+**Updated:** 16 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -62,14 +62,30 @@ it with the three objects and opens it in the text editor: set `kind`, fill in y
 section, save. Then REF3D + **Enter**: **T** (the default) loads it, and a typo is named
 in the message (`[pole] unknown key 'mark'`). The pole of the walkway:
 
-```toml
-kind = "pole"             # "pole", "box" or "triad"
+The file explains every key in its own comments. Axes: X sideways, Y forward (away from the camera), Z up; the origin (0, 0, 0) is a floor point. `rect = [1.4, 5]` puts the pole at (0,0), (1.4,0), (0,5) and (1.4,5).
 
-[pole]                    # a rod with marks, stood at several floor positions
-marks = [0, 1]            # heights of the marks, bottom to top
-rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
-# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order
+```toml
+kind = "pole"                     # the object you measured: "pole", "box" or "triad"
+
+[pole]                            # a rod with marks, stood on the floor at several positions
+marks = [0, 0.25, 0.5, 0.75, 1]   # heights of the marks, from the floor (0) up, in metres
+rect = [1.4, 5]                   # X = width (sideways), Y = length (forward): 4 floor corners
+# positions = [[0, 0], [1.4, 0], [0, 5]]   # or your own floor points (x, y), in click order
+
+# Optional: where the object stood in each video (pole/triad only).
+# [videos]
+# "calib_pos1.mp4" = [0, 0]
+# "calib_pos2.mp4" = [1.4, 0]
 ```
+
+**N** writes that richer default (five marks on a 1.4 × 5 m rectangle). The walkway
+drawing above still shows the short case `marks 0, 1` / `rect 1.38 x 5` (8 points): trim
+`marks` to the heights you measured.
+
+**Several videos.** Uncomment `[videos]` with one line per clip: file name → floor
+`[x, y]` that must be one of the positions above. REF3D + **T** in each video then sends
+clicks to that corner's points (any order). Without it, use list order + **Add video**
+(F8). Only for pole and triad.
 
 Options 1, 2, 3 (measures typed in dialogs) still work. Without a window:
 `python -m vaila.ref3d_builder --new-template ref3d_template.toml`, then
@@ -118,7 +134,13 @@ says **NOT A REAL CAMERA**: measure again. (13 November 2026: width typed 0.55 m
 
 ## 7. Several videos (one position per video)
 
-Click the points of pos1 in the first video, **Add video** (F8), open the next, go on.
+Two ways:
+
+1. **`[videos]` in the template** (preferred): name each file and its floor corner; open
+   that video, REF3D + **T**, click only that corner's marks.
+2. **List order + F8:** click pos1 in the first video, **Add video** (F8), open the next,
+   continue the list.
+
 The camera must not move between the videos.
 
 ## 8. Files and next step

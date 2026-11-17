@@ -4,9 +4,9 @@
 
 A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangente de anotação de vídeo que permite marcar e salvar coordenadas de pixels em quadros de vídeo. Desenvolvida pelo Prof. Dr. Paulo R. P. Santiago, esta ferramenta oferece recursos avançados incluindo zoom para anotações precisas, redimensionamento dinâmico da janela, navegação entre quadros, suporte a múltiplos formatos CSV e capacidades avançadas de visualização de dados.
 
-**Versão:** 0.4.18  
+**Versão:** 0.4.19  
 **Data:** 28 de Maio de 2026  
-**Atualizado:** 15 de Novembro de 2026  
+**Atualizado:** 16 de Novembro de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** *vailá* - Multimodal Toolbox
 
@@ -27,7 +27,7 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 
 - **Python 3.12+**
 - **OpenCV (cv2):** Processamento de vídeo
-- **Pygame:** Interface gráfica e visualização
+- **pygame-ce:** Interface gráfica e visualização (`import pygame`)
 - **Pandas:** Manipulação de dados CSV
 - **NumPy:** Operações numéricas
 - **Tkinter:** Diálogos de arquivo (geralmente incluído com Python)
@@ -44,7 +44,7 @@ uv run vaila/getpixelvideo.py
 Dependências avulsas:
 
 ```bash
-pip install opencv-python pygame pandas numpy
+pip install opencv-python pygame-ce pandas numpy
 ```
 
 ## Começando
@@ -185,17 +185,20 @@ do painel abre o guia no navegador.
 1. **Ctrl+I** (INSERT) e depois **REF3D**. Carregue as medidas de um arquivo de
    template, ou digite-as (Enter mantém o valor mostrado):
    - **Arquivo de template** (o jeito rápido): **N** grava o `ref3d_template.toml` na
-     pasta do vídeo (seções de poste, caixa e triedro) e o abre no editor de texto;
-     escolha o `kind`, preencha e salve. Depois, REF3D + **Enter** carrega (**T** é o
-     padrão). Veja [o template](ref3d_guide_pt.md#as-medidas-ficam-num-arquivo-de-template).
+     pasta do vídeo (seções de poste, caixa e triedro, com comentários) e o abre no
+     editor; escolha o `kind`, preencha e salve. A tabela opcional `[videos]` liga cada
+     clipe ao canto no chão, e os cliques vão para os pontos daquele canto. Depois,
+     REF3D + **Enter** carrega (**T** é o padrão). Veja
+     [o template](ref3d_guide_pt.md#as-medidas-ficam-num-arquivo-de-template).
    - **1 Caixa**: X x Y x Z e marcas em cada eixo (pontos das arestas).
    - **2 Poste/bastão**: alturas das marcas (`0, 0.5, 1`) e onde ele fica:
      `rect X x Y` (os 4 cantos, ordem 0,0 / X,0 / 0,Y / X,Y) ou `x,y; x,y; ...`.
    - **3 Triedro**: marcas das hastes X (lateral), Y (frente) e Z (para cima) e onde
      fica a origem (como o poste). Ordem: origem, marcas de X, de Y, de Z.
    - **L**: carregar um `.ref3d` existente.
-2. Clique os pontos na ordem mostrada: o painel à direita lista os pontos, desenha o
-   objeto em 3D com o próximo ponto piscando, e a linha de status diz
+2. Clique os pontos na ordem mostrada (ou no canto nomeado para este vídeo em
+   `[videos]`): o painel à direita lista os pontos, desenha o objeto em 3D com o
+   próximo ponto piscando, e a linha de status diz
    `click = p5 pos3 · mark 1 m (0, 5, 1)`. Clique direito remove o último ponto, **A**
    deixa vazio um ponto que não aparece, TAB ou um clique numa linha do painel
    seleciona um ponto para recolocar. **Hide panel** (no alto do painel) deixa só uma
@@ -208,7 +211,8 @@ do painel abre o guia no navegador.
    câmera real tem fx ≈ fy; **NOT A REAL CAMERA** quer dizer que uma medida do objeto
    (ou um clique) está errada. O erro sozinho não mostra isso: os 11 parâmetros
    absorvem uma medida errada.
-4. Se o objeto está em outro vídeo, **F8** / **Add video**: os pontos vão junto.
+4. Se o objeto está em outro vídeo, **F8** / **Add video**: os pontos vão junto
+   (ou abra aquele clipe com entrada em `[videos]` e clique só o canto dele).
 5. **Save** (ou ESC) grava ao lado do vídeo na tela: `<video>_markers_1_line.csv`
    (+ `.toml`), `<video>_markers_1_line.ref3d`, `<video>_markers_1_line.template.toml`
    e `<video>_markers_1_line.dlt3d`. Arquivos que já existem são copiados antes para
@@ -580,6 +584,16 @@ Sistema de backup integrado para segurança dos dados:
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.4.19 (16 de Novembro de 2026) — Template REF3D `[videos]` e padrões mais claros
+
+- Template em branco do REF3D (**N**) explica cada chave nos comentários; o poste padrão
+  é `marks = [0, 0.25, 0.5, 0.75, 1]` em `rect = [1.4, 5]`.
+- Tabela opcional `[videos]`: `"arquivo.mp4" = [x, y]` (uma posição no chão do
+  poste/triedro). Com REF3D + **T**, os cliques daquele vídeo vão para os pontos daquele
+  canto, não para o p0.
+- O guia ilustrado e a ajuda do REF3D builder documentam a tabela e os dois fluxos com
+  vários vídeos (`[videos]` vs ordem da lista + F8).
 
 ### Versão 0.4.18 (15 de Novembro de 2026) — Modo 1 Line: clique direito e uma linha a partir de vários vídeos
 

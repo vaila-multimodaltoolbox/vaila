@@ -11,7 +11,7 @@ Also covered: the row can be built over several videos (F8 with 1-line on, or
 
 Author: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 Update Date: 14 November 2026
-Version: 0.4.18
+Version: 0.4.19
 """
 
 from __future__ import annotations
@@ -426,8 +426,10 @@ def test_window_ref3d_new_template_then_load_it_with_enter(tmp_path: Path) -> No
     assert f"EDITOR {template}" in done.stdout
     assert ref3d_builder.read_template(template).kind == "pole"
     text = template.read_text(encoding="utf-8")
-    assert "rect = [1, 5]" in text
-    template.write_text(text.replace("rect = [1, 5]", "rect = [1.38, 5]"), encoding="utf-8")
+    assert "rect = [1.4, 5]" in text
+    # two marks x 4 corners = 8 points, as the clicks below expect
+    edited = text.replace("marks = [0, 0.25, 0.5, 0.75, 1]", "marks = [0, 1]")
+    template.write_text(edited.replace("rect = [1.4, 5]", "rect = [1.38, 5]"), encoding="utf-8")
 
     clicks = "L60,200 L62,120 L140,190 L141,125 L210,170 L211,110 L270,165 L272,112"
     done = _drive([video], f"insert ref3d enter {clicks} esc")
@@ -441,3 +443,24 @@ def test_window_ref3d_new_template_then_load_it_with_enter(tmp_path: Path) -> No
     assert len(xyz) == 8
     assert xyz[-1].tolist() == [1.38, 5, 1]
     assert (tmp_path / "pos1_markers_1_line.dlt3d").is_file()
+
+
+def test_window_ref3d_template_videos_send_clicks_to_their_own_points(tmp_path: Path) -> None:
+    """A template whose [videos] puts pos2.mp4 at (1.38, 0): with REF3D + Enter (T) the two
+    clicks made in that video go to its own points p2 and p3, not to p0 and p1."""
+    video = tmp_path / "pos2.mp4"
+    _write_video(video)
+    (tmp_path / "ref3d_template.toml").write_text(
+        'kind = "pole"\n[pole]\nmarks = [0, 1]\nrect = [1.38, 5]\n'
+        '[videos]\n"pos2.mp4" = [1.38, 0]\n',
+        encoding="utf-8",
+    )
+
+    done = _drive([video], "insert ref3d enter L60,200 L62,120 esc")
+
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert "--template-file" in done.stdout
+    import tomllib as _tomllib
+
+    saved = _tomllib.loads((tmp_path / "pos2_markers_1_line.toml").read_text(encoding="utf-8"))
+    assert [p["marker"] for p in saved["point"]] == [2, 3]

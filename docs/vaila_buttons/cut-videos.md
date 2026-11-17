@@ -71,7 +71,7 @@ The **folder** name always uses the source video stem; only **clip filenames** u
 ## Requirements
 
 - **ffmpeg / ffprobe** — recommended for precise cuts and audio waveform
-- **OpenCV**, **pygame** — player and fallback cutter
+- **OpenCV**, **pygame-ce** — player and fallback cutter
 
 ## Related Tools
 

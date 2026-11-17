@@ -1,9 +1,9 @@
 """
 Script: markerless_live.py
 Author: Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
-Version: 0.3.98
+Version: 0.4.19
 Created: April 9, 2025
-Last Updated: 02 August 2026
+Last Updated: 16 November 2026
 
 Description:
 This script performs real-time pose estimation and angle calculation using either YOLO or
@@ -85,12 +85,18 @@ import tkinter as tk
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
+from types import SimpleNamespace
 
 import cv2
 import matplotlib.pyplot as plt
-import mediapipe as mp
 import numpy as np
+from mediapipe.tasks.python.vision import PoseLandmark
 from ultralytics import YOLO
+
+try:
+    from .mp_pose_tasks import PoseVideoLandmarker, landmark_visibility
+except ImportError:
+    from mp_pose_tasks import PoseVideoLandmarker, landmark_visibility  # ty: ignore[unresolved-import]
 
 
 def list_available_cameras():
@@ -257,16 +263,15 @@ class YOLOAngleCalculator(AngleCalculator):
 class MediaPipeAngleCalculator(AngleCalculator):
     """Angle calculator using MediaPipe keypoints."""
 
-    def __init__(self):
+    def __init__(self, model_complexity: int = 1, min_detection_confidence: float = 0.5):
         super().__init__()
-        self.mp_pose = mp.solutions.pose  # ty: ignore[unresolved-attribute]
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=False,
-            model_complexity=1,
-            smooth_landmarks=True,
-            enable_segmentation=False,
-            min_detection_confidence=0.5,
+        # mediapipe 1.x has no mp.solutions: the Tasks PoseLandmarker (video mode) replaces
+        # Pose, and its PoseLandmark IntEnum keeps the ``mp_pose.PoseLandmark.X`` names.
+        self.mp_pose = SimpleNamespace(PoseLandmark=PoseLandmark)
+        self.pose = PoseVideoLandmarker(
+            complexity=model_complexity, min_detection_confidence=min_detection_confidence
         )
+        self.last_landmarks = None  # 33 landmarks of the last frame (None: no person)
 
         # MediaPipe joint mapping
         self.joint_map = {
@@ -324,16 +329,15 @@ class MediaPipeAngleCalculator(AngleCalculator):
 
     def process_frame(self, frame):
         """Process a frame with MediaPipe and calculate angles."""
-        # Convert BGR to RGB
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = self.pose.process(rgb_frame)
+        # One inference per frame: the drawing code reads ``last_landmarks``.
+        self.last_landmarks = self.pose.detect(frame)
 
         angles = {}
         skeleton_connections = []
         visible_landmarks = []
 
-        if results.pose_landmarks:
-            landmarks = results.pose_landmarks.landmark
+        if self.last_landmarks:
+            landmarks = self.last_landmarks
 
             # Calculate angles for each defined joint
             for joint_name, indices in self.joint_map.items():
@@ -341,9 +345,9 @@ class MediaPipeAngleCalculator(AngleCalculator):
 
                 # Check if necessary landmarks are visible
                 if (
-                    landmarks[p1_idx].visibility > 0.5
-                    and landmarks[p2_idx].visibility > 0.5
-                    and landmarks[p3_idx].visibility > 0.5
+                    landmark_visibility(landmarks[p1_idx]) > 0.5
+                    and landmark_visibility(landmarks[p2_idx]) > 0.5
+                    and landmark_visibility(landmarks[p3_idx]) > 0.5
                 ):
                     p1 = [
                         landmarks[p1_idx].x * frame.shape[1],
@@ -372,7 +376,7 @@ class MediaPipeAngleCalculator(AngleCalculator):
             # Get coordinates of all visible landmarks for drawing
             visible_landmarks = []
             for i, landmark in enumerate(landmarks):
-                if landmark.visibility > 0.5:
+                if landmark_visibility(landmark) > 0.5:
                     x = int(landmark.x * frame.shape[1])
                     y = int(landmark.y * frame.shape[0])
                     visible_landmarks.append((x, y, i))
@@ -516,13 +520,9 @@ class MovementAnalyzer:
             self.detect_yolo_model_type()
         elif self.engine == "mediapipe":
             self.model = None  # We don't need YOLO model for MediaPipe
-            self.angle_calculator = MediaPipeAngleCalculator()
-            # Configure MediaPipe with provided parameters
-            self.angle_calculator.pose = mp.solutions.pose.Pose(  # ty: ignore[unresolved-attribute]
-                static_image_mode=False,
+            # MediaPipe with the parameters chosen in the dialog
+            self.angle_calculator = MediaPipeAngleCalculator(
                 model_complexity=model_complexity,
-                smooth_landmarks=True,
-                enable_segmentation=False,
                 min_detection_confidence=min_detection_confidence,
             )
             # Define skeleton connections for MediaPipe
@@ -955,21 +955,16 @@ class MovementAnalyzer:
             angles, _, landmarks = {}, None, None
             if isinstance(self.angle_calculator, MediaPipeAngleCalculator):
                 angles, _, landmarks = self.angle_calculator.process_frame(frame)
-
-                # Process the frame with MediaPipe
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = self.angle_calculator.pose.process(rgb_frame)
+                pose_landmarks = self.angle_calculator.last_landmarks
             else:
                 return
 
-            if results.pose_landmarks:
-                pose_landmarks = results.pose_landmarks.landmark
-
+            if pose_landmarks:
                 # Create bounding box around the person
                 x_coords = []
                 y_coords = []
                 for landmark in pose_landmarks:
-                    if landmark.visibility > 0.5:
+                    if landmark_visibility(landmark) > 0.5:
                         x_coords.append(landmark.x * frame.shape[1])
                         y_coords.append(landmark.y * frame.shape[0])
 
@@ -1004,8 +999,8 @@ class MovementAnalyzer:
                     start_idx, end_idx = connection
 
                     if (
-                        pose_landmarks[start_idx].visibility > 0.5
-                        and pose_landmarks[end_idx].visibility > 0.5
+                        landmark_visibility(pose_landmarks[start_idx]) > 0.5
+                        and landmark_visibility(pose_landmarks[end_idx]) > 0.5
                     ):
                         start_point = (
                             int(pose_landmarks[start_idx].x * frame.shape[1]),
@@ -1021,7 +1016,7 @@ class MovementAnalyzer:
 
                 # Draw visible landmarks
                 for _idx, landmark in enumerate(pose_landmarks):
-                    if landmark.visibility > 0.5:
+                    if landmark_visibility(landmark) > 0.5:
                         x = int(landmark.x * frame.shape[1])
                         y = int(landmark.y * frame.shape[0])
                         cv2.circle(processed_frame, (x, y), 4, (0, 0, 255), -1)

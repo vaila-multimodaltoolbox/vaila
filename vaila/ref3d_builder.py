@@ -5,9 +5,9 @@ REF3D builder - ref3d_builder.py
 *vailá* – Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
-Date: 15 November 2026
-Update: 15 November 2026
-Version: 0.4.18
+Date: 16 November 2026
+Update: 16 November 2026
+Version: 0.4.19
 Python Version: 3.12.16
 
 Description:
@@ -94,6 +94,8 @@ class Ref3dTemplate:
     arms_y: tuple[float, ...] = ()
     arms_z: tuple[float, ...] = ()
     positions: tuple[tuple[float, float], ...] = field(default_factory=tuple)
+    # [videos]: file name of each video -> the floor position the object stood at in it
+    video_positions: tuple[tuple[str, tuple[float, float]], ...] = ()
 
     def points(self) -> list[Ref3dPoint]:
         if self.kind == "box":
@@ -111,11 +113,12 @@ class Ref3dTemplate:
             sx, sy, sz = self.size
             return f"box {sx:g} x {sy:g} x {sz:g} m"
         n_pos = len(self.positions) or 1
+        videos = f", {len(self.video_positions)} videos" if self.video_positions else ""
         if self.kind == "pole":
-            return f"pole, marks {_fmt(self.marks)} m, {n_pos} positions"
+            return f"pole, marks {_fmt(self.marks)} m, {n_pos} positions{videos}"
         return (
             f"triad X {_fmt(self.arms_x)} | Y {_fmt(self.arms_y)} | Z {_fmt(self.arms_z)} m, "
-            f"{n_pos} positions"
+            f"{n_pos} positions{videos}"
         )
 
 
@@ -592,17 +595,43 @@ _SECTION_KEYS: dict[str, tuple[str, ...]] = {
     "triad": ("arms_x", "arms_y", "arms_z", "rect", "positions"),
 }
 _EXAMPLES: dict[str, Ref3dTemplate] = {
-    "pole": Ref3dTemplate("pole", marks=(0.0, 1.0), positions=rectangle_positions(1.0, 5.0)),
+    "pole": Ref3dTemplate(
+        "pole", marks=(0.0, 0.25, 0.5, 0.75, 1.0), positions=rectangle_positions(1.4, 5.0)
+    ),
     "box": Ref3dTemplate("box", size=(1.0, 5.0, 1.0)),
     "triad": Ref3dTemplate("triad", arms_x=(0.5,), arms_y=(0.5, 1.0), arms_z=(0.5, 1.0)),
 }
+
 _HEADER = """\
-# vailá REF3D template: the measures of the calibration object, in metres.
-# Fill in the section of your object, set `kind`, save, then in getpixelvideo
-# press REF3D and Enter (T = load this template). The points are numbered
-# p0, p1, ... in the order REF3D asks you to click them.
-# Axes (right-handed): X sideways, Y forward (away from the camera), Z up;
-# origin (0, 0, 0) on the floor. Guide: vaila/help/ref3d_guide.html
+# ==============================================================================
+# vailá REF3D template: the measures of your calibration object, in METRES
+# ==============================================================================
+#
+# WHAT IT IS FOR
+#   getpixelvideo must know the 3D place of every point you click. This file
+#   holds those measures. Measure the object once, write the numbers here,
+#   save, and load the file: no more typing measures in dialogs.
+#
+# HOW TO USE IT
+#   1. Write your measures in the section of your object: [pole], [box], [triad].
+#   2. Set `kind` to the name of that section.
+#   3. In getpixelvideo press REF3D, then Enter (T loads this file).
+#      Click the points in the order REF3D shows: p0, p1, p2, ...
+#
+# THE AXES (right-handed). The origin (0, 0, 0) is a floor point.
+#   X = sideways, to the right     Y = forward, away from the camera
+#   Z = up, above the floor
+#
+#        Y
+#        ^
+#     5  +-----------+
+#        |           |      rect = [1.4, 5]:  X = 1.4 m (width)
+#        |           |                        Y = 5 m   (length)
+#     0  +-----------+--> X
+#        0          1.4
+#
+# UNITS: every number is in metres. 0.25 means 25 cm. Use a dot, not a comma.
+# ==============================================================================
 """
 
 
@@ -623,40 +652,51 @@ def _rect_of(positions) -> tuple[float, float] | None:
 def _positions_lines(positions, *, empty_means: str) -> list[str]:
     rect = _rect_of(positions)
     if rect is not None:
+        x, y = rect
         return [
-            f"rect = {_toml_list(rect)}            # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y",
-            "# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order",
+            f"rect = {_toml_list(rect)}      # X = width (sideways), Y = length (forward)",
+            "# The object stands at the 4 corners of that rectangle on the floor:",
+            f"#   (0, 0), ({x:g}, 0), (0, {y:g}), ({x:g}, {y:g})",
+            "# To use your own floor points instead, delete the rect line and uncomment:",
+            f"# positions = [[0, 0], [{x:g}, 0], [0, {y:g}]]   # (x, y) in click order",
         ]
     if not positions or tuple(positions) == ((0.0, 0.0),):
         return [
-            f"rect = []                # X x Y: stand at its 4 corners; empty = {empty_means}",
-            "# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order",
+            "rect = []                 # empty = the object stands only at (0, 0)",
+            "# Or list the floor points yourself, in click order, and remove rect:",
+            "# positions = [[0, 0], [1.4, 0], [0, 5]]   # (x, y) of each floor position",
         ]
     pairs = ", ".join(f"[{x:g}, {y:g}]" for x, y in positions)
-    return [f"positions = [{pairs}]  # floor positions (x, y), in click order"]
+    return [
+        "# The object stands at these floor points (x, y), in click order:",
+        f"positions = [{pairs}]",
+    ]
 
 
 def _section_lines(template: Ref3dTemplate) -> list[str]:
     if template.kind == "pole":
         return [
-            "[pole]                   # a rod with marks, stood at several floor positions",
-            f"marks = {_toml_list(template.marks)}       # heights of the marks, bottom to top",
-            *_positions_lines(template.positions, empty_means="only at 0,0"),
+            "[pole]   # a rod with marks, stood on the floor at several positions",
+            "# Heights of the marks on the rod, from the floor (0) upwards, in metres:",
+            f"marks = {_toml_list(template.marks)}   # 0 = at the floor, 1 = 1 m above it",
+            *_positions_lines(template.positions, empty_means="only at (0, 0)"),
         ]
     if template.kind == "box":
         return [
-            "[box]                    # a volume X x Y x Z with its 8 corners",
-            f"size = {_toml_list(template.size)}   # X x Y x Z",
-            f"div_x = {_toml_list(template.div_x)}               # marks along X (add the edge points)",
-            f"div_y = {_toml_list(template.div_y)}               # marks along Y",
-            f"div_z = {_toml_list(template.div_z)}               # marks along Z",
+            "[box]   # a solid box X x Y x Z; the marks are lines drawn on its faces",
+            f"size = {_toml_list(template.size)}   # X (width), Y (length), Z (height)",
+            "# Extra marks between the corners (the corners themselves are automatic).",
+            f"div_x = {_toml_list(template.div_x)}   # marks along X",
+            f"div_y = {_toml_list(template.div_y)}   # marks along Y",
+            f"div_z = {_toml_list(template.div_z)}   # marks along Z",
         ]
     return [
-        "[triad]                  # three arms from one origin, moved like the pole",
-        f"arms_x = {_toml_list(template.arms_x)}            # marks on the X arm (side)",
-        f"arms_y = {_toml_list(template.arms_y)}            # marks on the Y arm (forward)",
-        f"arms_z = {_toml_list(template.arms_z)}            # marks on the Z arm (up)",
-        *_positions_lines(template.positions, empty_means="only at 0,0"),
+        "[triad]   # three arms that meet at the origin (0, 0, 0)",
+        "# Marks on each arm, in metres, counted from the origin:",
+        f"arms_x = {_toml_list(template.arms_x)}   # the arm pointing sideways (X)",
+        f"arms_y = {_toml_list(template.arms_y)}   # the arm pointing forward (Y)",
+        f"arms_z = {_toml_list(template.arms_z)}   # the arm pointing up (Z)",
+        *_positions_lines(template.positions, empty_means="only at (0, 0)"),
     ]
 
 
@@ -668,16 +708,42 @@ def template_toml_text(template: Ref3dTemplate | None = None, *, all_kinds: bool
     """
     active = template if template is not None and template.kind in TEMPLATES else _EXAMPLES["pole"]
     kinds = TEMPLATES if all_kinds else (active.kind,)
-    lines = [_HEADER, f'kind = "{active.kind}"           # "pole", "box" or "triad"']
+    lines = [
+        _HEADER,
+        f'kind = "{active.kind}"   # the object you measured: "pole", "box" or "triad"',
+    ]
     for kind in ("pole", "box", "triad"):
         if kind not in kinds:
             continue
         lines.append("")
         lines.extend(_section_lines(active if kind == active.kind else _EXAMPLES[kind]))
+    if active.kind != "box" or active.video_positions:
+        lines.extend(_videos_lines(active))
     return "\n".join(_align_comments(lines)) + "\n"
 
 
-def _align_comments(lines: list[str], column: int = 26) -> list[str]:
+def _videos_lines(template: Ref3dTemplate) -> list[str]:
+    """The optional [videos] table; commented out as an example when there is none."""
+    intro = [
+        "",
+        "# Optional: where the object stood in each video. One line per video:",
+        "# its file name = [x, y], one of the floor positions above. REF3D then sends",
+        "# the clicks of that video to its own points, in the order of the list.",
+    ]
+    if template.video_positions:
+        return [
+            *intro[:4],
+            "[videos]",
+            *(f'"{name}" = [{x:g}, {y:g}]' for name, (x, y) in template.video_positions),
+        ]
+    return [
+        *intro[:4],
+        "# [videos]",
+        '# "calib_pos1_frame_1_to_3.mp4" = [0, 0]',
+    ]
+
+
+def _align_comments(lines: list[str], column: int = 34) -> list[str]:
     """Put the ``# comment`` of every ``key = value`` line in one column."""
     out = []
     for line in lines:
@@ -789,7 +855,33 @@ def template_from_dict(data: dict) -> Ref3dTemplate:
             positions=_positions_from(where, section),
         )
     template.points()  # raises Ref3dError when the measures cannot make points
+    template.video_positions = _videos_from(data, kind, template.positions or ((0.0, 0.0),))
     return template
+
+
+def _videos_from(
+    data: dict, kind: str, positions: tuple[tuple[float, float], ...]
+) -> tuple[tuple[str, tuple[float, float]], ...]:
+    """The optional ``[videos]`` table: ``"file.mp4" = [x, y]``, a floor position of the object."""
+    raw = data.get("videos", {})
+    if not raw:
+        return ()
+    if kind == "box":
+        raise Ref3dError("[videos]: only for pole and triad, which stand at floor positions")
+    if not isinstance(raw, dict):
+        raise Ref3dError('[videos]: one line per video: "file.mp4" = [x, y]')
+    out = []
+    for name, value in raw.items():
+        xy = _floats("[videos]", str(name), value)
+        if len(xy) != 2:
+            raise Ref3dError(f'[videos] "{name}": the floor position [x, y], like [1.4, 0]')
+        if not any(abs(xy[0] - x) < 1e-9 and abs(xy[1] - y) < 1e-9 for x, y in positions):
+            raise Ref3dError(
+                f'[videos] "{name}": [{xy[0]:g}, {xy[1]:g}] is not one of the floor positions '
+                "of the object above"
+            )
+        out.append((str(name), (xy[0], xy[1])))
+    return tuple(out)
 
 
 def read_template(path: str | Path) -> Ref3dTemplate:

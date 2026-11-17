@@ -1,6 +1,6 @@
 [project]
 name = "vaila"
-version = "0.4.18"
+version = "0.4.19"
 description = "Versatile Anarcho Integrated Liberation Ánalysis - Multimodal Toolbox for Biomechanics and Motion Analysis"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -74,8 +74,9 @@ dependencies = [
     "mediapipe",
     "ultralytics",
     "boxmot",
-    "trackers==2.4.0",
+    "trackers==2.7.0",
     "requests",
+    # <2: sam3 (extra `sam`, 0.1.3 and 0.1.4) caps huggingface-hub<2.0.
     "huggingface-hub>=1.22,<2",
     # 3D processing
     "open3d",
@@ -111,7 +112,7 @@ dependencies = [
     "absl-py",
     "bcrypt",
     "python-dotenv",
-    "pygame",
+    "pygame-ce",
     "PySide6",
     "tenacity",
     "retrying",
@@ -135,17 +136,19 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "ruff",
-    "ty>=0.0.16",
-    "pytest>=8.0.0",
+    "ty==0.0.89",  # held on purpose, see [dependency-groups].dev
+    "pytest>=9.2.0",
 ]
 upscaler = [
     "diffusers>=0.38.0",
     "safetensors>=0.8.0rc1",
 ]
 sam = [
-    # Pinned on purpose (checked 2026-11-05): sam3 0.1.4 has the same code but drops
-    # `decord` from its requirements, while sam3.model.utils.sam2_utils still imports it
-    # to read mp4 files. No PyPI sam3 (<= 0.1.4) includes the SAM 3.1 multiplex model.
+    # Pinned on purpose (rechecked 2026-11-17 by diffing the two wheels): sam3 0.1.4 only
+    # changes `__version__` and moves a `decord` import inside the training dataset code. It
+    # drops `decord` from its requirements, while sam3.model.utils.sam2_utils still imports it
+    # to read mp4 files. Both versions cap numpy<2.4 and huggingface-hub<2.0, so 0.1.4 frees
+    # neither. No PyPI sam3 (<= 0.1.4) includes the SAM 3.1 multiplex model.
     "sam3==0.1.3",
     "openai-clip==1.0.1",
 ]
@@ -199,7 +202,7 @@ conflicts = [
     [{ group = "cpu" }, { group = "cuda" }],
 ]
 # setuptools: neurokit2 caps setuptools<82, but 84.1.0 fixes GHSA-xmj3-9gf7-h52w.
-# pygame 2.6.1 imports pkg_resources inside try/except, so 84.x is safe for it.
+# pygame-ce (the `pygame` module) does not use pkg_resources, so 84.x is safe for it.
 override-dependencies = [
     "regex>=2025.11.3",
     "setuptools>=84.1.0",
@@ -285,9 +288,14 @@ line-ending = "auto"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.15.0",
-    "ty>=0.0.16",
-    "pytest>=8.0.0",
+    "ruff>=0.17.5",
+    # ty is held at 0.0.89 on purpose (checked 2026-11-17 against 0.0.105): 0.0.105 renamed
+    # the rules `unresolved-import` -> `import-not-found` and `unresolved-attribute` ->
+    # `missing-attribute`, so the 418 + 41 `# ty: ignore[...]` comments (in 134 + 25 files)
+    # stop matching and `ty check vaila/` goes from 930 to 1296 diagnostics. Move the pin
+    # up together with a rename of those comments.
+    "ty==0.0.89",
+    "pytest>=9.2.0",
 ]
 
 # ---------------------------------------------------------------------------

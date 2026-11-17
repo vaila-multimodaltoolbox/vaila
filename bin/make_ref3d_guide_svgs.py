@@ -4,9 +4,9 @@ make_ref3d_guide_svgs.py - figures of the illustrated REF3D calibration guide
 ================================================================================
 *vailá* – Multimodal Toolbox
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
-Date: 15 November 2026
-Update: 15 November 2026
-Version: 0.4.18
+Date: 16 November 2026
+Update: 16 November 2026
+Version: 0.4.19
 
 Writes the schematic drawings used by vaila/help/ref3d_guide.html and
 ref3d_guide_pt.html into vaila/help/images/ref3d/. The template drawings come from
