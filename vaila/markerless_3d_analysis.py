@@ -1,5 +1,6 @@
 """
 markerless_3d_gui.py — GUI configurator + TOML + batch runner for monocular 3D (meters by default)
+Update: 16 November 2026 · Version: 0.4.19 (2D extraction on the MediaPipe Tasks PoseLandmarker; mediapipe 1.x has no mp.solutions)
 
 What it does
 - Launches a Tkinter GUI to collect all parameters and save a .toml config file (with sensible defaults).
@@ -40,6 +41,10 @@ try:
     import mediapipe as mp
 except Exception:
     mp = None
+try:
+    from .mp_pose_tasks import PoseVideoLandmarker
+except ImportError:
+    from mp_pose_tasks import PoseVideoLandmarker  # ty: ignore[unresolved-import]
 try:
     from ezc3d import c3d as ezc3d
 except Exception:
@@ -615,12 +620,9 @@ def extract_mediapipe_csv(video_path: str, out_csv: str) -> tuple[int, int, floa
     print(f"[MediaPipe] Opening {video_path}")
     print(f"[MediaPipe] Resolution: {w}x{h}  fps: {fps:.3f}  total frames: {total}")
     sys.stdout.flush()
-    pose = mp.solutions.pose.Pose(
-        static_image_mode=False,
-        model_complexity=2,
-        enable_segmentation=False,
-        smooth_landmarks=True,
-    )
+    # mediapipe 1.x has no mp.solutions: the Tasks PoseLandmarker (heavy model, video mode
+    # = tracked and smoothed between frames) gives the same 33 landmarks.
+    pose = PoseVideoLandmarker(complexity=2)
     rows = []
     i = 0
     t0 = time.time()
@@ -628,13 +630,12 @@ def extract_mediapipe_csv(video_path: str, out_csv: str) -> tuple[int, int, floa
         ok, frame = cap.read()
         if not ok:
             break
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         t_proc0 = time.time()
-        res = pose.process(rgb)
+        landmarks = pose.detect(frame, timestamp_ms=1000.0 * i / fps)
         t_proc1 = time.time()
-        if res.pose_landmarks:
+        if landmarks:
             pts = []
-            for lm in res.pose_landmarks.landmark:
+            for lm in landmarks:
                 pts.extend([lm.x * w, lm.y * h])
         else:
             pts = [np.nan] * (33 * 2)

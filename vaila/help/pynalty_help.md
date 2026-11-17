@@ -1,8 +1,8 @@
 # Pynalty — guia / guide
 
-**Version:** 0.4.17
+**Version:** 0.4.19
 
-**Updated:** 12 November 2026
+**Updated:** 16 November 2026
 
 **Projeto / Project:** *vailá* Multimodal Toolbox
 

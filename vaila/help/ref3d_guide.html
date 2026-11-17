@@ -32,7 +32,7 @@
 <main>
 <p class="lang"><a href="ref3d_guide_pt.html">Português</a></p>
 <h1>REF3D calibration guide (illustrated)</h1>
-<p><strong>Version:</strong> 0.4.18 <strong>Date:</strong> 15 November 2026 <strong>Updated:</strong> 15 November 2026 <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox</p>
+<p><strong>Version:</strong> 0.4.19 <strong>Date:</strong> 16 November 2026 <strong>Updated:</strong> 16 November 2026 <strong>Authors:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Project:</strong> <i>vailá</i> - Multimodal Toolbox</p>
 <p>Keep this page open next to <code>getpixelvideo</code> while you calibrate. In the window, <span class="key">F1</span> (with REF3D on) or the <strong>Guide</strong> button of the REF3D panel opens it. Reference of the tool: <a href="ref3d_builder.html">REF3D builder</a>; keys: <a href="getpixelvideo.html">getpixelvideo</a>.</p>
 
 <figure class="wide"><img src="images/ref3d/workflow_en.svg" width="934" height="170" alt="Six steps: measure, REF3D, click, move, check, save" /><figcaption>The whole calibration in six steps.</figcaption></figure>
@@ -61,12 +61,20 @@
 <p><strong>L</strong> loads a <code>.ref3d</code> you already have (points of any shape).</p>
 <h3 id="template">The measures go in a template file</h3>
 <p>Instead of typing the measures in the window, write them once in <code>ref3d_template.toml</code>, next to the calibration videos (one file serves every <code>calib_pos*</code> video of the folder). In the first REF3D dialog, <strong>N</strong> writes the file with the three objects (pole, box, triad) and opens it in the text editor; set <code>kind</code>, fill in the section of your object, save. Then REF3D + <span class="key">Enter</span>: <strong>T</strong> is the default and the dialog shows what the file holds (<code>T = Template ref3d_template.toml: pole, marks 0, 1 m, 4 positions</code>). A typo in a key or value is named in the message (<code>[pole] unknown key 'mark'</code>). The pole of the walkway:</p>
-<pre><code>kind = &quot;pole&quot;             # &quot;pole&quot;, &quot;box&quot; or &quot;triad&quot;
+<p>The file explains every key in its own comments. Axes: X sideways, Y forward (away from the camera), Z up; the origin <code>(0, 0, 0)</code> is a floor point. <code>rect = [1.4, 5]</code> puts the pole at (0,0), (1.4,0), (0,5) and (1.4,5).</p>
+<pre><code>kind = &quot;pole&quot;                     # the object you measured: &quot;pole&quot;, &quot;box&quot; or &quot;triad&quot;
 
-[pole]                    # a rod with marks, stood at several floor positions
-marks = [0, 1]            # heights of the marks, bottom to top
-rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
-# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order</code></pre>
+[pole]                            # a rod with marks, stood on the floor at several positions
+marks = [0, 0.25, 0.5, 0.75, 1]   # heights of the marks, from the floor (0) up, in metres
+rect = [1.4, 5]                   # X = width (sideways), Y = length (forward): 4 floor corners
+# positions = [[0, 0], [1.4, 0], [0, 5]]   # or your own floor points (x, y), in click order
+
+# Optional: where the object stood in each video (pole/triad only).
+# [videos]
+# &quot;calib_pos1.mp4&quot; = [0, 0]
+# &quot;calib_pos2.mp4&quot; = [1.4, 0]</code></pre>
+<p><strong>N</strong> writes that richer default (five marks on a 1.4 × 5 m rectangle). The walkway drawing above still shows the short case <code>marks 0, 1</code> / <code>rect 1.38 x 5</code> (8 points): trim <code>marks</code> to the heights you measured.</p>
+<p><strong>Several videos.</strong> Uncomment <code>[videos]</code> with one line per clip: file name → floor <code>[x, y]</code> that must be one of the positions above. REF3D + <strong>T</strong> in each video then sends clicks to that corner&#x27;s points (any order). Without it, use list order + <strong>Add video</strong> (<span class="key">F8</span>). Only for pole and triad.</p>
 <p>Options 1, 2, 3 (type the measures in dialogs) still work. Without a window: <code>python -m vaila.ref3d_builder --new-template ref3d_template.toml</code>, then <code>--template-file ref3d_template.toml -o calib.ref3d</code>.</p>
 
 <h2>4. Step by step in getpixelvideo</h2>
@@ -94,7 +102,12 @@ rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
 </table>
 
 <h2>7. Several videos (one position per video)</h2>
-<p>When the pole was filmed at each corner in a different video (for example <code>calib_pos1 … calib_pos4</code>), click the points of pos1 in the first video, press <strong>Add video</strong> (<span class="key">F8</span>), open the next one, and go on: the list continues at the next point. The camera must not move between the videos.</p>
+<p>Two ways:</p>
+<ol>
+  <li><strong><code>[videos]</code> in the template</strong> (preferred): name each file and its floor corner; open that video, REF3D + <strong>T</strong>, click only that corner&#x27;s marks.</li>
+  <li><strong>List order + F8:</strong> click pos1 in the first video, <strong>Add video</strong> (<span class="key">F8</span>), open the next, continue the list.</li>
+</ol>
+<p>The camera must not move between the videos.</p>
 
 <h2>8. Files and next step</h2>
 <table>

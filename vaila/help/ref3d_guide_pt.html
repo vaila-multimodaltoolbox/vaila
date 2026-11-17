@@ -32,7 +32,7 @@
 <main>
 <p class="lang"><a href="ref3d_guide.html">English</a></p>
 <h1>Guia de calibração REF3D (ilustrado)</h1>
-<p><strong>Versão:</strong> 0.4.18 <strong>Data:</strong> 15 de novembro de 2026 <strong>Atualizado:</strong> 15 de novembro de 2026 <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Projeto:</strong> <i>vailá</i> - Multimodal Toolbox</p>
+<p><strong>Versão:</strong> 0.4.19 <strong>Data:</strong> 16 de novembro de 2026 <strong>Atualizado:</strong> 16 de novembro de 2026 <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Projeto:</strong> <i>vailá</i> - Multimodal Toolbox</p>
 <p>Deixe esta página aberta ao lado do <code>getpixelvideo</code> enquanto calibra. Na janela, <span class="key">F1</span> (com o REF3D ligado) ou o botão <strong>Guide</strong> do painel REF3D abre esta página. Referência da ferramenta: <a href="ref3d_builder.html">REF3D builder</a>; teclas: <a href="getpixelvideo_pt.html">getpixelvideo</a>.</p>
 
 <figure class="wide"><img src="images/ref3d/workflow_pt.svg" width="934" height="170" alt="Seis passos: medir, REF3D, clicar, mover, conferir, salvar" /><figcaption>A calibração inteira em seis passos.</figcaption></figure>
@@ -61,12 +61,20 @@
 <p><strong>L</strong> carrega um <code>.ref3d</code> que você já tem (pontos de qualquer forma).</p>
 <h3 id="template">As medidas ficam num arquivo de template</h3>
 <p>Em vez de digitar as medidas na janela, escreva-as uma vez no <code>ref3d_template.toml</code>, ao lado dos vídeos de calibração (um arquivo serve para todos os vídeos <code>calib_pos*</code> da pasta). No primeiro diálogo do REF3D, <strong>N</strong> grava o arquivo com os três objetos (poste, caixa, triedro) e o abre no editor de texto; escolha o <code>kind</code>, preencha a seção do seu objeto e salve. Depois, REF3D + <span class="key">Enter</span>: <strong>T</strong> é o padrão, e o diálogo mostra o que o arquivo contém (<code>T = Template ref3d_template.toml: pole, marks 0, 1 m, 4 positions</code>). Um erro de digitação numa chave ou valor aparece na mensagem (<code>[pole] unknown key 'mark'</code>). O poste da passarela:</p>
-<pre><code>kind = &quot;pole&quot;             # &quot;pole&quot;, &quot;box&quot; or &quot;triad&quot;
+<p>O arquivo explica cada chave nos próprios comentários. Eixos: X lateral, Y à frente (afastando-se da câmera), Z para cima; a origem <code>(0, 0, 0)</code> é um ponto do chão. <code>rect = [1.4, 5]</code> coloca a haste em (0,0), (1.4,0), (0,5) e (1.4,5).</p>
+<pre><code>kind = &quot;pole&quot;                     # o objeto medido: &quot;pole&quot;, &quot;box&quot; ou &quot;triad&quot;
 
-[pole]                    # a rod with marks, stood at several floor positions
-marks = [0, 1]            # heights of the marks, bottom to top
-rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
-# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order</code></pre>
+[pole]                            # uma haste com marcas, apoiada no chão em várias posições
+marks = [0, 0.25, 0.5, 0.75, 1]   # alturas das marcas, a partir do chão (0), em metros
+rect = [1.4, 5]                   # X = largura (lateral), Y = comprimento (à frente): 4 cantos no chão
+# positions = [[0, 0], [1.4, 0], [0, 5]]   # ou seus próprios pontos no chão (x, y), na ordem dos cliques
+
+# Opcional: onde o objeto esteve em cada vídeo (só poste/triedro).
+# [videos]
+# &quot;calib_pos1.mp4&quot; = [0, 0]
+# &quot;calib_pos2.mp4&quot; = [1.4, 0]</code></pre>
+<p><strong>N</strong> grava esse padrão mais completo (cinco marcas num retângulo 1,4 × 5 m). O desenho da passarela acima ainda mostra o caso curto <code>marks 0, 1</code> / <code>rect 1.38 x 5</code> (8 pontos): ajuste <code>marks</code> às alturas que você mediu.</p>
+<p><strong>Vários vídeos.</strong> Descomente <code>[videos]</code> com uma linha por clipe: nome do arquivo → canto <code>[x, y]</code> (tem de ser uma das posições acima). REF3D + <strong>T</strong> em cada vídeo manda os cliques para os pontos daquele canto (qualquer ordem). Sem isso, use a ordem da lista + <strong>Add video</strong> (<span class="key">F8</span>). Só para poste e triedro.</p>
 <p>As opções 1, 2, 3 (digitar as medidas em diálogos) continuam. Sem janela: <code>python -m vaila.ref3d_builder --new-template ref3d_template.toml</code> e depois <code>--template-file ref3d_template.toml -o calib.ref3d</code>.</p>
 
 <h2>4. Passo a passo no getpixelvideo</h2>
@@ -94,7 +102,12 @@ rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
 </table>
 
 <h2>7. Vários vídeos (uma posição por vídeo)</h2>
-<p>Quando o poste foi filmado em cada canto num vídeo diferente (por exemplo <code>calib_pos1 … calib_pos4</code>), clique os pontos da pos1 no primeiro vídeo, aperte <strong>Add video</strong> (<span class="key">F8</span>), abra o próximo e continue: a lista segue no próximo ponto. A câmera não pode se mexer entre os vídeos.</p>
+<p>Dois jeitos:</p>
+<ol>
+  <li><strong><code>[videos]</code> no template</strong> (preferido): nomeie cada arquivo e o canto no chão; abra aquele vídeo, REF3D + <strong>T</strong>, clique só as marcas daquele canto.</li>
+  <li><strong>Ordem da lista + F8:</strong> clique a pos1 no primeiro vídeo, <strong>Add video</strong> (<span class="key">F8</span>), abra o próximo e continue a lista.</li>
+</ol>
+<p>A câmera não pode se mexer entre os vídeos.</p>
 
 <h2>8. Arquivos e próximo passo</h2>
 <table>

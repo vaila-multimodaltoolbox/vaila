@@ -1,8 +1,8 @@
 # _vailá_ - Multimodal Toolbox
 
-**App version (GUI/CLI banner):** 0.4.18 (see `vaila.py`). **Package version:** 0.4.18 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
+**App version (GUI/CLI banner):** 0.4.19 (see `vaila.py`). **Package version:** 0.4.19 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-15
+**Last updated:** 2026-11-17
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -207,12 +207,34 @@ cd path\to\vaila
 
 ## What's new
 
+**Dependencies.** The GUI library is now **pygame-ce** (`pygame-ce` 2.5.8, the maintained fork; the
+module is still `import pygame`), so the `pkg_resources` deprecation warning at startup is gone and
+the Ctrl+V paste in the file browser uses the non-deprecated clipboard call. **mediapipe 1.2.3**
+has no `mp.solutions`: Markerless 3D's 2D extraction and the live webcam engine now run on the Tasks
+`PoseLandmarker` (new `vaila/mp_pose_tasks.py`; same 33 landmarks and CSV). **ultralytics 8.4.215**
+changed the default `iou` of predict and track from 0.7 to 0.5 (fewer overlapping boxes); pass
+`iou=0.7` to reproduce older results. On CUDA machines swap packages without a bare `uv sync`:
+`uv pip uninstall pygame` and `uv pip install pygame-ce`, or run `bash bin/setup_pyproject.sh`.
+
+**Dependency refresh (2026-11-17).** `uv.lock` moved about 85 packages to their latest compatible
+release, among them `trackers` 2.7.0 (was pinned at 2.4.0), `pytest` 9.2, `ruff` 0.17.5, `dash` 4.5,
+`folium` 1.0, `watchdog` 7, `neurokit2` 0.3, `transformers` 5.23 and `yt-dlp`; `pillow` was already
+at 13. Kept back on purpose, each by a package that caps it: `numpy` 2.3 and `huggingface-hub` 1.x
+(`sam3` needs `numpy<2.4` and `huggingface-hub<2`, in 0.1.3 and in 0.1.4), `pandas` 2 (`boxmot`
+needs `<3`), `scipy` 1.16 (`ydata-profiling` needs `<1.17`), `trimesh` 4 (`mhr` needs `<5`),
+`boxmot` 25 (26 pins `opencv-python==4.11.0.86`, which would downgrade the OpenCV in use) and `ty`
+0.0.89 (0.0.105 renamed lint rules, so 459 `# ty: ignore[...]` comments stop matching). The one
+lock still serves CPU, CUDA and macOS; on a CUDA machine update the environment package by package
+(`uv pip install --no-config ...`), never with a bare `uv sync`.
+
 GetPixelVideo **REF3D** (Shift+R, or CALIB option 4) builds the 3D points of a DLT3D calibration
 from the measures of a box, a pole with marks or a triad, shows which point to click next, and
 saves the pixels, the `.ref3d` and a checked `.dlt3d` together; the panel warns **NOT A REAL
 CAMERA** when fx and fy disagree (a wrong measure). The measures live in `ref3d_template.toml`
-next to the videos: **N** writes it to fill in, **T** (Enter) loads it; CLI
-`python -m vaila.ref3d_builder --new-template FILE` / `--template-file FILE -o calib.ref3d`.
+next to the videos: **N** writes a commented file to fill in (default pole marks
+`0, 0.25, 0.5, 0.75, 1` m on `rect = [1.4, 5]`), **T** (Enter) loads it. Optional `[videos]` maps
+each calibration clip to its floor position so clicks go to that corner's points, not to p0.
+CLI: `python -m vaila.ref3d_builder --new-template FILE` / `--template-file FILE -o calib.ref3d`.
 An [illustrated guide](vaila/help/ref3d_guide.html) ([PT](vaila/help/ref3d_guide_pt.html)) opens
 with F1 or the panel's **Guide** button. 1-line points can span several videos (F8 / **Add
 video**), and **H** shows a bilingual help of the current mode. Chessboard Calib now finds small
@@ -345,7 +367,7 @@ Com _vailá_, você é convidado a explorar, experimentar e criar sem restriçõ
 _vailá_ provides a comprehensive multimodal analysis framework organized into three main sections (Frames A, B, and C) that handle different aspects of biomechanical data processing:
 
 ```bash
-vailá - 15.Nov.2026 v0.4.18 (Python 3.12.16)
+vailá - 16.Nov.2026 v0.4.19 (Python 3.12.16)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -1131,7 +1153,7 @@ Don't hesitate to learn, explore, and experiment. Be bold, and don't be afraid t
 
 ## Releases and versioning
 
-The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.18`** (15 November 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
+The **installable package version** is defined in **`pyproject.toml`** (`[project].version`). That is what **`uv`** and **`pip`** report (e.g. when you `uv sync` or install from PyPI). Milestone **`0.4.6`** aligned the package line and the banner. The **GUI/CLI banner** in `vaila.py` and the installable package in `pyproject.toml` are both **`0.4.19`** (16 November 2026). Between milestones the banner is bumped on script changes per the metadata rule in `CLAUDE.md`, while the `pyproject.toml` package version is bumped separately for packaging/releases.
 
 **GitHub releases** may use an additional **milestone codename**: **`rp`** refers to **Ribeirão Preto**, plus a date suffix (day + abbreviated month + two-digit year), e.g. **`rp23mar26`** for 23 Mar 2026. This codename does not replace the package version.
 

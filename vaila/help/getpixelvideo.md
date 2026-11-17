@@ -4,9 +4,9 @@
 
 The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotation tool that allows you to mark and save pixel coordinates in video frames. Developed by Prof. Dr. Paulo R. P. Santiago, this tool offers advanced features including zoom for precise annotations, dynamic window resizing, frame navigation, multi-format CSV support, and advanced data visualization capabilities.
 
-**Version:** 0.4.18
-**Date:** 22 July 2025  
-**Updated:** 15 November 2026
+**Version:** 0.4.19
+**Date:** 22 July 2025
+**Updated:** 16 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -83,7 +83,7 @@ it does not create train/val/test splits. See the FreeKiki help page for ingest.
 
 - **Python 3.12+**
 - **OpenCV (cv2):** Video processing
-- **Pygame:** GUI and visualization
+- **pygame-ce:** GUI and visualization (`import pygame`)
 - **Pandas:** CSV data handling
 - **NumPy:** Numerical operations
 - **Tkinter:** File dialogs (usually included with Python)
@@ -97,7 +97,7 @@ uv sync
 uv run vaila/getpixelvideo.py
 ```
 
-Optional one-off run without syncing the whole repo: `uv run --with opencv-python --with pygame --with pandas --with numpy vaila/getpixelvideo.py` (prefer `uv sync` from the vailá clone).
+Optional one-off run without syncing the whole repo: `uv run --with opencv-python --with pygame-ce --with pandas --with numpy vaila/getpixelvideo.py` (prefer `uv sync` from the vailá clone).
 
 ## Getting Started
 
@@ -290,8 +290,10 @@ panel opens it in the browser.
 1. **Ctrl+I** (INSERT), then **REF3D**. Load the measures from a template file, or type
    them (Enter keeps the value shown):
    - **Template file** (the quick way): **N** writes `ref3d_template.toml` in the folder
-     of the video (pole, box and triad sections) and opens it in the text editor; set
-     `kind`, fill in, save. Then REF3D + **Enter** loads it (**T** is the default). See
+     of the video (pole, box and triad sections, with comments) and opens it in the text
+     editor; set `kind`, fill in, save. Optional `[videos]` maps each clip to its floor
+     corner so clicks go to that corner's points. Then REF3D + **Enter** loads it
+     (**T** is the default). See
      [the template](ref3d_guide.md#the-measures-go-in-a-template-file).
    - **1 Box**: X x Y x Z, plus marks along each axis (points of the edges).
    - **2 Pole**: heights of the marks (`0, 0.5, 1`) and where it stands:
@@ -299,19 +301,21 @@ panel opens it in the browser.
    - **3 Triad**: marks of the X (side), Y (forward) and Z (up) arms, and where its
      origin stands (like the pole). Order: origin, X marks, Y marks, Z marks.
    - **L**: load an existing `.ref3d`.
-2. Click the points in the order shown: the panel on the right lists them, draws the
-   object in 3D with the next point blinking, and the status line says
-   `click = p5 pos3 · mark 1 m (0, 5, 1)`. Right click removes the last point, **A**
-   leaves a point that is not visible empty, TAB or a click on a row of the panel
-   selects a point to re-place. **Hide panel** (top right of the panel) leaves only a
-   small tab with the count and the camera verdict; click it to show the panel again.
-   The sketch is right-handed: X to the right, Y away, Z up (X × Y = Z).
+2. Click the points in the order shown (or the corner named for this video in
+   `[videos]`): the panel on the right lists them, draws the object in 3D with the next
+   point blinking, and the status line says `click = p5 pos3 · mark 1 m (0, 5, 1)`.
+   Right click removes the last point, **A** leaves a point that is not visible empty,
+   TAB or a click on a row of the panel selects a point to re-place. **Hide panel**
+   (top right of the panel) leaves only a small tab with the count and the camera
+   verdict; click it to show the panel again. The sketch is right-handed: X to the
+   right, Y away, Z up (X × Y = Z).
 3. From 6 points off one plane, the DLT3D is solved at every click: a ring shows where
    each 3D point falls (green = the click agrees, red = far away; pink `pN?` = points
    still to click), and the panel shows the error and **fx / fy**. A real camera has
    fx ≈ fy; **NOT A REAL CAMERA** means a measure of the object (or a click) is wrong.
    The error alone does not show it: the 11 parameters absorb a wrong measure.
-4. When the object is in another video, **F8** / **Add video**: the points go with you.
+4. When the object is in another video, **F8** / **Add video**: the points go with you
+   (or open that clip with a `[videos]` entry and click only its corner).
 5. **Save** (or ESC) writes next to the video on screen:
    `<video>_markers_1_line.csv` (+ `.toml`), `<video>_markers_1_line.ref3d`,
    `<video>_markers_1_line.template.toml` and `<video>_markers_1_line.dlt3d`. Files
@@ -797,6 +801,15 @@ Built-in backup system for data safety:
 - **Project repository:** https://github.com/vaila-multimodaltoolbox/vaila
 
 ## Version History
+
+### Version 0.4.19 (16 November 2026) — REF3D template `[videos]` and clearer defaults
+
+- REF3D blank template (**N**) explains every key in comments; default pole is
+  `marks = [0, 0.25, 0.5, 0.75, 1]` on `rect = [1.4, 5]`.
+- Optional `[videos]` table: `"file.mp4" = [x, y]` (a floor position of the pole/triad).
+  With REF3D + **T**, clicks in that video go to that corner's points, not to p0.
+- Illustrated guide and REF3D builder help document the table and the two multi-video
+  workflows (`[videos]` vs list order + F8).
 
 ### Version 0.4.18 (15 November 2026) — 1 Line mode: right click, and one row from several videos
 

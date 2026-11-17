@@ -1,8 +1,8 @@
 # REF3D builder (ref3d_builder.py)
 
-**Version:** 0.4.18
-**Date:** 15 November 2026
-**Updated:** 15 November 2026
+**Version:** 0.4.19
+**Date:** 16 November 2026
+**Updated:** 16 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -35,7 +35,13 @@ Positions (pole and triad): `rect X x Y` = the 4 corners of a rectangle, in the 
 object. Empty = only at `0,0`.
 
 Example: a 1 m pole with marks at 0 and 1 m, stood at the corners of a walkway
-1.38 m wide and 5 m long, is `marks 0, 1` and `rect 1.38 x 5`: 8 points.
+1.38 m wide and 5 m long, is `marks 0, 1` and `rect 1.38 x 5`: 8 points. **N** writes a
+richer blank template by default (`marks = [0, 0.25, 0.5, 0.75, 1]`, `rect = [1.4, 5]`)
+with comments that explain every key; trim it to what you measured.
+
+Optional `[videos]` table (pole and triad only): `"file.mp4" = [x, y]` names the floor
+position of each calibration clip. getpixelvideo then routes clicks in that video to that
+corner's points. The `[x, y]` must be one of the template positions.
 
 All points on one plane (a pole with one mark, a triad with no Z arm and one
 position) give no DLT3D: the builder says so.

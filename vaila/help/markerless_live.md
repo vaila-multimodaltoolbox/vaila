@@ -6,7 +6,7 @@
 - **File:** `vaila\markerless_live.py`
 - **Lines:** 1486
 - **Size:** 56506 characters
-- **Version:** 0.3.98
+- **Version:** 0.4.19 (updated 2026-11-16: MediaPipe engine on the Tasks `PoseLandmarker`)
 - **Author:** Moser José (https://moserjose.com/),  Prof. Dr. Paulo Santiago
 - **GUI Interface:** ✅ Yes
 

@@ -1,8 +1,8 @@
 """Content of the H help screen and of the toolbar hints of getpixelvideo.
 
 Author: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
-Update Date: 15 November 2026
-Version: 0.4.18
+Update Date: 16 November 2026
+Version: 0.4.19
 """
 
 from __future__ import annotations

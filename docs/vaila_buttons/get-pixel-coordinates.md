@@ -3,7 +3,7 @@
 **Button:** Frame C → Video and Image → **GetPixelCoord**  
 **Module:** [`vaila/getpixelvideo.py`](../../vaila/getpixelvideo.py)  
 **Help:** [`vaila/help/getpixelvideo.md`](../../vaila/help/getpixelvideo.md) · [HTML](../../vaila/help/getpixelvideo.html)  
-**Version:** 0.4.18 · **Updated:** 15 November 2026
+**Version:** 0.4.19 · **Updated:** 16 November 2026
 
 ## Overview
 

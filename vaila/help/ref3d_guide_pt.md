@@ -2,9 +2,9 @@
 
 Passo a passo da calibração DLT3D com o botão REF3D do getpixelvideo, com desenhos esquemáticos dos eixos, dos gabaritos, da tela e da conferência da câmera.
 
-**Versão:** 0.4.18
-**Data:** 15 de novembro de 2026
-**Atualizado:** 15 de novembro de 2026
+**Versão:** 0.4.19
+**Data:** 16 de novembro de 2026
+**Atualizado:** 16 de novembro de 2026
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Projeto:** *vailá* - Multimodal Toolbox
 
@@ -62,14 +62,30 @@ grava o arquivo com os três objetos e o abre no editor de texto: escolha o `kin
 preencha a sua seção e salve. Depois, REF3D + **Enter**: **T** (o padrão) carrega, e um
 erro de digitação aparece na mensagem (`[pole] unknown key 'mark'`). O poste da passarela:
 
-```toml
-kind = "pole"             # "pole", "box" or "triad"
+O arquivo explica cada chave nos próprios comentários. Eixos: X lateral, Y à frente (afastando-se da câmera), Z para cima; a origem (0, 0, 0) é um ponto do chão. `rect = [1.4, 5]` coloca a haste em (0,0), (1.4,0), (0,5) e (1.4,5).
 
-[pole]                    # a rod with marks, stood at several floor positions
-marks = [0, 1]            # heights of the marks, bottom to top
-rect = [1.38, 5]          # the 4 corners of X x Y: 0,0 / X,0 / 0,Y / X,Y
-# positions = [[0, 0], [1, 0], [0, 5]]  # or your own list (x, y), in click order
+```toml
+kind = "pole"                     # o objeto medido: "pole", "box" ou "triad"
+
+[pole]                            # uma haste com marcas, apoiada no chão em várias posições
+marks = [0, 0.25, 0.5, 0.75, 1]   # alturas das marcas, a partir do chão (0), em metros
+rect = [1.4, 5]                   # X = largura (lateral), Y = comprimento (à frente): 4 cantos no chão
+# positions = [[0, 0], [1.4, 0], [0, 5]]   # ou seus próprios pontos no chão (x, y), na ordem dos cliques
+
+# Opcional: onde o objeto esteve em cada vídeo (só poste/triedro).
+# [videos]
+# "calib_pos1.mp4" = [0, 0]
+# "calib_pos2.mp4" = [1.4, 0]
 ```
+
+**N** grava esse padrão mais completo (cinco marcas num retângulo 1,4 × 5 m). O desenho
+da passarela acima ainda mostra o caso curto `marks 0, 1` / `rect 1.38 x 5` (8 pontos):
+ajuste `marks` às alturas que você mediu.
+
+**Vários vídeos.** Descomente `[videos]` com uma linha por clipe: nome do arquivo → canto
+`[x, y]` (tem de ser uma das posições acima). REF3D + **T** em cada vídeo manda os
+cliques para os pontos daquele canto (qualquer ordem). Sem isso, use a ordem da lista +
+**Add video** (F8). Só para poste e triedro.
 
 As opções 1, 2, 3 (medidas digitadas em diálogos) continuam. Sem janela:
 `python -m vaila.ref3d_builder --new-template ref3d_template.toml` e depois
@@ -118,8 +134,14 @@ largura digitada 0,55 m, real 1,38 m.)
 
 ## 7. Vários vídeos (uma posição por vídeo)
 
-Clique os pontos da pos1 no primeiro vídeo, **Add video** (F8), abra o próximo e
-continue. A câmera não pode se mexer entre os vídeos.
+Dois jeitos:
+
+1. **`[videos]` no template** (preferido): nomeie cada arquivo e o canto no chão; abra
+   aquele vídeo, REF3D + **T**, clique só as marcas daquele canto.
+2. **Ordem da lista + F8:** clique a pos1 no primeiro vídeo, **Add video** (F8), abra o
+   próximo e continue a lista.
+
+A câmera não pode se mexer entre os vídeos.
 
 ## 8. Arquivos e próximo passo
 

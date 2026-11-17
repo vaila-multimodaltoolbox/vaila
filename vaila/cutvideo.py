@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 29 July 2024
-Update Date: 12 November 2026
-Version: 0.4.17
+Update Date: 16 November 2026
+Version: 0.4.19
 
 Description:
 This script performs batch processing of videos for cutting videos.
@@ -66,7 +66,7 @@ Requirements:
 - Direct synchronization handoff:
   `python cutvideo.py --video reference.mp4 --sync-file session_sync.txt`.
 - OpenCV (`pip install opencv-python`)
-- pygame (`pip install pygame`)
+- pygame-ce (`pip install pygame-ce`; the module is still `import pygame`)
 - Tkinter (usually included with Python installations)
 - tomllib (Python 3.12 standard library)
 - rich (`pip install rich`)

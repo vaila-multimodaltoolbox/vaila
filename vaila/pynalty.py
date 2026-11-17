@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 19 December 2025
-Update Date: 12 November 2026
-Version: 0.4.17
+Update Date: 16 November 2026
+Version: 0.4.19
 
 Description:
 Guided analysis of a penalty kick from a single broadcast or handheld camera.
@@ -39,7 +39,7 @@ Outputs (inside ``<video_stem>_results/``):
 - event snapshots as PNG
 
 Requirements:
-- Python 3.12, OpenCV, pygame, numpy, Tkinter
+- Python 3.12, OpenCV, pygame-ce, numpy, Tkinter
 - Optional: ultralytics (automatic ball tracking), mediapipe (pose estimation)
 
 License:

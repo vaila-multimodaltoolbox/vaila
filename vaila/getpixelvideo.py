@@ -6,8 +6,8 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 15 November 2026
-Version: 0.4.18
+Update: 16 November 2026
+Version: 0.4.19
 Python Version: 3.12.16
 
 Description:
@@ -324,7 +324,7 @@ except ImportError:
 VAILA_MARK = "vailá"
 
 # Visible build stamp (keep aligned with the module docstring header).
-GETPIXELVIDEO_VERSION = "0.4.18"
+GETPIXELVIDEO_VERSION = "0.4.19"
 # FreeKiki review panel / point list background opacity (0 = invisible, 255 = solid).
 FREEKIKI_PANEL_ALPHA = 140
 
@@ -358,6 +358,33 @@ def open_help_page(name: str) -> str:
     path = os.path.abspath(os.path.join(os.path.dirname(__file__), "help", name))
     webbrowser.open(f"file://{path}")
     return path
+
+
+def display_size(default: tuple[int, int] = (800, 600)) -> tuple[int, int]:
+    """Size of the open window; ``default`` when there is no display surface.
+
+    pygame-ce types ``display.get_surface()`` as ``Surface | None``.
+    """
+    surface = pygame.display.get_surface() if pygame.display.get_init() else None
+    return surface.get_size() if surface is not None else default
+
+
+def clipboard_text() -> str:
+    """Text on the clipboard ("" when none or unavailable).
+
+    pygame-ce reads it with ``scrap.get_text()`` (no ``init`` needed); the older pygame
+    has only ``scrap.get(SCRAP_TEXT)``, which also needs ``scrap.init()`` after the
+    window is open.
+    """
+    scrap = pygame.scrap
+    try:
+        if hasattr(scrap, "get_text"):
+            return str(scrap.get_text() or "").rstrip("\x00").strip()
+        scrap.init()
+        data = scrap.get(pygame.SCRAP_TEXT)
+        return data.decode("utf-8", errors="ignore").rstrip("\x00").strip() if data else ""
+    except Exception:
+        return ""
 
 
 def open_in_editor(path: str) -> None:
@@ -433,7 +460,7 @@ def draw_help_chip(surface, font, text: str, x: int, y: int, *, mouse: bool = Fa
     return chip.right
 
 
-GETPIXELVIDEO_UPDATE_DATE = "15 November 2026"
+GETPIXELVIDEO_UPDATE_DATE = "16 November 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -2404,12 +2431,7 @@ def pygame_file_dialog(
     items = load_directory(current_dir)
 
     # Save current display mode if provided
-    if restore_size:
-        old_size = restore_size
-    else:
-        old_size = (
-            pygame.display.get_surface().get_size() if pygame.display.get_init() else (800, 600)
-        )
+    old_size = restore_size or display_size()
 
     # Create dialog window
     dialog_width = 800
@@ -2934,10 +2956,7 @@ def play_video_with_controls(
     pygame.display.set_caption(GETPIXELVIDEO_WINDOW_TITLE)
     clock = pygame.time.Clock()
 
-    # Initialize pygame.scrap for Ctrl+V clipboard paste support
-    with suppress(Exception):
-        pygame.scrap.init()
-
+    # Ctrl+V paste: clipboard_text() reads the clipboard (pygame-ce needs no scrap.init()).
     # Control variables
     # Default: auto-fit media to viewport (useful for 4K on 1080p displays).
     # Only zoom out by default; avoid upscaling small media.
@@ -8610,7 +8629,7 @@ def play_video_with_controls(
         column so long option lists (e.g. CALIB) fit the window.
         """
         # Get current display size dynamically to support both Main Window and Dialog calls
-        current_w, current_h = pygame.display.get_surface().get_size()
+        current_w, current_h = display_size()
 
         # Create semi-transparent overlay
         overlay = pygame.Surface((current_w, current_h))
@@ -8744,7 +8763,7 @@ def play_video_with_controls(
         if marker_range is None:
             return None
 
-        current_w, current_h = pygame.display.get_surface().get_size()
+        current_w, current_h = display_size()
         font = pygame.font.SysFont("verdana", 14)
         title_font = pygame.font.SysFont("verdana", 16, bold=True)
         small_font = pygame.font.SysFont("verdana", 12)
@@ -8980,7 +8999,7 @@ def play_video_with_controls(
         if marker_range is None:
             return None
 
-        current_w, current_h = pygame.display.get_surface().get_size()
+        current_w, current_h = display_size()
         font = pygame.font.SysFont("verdana", 14)
         title_font = pygame.font.SysFont("verdana", 16, bold=True)
         small_font = pygame.font.SysFont("verdana", 12)
@@ -9160,7 +9179,7 @@ def play_video_with_controls(
         if marker_range is None:
             return None
 
-        current_w, current_h = pygame.display.get_surface().get_size()
+        current_w, current_h = display_size()
         font = pygame.font.SysFont("verdana", 14)
         title_font = pygame.font.SysFont("verdana", 16, bold=True)
         small_font = pygame.font.SysFont("verdana", 12)
@@ -10950,7 +10969,7 @@ def play_video_with_controls(
         Returns selected file path or None on cancel (Escape).
         *extensions*: list of lowercase extensions to highlight, e.g. ['.yaml']
         """
-        current_w, current_h = pygame.display.get_surface().get_size()
+        current_w, current_h = display_size()
         font = pygame.font.SysFont("verdana", 14)
         small_font = pygame.font.SysFont("verdana", 12)
         title_font = pygame.font.SysFont("verdana", 15, bold=True)
@@ -11027,7 +11046,7 @@ def play_video_with_controls(
 
         while browsing:
             clock.tick(30)
-            current_w, current_h = pygame.display.get_surface().get_size()
+            current_w, current_h = display_size()
             visible_rows = max(1, (current_h - top_area - bottom_area) // row_h)
             max_scroll = max(0, len(entries) - visible_rows)
             scroll_offset = max(0, min(scroll_offset, max_scroll))
@@ -11172,17 +11191,10 @@ def play_video_with_controls(
 
                     # Ctrl+V paste (works whether path bar is active or not)
                     if event.key == pygame.K_v and (mods & pygame.KMOD_CTRL):
-                        try:
-                            clip = pygame.scrap.get(pygame.SCRAP_TEXT)
-                            if clip:
-                                pasted = (
-                                    clip.decode("utf-8", errors="ignore").rstrip("\x00").strip()
-                                )
-                                if pasted:
-                                    input_text = pasted
-                                    input_active = True
-                        except Exception:
-                            pass
+                        pasted = clipboard_text()
+                        if pasted:
+                            input_text = pasted
+                            input_active = True
                         continue
 
                     if event.key == pygame.K_ESCAPE:
@@ -11544,10 +11556,27 @@ def play_video_with_controls(
             if idx < len(ref3d_points)
         }
 
+    def _ref3d_video_target() -> int:
+        """First empty point of the floor position this video stood at ([videos] of the
+        template); -1 when the template does not name this video or it is complete."""
+        if not isinstance(ref3d_template, ref3d_builder.Ref3dTemplate):
+            return -1
+        name = os.path.basename(str(video_path or ""))
+        spot = dict(ref3d_template.video_positions).get(name)
+        if spot is None:
+            return -1
+        live = set(one_line_live_indices(one_line_markers, deleted_markers))
+        for idx, p in enumerate(ref3d_points):
+            if (p.x, p.y) == tuple(spot) and idx not in live:
+                return idx
+        return -1
+
     def _ref3d_next_index() -> int:
         """The point the next left click writes."""
         if 0 <= selected_marker_idx < len(one_line_markers):
             return selected_marker_idx
+        if ref3d_mode and _ref3d_video_target() >= 0:
+            return _ref3d_video_target()
         return len(one_line_markers)
 
     def _ref3d_next_text() -> str:
@@ -15645,6 +15674,14 @@ def play_video_with_controls(
                             track_shape_drag_origin = (float(video_x), float(video_y))
                             track_shape_drag_current = (float(video_x), float(video_y))
                         elif one_line_mode:
+                            # REF3D with a [videos] entry: this video's next empty point,
+                            # not the next number in the list.
+                            if ref3d_mode and selected_marker_idx < 0:
+                                _r3_target = _ref3d_video_target()
+                                if _r3_target >= 0:
+                                    while len(one_line_markers) < _r3_target:
+                                        one_line_markers.append((frame_count, None, None))
+                                    selected_marker_idx = _r3_target
                             # Append the next point, or re-place the selected one.
                             _push_undo()
                             _ol_idx = one_line_place(
