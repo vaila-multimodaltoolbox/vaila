@@ -57,10 +57,14 @@ def test_timestamps_grow_even_when_the_same_one_is_given_twice() -> None:
         def close(self):
             pass
 
+    # A fake `mp` as well: the real mp.Image loads libmediapipe.so, which needs libGLESv2 on
+    # Linux (absent on the CI runner), and this test is only about the timestamp logic.
+    fake_mp = SimpleNamespace(
+        Image=lambda image_format, data: SimpleNamespace(format=image_format, data=data),
+        ImageFormat=SimpleNamespace(SRGB="SRGB"),
+    )
     landmarker = object.__new__(mpt.PoseVideoLandmarker)
-    import mediapipe as mp
-
-    landmarker._mp = mp
+    landmarker._mp = fake_mp
     landmarker._landmarker = FakeLandmarker()
     landmarker._last_ms = -1
     frame = np.zeros((8, 8, 3), dtype=np.uint8)
