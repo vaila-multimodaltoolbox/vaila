@@ -392,6 +392,10 @@ def test_window_ref3d_pole_over_two_videos_writes_ref3d_and_dlt3d(tmp_path: Path
     dlt = pd.read_csv(f"{stem}.dlt3d")
     assert list(dlt.columns) == ["frame"] + [f"L{i}" for i in range(1, 12)]
     assert "DLT3D from 8 points" in done.stdout
+    # These clicks are synthetic (fx 129 vs fy 1202): not a real camera, so the terminal must
+    # not claim that the .dlt3d is final. The positive case is in test_ref3d_builder.py.
+    assert "NOT A REAL CAMERA" in done.stdout
+    assert "no need to run it again" not in done.stdout
 
 
 def test_window_ref3d_guide_button_and_f1_open_the_illustrated_guide(tmp_path: Path) -> None:

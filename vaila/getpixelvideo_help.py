@@ -6,7 +6,7 @@ Pixel Coordinate Tool - help content (getpixelvideo_help.py)
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 14 November 2026
-Update: 16 November 2026
+Update: 18 November 2026
 Version: 0.4.19
 Python Version: 3.12.16
 
@@ -769,8 +769,10 @@ def now_steps(context: HelpContext) -> list[HelpEntry]:
                 button="Add video",
             ),
             _now(
-                "Save <video>_markers_1_line .csv, .ref3d and .dlt3d (ESC saves and closes).",
-                "Salva <video>_markers_1_line .csv, .ref3d e .dlt3d (ESC salva e fecha).",
+                "Save <video>_markers_1_line .csv, .ref3d and .dlt3d (ESC saves and closes). "
+                "The .dlt3d is final: no need to run Make DLT3D.",
+                "Salva <video>_markers_1_line .csv, .ref3d e .dlt3d (ESC salva e fecha). "
+                "O .dlt3d já é o final: não precisa rodar o Make DLT3D.",
                 keys=("Ctrl+S", "ESC"),
                 button="Save",
             ),

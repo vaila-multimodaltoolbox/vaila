@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 16 November 2026
+Update: 18 November 2026
 Version: 0.4.19
 Python Version: 3.12.16
 
@@ -11526,11 +11526,9 @@ def play_video_with_controls(
         for warning in check.warnings:
             print(f"   warning: {warning}")
         print(f"   DLT3D -> {targets[2]}")
-        verdict = "camera OK" if check.ok else "NOT A REAL CAMERA - check the measures"
-        return (
-            f"Saved .ref3d + pixels + .dlt3d: error {check.mean_px:.1f} px, "
-            f"fx {check.fx:.0f} / fy {check.fy:.0f} - {verdict}"
-        )
+        if note := check.terminal_note():
+            print(f"   {note}")
+        return check.banner()  # says "ready for Rec3D" only for a real camera
 
     def _backup_before_overwrite(paths: list[str]) -> None:
         """Copy files that are about to be replaced into .vaila_markers_history/."""

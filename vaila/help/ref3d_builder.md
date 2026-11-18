@@ -2,7 +2,7 @@
 
 **Version:** 0.4.19
 **Date:** 16 November 2026
-**Updated:** 16 November 2026
+**Updated:** 18 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -68,7 +68,7 @@ Saved next to the video on screen when you press Save in getpixelvideo:
 | `<video>_markers_1_line.ref3d` | 3D points, one row `frame,p0_x,p0_y,p0_z,...` (read by `dlt3d.py`) |
 | `ref3d_template.toml` (folder of the videos) | the measures filled in by hand: REF3D **N** writes it, **T** loads it |
 | `<video>_markers_1_line.template.toml` | the measures used, in the same format (can be edited and loaded) |
-| `<video>_markers_1_line.dlt3d` | the 11 coefficients, in `dlt3d.py`'s format |
+| `<video>_markers_1_line.dlt3d` | the 11 coefficients, in `dlt3d.py`'s format; same format and equations as the file **Make DLT3D** writes, solved from the exact clicks (the pixel CSV keeps whole pixels, so Make DLT3D would differ by under 1 px); it does not need to be run again |
 
 Files that already exist are copied to `.vaila_markers_history/` before being replaced.
 

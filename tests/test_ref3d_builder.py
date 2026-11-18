@@ -1,7 +1,7 @@
 """REF3D builder: control points from the measures of a box, pole or triad.
 
 Author: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
-Update Date: 16 November 2026
+Update Date: 18 November 2026
 Version: 0.4.19
 """
 
@@ -13,7 +13,7 @@ import numpy as np
 import pytest
 
 from vaila import ref3d_builder as rb
-from vaila.dlt3d import normalize_ref3d_to_format1
+from vaila.dlt3d import normalize_ref3d_to_format1, process_files, save_dlt_parameters
 from vaila.monocular_dlt_align import dlt_project
 
 # The walkway calibration of 13 November 2026: a 1 m pole at the 4 corners of a
@@ -145,6 +145,65 @@ def test_a_wrong_width_still_fits_the_clicks_but_is_not_a_real_camera() -> None:
     assert check.max_px < 1  # the 11 parameters absorb it: the error alone hides it
     assert not check.ok
     assert "non-square pixels" in check.problems[0]
+
+
+def test_save_messages_say_ready_only_for_a_real_camera() -> None:
+    """After Save, getpixelvideo says the .dlt3d is final (no Make DLT3D) only for a real camera."""
+    clicks = _clicks(rb.pole_points((0, 1), rb.parse_positions("1.38 x 5")), _camera())
+    good = rb.fit_and_check(rb.pole_points((0, 1), rb.parse_positions("1.38 x 5")), clicks)
+    wrong = rb.fit_and_check(rb.pole_points((0, 1), rb.parse_positions("0.55 x 5")), clicks)
+    assert isinstance(good, rb.DltCheck) and isinstance(wrong, rb.DltCheck)
+
+    assert good.ok
+    assert good.banner().startswith("Saved .ref3d + pixels + .dlt3d, ready for Rec3D")
+    assert "skip Make DLT3D" in good.banner() and "NOT" not in good.banner()
+    assert len(good.banner()) <= 110  # one line on the screen banner, no wrapping
+    assert "no need to run it again" in good.terminal_note()
+
+    assert not wrong.ok
+    assert wrong.banner().endswith("NOT A REAL CAMERA - check the measures")
+    assert "ready" not in wrong.banner()
+    assert wrong.terminal_note() == ""
+
+
+def test_builder_and_dlt3d_py_write_the_same_file_from_the_same_pixels(tmp_path: Path) -> None:
+    """Same equations and format: on the same pixel values (here the CSV values for both) the
+    builder's .dlt3d and the one Make DLT3D (dlt3d.py) writes are identical."""
+    points = rb.pole_points((0, 0.5, 1), rb.parse_positions("1.38 x 5"))
+    clicks = _clicks(points, _camera(), noise=0.4, seed=3)
+    ref3d = rb.write_ref3d(points, tmp_path / "pole_markers_1_line.ref3d")
+    pixels = tmp_path / "pole_markers_1_line.csv"
+    header = "frame," + ",".join(f"p{p.index}_x,p{p.index}_y" for p in points)
+    row = "0," + ",".join(f"{clicks[p.index][0]:.2f},{clicks[p.index][1]:.2f}" for p in points)
+    pixels.write_text(header + "\n" + row + "\n")
+
+    from_script = tmp_path / "from_script.dlt3d"
+    params = process_files(str(pixels), str(ref3d))
+    assert params is not None
+    save_dlt_parameters(str(from_script), params, show_gui=False)
+
+    check = rb.fit_and_check(rb.read_ref3d_points(ref3d), rb.read_pixels_row(pixels))
+    assert isinstance(check, rb.DltCheck)
+    from_builder = rb.write_dlt3d(check.L, tmp_path / "from_builder.dlt3d")
+
+    assert from_script.read_text() == from_builder.read_text()
+
+
+def test_whole_pixel_csv_moves_the_dlt3d_by_less_than_a_pixel() -> None:
+    """Save solves from the exact clicks (the .toml keeps 1082.0383, 707.8538); the pixel CSV that
+    dlt3d.py reads keeps whole pixels (1082, 708). The two .dlt3d are not the same numbers, but they
+    project the control points within a pixel of each other, so the Save file is final."""
+    points = rb.pole_points((0, 0.5, 1), rb.parse_positions("1.38 x 5"))
+    exact = _clicks(points, _camera(), noise=0.4, seed=3)
+    whole = {i: (float(round(u)), float(round(v))) for i, (u, v) in exact.items()}
+    a = rb.fit_and_check(points, exact)
+    b = rb.fit_and_check(points, whole)
+    assert isinstance(a, rb.DltCheck) and isinstance(b, rb.DltCheck)
+
+    xyz = np.array([p.xyz for p in points])
+    gap = np.linalg.norm(dlt_project(a.L, xyz) - dlt_project(b.L, xyz), axis=1)
+    assert gap.max() < 1.0
+    assert not np.allclose(a.L, b.L)  # so the docs must not claim "identical"
 
 
 def test_projection_covers_points_not_clicked_yet() -> None:

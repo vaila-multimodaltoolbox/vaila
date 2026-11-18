@@ -32,7 +32,7 @@
 <main>
 <p class="lang"><a href="ref3d_guide.html">English</a></p>
 <h1>Guia de calibração REF3D (ilustrado)</h1>
-<p><strong>Versão:</strong> 0.4.19 <strong>Data:</strong> 16 de novembro de 2026 <strong>Atualizado:</strong> 16 de novembro de 2026 <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Projeto:</strong> <i>vailá</i> - Multimodal Toolbox</p>
+<p><strong>Versão:</strong> 0.4.19 <strong>Data:</strong> 16 de novembro de 2026 <strong>Atualizado:</strong> 18 de novembro de 2026 <strong>Autores:</strong> Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro <strong>Projeto:</strong> <i>vailá</i> - Multimodal Toolbox</p>
 <p>Deixe esta página aberta ao lado do <code>getpixelvideo</code> enquanto calibra. Na janela, <span class="key">F1</span> (com o REF3D ligado) ou o botão <strong>Guide</strong> do painel REF3D abre esta página. Referência da ferramenta: <a href="ref3d_builder.html">REF3D builder</a>; teclas: <a href="getpixelvideo_pt.html">getpixelvideo</a>.</p>
 
 <figure class="wide"><img src="images/ref3d/workflow_pt.svg" width="934" height="170" alt="Seis passos: medir, REF3D, clicar, mover, conferir, salvar" /><figcaption>A calibração inteira em seis passos.</figcaption></figure>
@@ -85,7 +85,7 @@ rect = [1.4, 5]                   # X = largura (lateral), Y = comprimento (à f
   <li>Ponto escondido neste vídeo? <span class="key">A</span> deixa em branco e passa ao próximo. Clique errado? O botão direito remove o último; clicar numa linha da lista seleciona aquele ponto para recolocar.</li>
   <li><strong>Mova</strong> o poste para o próximo canto. Se essa posição está em outro vídeo, aperte <strong>Add video</strong> (<span class="key">F8</span>): os pontos já clicados vão junto e a lista continua.</li>
   <li><strong>Confira</strong> os anéis e a câmera no painel (seções 5 e 6).</li>
-  <li><strong>Save</strong> (ou <span class="key">Esc</span>): os pixels, o <code>.ref3d</code> e o <code>.dlt3d</code> são gravados ao lado do vídeo (seção 8).</li>
+  <li><strong>Save</strong> (ou <span class="key">Esc</span>): os pixels, o <code>.ref3d</code> e o <code>.dlt3d</code> são gravados ao lado do vídeo (seção 8). O <code>.dlt3d</code> já é o final (aviso &ldquo;ready for Rec3D&rdquo;): <strong>não</strong> rode o <strong>Make DLT3D</strong> depois.</li>
 </ol>
 
 <h2>5. Como ler a tela</h2>
@@ -118,7 +118,7 @@ rect = [1.4, 5]                   # X = largura (lateral), Y = comprimento (à f
   <tr><td><code>&lt;video&gt;_markers_1_line.template.toml</code></td><td>as medidas usadas, no mesmo formato (T carrega quando não há <code>ref3d_template.toml</code>)</td></tr>
   <tr><td><code>&lt;video&gt;_markers_1_line.dlt3d</code></td><td>os 11 coeficientes do DLT3D</td></tr>
 </table>
-<p>Depois use o <code>.dlt3d</code> no <strong>DLT/REC 2D-3D</strong> (<code>rec3d</code>), ou refaça-o a partir do par <code>.csv</code> + <code>.ref3d</code> com o <code>dlt3d.py</code>. Arquivos que já existiam são copiados antes para <code>.vaila_markers_history/</code>.</p>
+<p>Depois use o <code>.dlt3d</code> direto no <strong>DLT/REC 2D-3D</strong> (<code>rec3d</code>): tem o mesmo formato e as mesmas equações do arquivo que o <strong>Make DLT3D</strong> (<code>dlt3d.py</code>) grava, resolvido com os seus cliques exatos (o CSV guarda pixels inteiros, então o Make DLT3D difere em menos de 1 px), então esse passo já foi feito. Arquivos que já existiam são copiados antes para <code>.vaila_markers_history/</code>.</p>
 
 <h2>9. Erros comuns</h2>
 <ul>

@@ -4,7 +4,7 @@ Step-by-step DLT3D calibration with the REF3D button of getpixelvideo, with sche
 
 **Version:** 0.4.19
 **Date:** 16 November 2026
-**Updated:** 16 November 2026
+**Updated:** 18 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -105,7 +105,8 @@ Options 1, 2, 3 (measures typed in dialogs) still work. Without a window:
 5. **Move** the pole to the next corner; if it is in another video, **Add video** (F8):
    the points go along and the list continues.
 6. **Check** the rings and the camera (sections 5 and 6).
-7. **Save** (or Esc): pixels, `.ref3d` and `.dlt3d` next to the video.
+7. **Save** (or Esc): pixels, `.ref3d` and `.dlt3d` next to the video. The `.dlt3d` is final
+   (banner "ready for Rec3D"): do **not** run **Make DLT3D** afterwards.
 
 ## 5. Reading the screen
 
@@ -153,7 +154,10 @@ The camera must not move between the videos.
 | `<video>_markers_1_line.template.toml` | the measures used, same format |
 | `<video>_markers_1_line.dlt3d` | the 11 DLT3D coefficients |
 
-Use the `.dlt3d` in **DLT/REC 2D-3D** (`rec3d`). Existing files are copied to
+Use the `.dlt3d` straight in **DLT/REC 2D-3D** (`rec3d`): it has the same format and
+equations as the file **Make DLT3D** (`dlt3d.py`) writes, solved from your exact clicks (the
+CSV keeps whole pixels, so Make DLT3D would differ by under 1 px), so that step is already
+done. Existing files are copied to
 `.vaila_markers_history/` first.
 
 ## 9. Common mistakes
