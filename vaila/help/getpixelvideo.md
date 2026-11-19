@@ -6,7 +6,7 @@ The Pixel Coordinate Tool (`getpixelvideo.py`) is a comprehensive video annotati
 
 **Version:** 0.4.19
 **Date:** 22 July 2025
-**Updated:** 16 November 2026
+**Updated:** 18 November 2026
 **Authors:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Project:** *vailá* - Multimodal Toolbox
 
@@ -279,7 +279,10 @@ later: **Load** its CSV, or `--one-line CSV` on the command line.
 
 Builds the 3D control points (`.ref3d`) from the measures of the calibration object,
 shows each point while you click it, and saves the pixels, the `.ref3d` and the
-`.dlt3d` together. Also option **4** of **CALIB**. Details:
+`.dlt3d` together. The `.dlt3d` is final: same format and equations as **Make DLT3D**
+(`dlt3d.py`), solved from your exact clicks (the CSV keeps whole pixels, so a later
+Make DLT3D differs by under 1 px), so go straight to **Rec3D**.
+Also option **4** of **CALIB**. Details:
 [ref3d_builder.md](ref3d_builder.md). **Illustrated step-by-step guide** (axes,
 templates with the order of the points, screen, camera check):
 [ref3d_guide.md](ref3d_guide.md); with REF3D on, **F1** or the **Guide** button of the
@@ -319,7 +322,8 @@ panel opens it in the browser.
 5. **Save** (or ESC) writes next to the video on screen:
    `<video>_markers_1_line.csv` (+ `.toml`), `<video>_markers_1_line.ref3d`,
    `<video>_markers_1_line.template.toml` and `<video>_markers_1_line.dlt3d`. Files
-   that already exist are copied to `.vaila_markers_history/` first.
+   that already exist are copied to `.vaila_markers_history/` first. With a real
+   camera the banner says "ready for Rec3D": no need to run **Make DLT3D**.
 
 ### Sequential Mode (S or O key)
 
@@ -810,6 +814,9 @@ Built-in backup system for data safety:
   With REF3D + **T**, clicks in that video go to that corner's points, not to p0.
 - Illustrated guide and REF3D builder help document the table and the two multi-video
   workflows (`[videos]` vs list order + F8).
+- REF3D **Save** already wrote the `.dlt3d`; the banner and the terminal now say it is
+  final ("ready for Rec3D"; same format and equations as **Make DLT3D**), so that step is
+  not repeated.
 
 ### Version 0.4.18 (15 November 2026) — 1 Line mode: right click, and one row from several videos
 

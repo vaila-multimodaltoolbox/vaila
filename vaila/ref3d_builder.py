@@ -6,7 +6,7 @@ REF3D builder - ref3d_builder.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 16 November 2026
-Update: 16 November 2026
+Update: 18 November 2026
 Version: 0.4.19
 Python Version: 3.12.16
 
@@ -895,7 +895,13 @@ def read_template(path: str | Path) -> Ref3dTemplate:
 
 
 def write_dlt3d(L: np.ndarray, path: str | Path) -> Path:
-    """Write the 11 coefficients in dlt3d.py's format (frame 0)."""
+    """Write the 11 coefficients in dlt3d.py's format (frame 0).
+
+    Same format and equations as the file Make DLT3D (dlt3d.py) writes, so there is no need
+    to run it again. On the same pixel values the two files are identical; Save solves from
+    the exact clicks while the pixel CSV (what dlt3d.py reads) keeps whole pixels, so a later
+    Make DLT3D can differ by under 1 px in projection.
+    """
     path = Path(path)
     coeffs = ",".join(f"{v:.6f}" for v in np.asarray(L, dtype=float).reshape(11))
     path.write_text("frame,L1,L2,L3,L4,L5,L6,L7,L8,L9,L10,L11\n" + f"0,{coeffs}\n")
@@ -953,6 +959,29 @@ class DltCheck:
         if self.problems:
             return head + " - NOT A REAL CAMERA: " + "; ".join(self.problems)
         return head + " - camera OK"
+
+    def save_note(self) -> str:
+        """What to tell the user once the .dlt3d is on disk: the file is final (same format
+        and equations as Make DLT3D / dlt3d.py) only for a real camera."""
+        if self.ok:
+            return "ready for Rec3D (skip Make DLT3D)"
+        return "NOT A REAL CAMERA - check the measures"
+
+    def banner(self) -> str:
+        """The one-line message of the window after Save (no wrapping: keep it short)."""
+        stats = f"error {self.mean_px:.1f} px, fx {self.fx:.0f} / fy {self.fy:.0f}"
+        if self.ok:
+            return f"Saved .ref3d + pixels + .dlt3d, {self.save_note()}: {stats}"
+        return f"Saved .ref3d + pixels + .dlt3d: {stats} - {self.save_note()}"
+
+    def terminal_note(self) -> str:
+        """A line for the terminal after the .dlt3d path; empty when the camera is not real."""
+        if not self.ok:
+            return ""
+        return (
+            "same format and equations as Make DLT3D (dlt3d.py), solved from your exact clicks "
+            "(the CSV keeps whole pixels): use it in Rec3D, no need to run it again"
+        )
 
 
 def solve_dlt3d(xyz: np.ndarray, uv: np.ndarray) -> np.ndarray:

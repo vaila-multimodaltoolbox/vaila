@@ -6,7 +6,7 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 
 **Versão:** 0.4.19  
 **Data:** 28 de Maio de 2026  
-**Atualizado:** 16 de Novembro de 2026  
+**Atualizado:** 18 de Novembro de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** *vailá* - Multimodal Toolbox
 
@@ -174,7 +174,9 @@ já salva: **Load** no CSV, ou `--one-line CSV` na linha de comando.
 
 Monta os pontos 3D de controle (`.ref3d`) a partir das medidas do objeto de
 calibração, mostra cada ponto na hora de clicar e salva juntos os pixels, o `.ref3d`
-e o `.dlt3d`. Também é a opção **4** do **CALIB**. Detalhes:
+e o `.dlt3d`. O `.dlt3d` já é o final: mesmo formato e equações do **Make DLT3D**
+(`dlt3d.py`), resolvido com os seus cliques exatos (o CSV guarda pixels inteiros, então
+um Make DLT3D depois difere em menos de 1 px), então vá direto ao **Rec3D**. Também é a opção **4** do **CALIB**. Detalhes:
 [ref3d_builder.md](ref3d_builder.md). **Guia ilustrado passo a passo** (eixos,
 gabaritos com a ordem dos pontos, tela, conferência da câmera):
 [ref3d_guide_pt.md](ref3d_guide_pt.md); com o REF3D ligado, **F1** ou o botão **Guide**
@@ -216,7 +218,8 @@ do painel abre o guia no navegador.
 5. **Save** (ou ESC) grava ao lado do vídeo na tela: `<video>_markers_1_line.csv`
    (+ `.toml`), `<video>_markers_1_line.ref3d`, `<video>_markers_1_line.template.toml`
    e `<video>_markers_1_line.dlt3d`. Arquivos que já existem são copiados antes para
-   `.vaila_markers_history/`.
+   `.vaila_markers_history/`. Com câmera real o aviso diz "ready for Rec3D": não
+   precisa rodar o **Make DLT3D**.
 
 ### Modo Sequencial (tecla S)
 
@@ -594,6 +597,9 @@ Sistema de backup integrado para segurança dos dados:
   canto, não para o p0.
 - O guia ilustrado e a ajuda do REF3D builder documentam a tabela e os dois fluxos com
   vários vídeos (`[videos]` vs ordem da lista + F8).
+- O **Save** do REF3D já gravava o `.dlt3d`; o aviso na tela e o terminal agora dizem que ele
+  é o final ("ready for Rec3D"; mesmo formato e equações do **Make DLT3D**), então esse
+  passo não se repete.
 
 ### Versão 0.4.18 (15 de Novembro de 2026) — Modo 1 Line: clique direito e uma linha a partir de vários vídeos
 

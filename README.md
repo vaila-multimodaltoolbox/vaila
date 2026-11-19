@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.19 (see `vaila.py`). **Package version:** 0.4.19 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-17
+**Last updated:** 2026-11-18
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -235,7 +235,9 @@ next to the videos: **N** writes a commented file to fill in (default pole marks
 `0, 0.25, 0.5, 0.75, 1` m on `rect = [1.4, 5]`), **T** (Enter) loads it. Optional `[videos]` maps
 each calibration clip to its floor position so clicks go to that corner's points, not to p0.
 CLI: `python -m vaila.ref3d_builder --new-template FILE` / `--template-file FILE -o calib.ref3d`.
-An [illustrated guide](vaila/help/ref3d_guide.html) ([PT](vaila/help/ref3d_guide_pt.html)) opens
+The `.dlt3d` written by Save is final: same format and equations as **Make DLT3D** (`dlt3d.py`),
+solved from the exact clicks (the CSV keeps whole pixels, so Make DLT3D differs by under 1 px), so
+with a real camera the banner says "ready for Rec3D" and that step is not repeated. An [illustrated guide](vaila/help/ref3d_guide.html) ([PT](vaila/help/ref3d_guide_pt.html)) opens
 with F1 or the panel's **Guide** button. 1-line points can span several videos (F8 / **Add
 video**), and **H** shows a bilingual help of the current mode. Chessboard Calib now finds small
 boards (full search when the fast check fails) and explains why intrinsics failed.
