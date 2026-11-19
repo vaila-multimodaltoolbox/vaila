@@ -416,3 +416,13 @@ official `cameras/*.npz`.
 ### Slash Commands (`.claude/commands/`)
 
 Specs, common shortcuts like `/check`, `/new-module`, `/debug` (safe File Manager / downloader diagnosis — `.agents/skills/debug/SKILL.md`).
+
+### Orchestrator mode (`orq deus`)
+
+Global kit (`~/.claude/agents/orquestrador.md`, `executor.md`, skill `auto-improve`, command `orq`, all linked from `NeuroDream-Inception/kit-orquestrador`). Open it from the repo root with `orq deus` (Fable orchestrator + Sonnet executors, compaction 60 %, effort max) or `orq fable sonnet` / `orq opus haiku`. The orchestrator has no Bash or Edit: it plans, delegates, audits; executors do the work. Rules every executor prompt must carry in this repo:
+
+- **CUDA machine:** `uv run --no-sync` only; never `uv sync`, a bare `uv run` or `uv lock --upgrade` (see Platform-Specific Configuration).
+- **At most 3 executors at once, one writer per file.** `vaila/getpixelvideo.py` is ~20 000 lines; `pyproject.toml`, `uv.lock`, `README.md`, `CLAUDE.md` are single-writer. Only one executor at a time runs the full `pytest tests/` or the GUI window tests: parallel load made them time out (2026-11-18, load ~9).
+- **Git:** executors work on a branch, never on `main`, and never run `commit`, `push`, `tag` or `stash`, nor delete user data, unless the user asked and the prompt says so. Never touch `stash@{0}`.
+- **A subtask that edits a `.py`** lists the metadata checklist above (header Update/Version, README date, help `.md`/`.html`, index) plus `ruff check`, `ruff format --check` and `ty` on the touched files as acceptance criteria.
+- **Lessons:** `memoria/aprendizados.md` (local, gitignored); general rules go to the `auto-improve` skill, repo rules here or in `docs/`.

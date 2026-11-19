@@ -4,8 +4,8 @@
 
 - **Category:** Multimodal Analysis / Video Segmentation
 - **File:** `vaila/vaila_sam.py`
-- **Version:** 0.4.14
-- **Updated:** 05 November 2026
+- **Version:** 0.4.19
+- **Updated:** 19 November 2026
 - **Authors:** Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 - **GUI Interface:** Yes (Tkinter batch dialog when no CLI args)
 - **CLI Interface:** Yes (`-i`, `-o`, `-t`, ...)
@@ -262,6 +262,7 @@ Writes `sam_points.csv`, `sam_id_map.csv`, and five `sam_vaila_*.csv` files.
 | Symptom in the terminal / GUI log | Most likely cause | Fix |
 |-----------------------------------|-------------------|-----|
 | `incomplete SAM frame coverage: expected=N, present=M` with `failed_chunks=0` and a contiguous missing **suffix** | Older builds trusted container `nb_frames` / OpenCV `CAP_PROP_FRAME_COUNT`, which can **over-report** decodable frames (VFR / bad mux). Chunked SAM finished every real frame, then the coverage gate compared against the inflated metadata. v0.3.120+ uses a last-frame probe and falls back to sequential decode (`>> vaila/vaila_sam: frame count metadata=… decodable=…`). | Upgrade / re-run. Optional: re-encode the source so metadata matches decode. Mid-video holes still fail the gate (true incomplete runs). |
+| `incomplete SAM frame coverage: expected=N, present=M` with `failed_chunks=0` and the missing frames **scattered or at the start**, `sam_tracks.csv` shorter than the video | Versions before 0.4.19 wrote no `sam_frames_meta.csv` row for frames where nobody was detected (a wide shot, a replay), so the coverage gate refused a run that had processed every frame. The SAM3+DINOv3 and SAM3+Sapiens2 pipelines stopped with `SAM3 stage failed with subprocess exit=3`. | Upgrade to 0.4.19 and re-run: every frame now has a row, blank when empty. A real hole (a frame that was never exported) still fails the gate. |
 | `Could not find bpe_simple_vocab_16e6.txt.gz` | The `sam3==0.1.3` wheel omitted the CLIP tokenizer vocabulary; recent BoxMOT wheels can omit the same fallback asset. | From the repository root run `bash bin/setup_pyproject.sh --target=cuda --extras=sam --yes` (Linux CUDA) or `pwsh bin/setup_pyproject.ps1 -Target cuda -Extras gpu,sam -Yes` (Windows CUDA). If the CUDA template is already active, use `uv sync --no-group cpu --group cuda --extra sam`. For an older checkout, the temporary repair is `uv pip install openai-clip==1.0.1`. |
 | `Could not open VideoWriter for SAM3 subsample` in `FAILED_sam.txt` | OpenCV still could not create the temporal subsample clip (`_sam3_subsample_input.*`) after the mp4v → MJPG/XVID → ffmpeg libx264 pipe fallback. v0.3.71+ skips broken `h264_v4l2m2m`/`avc1` on ARM boards; v0.3.69+ routes extreme low-FPS subsamples to chunked fallback before opening the writer. | Delete the failed per-video output folder and re-run. Ensure `ffmpeg` is on `PATH` for the pipe fallback. For normal long broadcasts prefer auto `max_frames` or `--max-frames 128`/`256`; if the writer failure repeats, re-encode the source video. |
 | `[h264_v4l2m2m] Could not find a valid device` (stderr noise) | Harmless on many Linux SBCs when OpenCV probes the hardware encoder before falling back to `mp4v`. v0.3.71 tries software codecs first and uses ffmpeg libx264 when OpenCV fails entirely. CSV/JSON exports continue even if overlay MP4 stitching fails. | Ignore if the run completes. Install `ffmpeg` if overlay MP4 is missing. Chunked runs now auto-generate `sam_points.csv` + `sam_vaila_*.csv` after merge. |
@@ -1030,6 +1031,7 @@ Place a short MP4 at `tests/SAM/test1000.mp4` for smoke tests (see `tests/SAM/RE
 
 ## Version History
 
+- **v0.4.19 (19 November 2026):** Fix: frames with no detection (a wide shot, a replay) now get a blank row in `sam_frames_meta.csv`. Before, the export skipped them and the coverage gate refused the run (`incomplete SAM frame coverage ... present=69, missing=29`), which stopped SAM3+DINOv3 / SAM3+Sapiens2 with `SAM3 stage failed with subprocess exit=3`.
 - **v0.4.14 (05 November 2026):** `sam3.1_multiplex.pt` is no longer auto-detected and is refused with an explanatory error: the pinned `sam3==0.1.3` (and PyPI 0.1.4) cannot build the SAM 3.1 multiplex model.
 - **v0.3.70 (05 July 2026):** Set H.264/H.265 MP4 formats as the default output videos, keeping AVI only as a legacy fallback option to save disk space.
 - **v0.3.69 (05 July 2026):** Help expanded with **Re-ID CLI workflows** (`--stabilize-ids`, `--overlap-frames`, scenario recipes A–H), chunked post-process repair via `sam_postprocess.py`, and AVI overlay / `source=` README support in post-process frame-size detection.

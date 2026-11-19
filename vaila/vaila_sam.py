@@ -5,8 +5,8 @@ Authors: Paulo Santiago, Sergio Barroso, Felipe Dias, Lennin Abrão
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 16 April 2026
-Update Date: 05 November 2026
-Version: 0.4.14
+Update Date: 19 November 2026
+Version: 0.4.19
 
 Description:
     Video segmentation with Meta SAM 3 (text prompts, Hugging Face checkpoints).
@@ -1430,6 +1430,24 @@ def _video_frame_count(video_path: str) -> int:
                 flush=True,
             )
     return max(0, decoded)
+
+
+def _sam_meta_row(
+    frame_idx: int,
+    sorted_oids: list[int],
+    frame_data: dict[int, tuple[float, float, float, float, float]],
+) -> str:
+    """One ``sam_frames_meta.csv`` row: ``frame`` then box_x, box_y, box_w, box_h, prob for each
+    object id; an object absent from this frame (or every object, when nobody was detected)
+    stays blank. Every exported frame must get a row, see ``validate_sam_run_complete``."""
+    cols = [str(frame_idx)]
+    for oid in sorted_oids:
+        if oid in frame_data:
+            bx, by, bw, bh, pr = frame_data[oid]
+            cols.extend([f"{bx:.6f}", f"{by:.6f}", f"{bw:.6f}", f"{bh:.6f}", f"{pr:.6f}"])
+        else:
+            cols.extend(["", "", "", "", ""])
+    return ",".join(cols)
 
 
 def validate_sam_run_complete(
@@ -4136,6 +4154,9 @@ def run_sam3_on_video(
             if masks is None or oids is None or getattr(masks, "size", 0) == 0:
                 if writer is not None and bgr is not None:
                     writer.write(bgr)
+                # No detection here, but the frame still gets its (blank) row:
+                # sam_frames_meta.csv is the coverage proof validate_sam_run_complete reads.
+                meta_rows_wide.append(_sam_meta_row(frame_idx, sorted_oids, {}))
                 frame_idx += 1
                 continue
 
@@ -4237,17 +4258,7 @@ def run_sam3_on_video(
                     }
                 )
 
-            row_cols = [str(frame_idx)]
-            for oid in sorted_oids:
-                if oid in frame_data:
-                    bx, by, bw, bh, pr = frame_data[oid]
-                    row_cols.extend(
-                        [f"{bx:.6f}", f"{by:.6f}", f"{bw:.6f}", f"{bh:.6f}", f"{pr:.6f}"]
-                    )
-                else:
-                    row_cols.extend(["", "", "", "", ""])
-
-            meta_rows_wide.append(",".join(row_cols))
+            meta_rows_wide.append(_sam_meta_row(frame_idx, sorted_oids, frame_data))
 
             frame_idx += 1
 
