@@ -170,6 +170,40 @@ def test_validate_sam_run_complete_accepts_empty_detection_rows(tmp_path: Path) 
     assert validate_sam_run_complete(out, expected_frames=3)[0] is True
 
 
+def test_sam_meta_row_keeps_every_frame_and_blanks_absent_objects() -> None:
+    """A frame with nobody detected still gets a row (blank boxes), so the file lists every
+    frame; an object missing from a frame stays blank next to the ones that are there."""
+    from vaila.vaila_sam import _sam_meta_row
+
+    oids = [1, 8]
+    assert _sam_meta_row(5, oids, {}) == "5" + "," * 10
+    row = _sam_meta_row(6, oids, {8: (0.1, 0.2, 0.3, 0.4, 0.95)}).split(",")
+    assert row[0] == "6" and row[1:6] == [""] * 5
+    assert row[6:] == ["0.100000", "0.200000", "0.300000", "0.400000", "0.950000"]
+
+
+def test_clip_with_frames_without_people_passes_the_coverage_check(tmp_path: Path) -> None:
+    """The 2026-11-19 case: 98 frames, 29 of them with no person (a wide shot at the start of a
+    highlights clip). The export used to skip those frames, so the coverage check refused a run
+    that had in fact processed every frame and the whole SAM3+DINOv3 3D pipeline stopped."""
+    from vaila.vaila_sam import _sam_meta_row, validate_sam_run_complete
+
+    oids = [1, 8]
+    header = "frame," + ",".join(f"box_x_{o},box_y_{o},box_w_{o},box_h_{o},prob_{o}" for o in oids)
+    nobody = set(range(0, 17)) | set(range(24, 36))
+    rows = [
+        _sam_meta_row(f, oids, {} if f in nobody else {1: (0.1, 0.2, 0.3, 0.4, 0.9)})
+        for f in range(98)
+    ]
+    out = tmp_path / "sam"
+    out.mkdir()
+    (out / "sam_frames_meta.csv").write_text(header + "\n" + "\n".join(rows) + "\n")
+
+    complete, reason = validate_sam_run_complete(out, expected_frames=98)
+    assert complete, reason
+    assert all(len(r.split(",")) == len(header.split(",")) for r in rows)
+
+
 def test_video_frame_count_prefers_decode_when_metadata_overreports(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
