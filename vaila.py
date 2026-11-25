@@ -6,7 +6,7 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 07 October 2024
-Update Date: 16 November 2026
+Update Date: 25 November 2026
 Version: 0.4.19
 
 Example of usage:
@@ -358,7 +358,7 @@ if platform.system() == "Darwin":  # macOS
         pass
 
 text = r"""
-    vailá - 16.Nov.2026 v0.4.19 (Python 3.12.16)
+    vailá - 25.Nov.2026 v0.4.19 (Python 3.12.16)
                                              o
                                 _,  o |\  _,/
                           |  |_/ |  | |/ / |
@@ -478,7 +478,7 @@ class Vaila(tk.Tk):
 
         """
         super().__init__(className="vaila")
-        self.title("vailá - 16.Nov.2026 v0.4.19 (Python 3.12.16)")
+        self.title("vailá - 25.Nov.2026 v0.4.19 (Python 3.12.16)")
         self._main_canvas: tk.Canvas | None = None
         self._scrollable_frame: tk.Frame | None = None
         self._canvas_window_id: int | None = None
@@ -516,10 +516,11 @@ class Vaila(tk.Tk):
 
         if gui:
             self.create_widgets()
-            # Non-blocking: checks GitHub main in a background thread, cached
-            # ~20h, never raises. Lets users know a newer install script is
+            # Non-blocking: checks GitHub main in a background thread on EVERY start
+            # (force=True, no 20 h wait: like the Claude Code CLI), never raises, and
+            # prints one status line in the terminal. Lets users know a newer version is
             # up before they hit a bug already fixed on main.
-            self.after(2000, lambda: self._start_update_check(force=False, manual=False))
+            self.after(2000, lambda: self._start_update_check(force=True, manual=False))
         else:
             self.withdraw()
 
@@ -3577,6 +3578,13 @@ class Vaila(tk.Tk):
         self._handle_update_check_result(result, manual=manual)
 
     def _handle_update_check_result(self, result, manual: bool):
+        if not manual:  # the check at startup: say whether this vailá is current
+            try:
+                from vaila.update_checker import startup_status_line
+
+                print(startup_status_line(result))
+            except Exception:  # a status line is a convenience, never fatal
+                pass
         if result.update_available:
             self._show_update_available_dialog(result)
         elif manual:
