@@ -37,6 +37,7 @@ except ImportError:
 
 
 DEFAULT_VERTEX_REGIONS = ["us-central1", "us-east1", "us-west1", "europe-west1"]
+_AIPLATFORM_PREFIX = "//aiplatform.googleapis.com/"
 
 
 def run_command(
@@ -101,8 +102,8 @@ def find_agent_via_cais(
               "display_name": agent_name,
               "location": location,
               "resource_name": (
-                  full_name.split("//aiplatform.googleapis.com/")[-1]
-                  if "//aiplatform.googleapis.com/" in full_name
+                  full_name[len(_AIPLATFORM_PREFIX):]
+                  if full_name.startswith(_AIPLATFORM_PREFIX)
                   else full_name
               ),
           }

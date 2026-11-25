@@ -187,9 +187,11 @@ CLAUDE.local.md
 # Lessons the orchestrator-mode executors write (kit-orquestrador); local to each machine
 memoria/
 .claude/*
+!.claude/
 !.claude/agents/
 !.claude/skills/
 !.claude/commands/
+!.claude/settings.json
 # get_anthropic_skills.sh (Keep tracked)
 
 # VSCode
@@ -289,3 +291,7 @@ tests/viewc3d/**/_staging/
 
 # graphify knowledge graph (generated; regenerate with graphify update / cluster-only)
 graphify-out/
+
+# ai-memory / graphify install backups
+CLAUDE.md.bak-*
+AGENTS.md.bak-*

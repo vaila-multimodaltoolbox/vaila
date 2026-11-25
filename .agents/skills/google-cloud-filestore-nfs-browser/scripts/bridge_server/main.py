@@ -36,6 +36,7 @@ MIN_MAX_RESULTS = 1
 MAX_MAX_RESULTS = 100
 MAX_SEARCH_FILE_SIZE_BYTES = 50 * 1024 * 1024
 MAX_CONTEXT_SNIPPET_LENGTH = 200
+MAX_GREP_PATTERN_LENGTH = 200
 DEFAULT_HEAD_LINES = 100
 MIN_HEAD_LINES = 1
 MAX_HEAD_LINES = 500
@@ -49,7 +50,9 @@ def safe_path(rel_path: str) -> str:
   resolved = os.path.realpath(
       os.path.join(mount_root_real, rel_path.lstrip("/"))
   )
-  if os.path.commonpath([mount_root_real, resolved]) != mount_root_real:
+  if resolved != mount_root_real and not resolved.startswith(
+      mount_root_real.rstrip(os.sep) + os.sep
+  ):
     raise HTTPException(
         status_code=http_status.HTTP_403_FORBIDDEN,
         detail="Access denied: path traversal",
@@ -140,6 +143,11 @@ def search_files(
         detail=f"Path not found: {path}",
     )
   if grep:
+    if len(grep) > MAX_GREP_PATTERN_LENGTH:
+      raise HTTPException(
+          status_code=http_status.HTTP_400_BAD_REQUEST,
+          detail=f"Regex pattern too long (max {MAX_GREP_PATTERN_LENGTH})",
+      )
     try:
       rgx = re.compile(grep)
     except re.error as e:
