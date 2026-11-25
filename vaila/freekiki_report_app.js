@@ -536,12 +536,25 @@
     }
 
     function showMetrics(m, title) {
-      var rows = [];
-      function row(key, value) {
-        rows.push("<dt>" + key + "</dt><dd>" + value + "</dd>");
+      // Build the list with DOM nodes + textContent (no HTML reinterpretation).
+      var out = $("ed-out");
+      out.textContent = "";
+      function row(key, value, bold) {
+        var dt = document.createElement("dt");
+        dt.textContent = key;
+        var dd = document.createElement("dd");
+        if (bold) {
+          var b = document.createElement("b");
+          b.textContent = value;
+          dd.appendChild(b);
+        } else {
+          dd.textContent = value;
+        }
+        out.appendChild(dt);
+        out.appendChild(dd);
       }
       var tierLabel = L["tier_" + m.tier] || m.tier;
-      row(L.ed_out_tier, "<b>" + tierLabel + "</b>");
+      row(L.ed_out_tier, String(tierLabel), true);
       row(L.ed_out_rms, num(m.rms_px, 2) + " px · " + L.ed_out_max.toLowerCase() + " " + num(m.max_px, 2) + " px");
       row(L.ed_out_anchor, m.anchor_m.map(function (d, i) {
         return "p" + (i + 1) + " " + num(d, 2) + " m";
@@ -551,7 +564,6 @@
       row(L.ed_out_peak, num(m.peak_kmh, 0) + " km/h");
       row(L.ed_out_dist, num(m.distance_m, 1) + " m");
       row(L.ed_out_zmax, num(m.zmax_m, 2) + " m");
-      $("ed-out").innerHTML = rows.join("");
       $("ed-status").textContent = title;
       drawPlots(m);
     }
