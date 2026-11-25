@@ -6,8 +6,8 @@ Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
 GitHub: https://github.com/vaila-multimodaltoolbox/vaila
 Creation Date: 21 August 2026
-Update Date: 03 September 2026
-Version: 0.3.120
+Update Date: 25 November 2026
+Version: 0.4.19
 
 Description:
 ------------
@@ -16,7 +16,10 @@ Git-based update checker for vailá git clones.
 When the project directory is a git repository, the GUI compares the local
 ``HEAD`` with ``origin/main`` (``git fetch`` + rev-list) so any new commit is
 detected — not only pyproject.toml version bumps. Manual **Check for Updates**
-always fetches; automatic startup checks respect a ~20 h cache.
+always fetches; the check at startup also fetches every time vailá opens (background
+thread, never blocks the window) and prints one status line in the terminal
+(``startup_status_line``), as the Claude Code CLI does. ``CHECK_INTERVAL_SECONDS`` (~20 h)
+still applies to callers that ask for ``force=False``.
 
 Non-git installs (one-line installer trees without ``.git``) fall back to
 comparing the local pyproject version with GitHub's ``main`` pyproject.toml.
@@ -514,6 +517,37 @@ def check_for_updates(force: bool = False) -> UpdateCheckResult:
     if is_git_repository():
         return _check_git_updates(force, local_version)
     return _check_pyproject_updates(force, local_version)
+
+
+def startup_status_line(result: UpdateCheckResult) -> str:
+    """One line saying whether this vailá is current, for every start (like ``claude`` does).
+
+    Pure text: the GUI prints it in the terminal when it opens, after the automatic check
+    (``force=True`` at startup: it asks GitHub every time, no 20 h wait). It never raises and
+    never mentions a URL or an account.
+    """
+    local = result.local_version or "?"
+    if not result.checked:
+        return f"vailá v{local}: could not check for updates (offline or git fetch failed)."
+    if result.is_git_repo:
+        if result.update_available:
+            return (
+                f"vailá v{local}: NEW version on origin/main, {result.commits_behind} new "
+                f"commit(s) ({result.local_commit} -> {result.remote_commit}). "
+                f"Update: {get_git_pull_command()}"
+            )
+        if result.commits_behind > 0:
+            return (
+                f"vailá v{local}: {result.commits_behind} new commit(s) on origin/main "
+                "(notice dismissed earlier)."
+            )
+        return f"vailá v{local}: up to date (commit {result.local_commit or '?'})."
+    if result.update_available:
+        return (
+            f"vailá v{local}: NEW version v{result.remote_version} on GitHub. "
+            f"Update: see the install command in Help > Check for Updates."
+        )
+    return f"vailá v{local}: up to date (latest on GitHub: v{result.remote_version or local})."
 
 
 def skip_version(version: str) -> None:

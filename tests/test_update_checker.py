@@ -237,3 +237,68 @@ def test_check_git_updates_non_ssh_failure_skips_https_fallback(monkeypatch):
     assert result.used_https_fallback is False
     assert result.ssh_origin_detected is False
     assert result.error == "some_other_git_error"
+
+
+# --- startup status line (the check on every start of vaila.py) -------------------------
+
+
+def _result(**kw):
+    from vaila.update_checker import UpdateCheckResult
+
+    return UpdateCheckResult(**{"checked": True, "local_version": "0.4.19", **kw})
+
+
+def test_startup_status_line_up_to_date_git():
+    from vaila.update_checker import startup_status_line
+
+    text = startup_status_line(_result(is_git_repo=True, local_commit="abc1234"))
+    assert text == "vailá v0.4.19: up to date (commit abc1234)."
+
+
+def test_startup_status_line_new_commits_names_the_update_command():
+    from vaila.update_checker import startup_status_line
+
+    text = startup_status_line(
+        _result(
+            is_git_repo=True,
+            update_available=True,
+            commits_behind=3,
+            local_commit="aaa1111",
+            remote_commit="bbb2222",
+        )
+    )
+    assert "NEW version" in text and "3 new commit(s)" in text
+    assert "aaa1111 -> bbb2222" in text and "git pull --ff-only origin main" in text
+
+
+def test_startup_status_line_dismissed_notice_is_still_reported():
+    from vaila.update_checker import startup_status_line
+
+    text = startup_status_line(_result(is_git_repo=True, commits_behind=2, update_available=False))
+    assert "2 new commit(s)" in text and "dismissed" in text and "NEW version" not in text
+
+
+def test_startup_status_line_non_git_install():
+    from vaila.update_checker import startup_status_line
+
+    new = startup_status_line(_result(update_available=True, remote_version="0.4.20"))
+    assert "NEW version v0.4.20" in new
+    same = startup_status_line(_result(remote_version="0.4.19"))
+    assert same == "vailá v0.4.19: up to date (latest on GitHub: v0.4.19)."
+
+
+def test_startup_status_line_when_the_check_failed_does_not_raise_or_leak_details():
+    from vaila.update_checker import startup_status_line
+
+    text = startup_status_line(
+        _result(checked=False, error="ssh_permission_denied", is_git_repo=True)
+    )
+    assert text == "vailá v0.4.19: could not check for updates (offline or git fetch failed)."
+    assert "git@" not in text and "http" not in text
+
+
+def test_vaila_py_checks_on_every_start_and_prints_the_status_line():
+    """vaila.py asks GitHub at every start (force=True) and prints startup_status_line."""
+    source = (Path(__file__).resolve().parents[1] / "vaila.py").read_text(encoding="utf-8")
+    assert "self._start_update_check(force=True, manual=False)" in source
+    assert "startup_status_line(result)" in source
