@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.17
+Version: 0.4.19
 Created: 28 October 2026
-Update Date: 12 November 2026
+Update Date: 24 November 2026
 
 Description:
     The core kick metrics of one kicker, from ``poses_3d_binocular.csv`` (the triangulated
@@ -513,7 +513,7 @@ def analyze_kicker(
     ``goal_x`` is the attacked goal line (metres, signed), which sets the side of the front views.
     ``override_source`` names where ``contact_override`` comes from: ``fit`` (default; it needs a
     marker contact to replace), or the contact the flight decided for a ball not at rest
-    (``manual``, ``kink``, ``first_frame``), which stands on its own. ``incoming`` (the flight's
+    (``manual``, ``feet``, ``kink``, ``first_frame``), which stands on its own. ``incoming`` (the flight's
     ``incoming`` record) adds the ball that came in: ``v_ball_pre_mps`` and ``ball_turn_deg``.
     """
     n = len(ball)
@@ -556,12 +556,15 @@ def analyze_kicker(
             warnings.append(f"fit kick time differs from the contact by {check * fps:+.1f} frames")
         metrics.append(_metric("kick_time_check_s", check, "s", "inferido", "ok"))
     contact_source_label = {"fit": "ajustado", "manual": "informado", "kink": "inferido",
-                            "first_frame": "inferido"}.get(contact_source, "observado")  # fmt: skip
+                            "first_frame": "inferido",
+                            "feet": "inferido"}.get(contact_source, "observado")  # fmt: skip
     contact_reason = {
         "fit": f"contact of the fitted flight; the hand-marked ball moved at frame {marker_contact}",
         "manual": "contact frame given by hand",
         "kink": "break of the rolling ball's ground track: the ball came in rolling",
         "first_frame": "the ball already flies in the first frame: the kick is at or before it",
+        "feet": "the last frame with the ball at the kicker's foot, then the ball moves away "
+        "(SAM 3D Body 2D feet)",
     }.get(contact_source, "")
     metrics.append(
         _metric("contact_frame", contact, "frame", contact_source_label, "ok", contact_reason)

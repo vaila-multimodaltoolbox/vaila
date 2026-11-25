@@ -1,34 +1,85 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <title>Train AI Tracker — vailá</title>
-  <style>
-    body { font-family: Georgia, serif; max-width: 720px; margin: 2rem auto; line-height: 1.5; padding: 0 1rem; }
-    code, pre { font-family: Consolas, monospace; background: #f4f4f4; }
-    pre { padding: 0.75rem; overflow-x: auto; }
-    h1 { font-size: 1.6rem; }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - Train AI Tracker</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 980px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; vertical-align: top; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 12px; border-radius: 6px; overflow-x: auto; }
+        pre code { padding: 0; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
 </head>
 <body>
-  <h1>Train AI Tracker</h1>
-  <p><em>vailá</em> · Version 0.4.4 · Updated 2026-09-18</p>
-  <p>Offline fine-tuning for Track AI backbones (<code>.pth</code>) and discriminator
-  checkpoints (<code>discriminator_*.npz</code>) using datasets from getpixelvideo
-  <strong>Save ML</strong> (pose or detect).</p>
-  <h2>Workflow</h2>
-  <ol>
-    <li>getpixelvideo: mark targets, <strong>Rename</strong> slots to COCO/custom classes.</li>
-    <li><strong>Save ML</strong> → 1=pose or 2=detect.</li>
-    <li>Main GUI → Markerless 2D → <strong>Train AI Tracker</strong>.</li>
-    <li>Pick <code>data.yaml</code> + base <code>.pth</code>, mode backbone / discriminator / both.</li>
-  </ol>
-  <h2>CLI</h2>
-  <pre>uv run --no-sync python -m vaila.ai_tracker_train \
-  --data /path/to/data.yaml \
+    <div class="container">
+        <h1>vailá - Train AI Tracker</h1>
+<p>Version: 0.4.19<br>Updated: 24 November 2026</p>
+<p>Offline fine-tuning for <i>vailá</i> Track AI assets, using YOLO datasets produced by <strong>getpixelvideo → Save ML</strong>, or the points you clicked while AI Track was on (<code>--from-samples</code>, see below). The assets live in the AI Track folder (<code>&lt;home&gt;/ai_tracker/</code>; see <a href="ai_tracker_models.html">ai_tracker_models</a>). If no folder was chosen, the old <code>vaila/models/ai_tracker/</code> is used.</p>
+<h2>Goal</h2>
+<p>Improve tracking quality by:</p>
+<ol>
+<li>Fine-tuning a backbone <code>.pth</code> (ResNet50 / ResNet152 / MobileNetV3 / EfficientNet-B0) with multi-class crops from your labeled dataset.</li>
+<li>Training an offline appearance <strong>discriminator</strong> (<code>discriminator_&lt;profile&gt;.npz</code>) with more samples and time than the online JIT path.</li>
+</ol>
+<h2>Workflow</h2>
+<ol>
+<li>In <strong>getpixelvideo</strong>, mark targets (<code>p0</code>, <code>p1</code>, …).</li>
+<li>Click <strong>Rename</strong> (or <strong>Ctrl+N</strong>): map slots to COCO-80 or custom names (e.g. <code>person</code>, <code>sports ball</code>). Option 5 sets the pose object class.</li>
+<li>Click <strong>Save ML</strong>:
+<ul>
+<li><code>1 = pose</code> — markers become keypoints (one object class).</li>
+<li><code>2 = detect</code> — each marker becomes a class box (uses Track AI block size when available).</li>
+</ul></li>
+<li>Open main GUI → <strong>Markerless 2D</strong> → <strong>Train AI Tracker</strong>.</li>
+<li>Select the dataset <code>data.yaml</code>, pick a base <code>.pth</code> from <code>ai_tracker/</code>, choose mode <strong>backbone</strong> / <strong>discriminator</strong> / <strong>both</strong>, Run.</li>
+</ol>
+<p>The same dataset also trains Ultralytics via <strong>Train YOLOv26</strong>.</p>
+<h2>CLI</h2>
+<pre><code>uv run --no-sync python -m vaila.ai_tracker_train \
+  --data /path/to/vaila_dataset_*/data.yaml \
   --weights vaila/models/ai_tracker/resnet50_imagenet.pth \
-  --mode both --epochs 10 --profile athletics</pre>
-  <p>Outputs land under <code>vaila/models/ai_tracker/</code>. ImageNet base weights are
-  never overwritten automatically.</p>
+  --mode both --epochs 10 --profile athletics</code></pre>
+<p>Outputs:</p>
+<ul>
+<li><code>&lt;home&gt;/ai_tracker/backbones/{variant}_finetuned_YYYYMMDD_HHMMSS.pth</code></li>
+<li><code>&lt;home&gt;/ai_tracker/discriminators/discriminator_&lt;profile&gt;__&lt;key&gt;.npz</code></li>
+</ul>
+<p>Never overwrites <code>*_imagenet.pth</code> automatically. Load the finetuned <code>.pth</code> in getpixelvideo Track AI (Deep / Cfg / browse). Discriminator profiles load via the existing Track AI checkpoint path.</p>
+<h2>Retrain from your own clicks (<code>--from-samples</code>)</h2>
+<p>AI Track keeps the points you click while it is on (only mouse clicks) as samples in <code>&lt;home&gt;/ai_tracker/samples/</code>. <code>--from-samples ROOT</code> (ROOT = the <code>&lt;home&gt;/ai_tracker</code> folder) retrains from them. The <strong>Retrain (GPU)</strong> button of the Net window in getpixelvideo runs the same command.</p>
+<pre><code>uv run --no-sync python -m vaila.ai_tracker_train \
+  --from-samples ~/vaila_ai_models/ai_tracker --mode both --device auto
+uv run --no-sync python -m vaila.ai_tracker_train --from-samples ~/vaila_ai_models/ai_tracker --dry-run</code></pre>
+<ul>
+<li><strong>Backbone:</strong> a marker / background classifier on the context crops. By default only the last stage plus a new 2-class head is trained (<code>--unfreeze last</code>); <code>--unfreeze all</code> trains the whole network. Defaults: 5 epochs, batch 32, learning rate 1e-4. Needs at least 40 training samples (<code>--min-samples</code>).</li>
+<li><strong>Hold-out and activation rule:</strong> with samples from two or more videos, whole videos are held out (about <code>--val-fraction</code>, default 0.2); with one video, the last block of frames is. The measure is the held-out ROC AUC of a discriminator trained on the train split with the live tracker features, with the old backbone (before) and the new one (after). The new backbone is saved as <code>backbones/&lt;variant&gt;_finetuned_&lt;time&gt;.pth</code> and becomes active in <code>manifest.json</code> only if after &gt;= before. Otherwise it stays on disk, the old backbone stays active and the status is <code>kept_previous</code>.</li>
+<li><strong>Discriminators:</strong> rebuilt on all samples with the same features the live tracker uses (808 classic values, plus the deep embedding of the active backbone), so AI Track loads them. This fixes the old offline file of 2048 values that the live tracker never loaded. A classic (808) one is written too.</li>
+<li><strong>Device rule:</strong> <code>--device auto</code> (default) uses CUDA only if at least 3 GiB are free, else the CPU. <code>cpu</code> and <code>cuda</code> force one.</li>
+<li><strong>Result:</strong> <code>manifest.json</code> gets <code>last_retrain</code> (status <code>activated</code>, <code>kept_previous</code> or <code>error</code>, mode, variant, device, number of samples and videos, metric before and after, reason, log). The log is <code>&lt;ROOT&gt;/logs/retrain_&lt;time&gt;.log</code>. Exit code 0 = finished, activated or not.</li>
+<li>Other options: <code>--variant</code>, <code>--weights</code>, <code>--profile</code>, <code>--seed</code>, <code>--ai-models DIR</code>.</li>
+</ul>
+<p>Next step: send the result to Hugging Face or restore a version, see <a href="ai_tracker_models.html">ai_tracker_models</a>.</p>
+<h2>Notes</h2>
+<ul>
+<li>Pose and detect layouts are both accepted (boxes parsed from YOLO label lines).</li>
+<li>Optional <code>ai_tracker_train.json</code> next to <code>data.yaml</code> records task/classes.</li>
+<li>CUDA used when available (<code>--device auto</code>); otherwise CPU.</li>
+</ul>
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
 </body>
 </html>

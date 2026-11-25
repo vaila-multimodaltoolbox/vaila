@@ -8,13 +8,13 @@
 
 [Project documentation](../../docs/index.md) · [GitHub](https://github.com/vaila-multimodaltoolbox/vaila) · [README](../../README.md)
 
-**Documented topics:** 144 | **Categories:** 7 | **Generated on:** 19/11/2026 (v0.4.19)
+**Documented topics:** 147 | **Categories:** 7 | **Generated on:** 24/11/2026 (v0.4.19)
 
 This page lists every help topic under `vaila/help/` with links to HTML and Markdown.
 
 ---
 
-## Analysis (29)
+## Analysis (31)
 
 - **animal_open_field** — This script processes movement data of animals in an open field test, performing comprehensive kinematic analyses and generating visualizations to evaluate a...
   - [HTML](animal_open_field.html) · [Markdown](animal_open_field.md)
@@ -34,6 +34,10 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
   - [HTML](gnss_analysis.html) · [Markdown](gnss_analysis.md)
 - **imu_analysis** — This script performs IMU sensor data analysis from CSV and C3D files. It processes accelerometer and gyroscope data, calculates tilt angles and Euler angles,...
   - [HTML](imu_analysis.html) · [Markdown](imu_analysis.md)
+- **kick_measure** — This module opens a FreeKiki kick analysis folder and turns any pixel of its video into metres of the pitch, in any frame, not only in the frames that the pi...
+  - [HTML](kick_measure.html) · [Markdown](kick_measure.md)
+- **kick_measure_pt** — Este módulo abre uma pasta de análise de chute do FreeKiki e transforma qualquer pixel do vídeo dela em metros do campo, em qualquer quadro, não só nos quadr...
+  - [HTML](kick_measure_pt.html) · [Markdown](kick_measure_pt.md)
 - **markerless_2d_analysis** — This script performs batch processing of videos for 2D pose estimation using MediaPipe's Pose model. It processes videos from a specified input directory, ov...
   - [HTML](markerless_2d_analysis.html) · [Markdown](markerless_2d_analysis.md)
 - **markerless_3d_analysis** — Launches a Tkinter GUI to collect all parameters and save a .toml config file (with sensible defaults).
@@ -165,9 +169,11 @@ This page lists every help topic under `vaila/help/` with links to HTML and Mark
 - **yolo_depth3d** — Monocular 3D from one video in vailá: 2D keypoints, the metric depth map of the
   - [HTML](yolo_depth3d.html) · [Markdown](yolo_depth3d.md)
 
-## Tools (48)
+## Tools (49)
 
-- **ai_tracker_train** — Offline fine-tuning for vailá Track AI assets under vaila/models/ai_tracker/,
+- **ai_tracker_models** — This guide explains where the AI Track network of vailá is kept, how it is saved, and how to move it, retrain it, send it to Hugging Face and download it on...
+  - [HTML](ai_tracker_models.html) · [Markdown](ai_tracker_models.md)
+- **ai_tracker_train** — Offline fine-tuning for vailá Track AI assets, using YOLO datasets produced by getpixelvideo → Save ML, or the points you clicked while AI Track was on (--fr...
   - [HTML](ai_tracker_train.html) · [Markdown](ai_tracker_train.md)
 - **brainstorm** — brainstorm.py is a Tkinter workspace for creative text workflows inside vailá. It records or loads audio, transcribes speech, edits text prompts, generates m...
   - [HTML](brainstorm.html) · [Markdown](brainstorm.md)

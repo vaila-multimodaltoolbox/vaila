@@ -6,8 +6,8 @@
 |-------|--------|
 | **Category** | Processing |
 | **File** | `vaila/quickmeasure.py` |
-| **Version** | 0.4.10 |
-| **Updated** | 19 October 2026 |
+| **Version** | 0.4.19 |
+| **Updated** | 24 November 2026 |
 | **Author** | Paulo Santiago |
 | **GUI** | Yes (embedded in `getpixelvideo.py`) |
 | **CLI** | Yes (`python -m vaila.quickmeasure --points-csv ...`) |
@@ -134,7 +134,7 @@ The first calibration or result save creates one `processed_quickmeasure_<timest
 | Symbol | Role |
 |--------|------|
 | `QuickMeasureCalibration` | Line / plane / DLT2D / REF3D calib; `pixel_to_real()`, `source_frame` |
-| `QuickMeasureSession` | `set_calibration(calib, frame=None)`, `calibration_for_frame(n)`, live modes, `save_session` |
+| `QuickMeasureSession` | `set_calibration(calib, frame=None)`, `calibration_for_frame(n)`, live modes, `save_session`, `world_anchor(frame, x, y)` and `world_to_pixel_at(frame, X, Y, z)` (camera3d: pixel ↔ pitch point) |
 | `format_hover_coords(session, x, y, frame=None)` | Status-bar pixel + real text |
 | `CalibrationDraft` / `Ref3dCalibrationDraft` | Click collectors for CALIB |
 
@@ -160,3 +160,55 @@ current calibration. Cursor coordinates and measurements use each frame's
 calibration; the sequence is saved once after loading. Exported DLT2D frame
 identifiers retain the existing convention (1-based per-frame, 0 for default).
 Video and calibration must already be synchronized and describe the same plane.
+
+### Per-frame calibration (`*_frames.dlt3d` / `*_frames.dlt2d`)
+
+A `kick_analysis_*` folder of *vailá* holds one camera per video frame, written next to the
+SAM 3 outputs: `work/<stem>/sam3dinov3/processed_sam3dinov3_*/<stem>/<stem>_frames.dlt3d`
+(`frame,L1..L11`, one row per video frame) and the matching `<stem>_frames.dlt2d`
+(`frame,L1..L8`, the ground homography). In **CALIB → L**:
+
+- `<stem>_frames.dlt3d` becomes one `camera3d` calibration: every click uses the camera of its
+  own frame, so modes 1-8 give metres on the pitch in any frame.
+- `<stem>_frames.dlt2d` becomes one DLT2D calibration per frame.
+
+The FreeKiki detect run also writes `<stem>.dlt3d` / `<stem>.dlt2d` (in
+`work/<stem>/freekiki_predict_*/`), but those are **sparse**: one row per frame, with numbers
+only on the frames FreeKiki calibrated and empty (NaN) rows elsewhere. A calibration built from
+them answers `(nan, nan)` on every empty frame. When you pick such a file, *vailá* looks in the
+same kick folder for the per-frame file of the same stem; if it has a camera on every frame it
+is loaded instead (the terminal prints `has no camera on N of M frames (sparse FreeKiki file);
+loaded the per-frame calibration <path> instead`, and the calibration, exports and HUD name the
+real file). If there is none, the load is refused with the number of frames without camera and
+how to make the file: `uv run --no-sync vaila/freekiki.py kick-cameras <kick folder>` (or the
+FreeKiki button **Calibration per frame**), or open the video with `--kick-run`.
+
+Frames whose camera was not measured but copied from the nearest good frame are marked
+**approximate** in `<stem>_frames_cameras.csv`; the status line counts them
+(`N approx. frames`): measures there are less reliable, check them before using the numbers.
+
+### Measures anchored on the pitch (moving camera)
+
+With a `camera3d` calibration (one camera per video frame: `--kick-run`, or CALIB → L with a
+`*_frames.dlt3d`) the camera moves from frame to frame, so a spot clicked on frame 0 is not at the
+same screen pixel on frame 92. The overlay now draws the points of a measure where that spot of the
+pitch is **in the frame you are looking at**: the click becomes a point of the grass with the camera
+of its own frame (`QuickMeasureSession.world_anchor(frame, x, y)`) and is projected back with the
+camera of the current frame (`world_to_pixel_at(frame, X, Y, z=0)`). On the frame of the click the
+point is exactly where you clicked.
+
+- Lines and polygons are drawn on the pitch and clipped to the video image (not the black bars, not
+  under the open Kick panel); the value badge stays near the middle of the visible part.
+- A spot outside the image gets a marker on the border with a small arrow towards it and the label
+  `P<n> · q<frame>`: the point number and the frame of the click, counted from 0 as in the CSV
+  (the HUD `Frame: 1/93` counts from 1, so `q0` is `Frame: 1`). A spot behind the camera gets the
+  marker with `behind camera` (Portuguese window: `atrás da câmera`).
+- Anchored types: distance, area, angle, velocity, acceleration, arc, and height (the base on the
+  grass and the top above it, at the measured height). `level`, plane of the line, height line,
+  event and spin stay at the clicked pixel: they belong to the image or to a vertical plane.
+- Only `camera3d` is anchored. Line, plane, REF3D and DLT2D (fixed camera) draw exactly as before.
+- Only the drawing changes: the values, `points.csv` (`x_px`, `y_px` of the click frame) and every
+  export are unchanged; each point was already converted with the camera of its own frame.
+- The anchor is the grass under the pixel (`z = 0`), the same assumption the values make: a click on
+  the ball in the air is anchored on the grass under that pixel. Close to the horizon one pixel is many
+  metres, so a point there can jump from frame to frame.

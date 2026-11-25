@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.19
 Created: 28 October 2026
-Update Date: 02 November 2026
+Update Date: 24 November 2026
 
 Description:
     The kind of the kick / open-play analysis, from how the ball comes to it and who stands around it.
@@ -30,7 +30,7 @@ Description:
     * ``dribble`` / ``pass``: user choices for planar 1vN / pass reports (never from ``classify``).
 
     The distances and the ring are operational choices, not validated thresholds. The attacked goal is
-    the one nearer to the ball. The result goes to ``data/setpiece.json`` of each analysis.
+    the one the fitted flight goes to (its ``side``), else the one nearer to the ball. The result goes to ``data/setpiece.json`` of each analysis.
 """
 
 from __future__ import annotations
@@ -60,6 +60,7 @@ def classify(
     ball_xy: tuple[float, float],
     feet: dict[int, tuple[float, float]],
     pre_contact: str | None = None,
+    side: int | None = None,
 ) -> dict:
     """The kind of the kick from the ball at the kick (metres) and the feet of the people (metres).
 
@@ -67,9 +68,16 @@ def classify(
     ball came to the kick (``still``, ``rolling`` or ``unseen``; None when unknown): a ball that was
     not at rest is classified as ``kick`` (chute a gol in play, no wall). Returns the kind, the goal
     attacked, the distances and the people in the wall ring, with the reason in words.
+
+    ``side`` (+1 or -1, optional) is the goal the fitted flight goes to (``ball_flight.json``): the
+    attacked goal is then ``side * GOAL_LINE_X_M``, whatever half the ball is kicked from (a long
+    kick from the own half goes to the far goal). Without it the goal is the one nearer to the ball.
     """
     bx, by = float(ball_xy[0]), float(ball_xy[1])
-    goal_x = GOAL_LINE_X_M if bx >= 0 else -GOAL_LINE_X_M
+    if side is not None and int(side) != 0:
+        goal_x = GOAL_LINE_X_M if int(side) > 0 else -GOAL_LINE_X_M
+    else:
+        goal_x = GOAL_LINE_X_M if bx >= 0 else -GOAL_LINE_X_M
     distance = abs(goal_x - bx)
     wall = []
     for pid, (x, y) in sorted(feet.items()):
@@ -175,7 +183,9 @@ def classify_run(folder: Path | str) -> dict:
     ):  # a still ball keeps the rule below as it was
         poses = folder / "poses_3d_on_field.csv"
         feet = feet_at(poses, int(contact["frame"])) if poses.is_file() else {}
-        result = classify(tuple(contact["kick_xy"]), feet, contact.get("pre_contact"))
+        result = classify(
+            tuple(contact["kick_xy"]), feet, contact.get("pre_contact"), side=contact.get("side")
+        )
         result["pre_contact"] = contact.get("pre_contact")
         result["contact_frame"] = int(contact["frame"])
         return result
@@ -198,7 +208,8 @@ def classify_run(folder: Path | str) -> dict:
                 first = int(row["frame"])
                 break
     poses = folder / "poses_3d_on_field.csv"
-    return classify(rest, feet_at(poses, first) if poses.is_file() else {})
+    side = contact.get("side") if contact is not None else None
+    return classify(rest, feet_at(poses, first) if poses.is_file() else {}, side=side)
 
 
 def with_player_ids(result: dict, sam_to_player: dict[int, int]) -> dict:

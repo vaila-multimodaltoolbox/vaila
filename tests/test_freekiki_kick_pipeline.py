@@ -5,8 +5,8 @@ write the files each stage must leave. The tests check the order of the stages, 
 (one or two cameras), the reuse of finished stages, a failing monocular analysis, the failure
 message and the parser. Nothing here needs a video, a model or a GPU.
 
-Version: 0.4.17
-Update Date: 12 November 2026
+Version: 0.4.19
+Update Date: 24 November 2026
 """
 
 from __future__ import annotations
@@ -62,6 +62,17 @@ def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         (predict / "x.dlt3d").write_text("frame,L1\n", encoding="utf-8")
         return predict
 
+    def sam_2d_run(run_dir, video, work_dir, *, device=None, fresh_sam=False, **_):
+        sam = Path(work_dir) / "sam3dinov3" / "processed_sam3dinov3_x" / Path(video).stem
+        sam.mkdir(parents=True, exist_ok=True)
+        camera = sam / f"{Path(video).stem}_sam3dinov3_camera.csv"
+        camera.write_text("frame,person_id\n", encoding="utf-8")
+        (Path(work_dir) / "cam_int.npy").write_bytes(b"npy")
+        (sam / "p.json.gz").write_bytes(b"x")
+        calls.setdefault("sam_kwargs", []).append({"fresh_sam": fresh_sam})
+        return {"focal": {}, "camera_csv": str(camera), "predictions": str(sam / "p.json.gz"),
+                "reused": False}  # fmt: skip
+
     def detect_3d_run(run_dir, video, out_dir, *, work_dir, device=None, ball_csv=None, **kw):
         out_dir = Path(out_dir)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -72,12 +83,31 @@ def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         calls.setdefault("3d_kwargs", []).append(kw)
         return {"out": str(out_dir)}
 
-    def rebuild_ball_in_place(out_dir, video, work, ball_csv, *, contact_frame=None, **_):
+    def write_frame_cameras(kick_dir, camera="reference"):
+        videos = kp.resume_options(kick_dir)["videos"]
+        stem = Path(videos[0 if camera == "reference" else 1]).stem
+        sam = Path(kick_dir) / "work" / stem / "sam3dinov3" / "processed_sam3dinov3_x" / stem
+        sam.mkdir(parents=True, exist_ok=True)
+        files = {}
+        for kind, name in (("dlt3d", f"{stem}_frames.dlt3d"), ("dlt2d", f"{stem}_frames.dlt2d"),
+                           ("cameras", f"{stem}_frames_cameras.csv"),
+                           ("summary", f"{stem}_frames_cameras.json")):  # fmt: skip
+            (sam / name).write_text("frame\n", encoding="utf-8")
+            files[kind] = str(sam / name)
+        calls.setdefault("cameras_args", []).append((stem, camera))
+        return {"stem": stem, "dir": str(sam), "files": files,
+                "counts": {"dlt3d": 2, "solved": 1, "approximate": 1}, "n_frames": 4}  # fmt: skip
+
+    def frame_cameras_for_ball(path):
+        return {0: np.zeros(11), 1: np.ones(11)}
+
+    def rebuild_ball_in_place(out_dir, video, work, ball_csv, *, contact_frame=None, **kw):
+        calls.setdefault("ball_kwargs", []).append(kw)
         (Path(out_dir) / "ball.csv").write_text("frame,cx,cy\n", encoding="utf-8")
         (Path(out_dir) / "ball_3d_on_field.csv").write_text("frame,x_m\n", encoding="utf-8")
         return {"field3d": {"ball_flight": None}}
 
-    def run_player_ids(folders):
+    def run_player_ids(folders, roles=None):
         for folder in folders:
             (Path(folder) / "player_map.csv").write_text(
                 "player_id,role,camera,sam_id,first_frame,last_frame,frames,partner,median_match_m,group\n"
@@ -109,13 +139,13 @@ def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         return {"out": str(data / "field_ball.c3d"), "summary": {"field_kept": 0}}
 
     def teams_binocular(ref3d, other3d, ref_video, other_video, ref_work, other_work, bino_dir,
-                        poses_csv, ball_csv, *, team_a, fps):  # fmt: skip
+                        poses_csv, ball_csv, *, team_a, fps, roster=None):  # fmt: skip
         data = Path(bino_dir) / "data"
         data.mkdir(parents=True, exist_ok=True)
         (data / "team_map.csv").write_text("player_id\n", encoding="utf-8")
         return {"counts": {"TEAM_A": 0, "TEAM_B": 0, "REF": 0}}
 
-    def teams_mono(cam3d, video, work, *, is_ref, key, team_a, fps, sync=None):
+    def teams_mono(cam3d, video, work, *, is_ref, key, team_a, fps, sync=None, roster=None):
         data = Path(cam3d) / "data"
         data.mkdir(parents=True, exist_ok=True)
         (data / "team_map.csv").write_text("player_id\n", encoding="utf-8")
@@ -136,8 +166,11 @@ def stubs(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict:
         return {"dir": str(base), "tier": "alta"}
 
     monkeypatch.setattr(fk, "detect_video", counted("detect", detect_video))
+    monkeypatch.setattr(d3, "sam_2d_run", counted("sam", sam_2d_run))
     monkeypatch.setattr(d3, "detect_3d_run", counted("3d", detect_3d_run))
     monkeypatch.setattr(d3, "rebuild_ball_in_place", counted("ball", rebuild_ball_in_place))
+    monkeypatch.setattr(kp, "write_frame_cameras", counted("cameras", write_frame_cameras))
+    monkeypatch.setattr(kp, "frame_cameras_for_ball", frame_cameras_for_ball)
     monkeypatch.setattr(pids, "run_player_ids", counted("players", run_player_ids))
     monkeypatch.setattr(st, "run_binocular", counted("binocular", run_binocular))
     monkeypatch.setattr(kp, "_triangulate", counted("triangulate", triangulate))
@@ -380,8 +413,9 @@ def test_the_whole_run_writes_every_stage_in_order(tmp_path: Path, stubs: dict) 
     out = Path(result["out"])
     status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
     assert list(status["stages"]) == [
-        f"detect:{CAM1}", f"3d:{CAM1}", f"ball:{CAM1}", f"detect:{CAM2}", f"3d:{CAM2}",
-        f"ball:{CAM2}", "players", "setpiece", "binocular", "triangulate",
+        f"detect:{CAM1}", f"sam:{CAM1}", f"cameras:{CAM1}", f"detect:{CAM2}", f"sam:{CAM2}",
+        f"cameras:{CAM2}", f"3d:{CAM1}",
+        f"ball:{CAM1}", f"3d:{CAM2}", f"ball:{CAM2}", "players", "setpiece", "binocular", "triangulate",
         "teams:mono-ref", "kicker:mono-ref", "report:mono-ref",
         "teams:mono-other", "kicker:mono-other", "report:mono-other",
         "c3d:binocular", "teams:binocular", "kicker:binocular", "report:binocular",
@@ -527,7 +561,8 @@ def test_one_video_gives_only_the_monocular_analysis(tmp_path: Path, stubs: dict
     result = kp.run_kick_analysis("ws", [video], out_dir=tmp_path / "kick")
     status = json.loads(Path(result["status_file"]).read_text(encoding="utf-8"))
     assert list(status["stages"]) == [
-        f"detect:{CAM1}", f"3d:{CAM1}", f"ball:{CAM1}", "players", "setpiece",
+        f"detect:{CAM1}", f"sam:{CAM1}", f"cameras:{CAM1}", f"3d:{CAM1}", f"ball:{CAM1}", "players",
+            "setpiece",
         "teams:mono-ref", "kicker:mono-ref", "report:mono-ref",
     ]  # fmt: skip
     assert "binocular" not in " ".join(status["stages"])
@@ -944,7 +979,11 @@ def test_a_failing_overlay_redraw_does_not_stop_the_penalty_analysis(
 
 
 def _counts(stubs: dict) -> dict:
-    return {k: v for k, v in stubs.items() if k != "3d_kwargs"}
+    return {
+        k: v
+        for k, v in stubs.items()
+        if k not in ("3d_kwargs", "sam_kwargs", "ball_kwargs", "cameras_args")
+    }
 
 
 def test_a_corrected_ball_redoes_only_the_ball_and_what_follows(
@@ -989,15 +1028,16 @@ def test_corrected_field_keypoints_redo_the_detection_and_move_the_old_one_aside
     out = tmp_path / "kick"
     kp.run_kick_analysis("ws", [video], out_dir=out)
     old_predict = next((out / "work" / CAM1).glob(f"freekiki_predict_{CAM1}_*"))
-    (out / "work" / CAM1 / "sam3dinov3").mkdir()
+    (out / "work" / CAM1 / "sam3dinov3").mkdir(exist_ok=True)
     (tmp_path / f"{CAM1}_kiki49.csv").write_text("frame\n", encoding="utf-8")
     before = _counts(stubs)
     kp.run_kick_analysis("ws", [video], out_dir=out)
     assert stubs["detect"] == before["detect"] + 1 and stubs["3d"] == before["3d"] + 1
-    assert stubs["3d_kwargs"][-1]["fresh_sam"] is True  # the focal changed: SAM 3D Body again
+    assert stubs["sam_kwargs"][-1]["fresh_sam"] is True  # the focal changed: SAM 3D Body again
+    assert stubs["3d_kwargs"][-1]["skip_sam"] is True  # the 3D stage never starts SAM itself
     moved = list((out / kp.SUPERSEDED).glob(f"*/{CAM1}/*"))
     assert {p.name for p in moved} == {old_predict.name, "sam3dinov3"}
-    assert not (out / "work" / CAM1 / "sam3dinov3").exists()
+    assert stubs["sam"] == before["sam"] + 1  # the new SAM 3D Body run (the stub writes its folder)
 
 
 def test_the_contact_given_by_hand_reaches_the_reference_3d_and_is_stored(
@@ -1065,7 +1105,7 @@ def test_new_ball_observation_reuses_sam_but_new_goal_corners_refit_it(
     changed = moved | {"corners_px": moved["corners_px"] | {"p34": [51, 50]}}
     kp.run_kick_analysis("ws", videos, out_dir=out, arrival_observation=changed)
     assert stubs["detect"] == before["detect"] + 1 and stubs["3d"] == before["3d"] + 1
-    assert stubs["3d_kwargs"][-1]["fresh_sam"] is True and len(seen) == 2
+    assert stubs["sam_kwargs"][-1]["fresh_sam"] is True and len(seen) == 2
 
 
 def test_invalid_arrival_stops_before_making_a_run(tmp_path: Path, stubs: dict) -> None:

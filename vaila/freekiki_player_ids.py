@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.19
 Created: 27 October 2026
-Update Date: 01 November 2026
+Update Date: 23 November 2026
 
 Description:
     Each camera numbers its people with the SAM 3 object id, so the same player can carry
@@ -188,12 +188,30 @@ def _foot_distance(
     return best
 
 
+def _warn(message: str) -> None:
+    print(f"[freekiki player-ids] WARNING: {message}", flush=True)
+
+
+def _group_of(groups: list[Group], camera: str | None, sam_id: int) -> int | None:
+    """Index of the group that holds the track ``(camera, sam_id)``, None when there is none."""
+    for gi, g in enumerate(groups):
+        if any(t.camera == camera and t.sam_id == sam_id for t in g.tracks):
+            return gi
+    return None
+
+
 def _keeper(
-    groups: list[Group], offsets: dict[str, int], goal_point: np.ndarray, frame: int
+    groups: list[Group],
+    offsets: dict[str, int],
+    goal_point: np.ndarray,
+    frame: int,
+    skip: set[int] | None = None,
 ) -> int | None:
     """The group whose ground point at ``frame`` is nearest the goal, within ``KEEPER_RADIUS_M``."""
     best: tuple[float, int] | None = None
     for gi, g in enumerate(groups):
+        if skip and gi in skip:
+            continue
         centre = _group_ground_at(g, frame, offsets)
         if centre is None:
             continue
@@ -269,6 +287,7 @@ def assign_player_ids(
     fps: float,
     last_frame: int,
     first_frame: int = 0,
+    forced: dict[str, int] | None = None,
 ) -> tuple[dict[int, int], dict[int, str], dict]:
     """The player id and role of every group: ``(ids, roles, info)``.
 
@@ -276,9 +295,33 @@ def assign_player_ids(
     (``keeper``, ``kicker``, ``other``). The ids 0 and 1 are reserved: when no keeper or no kicker
     is found, that id is simply absent and the others keep their numbers from 2. ``side`` is +1
     or -1: the goal the ball is attacking is at ``x = side * GOAL_X_M``.
+
+    ``forced`` is the user's decision (the roster): ``{"kicker": sam id, "keeper": sam id}`` of the
+    reference camera, the first camera of ``offsets``. The group that holds that track takes the
+    role and the id (0 keeper, 1 kicker) instead of the heuristics; a SAM id with no track is
+    reported and that role falls back to the heuristic. ``info["kicker_source"]`` and
+    ``info["keeper_source"]`` say ``"roster"`` or ``"auto"``.
     """
     goal_point = np.array([side * GOAL_X_M, 0.0])
-    keeper = _keeper(groups, offsets, goal_point, first_frame)
+    reference = next(iter(offsets), None)
+    held: dict[str, int] = {}
+    for role, sam in (forced or {}).items():
+        if role not in ("keeper", "kicker") or sam is None:
+            continue
+        gi = _group_of(groups, reference, int(sam))
+        if gi is None:
+            _warn(f"roster {role} SAM {sam}: no track of the reference camera; using the heuristic")
+        else:
+            held[role] = gi
+    if "keeper" in held and held.get("keeper") == held.get("kicker"):
+        _warn(
+            "roster keeper and kicker are the same person (one group); the keeper is chosen again"
+        )
+        del held["keeper"]
+    if "keeper" in held:
+        keeper: int | None = held["keeper"]
+    else:
+        keeper = _keeper(groups, offsets, goal_point, first_frame, skip=set(held.values()))
     skip = {keeper} if keeper is not None else set()
     frame, point, kicker, kick_d = _kick_reference(
         groups,
@@ -292,6 +335,9 @@ def assign_player_ids(
         fps=fps,
         last_frame=last_frame,
     )
+    if "kicker" in held:
+        kicker = held["kicker"]
+        kick_d = _foot_distance(groups[kicker], frame, offsets, feet, point)
     if kicker is not None:
         skip.add(kicker)
 
@@ -322,6 +368,8 @@ def assign_player_ids(
         "keeper_found": keeper is not None,
         "kicker_found": kicker is not None,
         "kicker_distance_m": None if kick_d is None else round(float(kick_d), 3),
+        "kicker_source": "roster" if "kicker" in held else "auto",
+        "keeper_source": "roster" if "keeper" in held else "auto",
     }
     return ids, roles, info
 
@@ -436,12 +484,15 @@ def _cut_sync(folder: Path) -> tuple[int, int] | None:
     return video_sync(video) if video is not None else None
 
 
-def run_player_ids(folders: list[Path]) -> dict:
+def run_player_ids(folders: list[Path], roles: dict[str, int] | None = None) -> dict:
     """Give one ``player_id`` to every person of the 3D folders of one kick.
 
     ``folders[0]`` is the reference camera. Each folder gets ``player_map.csv`` (one row per
     track of that camera), ``poses_3d_on_field_players.csv`` and ``ground_tracks_players.csv``
     (the original rows plus ``player_id``). Returns the summary the CLI prints.
+
+    ``roles`` (``{"kicker": sam id, "keeper": sam id}`` of the reference camera, from the user's
+    roster) replaces the heuristics for the roles it names; see :func:`assign_player_ids`.
     """
     if not folders:
         raise ValueError("at least one 3D folder is needed")
@@ -505,6 +556,7 @@ def run_player_ids(folders: list[Path]) -> dict:
         side=side,
         ball_xy=ball_xy,
         last=int(last),
+        forced=roles,
     )
 
 
@@ -522,6 +574,7 @@ def _finish(
     side: float,
     ball_xy: dict[int, tuple[float, float]],
     last: int,
+    forced: dict[str, int] | None = None,
 ) -> dict:
     fps, fps_source = _fps_of(folders[0])
     groups = link_tracks(tracks, offsets)
@@ -535,6 +588,7 @@ def _finish(
         ball_xy=ball_xy,
         fps=fps,
         last_frame=last,
+        forced=forced,
     )
     player_of: dict[tuple[str, int], int] = {}
     for gi, g in enumerate(groups):

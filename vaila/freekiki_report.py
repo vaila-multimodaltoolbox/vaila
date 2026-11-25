@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.17
+Version: 0.4.19
 Created: 26 October 2026
-Update Date: 12 November 2026
+Update Date: 24 November 2026
 
 Description:
     ``freekiki.py report-tv --run <3D folder>`` writes ``report_tv/`` inside the finished run,
@@ -1175,7 +1175,7 @@ def _incoming_texts(m: dict, lang: str) -> tuple[str, str, str]:
     source = str(m.get("contact_source") or "rest")
     key = (
         f"contact_limit_{source}"
-        if source in ("kink", "first_frame", "manual")
+        if source in ("kink", "first_frame", "manual", "feet")
         else "contact_limit_rest"
     )
     return lead, text, tr(lang, key)

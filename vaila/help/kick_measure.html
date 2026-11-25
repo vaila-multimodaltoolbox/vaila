@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - kick_measure</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 980px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; vertical-align: top; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - kick_measure</h1>
+<p>English · <a href="kick_measure_pt.html">Português</a></p>
+<h2>Module information</h2>
+<table>
+<tr><th>Field</th><th>Value</th></tr>
+<tr><td><strong>Category</strong></td><td>Analysis</td></tr>
+<tr><td><strong>File</strong></td><td><code>vaila/kick_measure.py</code></td></tr>
+<tr><td><strong>Version</strong></td><td>0.4.19</td></tr>
+<tr><td><strong>Updated</strong></td><td>24 November 2026</td></tr>
+<tr><td><strong>Author</strong></td><td>Paulo Roberto Pereira Santiago</td></tr>
+<tr><td><strong>GUI</strong></td><td>Yes (measuring happens in <code>getpixelvideo.py</code>, with the step panel of <code>kick_panel.py</code>; this module is the logic behind it)</td></tr>
+<tr><td><strong>CLI</strong></td><td>Yes (<code>python -m vaila.kick_measure --run DIR</code>, <code>freekiki.py kick-measure DIR</code>, <code>getpixelvideo.py --kick-run DIR</code>, <code>python -m vaila.kick_measure --run DIR --export-scene OUT</code>, <code>python -m vaila.kick_measure --run DIR --write-cameras</code>, <code>freekiki.py kick-cameras DIR</code>)</td></tr>
+</table>
+<h2>What it is</h2>
+<p>This module opens a FreeKiki kick analysis folder and turns any pixel of its video into metres of the pitch, <strong>in any frame</strong>, not only in the frames that the pipeline could calibrate. With it, <i>vailá</i> measures on the video, live, and shows the result at once: distance, angle, speed, acceleration, height of an object or of the ball, the time between two events, the spin of the ball, and the length and radius of a curve. Everything is combined with the AI Track of getpixelvideo.</p>
+<p>Pitch frame (the same as FreeKiki): <code>x</code> along the pitch, <code>y</code> across, <code>z</code> up, in metres, origin at the centre spot. One video frame is one time step of <code>1 / fps</code> seconds (frame index from 0).</p>
+<h2>How to open a kick folder</h2>
+<table>
+<tr><th>Entry</th><th>What to do</th></tr>
+<tr><td>getpixelvideo, <strong>Tpl:</strong> button</td><td>Press <strong>Tpl:</strong> and answer <strong>K</strong> (Kick Measure), pick the <code>kick_analysis_*</code> folder in the browser and press <strong>Enter</strong>. If the video open now is not the video of the camera of the folder, it opens the right one.</td></tr>
+<tr><td>getpixelvideo, <strong>Kick SAM</strong> button</td><td>With the video open, click <strong>Kick SAM</strong> and choose the <code>kick_analysis_*</code> folder.</td></tr>
+<tr><td>getpixelvideo CLI</td><td><code>uv run --no-sync vaila/getpixelvideo.py --kick-run DIR -f VIDEO</code> (<code>-f</code> is optional: without it the reference video of the folder is used).</td></tr>
+<tr><td>FreeKiki window</td><td><strong>Frame B → Soccer Tools → FreeKiki</strong>, section 5, <strong>Open run and correct...</strong>: choose the <code>kick_analysis_*</code> folder and the <strong>Camera</strong> (Reference or Other), then press <strong>Measure kick</strong> (next to <i>Correct ball</i> and <i>Correct field keypoints</i>), or <strong>Measure kick: video + SAM folder</strong>.</td></tr>
+<tr><td>FreeKiki CLI</td><td><code>uv run --no-sync vaila/freekiki.py kick-measure DIR [--camera reference|other] [--no-wait]</code></td></tr>
+<tr><td>Python module</td><td><code>uv run --no-sync python -m vaila.kick_measure --run DIR [--camera reference|other] [--info] [--export cameras.json]</code> prints the cameras (calibrated, solved, tracked, approximate), the ball and the people; <code>--export</code> writes them to a JSON; <code>--write-cameras</code> writes the per-frame calibration files (see <i>Per-frame calibration files</i>).</td></tr>
+</table>
+<p>The <strong>Load</strong> button of getpixelvideo keeps its own job (FreeKiki run to <i>correct</i>, <code>Tpl: L</code>); Kick Measure is <code>Tpl: K</code>. Every GUI entry prints the equivalent command in the terminal (<code>&gt;&gt; uv run --no-sync vaila/getpixelvideo.py --kick-run ... -f ...</code>), so the session can be repeated without the window.</p>
+<p><code>DIR</code> can be the <code>kick_analysis_*</code> folder, its <code>*_3d_*</code> folder or the detect run inside <code>work/</code>.</p>
+<h3>What loading does</h3>
+<p>Loading shows <strong>only the calibration</strong>; nothing else is drawn until you ask for it in the step panel (next section).</p>
+<ul>
+<li>The camera of <strong>every</strong> frame becomes one <code>camera3d</code> calibration of the Quick Measure session (see below), so the keys <code>1</code>-<code>6</code> already give real metres. When the per-frame files of the next section exist next to the SAM 3 outputs, they are read (fast); otherwise the cameras are built on the spot, tracking included.</li>
+<li>The pitch lines are re-projected on the video with that camera, coloured by the source of the camera of the frame: DLT3D green, solved yellow, tracked cyan, approximate orange.</li>
+<li>The ball track (<code>&lt;video&gt;_markers.csv</code> next to the video, else <code>ball.csv</code> of the 3D folder) is <strong>not</strong> written into the marker p0 any more: the panel does it only when you press <strong>Ball → marker p0 (edit / AI Track)</strong>. A p0 you already clicked is never overwritten, and AI Track keeps working.</li>
+<li>The mouse hover shows <code>Real: (x, y) m</code>, and <code>[approx. camera]</code> when the frame has no calibration of its own.</li>
+<li>In mode <code>8</code> the bottom of the window shows <code>s</code>, <code>z</code>, speed and acceleration of the current frame.</li>
+</ul>
+<h2>Step panel: measure by parts and export to mkvis3d and Blender</h2>
+<p>Why: with 31 boxes, labels and the ball in p0 drawn at once, nothing could be measured. The panel (<code>vaila/kick_panel.py</code>) docks on the right of the video and goes in four steps; every layer is off until you switch it on. Texts follow the language of the <code>H</code> help (English or Portuguese).</p>
+<p><strong>How to start.</strong> Open the video in getpixelvideo, click <strong>Kick SAM</strong> (or FreeKiki → <strong>Measure kick: video + SAM folder</strong>, or <code>--kick-run DIR</code>) and choose the <code>kick_analysis_*</code> folder.</p>
+<table>
+<tr><th>Step</th><th>What it has</th></tr>
+<tr><td><strong>1 Calib</strong></td><td>Frames counted by calibration source (DLT3D, solved, tracked, approximate), the source of <strong>this</strong> frame, and <strong>Field lines</strong> on/off. Check that the pitch lines sit on the grass, then go on.</td></tr>
+<tr><td><strong>2 Layers</strong></td><td>Toggles <strong>Boxes</strong>, <strong>Pose 2D</strong>, <strong>Ball</strong>, <strong>Labels</strong>; role chips <strong>all / kicker / keeper / team A / team B / referee / selected</strong>; the list of people with a checkbox each (the wheel over the panel scrolls it). A click on a player in the video selects it. <strong>Ball → marker p0 (edit / AI Track)</strong> puts the ball track into p0, only when you press it.</td></tr>
+<tr><td><strong>3 Metrics</strong></td><td>Choose the person among the selected ones, the metric and, when needed, the body point, then <strong>+ Add metric</strong>. Each added metric shows the value <i>now</i> / <i>max</i> in the panel and above the player in the video. Below, <strong>Measure by hand</strong> buttons start the Quick Measure modes: <code>1</code> distance, <code>3</code> angle, <code>4</code> velocity, <code>7</code> height base+top, <code>8</code> line plane, <code>9</code> event time, <code>0</code> spin, <code>,</code> arc, <code>.</code> height line.</td></tr>
+<tr><td><strong>4 Export</strong></td><td><strong>mkvis3d C3D</strong>, <strong>Blender BVH + script</strong>, <strong>Metrics CSV</strong> or <strong>All</strong>; <strong>Open mkvis3d</strong> and <strong>Open Blender</strong> launch the viewers without blocking the window.</td></tr>
+</table>
+<p>Collapse the panel with ▶ and reopen it from the tab at the right edge.</p>
+<h3>Metrics</h3>
+<table>
+<tr><th>Metric</th><th>What it is</th><th>Unit</th></tr>
+<tr><td>Speed on the pitch (<code>speed</code>)</td><td>speed of the feet point of the person on the grass</td><td>m/s</td></tr>
+<tr><td>Distance to the ball (<code>distance_ball</code>)</td><td>feet point to the ball on the grass</td><td>m</td></tr>
+<tr><td>Distance to another person (<code>distance_person</code>)</td><td>needs a second selected person</td><td>m</td></tr>
+<tr><td>Height of a body point (<code>height_kpt</code>)</td><td><code>z</code> of the point in the 3D pose</td><td>m</td></tr>
+<tr><td>Jump height (<code>jump</code>)</td><td>rise of the pelvis over the standing baseline (median of the first 10 valid frames); the summary max is the jump</td><td>m</td></tr>
+<tr><td>Speed of a body point (<code>kpt_speed</code>)</td><td>3D speed of the point</td><td>m/s</td></tr>
+</table>
+<p>Body points: <code>pelvis</code> (mean of both hips), <code>head</code>, <code>neck</code>, <code>left_wrist</code>, <code>right_wrist</code>, <code>left_ankle</code>, <code>right_ankle</code>. Frames without data give no value (never an invented one); a metric that cannot be computed (for example a distance with no second person) says why.</p>
+<h3>Export</h3>
+<p>The export goes into <code>&lt;kick_analysis&gt;/processed_kickmeasure_YYYYMMDD_HHMMSS/</code>. With <strong>nobody selected</strong> it exports every person that has a 3D pose.</p>
+<table>
+<tr><th>File</th><th>Content</th></tr>
+<tr><td><code>kick_scene.c3d</code></td><td>markers <code>P&lt;id&gt;_&lt;kpt&gt;</code> of the selected people (3D poses), <code>BALL</code>, and the pitch template as static <code>FKP_&lt;name&gt;</code>; open it with mkvis3d</td></tr>
+<tr><td><code>kick_scene_c3d.csv</code></td><td>the same markers as a CSV</td></tr>
+<tr><td><code>blender/person_&lt;id&gt;.bvh</code></td><td>one BVH per person (gaps are filled with the nearest valid position)</td></tr>
+<tr><td><code>blender/ball_path.json</code>, <code>blender/pitch_lines.json</code></td><td>the ball path and the pitch lines for Blender</td></tr>
+<tr><td><code>blender/kick_scene_blender.py</code></td><td>plain <code>bpy</code> script: imports the BVHs, a ball sphere keyframed from the JSON, the pitch lines as curves; the scene frame rate and range are set last</td></tr>
+<tr><td><code>metrics.csv</code>, <code>metrics_summary.json</code></td><td>per-frame values (<code>frame,time_s,&lt;metric&gt;...</code>) and max / min / mean / frame of max of each metric</td></tr>
+<tr><td><code>README.txt</code></td><td>the commands to open the files</td></tr>
+</table>
+<p>The terminal prints the equivalent command, so the export can be repeated without the window:</p>
+<pre><code>uv run --no-sync python -m vaila.kick_measure --run DIR --export-scene OUT \
+    --people 21,23 --metric speed:21 --metric height_kpt:23:right_wrist \
+    --metric distance_person:21:23 [--no-blender] [--no-mkvis3d]</code></pre>
+<p><code>--metric KIND:PERSON[:OTHER_OR_POINT]</code> can be repeated: the third field is the other person for <code>distance_person</code> and the body point for <code>height_kpt</code> and <code>kpt_speed</code> (default <code>pelvis</code>); <code>jump</code> always uses the pelvis. <code>--people</code> takes SAM ids.</p>
+<p><strong>mkvis3d</strong> is a separate project. <i>vailá</i> finds it through the environment variable <code>VAILA_MKVIS3D</code> (path of <code>mkvis3d.py</code>) or a <code>mkvis3d/</code> folder next to the <i>vailá</i> checkout; without it the <strong>Open mkvis3d</strong> button says so and the export of the other files still works. By hand: <code>python mkvis3d.py kick_scene.c3d</code> opens the 3D viewer and <code>python mkvis3d.py info kick_scene.c3d</code> prints a summary.</p>
+<p>Real example (Vargas kick, 169 frames at 30 fps): 31 SAM ids, 24 with a 3D pose; 97 pitch segments per frame; <code>mkvis3d info</code> of the export: 169 frames, 190 markers (2 x 70 body points, BALL, 49 FKP_*); kicker P21 speed max 8.7 m/s on the pitch (source <code>box_foot</code>, the SAM box foot seen by each frame's camera, 60 of 96 frames). A speed or distance series uses one position source, the one with the most valid frames (<code>ground_tracks</code>, the 3D-pose ground point, the ankles or <code>box_foot</code>), and <code>metrics_summary.json</code> records it. <code>box_foot</code> skips frames whose camera is approximate, because those cameras copy a neighbour and do not follow the pan (the foot jumped 9 m in one frame). So frames 36-43 and 47-74 of the kicker have no speed.</p>
+<h3>Limits of the panel</h3>
+<ul>
+<li><strong>One camera.</strong> Heights from the pitch plane depend on the reference plane chosen; the ± of the manual modes still applies.</li>
+<li><strong>Jump from monocular 3D poses is noisy:</strong> in the real example the pelvis moved ±0.18 m around the baseline, so read a jump as an order of magnitude, not as a measurement of a few centimetres.</li>
+<li>BVH fills gaps with the nearest valid position, so a person that leaves the frame stands still there.</li>
+<li>The referee files <code>referees/P&lt;n&gt;_referee*.c3d</code> of the 3D folder use the <code>player_id</code> of <code>player_map.csv</code>, not the SAM id; the export converts it.</li>
+</ul>
+<h2>Keys (MEASURE on: <code>Q</code>)</h2>
+<table>
+<tr><th>Key</th><th>Measure</th><th>Clicks</th><th>Result</th></tr>
+<tr><td><code>1</code></td><td>Distance</td><td>2</td><td>metres on the grass of that frame</td></tr>
+<tr><td><code>2</code></td><td>Area</td><td>3 or more + Enter</td><td>m²</td></tr>
+<tr><td><code>3</code></td><td>Angle</td><td>3 (vertex in the middle)</td><td>degrees</td></tr>
+<tr><td><code>4</code></td><td>Velocity</td><td>2, on different frames</td><td>m/s (needs FPS)</td></tr>
+<tr><td><code>5</code></td><td>Acceleration</td><td>3, on distinct frames</td><td>m/s² (needs FPS)</td></tr>
+<tr><td><code>6</code></td><td>Level</td><td>2</td><td>H+V guide and tape</td></tr>
+<tr><td><code>7</code></td><td><strong>Height</strong></td><td>2 in the same frame: base on the grass, then top</td><td>metres, with the plane used and a ± of 1 px</td></tr>
+<tr><td><code>8</code></td><td><strong>Plane of the line</strong></td><td>2 on the grass (kick, arrival), then 1 click per ball position</td><td><code>s</code> (distance along the line) and <code>z</code> (height) of each click, plus 3D speed and acceleration of the sequence</td></tr>
+<tr><td><code>9</code></td><td><strong>Event</strong></td><td>2, each in its own frame (start, end)</td><td>duration in s (± 1 frame), mean speed between the two points, frame rate</td></tr>
+<tr><td><code>0</code></td><td><strong>Spin</strong></td><td>each click marks the <i>same</i> mark of the ball in another frame</td><td>turns, rps and rpm (± 1 frame); the result updates from the 2nd click</td></tr>
+<tr><td><code>,</code></td><td><strong>Arc / curve</strong></td><td>3 or more along the curve</td><td>curve length and fitted arc (radius, angle, sagitta); updates on every click</td></tr>
+<tr><td><code>.</code></td><td><strong>Height line</strong></td><td>1 click at the wanted height, after the line of <code>8</code></td><td>a horizontal guide at that height, drawn over the video in every frame</td></tr>
+</table>
+<p><code>Enter</code> closes the open results (<code>0</code>, <code>,</code>); <code>Ctrl+Z</code> / <code>Ctrl+Y</code> undo and redo; <strong>Clear</strong> / Backspace wipe the drawing and keep the calibration. <code>,</code> and <code>.</code> are the free keys of getpixelvideo and exist on US and ABNT2 keyboards.</p>
+<p>Spin: <code>k</code> clicks of the same mark are <code>k - 1</code> turns between the first and the last frame, so <code>rps = (k - 1) / ((last - first) / fps)</code> and <code>rpm = 60 rps</code>. At <code>fps / 2</code> turns per second or more the mark is seen less than twice per turn and the count aliases; the result carries a note when that happens.</p>
+<h2>Calibration <code>camera3d</code></h2>
+<ul>
+<li><strong>One camera per frame.</strong> A frame with a FreeKiki DLT3D keeps it untouched (source <code>dlt3d</code>). A frame without one is <strong>solved</strong>: rotation and zoom are fitted, per frame, to the raw pitch keypoints of <code>field_kps_raw.csv</code> (3 or more points with confidence at least 0.5, robust loss), starting from the neighbour frame (source <code>solved</code>, with the reprojection error in pixels).</li>
+<li><strong>Fixed optical centre.</strong> Only rotation and zoom are free: the centre is the median of the <strong>10 calibrated frames nearest in time</strong>, not one median of the whole clip. A single global centre failed on a long lens (about 7000 px of focal length), where the centre of the DLT3D drifts metres along the viewing axis. The fixed centre is a broadcast-camera hypothesis (camera on a tripod).</li>
+<li><strong>Tracked frames.</strong> A frame with too few pitch points to be solved used to copy the nearest good frame, while the broadcast camera pans and zooms tens of pixels per frame. Now the static scene (crowd, advertising boards, line markings) is followed from frame to frame (Shi-Tomasi corners and Lucas-Kanade, matches at distances of 1, 2, 4, 8 and 16 frames), with the SAM person boxes (grown 10 %), the ball and the broadcast overlays (scoreboard, channel logos) masked out, and the rotation and zoom of every such frame are fitted to those matches. The pitch is carried from the known cameras on <strong>both sides</strong> of the gap (up to 4 anchors per side). The frame is <code>tracked</code>; <code>rms_px</code> is its uncertainty in pixels (the disagreement of the anchors that carried it plus the misfit of the fixed-centre family, in quadrature) and <code>from_frame</code> is its nearest anchor.</li>
+<li><strong>Approximate frames.</strong> A frame stays <code>approximate</code> (copy of the nearest good frame) only when the tracker fails: fewer than 60 matches touch it, the feature transfer error is above 4 px, its uncertainty is above 60 px, or no anchor is in reach. The tool says so (hover tag, a column in the results, a warning in the HUD of getpixelvideo) instead of inventing a calibration. Measures taken there are less reliable.</li>
+<li>A pixel becomes a point on the grass <strong>of its own frame</strong>: moving the camera between frames is already accounted for.</li>
+</ul>
+<h2>Per-frame calibration files</h2>
+<p>Every kick run keeps the camera of <strong>every</strong> video frame in four files, written <strong>always</strong> next to the SAM 3 outputs of the camera: <code>&lt;kick_analysis&gt;/work/&lt;stem&gt;/sam3dinov3/processed_sam3dinov3_&lt;time&gt;/&lt;stem&gt;/</code> (where <code>&lt;stem&gt;_sam3dinov3_predictions.json.gz</code> and the <code>&lt;stem&gt;_id_NN_*.csv</code> files are). The pipeline writes them in the stage <code>cameras:&lt;stem&gt;</code>, right after <code>sam:&lt;stem&gt;</code> (also with <code>--stop-after sam</code>, so the video can be measured before the 3D stage); <code>freekiki.py kick-cameras DIR</code> and the CLI below write them for an existing run.</p>
+<table>
+<tr><th>File</th><th>Content</th></tr>
+<tr><td><code>&lt;stem&gt;_frames.dlt3d</code></td><td>CSV <code>frame,L1..L11</code>, one row per video frame, all finite (<code>L12 = 1</code>): the DLT3D of each frame, in metres of the pitch frame</td></tr>
+<tr><td><code>&lt;stem&gt;_frames.dlt2d</code></td><td>CSV <code>frame,L1..L8</code>, one row per frame: the ground-plane (<code>z = 0</code>) homography of the same camera (<code>pixel = H [x, y, 1]</code>, <code>H[2,2] = 1</code>); it is what <code>QuickMeasureCalibration.from_dlt2d_sequence</code> reads</td></tr>
+<tr><td><code>&lt;stem&gt;_frames_cameras.csv</code></td><td><code>frame,source,rms_px,n_points,focal_px,from_frame</code>: where each camera comes from and how good it is</td></tr>
+<tr><td><code>&lt;stem&gt;_frames_cameras.json</code></td><td>summary: video, number of frames, size, fps, counts per source, optical centre, who made it and when</td></tr>
+</table>
+<p>Sources of a camera (column <code>source</code>; the colour is the one of the pitch lines and of the bar of the step panel):</p>
+<table>
+<tr><th>Source</th><th>Colour</th><th>What it is</th><th><code>rms_px</code></th></tr>
+<tr><td><code>dlt3d</code></td><td>green</td><td>the FreeKiki DLT3D of the frame, untouched</td><td>empty</td></tr>
+<tr><td><code>solved</code></td><td>yellow</td><td>rotation and zoom fitted to the raw pitch keypoints of the frame (fixed optical centre)</td><td>reprojection error of those points</td></tr>
+<tr><td><code>tracked</code></td><td>cyan</td><td>carried by the image motion from the known cameras on both sides of a gap</td><td>uncertainty of the carry (anchor disagreement plus misfit, quadrature)</td></tr>
+<tr><td><code>approximate</code></td><td>orange</td><td>copy of the nearest good frame; the tracker failed</td><td>empty</td></tr>
+</table>
+<p><code>rms_px</code> is therefore <strong>not</strong> one comparable number: for <code>solved</code> it is a fit residual on real points, for <code>tracked</code> it is an expected error of the carried camera. Read it as "about this many pixels on the pitch", and compare <code>tracked</code> frames only with each other.</p>
+<p>CLI:</p>
+<pre><code>uv run --no-sync python -m vaila.kick_measure --run KICK_DIR --write-cameras [--cameras-dir DIR] [--no-track] [--camera reference|other]
+uv run --no-sync python -m vaila.kick_measure --run KICK_DIR --validate-tracking 5,10,20,30
+uv run --no-sync vaila/freekiki.py kick-cameras KICK_DIR [--camera reference|other]</code></pre>
+<ul>
+<li><code>--write-cameras</code> writes the four files into the SAM 3 folder and prints the paths and the counts per source; <code>--cameras-dir DIR</code> writes them there instead.</li>
+<li><code>--no-track</code> does not track the approximate frames and ignores saved per-frame cameras (the old behaviour, for comparison).</li>
+<li><code>--validate-tracking K,K,...</code> is the hold-out test (default <code>5,10,20,30</code>): a frame whose camera is known is pretended unknown, tracked from a good frame <code>k</code> frames away, and compared with the real camera.</li>
+<li>The FreeKiki window has the button <strong>Calibration per frame</strong> (section 5, <strong>Open run and correct...</strong>), which runs <code>kick-cameras</code> and mirrors the command in the terminal.</li>
+</ul>
+<p><strong>Validation (hold-out, Fla x CAP clip, 169 frames).</strong> At <code>k = 10</code> frames from a known camera the median error is <strong>4.5 px</strong> on the raw pitch keypoints (the reference itself, the real camera against the same noisy keypoints, is at about 3.7 px: the floor of the test) and <strong>0.21 m</strong> on the ground (9 image pixels against the real camera). Projected on the video, the pitch lines of frames 56-74 fall 1-4 px from the white lines. On this clip 42 frames became <code>tracked</code> and 2 stayed <code>approximate</code> (116-117). Limits of this validation: one clip, one broadcast camera; the error grows with the distance to the anchors, and frames 100-140 are the weakest of the clip, so measure there with the <code>rms_px</code> of the frame in mind; a camera cut is not detected (a cut needs its own run); a frame the tracker cannot follow (too few matches, see above) stays <code>approximate</code>.</p>
+<p><strong>How getpixelvideo uses them.</strong> Opening a video, <code>--kick-run</code>, the <strong>Kick SAM</strong> button and the <strong>Load Tracking CSV</strong> of a SAM 3 file install <code>&lt;stem&gt;_frames.dlt3d</code> as the calibration of the session when there is none yet (also <code>getpixelvideo.py -f VIDEO --calib-frames FILE</code>, or <strong>CALIB</strong> <code>L</code> with the <code>.dlt3d</code> / <code>.dlt2d</code>). The HUD says <i>Calibrated per frame</i> and warns on <code>approximate</code> frames; the kick panel and the pitch lines colour <code>tracked</code> cyan. See <a href="getpixelvideo.html">getpixelvideo</a>.</p>
+<h2>What a height assumes</h2>
+<p>One camera sees the ball along a ray, so a height always depends on the plane that cuts that ray. The result names the plane:</p>
+<ul>
+<li><strong><code>7</code> Height:</strong> a vertical plane through the base point, perpendicular to the camera ray of the base. A pole or a person stands in it. The base must be on the grass. The ± is the largest change of the height when either click moves 1 px.</li>
+<li><strong><code>8</code> Plane of the line:</strong> the vertical plane through the line you marked on the grass. The ball is <strong>taken in that plane</strong>, but one camera cannot tell how far the ball is across the line. The ± of each point is the change of <code>z</code> if the plane were shifted 2 m sideways. With a typical broadcast camera that is about 0.1 m of height per metre of lateral error (2 m of lateral error changed the height by at most 0.37 m in the Vargas x Rossi clip).</li>
+<li>The height of a ball that is far from the plane you chose is therefore a <strong>model</strong> result: choose the line that follows the kick.</li>
+</ul>
+<h2>Limits</h2>
+<ul>
+<li><strong>One camera.</strong> No triangulation: the plane chosen decides the height.</li>
+<li><strong>No camera cuts.</strong> The module does not detect a cut of the broadcast camera; a cut moves the optical centre, so a cut needs its own run (a segment per run).</li>
+<li><strong>Frames with too few pitch points</strong> are tracked from the image motion (accuracy in <i>Per-frame calibration files</i>); only the frames the tracker cannot follow stay approximate (copy of the nearest frame).</li>
+<li>Validated on a single real clip (Fla x CAP, the Vargas x Rossi kick, broadcast camera); other cameras and matches are not verified.</li>
+<li>The spin counts what you click; it does not detect the mark by itself.</li>
+<li>The <code>dlt3d</code> calibration of Quick Measure (11 parameters from one video) remains reserved; <code>camera3d</code> is the one in use here.</li>
+</ul>
+<h2>Files written</h2>
+<p>Loading and measuring write nothing into the <code>kick_analysis_*</code> folder; only the <strong>Export</strong> step writes there (<code>processed_kickmeasure_&lt;timestamp&gt;/</code>, see above). <strong>S</strong> (save) in getpixelvideo writes next to the video:</p>
+<table>
+<tr><th>File</th><th>Content</th></tr>
+<tr><td><code>&lt;video&gt;_markers.csv</code></td><td>the markers of getpixelvideo, including the p0 ball track you corrected</td></tr>
+<tr><td><code>processed_quickmeasure_&lt;timestamp&gt;/</code></td><td>one folder per session, refreshed by each save</td></tr>
+<tr><td><code>&lt;stem&gt;_quickmeasure_points.csv</code></td><td>every click: frame, pixel and real coordinates</td></tr>
+<tr><td><code>&lt;stem&gt;_quickmeasure_calibration.csv</code></td><td>the calibration (<code>camera3d</code>, source folder)</td></tr>
+<tr><td><code>&lt;stem&gt;_quickmeasure_camera3d.csv</code></td><td>one row per video frame: <code>source</code> (<code>dlt3d</code> / <code>solved</code> / <code>tracked</code> / <code>approximate</code>), <code>approximate</code>, <code>rms_px</code>, <code>n_points</code>, and the 3x4 matrix <code>P11</code>...<code>P34</code></td></tr>
+<tr><td><code>&lt;stem&gt;_quickmeasure_results.csv</code> and <code>..._results_&lt;type&gt;.csv</code></td><td>one result per row; types <code>height</code>, <code>line_plane</code>, <code>plane_point</code>, <code>height_line</code>, <code>event</code>, <code>spin</code>, <code>arc</code> (plus <code>distance</code>, <code>angle</code>...), with <code>uncertainty</code>, <code>camera_source</code>, <code>approximate</code>, <code>plane</code>, <code>s</code>, <code>z</code>, <code>speed</code>, <code>accel</code>, <code>turns</code>, <code>rps</code>, <code>rpm</code>, <code>radius</code>, <code>angle_deg</code>, <code>sagitta</code></td></tr>
+<tr><td><code>&lt;stem&gt;_quickmeasure_lineplane_series.csv</code></td><td>mode <code>8</code>: x, y, z, s, speed, acceleration (and the components) per frame, from the first to the last ball click (needs FPS and 2 clicks on different frames)</td></tr>
+<tr><td><code>quickmeasure_report.html</code></td><td>didactic report: every measure, its plane and its ±</td></tr>
+<tr><td><code>README_quickmeasure.txt</code></td><td>list of the files and the command to recompute</td></tr>
+</table>
+<p>The four per-frame calibration files are described in <i>Per-frame calibration files</i> (they live next to the SAM 3 outputs, not here). The <code>--export</code> of the module CLI writes a JSON with the summary, the camera of each frame, the ball pixels and the number of people per frame.</p>
+<h2>Python API (frozen in the docstrings of <code>vaila/kick_measure.py</code>)</h2>
+<table>
+<tr><th>Name</th><th>Role</th></tr>
+<tr><td><code>load_kick_measure_run(path, camera="reference")</code></td><td>opens the folder: <code>KickMeasureRun</code> (video, fps, cameras, ball track, people)</td></tr>
+<tr><td><code>load_people_info</code>, <code>load_pose_2d</code>, <code>pose_connections</code>, <code>field_segments_px</code></td><td>people (role, team, frames), 2D poses, bones and the pitch lines projected on a frame, for the panel layers</td></tr>
+<tr><td><code>metric_series(run, kind, person, ...)</code></td><td><code>MetricSeries</code> of a metric (<code>METRIC_KINDS</code>, <code>BODY_POINTS</code>) with <code>at(frame)</code> and <code>summary()</code></td></tr>
+<tr><td><code>export_scene(run, out_dir, people, ...)</code>, <code>find_mkvis3d</code>, <code>mkvis3d_argv</code></td><td>the export of the table above</td></tr>
+<tr><td><code>write_frame_calibration</code>, <code>read_frame_calibration</code>, <code>find_frame_calibration</code></td><td>write, read back and find the per-frame files (<code>&lt;stem&gt;_frames.*</code>)</td></tr>
+<tr><td><code>track_approximate_frames</code>, <code>track_features</code>, <code>validate_tracking</code></td><td>frame-to-frame tracking of the approximate frames and its hold-out test</td></tr>
+<tr><td><code>ground_homography(P)</code>, <code>CameraTrack.homography(frame)</code></td><td>the <code>z = 0</code> homography of a camera (the <code>.dlt2d</code> row)</td></tr>
+<tr><td><code>CameraTrack</code></td><td>one 3x4 matrix per frame; <code>from_calibration</code>, <code>matrix</code>, <code>ground_point</code>, <code>height_base_top</code>, <code>counts</code></td></tr>
+<tr><td><code>ground_point(P, u, v, z=0)</code></td><td>pixel to the grass (or to a horizontal plane at height <code>z</code>)</td></tr>
+<tr><td><code>height_base_top(P, base_uv, top_uv)</code></td><td>height of an object by the vertical plane through its base</td></tr>
+<tr><td><code>LinePlane</code></td><td>vertical plane of a line on the grass: <code>locate</code>, <code>lateral_sensitivity</code>, <code>height_line</code></td></tr>
+<tr><td><code>event_time</code>, <code>mean_speed</code>, <code>spin_rate</code></td><td>time, mean speed, spin (± 1 frame)</td></tr>
+<tr><td><code>path_length</code>, <code>fit_arc</code>, <code>fit_parabola</code></td><td>curve length and fits</td></tr>
+<tr><td><code>velocity_series</code>, <code>acceleration_series</code>, <code>speed_series</code></td><td>kinematics of a track, optional smoothing</td></tr>
+</table>
+<h2>Related modules</h2>
+<table>
+<tr><th>Module</th><th>Role</th></tr>
+<tr><td><a href="getpixelvideo.html">getpixelvideo</a></td><td>host: loads the folder (<code>--kick-run</code>, <code>Tpl: K</code>, <strong>Kick SAM</strong>), docks the step panel, takes the clicks</td></tr>
+<tr><td><a href="quickmeasure.html">quickmeasure</a></td><td>measure modes and the session files (<code>camera3d</code> calibration)</td></tr>
+<tr><td><a href="freekiki.html">freekiki</a></td><td>produces the <code>kick_analysis_*</code> folder; <code>kick-measure</code>, <code>kick-cameras</code> and the <strong>Measure kick</strong> and <strong>Calibration per frame</strong> buttons</td></tr>
+<tr><td><a href="soccerfield.html">soccerfield</a></td><td>the 49-point pitch template that the cameras are fitted to</td></tr>
+</table>
+<p>Part of <i>vailá</i> - Multimodal Toolbox · <a href="kick_measure_pt.html">Português</a> · <a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub</a></p>
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>vailá - ai_tracker_models</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; background: #f8f9fa; color: #212529; }
+        .container { max-width: 980px; margin: 0 auto; background: #fff; padding: 32px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); }
+        h1 { color: #212529; border-bottom: 2px solid #333; padding-bottom: 10px; }
+        h2 { color: #212529; margin-top: 28px; }
+        h3 { color: #333; margin-top: 20px; }
+        table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 0.95em; }
+        th, td { border: 1px solid #dee2e6; padding: 10px 12px; text-align: left; vertical-align: top; }
+        th { background: #e9ecef; color: #212529; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 4px; color: #212529; }
+        pre { background: #e9ecef; padding: 12px; border-radius: 6px; overflow-x: auto; }
+        pre code { padding: 0; }
+        ul, ol { margin: 10px 0; padding-left: 24px; }
+        .footer { margin-top: 36px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #495057; font-size: 0.9em; }
+        .footer a { color: #0d6efd; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>vailá - ai_tracker_models</h1>
+<p>English</p>
+<h2>Module information</h2>
+<table>
+<tr><th>Field</th><th>Value</th></tr>
+<tr><td><strong>Category</strong></td><td>Tools</td></tr>
+<tr><td><strong>File</strong></td><td><code>vaila/ai_tracker_store.py</code>, <code>vaila/ai_tracker_hub.py</code>, <code>vaila/ai_tracker_train.py</code></td></tr>
+<tr><td><strong>Version</strong></td><td>0.4.19</td></tr>
+<tr><td><strong>Updated</strong></td><td>24 November 2026</td></tr>
+<tr><td><strong>Author</strong></td><td>Paulo Roberto Pereira Santiago</td></tr>
+<tr><td><strong>GUI</strong></td><td>Yes (the <strong>Net</strong> button of <code>getpixelvideo.py</code>)</td></tr>
+<tr><td><strong>CLI</strong></td><td>Yes (<code>python -m vaila.ai_tracker_hub ...</code>, <code>python -m vaila.ai_tracker_train --from-samples ...</code>)</td></tr>
+</table>
+<h2>Overview</h2>
+<p>This guide explains where the AI Track network of <i>vailá</i> is kept, how it is saved, and how to move it, retrain it, send it to Hugging Face and download it on another computer. The network is small, but it gets better with every marker you place by hand, so it should not be lost when you reinstall <i>vailá</i>.</p>
+<p>The AI Track tool of <code>getpixelvideo.py</code> (button <strong>AI Track</strong>, key <code>T</code>) follows a marker from frame to frame. Each time you click, it learns. What it learns is the <strong>network</strong>: a set of small discriminators (<code>.npz</code>) and, if you ran a retrain, a fine-tuned backbone (<code>.pth</code>).</p>
+<h2>What is saved, and where</h2>
+<p>The network lives in a folder you choose, outside the <i>vailá</i> install. Inside it, <i>vailá</i> uses the sub-folder <code>ai_tracker/</code>:</p>
+<pre><code>&lt;home&gt;/ai_tracker/
+  discriminators/   discriminator_&lt;profile&gt;__&lt;key&gt;.npz
+  backbones/        &lt;variant&gt;_finetuned_&lt;time&gt;.pth
+  samples/          &lt;time&gt;_&lt;video name&gt;.npz       (local only, never uploaded)
+  history/          up to 10 previous versions of each file
+  logs/             retrain logs
+  manifest.json     active backbones, sha256 and size of each file, last retrain, Hugging Face sync
+  README.txt</code></pre>
+<ul>
+<li><strong>One discriminator per feature space.</strong> The key <code>classic</code> is the 808 hand-made colour and region values (Deep off). A key like <code>resnet50-1a2b3c4d</code> is the same 808 values plus the deep features of one backbone (Deep on); <code>1a2b3c4d</code> is the start of the sha256 of that backbone file. A discriminator only works with that exact backbone. Before this change a session with Deep off overwrote the Deep checkpoint; now each space has its own file.</li>
+<li><strong>Samples.</strong> AI Track keeps the points that you click while AI Track is on (a small patch around the point and a larger context crop), so a later retrain can learn from them. Only the points you click are recorded.</li>
+<li><strong>History.</strong> Every time a file is replaced, the previous version goes to <code>history/&lt;file name&gt;/</code>. The last 10 are kept.</li>
+<li><strong>Official weights.</strong> The ImageNet files (<code>*_imagenet.pth</code>) are not copied into the folder of the network. They are downloaded when Deep is first used.</li>
+</ul>
+<h2>Choosing and moving the folder</h2>
+<p><i>vailá</i> looks for the folder in this order:</p>
+<ol>
+<li><code>--ai-models DIR</code> (for example <code>uv run --no-sync vaila/getpixelvideo.py --ai-models ~/vaila_ai_models</code>);</li>
+<li>the variable <code>VAILA_AI_MODELS_HOME</code>;</li>
+<li>the file <code>~/.vaila/ai_models.json</code>, written when you choose a folder;</li>
+<li>the old folder inside the install, <code>vaila/models/ai_tracker</code> (no copy outside it).</li>
+</ol>
+<p>The first time AI Track saves something and no folder is chosen, <code>getpixelvideo</code> asks you for one once (suggestion <code>~/vaila_ai_models</code>). If you press Cancel, the old place inside <i>vailá</i> is used and the question comes back in the next session. Old checkpoints found in the old place are <strong>copied</strong> into the new folder (never moved) and put in the right feature space.</p>
+<p>To choose or change the folder:</p>
+<ul>
+<li>in the Net window, <strong>Change folder...</strong>; or</li>
+<li><code>uv run --no-sync python -m vaila.ai_tracker_hub set-home ~/vaila_ai_models</code>.</li>
+</ul>
+<p>Choose a folder that you back up if you want a safe copy. To move an already chosen folder, copy it to the new place first, then choose the new place.</p>
+<h2>When it is saved</h2>
+<p>The network is saved when you turn AI Track off, when you press Save (<code>Ctrl+S</code>), when the window closes, when you open another video, and just before the <strong>Net</strong> window opens, even with AI Track still on. A session where you placed no point by hand writes nothing and does not ask for a folder.</p>
+<h2>The Net window</h2>
+<p>In <code>getpixelvideo</code>, press <strong>Net</strong> (right after <strong>AI Track</strong> and <strong>Deep</strong> in the toolbar). The same window opens from a terminal with <code>uv run --no-sync python -m vaila.ai_tracker_hub gui</code>. The text area shows the folder, the active backbones, each discriminator with its number of samples, the samples folder, the last retrain and the last Hugging Face sync. Every action also prints the equivalent terminal command (a line that starts with <code>&gt;&gt;</code>).</p>
+<table>
+<tr><th>Button</th><th>What it does</th></tr>
+<tr><td><strong>Change folder...</strong></td><td>Choose another folder for the network. Checkpoints found in the old place inside <i>vailá</i> are copied, never moved. A folder you chose before is not moved: copy it yourself.</td></tr>
+<tr><td><strong>Open folder</strong></td><td>Opens the folder in the file manager.</td></tr>
+<tr><td><strong>Download from Hugging Face</strong></td><td>Downloads the network of the repository written in the box above the buttons (no login).</td></tr>
+<tr><td><strong>Use a local folder...</strong></td><td>Installs a downloaded copy or a folder on a USB stick.</td></tr>
+<tr><td><strong>Retrain (GPU)</strong></td><td>Retrains from your samples in the background (see below).</td></tr>
+<tr><td><strong>Send to Hugging Face...</strong></td><td>Uploads the network after you confirm the list of files (needs login).</td></tr>
+<tr><td><strong>Restore previous version...</strong></td><td>Puts back the newest earlier version of a file.</td></tr>
+<tr><td><strong>Refresh</strong></td><td>Reads the folder again.</td></tr>
+</table>
+<h2>Retrain</h2>
+<p>Retrain uses the samples you clicked to fine-tune the backbone and to rebuild the discriminators.</p>
+<ul>
+<li>Terminal: <code>uv run --no-sync python -m vaila.ai_tracker_hub retrain</code>, or directly <code>uv run --no-sync python -m vaila.ai_tracker_train --from-samples ~/vaila_ai_models/ai_tracker --mode both --device auto</code>.</li>
+<li>It trains only the last stage of the backbone plus a new two-class head (marker or background). <code>--unfreeze all</code> trains the whole network.</li>
+<li>It needs at least 40 training samples (<code>--min-samples</code>).</li>
+<li><strong>Hold-out without leakage.</strong> With samples from two or more videos, whole videos are held out (about 20 %). With one video, the last block of frames is held out. The measure is the ROC AUC of a discriminator, on the held-out samples, with the old backbone and with the new one.</li>
+<li><strong>Activation rule.</strong> The new backbone becomes the active one only if the AUC after is not lower than before. Otherwise the file stays in <code>backbones/</code> for inspection, the old backbone stays active, and the status is <code>kept_previous</code>.</li>
+<li>The discriminators are rebuilt with the same features the live tracker uses, so AI Track loads them.</li>
+<li><code>--device auto</code> uses the GPU only if at least 3 GiB are free, else the CPU. Close SAM or other heavy jobs first.</li>
+<li>The result is in <code>manifest.json</code> (<code>last_retrain</code>) and the log is in <code>logs/retrain_&lt;time&gt;.log</code>.</li>
+</ul>
+<p>See <a href="ai_tracker_train.html">ai_tracker_train</a> for every option.</p>
+<h2>Send the network to Hugging Face</h2>
+<ol>
+<li>Make a free account on huggingface.co and create an access token with <strong>write</strong> permission (Settings, Access Tokens).</li>
+<li>Log in once on your computer:
+<pre><code>uv run --no-sync hf auth login</code></pre>
+<p>Paste the token. You can also set the variable <code>HF_TOKEN</code> instead.</p></li>
+<li>Look at what would be sent, without sending:
+<pre><code>uv run --no-sync python -m vaila.ai_tracker_hub push --dry-run</code></pre></li>
+<li>Send it (the same step is the <strong>Send to Hugging Face...</strong> button):
+<pre><code>uv run --no-sync python -m vaila.ai_tracker_hub push</code></pre>
+<p><i>vailá</i> lists the files and asks you to confirm. <code>--yes</code> skips the question.</p></li>
+</ol>
+<p>What is sent: <code>manifest.json</code>, a model card <code>README.md</code>, <code>discriminators/*.npz</code> and the <strong>active</strong> fine-tuned backbones. What is never sent: <code>samples/</code>, <code>history/</code>, <code>logs/</code> (the samples are crops of people from your videos) and the official ImageNet weights.</p>
+<p>The files are replaced in place in the repository. The Hugging Face history keeps every older version, so you can go back with <code>--revision</code>. The repository is public. The default is <code>paulosantiago/vaila-ai-tracker</code>; to use your own, add <code>--repo your-name/your-repo</code> or set <code>VAILA_AI_MODELS_REPO</code>.</p>
+<h2>Download the network on another computer</h2>
+<p>No login is needed (the repository is public):</p>
+<pre><code>uv run --no-sync python -m vaila.ai_tracker_hub pull
+uv run --no-sync python -m vaila.ai_tracker_hub pull --revision &lt;commit&gt;</code></pre>
+<p>Or press <strong>Download from Hugging Face</strong> in the Net window. <i>vailá</i> checks the sha256 of every file against the manifest first; one mismatch stops everything and nothing is installed. A file that is replaced goes to <code>history/</code> first. If a discriminator needs the official ImageNet weights that are not on the computer, <i>vailá</i> tells you; it downloads them the first time Deep is used.</p>
+<p>To move the network without Hugging Face (a USB stick, a shared disk): copy the <code>&lt;home&gt;</code> folder, then on the new computer run <code>uv run --no-sync python -m vaila.ai_tracker_hub import &lt;folder&gt;</code> or use <strong>Use a local folder...</strong>.</p>
+<h2>Go back to a previous version</h2>
+<p>Button <strong>Restore previous version...</strong> in the Net window, or:</p>
+<pre><code>uv run --no-sync python -m vaila.ai_tracker_hub restore ~/vaila_ai_models/ai_tracker/discriminators/discriminator_default__classic.npz</code></pre>
+<p>The newest earlier version in <code>history/</code> is put back, and the current one goes to <code>history/</code>, so a second call returns to where you were. To go back further, copy the file you want from <code>history/&lt;file name&gt;/</code>.</p>
+<h2>Command reference</h2>
+<p>All commands accept <code>--ai-models DIR</code> before the command name to use another folder for that run.</p>
+<table>
+<tr><th>Task</th><th>Command</th></tr>
+<tr><td>See the folder, networks, samples and sync</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub status</code></td></tr>
+<tr><td>Choose the folder</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub set-home ~/vaila_ai_models</code></td></tr>
+<tr><td>Download</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub pull [--repo R] [--revision X]</code></td></tr>
+<tr><td>Preview the upload</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub push --dry-run</code></td></tr>
+<tr><td>Upload</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub push [--repo R] [--yes]</code></td></tr>
+<tr><td>Install a local copy</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub import &lt;folder&gt;</code></td></tr>
+<tr><td>Restore a file</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub restore &lt;file&gt;</code></td></tr>
+<tr><td>Retrain in the background</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub retrain</code></td></tr>
+<tr><td>Open the window</td><td><code>uv run --no-sync python -m vaila.ai_tracker_hub gui</code></td></tr>
+<tr><td>Retrain in the foreground</td><td><code>uv run --no-sync python -m vaila.ai_tracker_train --from-samples &lt;home&gt;/ai_tracker --mode both --device auto</code></td></tr>
+<tr><td>Retrain, only the plan</td><td><code>uv run --no-sync python -m vaila.ai_tracker_train --from-samples &lt;home&gt;/ai_tracker --dry-run</code></td></tr>
+<tr><td>Login to Hugging Face</td><td><code>uv run --no-sync hf auth login</code></td></tr>
+</table>
+<h2>Privacy</h2>
+<ul>
+<li>The samples hold image crops of people from your videos. They stay in your folder and are never uploaded. Do not copy <code>samples/</code> to a public place.</li>
+<li>A discriminator or a backbone file is a set of numbers. It is not a picture, but it was trained on your footage: send it only if you are allowed to share what the footage shows.</li>
+<li>The repository is public: anyone can download what you push.</li>
+</ul>
+<h2>Limits</h2>
+<ul>
+<li>The upload to Hugging Face was written and tested with a stand-in service. A real upload has not been exercised yet; it will be tried at the owner's first push, so treat that first push as a test (use <code>--dry-run</code> first).</li>
+<li>The gain of the retrain was measured only on two benchmark videos. Expect it to help on similar footage and check the tracked points on yours; the activation rule stops a worse network, but a held-out score is not a guarantee.</li>
+<li>A discriminator trained with Deep needs the same backbone file (same sha256) to be used.</li>
+</ul>
+<h2>See also</h2>
+<ul>
+<li><a href="getpixelvideo.html">getpixelvideo</a> (AI Track and the Net button)</li>
+<li><a href="ai_tracker_train.html">ai_tracker_train</a> (every training option)</li>
+</ul>
+        <div class="footer">
+            <p>Part of <i>vailá</i> - Multimodal Toolbox</p>
+            <p><a href="https://github.com/vaila-multimodaltoolbox/vaila">GitHub Repository</a></p>
+        </div>
+    </div>
+</body>
+</html>

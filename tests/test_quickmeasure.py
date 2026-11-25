@@ -1,6 +1,6 @@
 """
-Version: 0.4.10
-Update Date: 19 October 2026
+Version: 0.4.19
+Update Date: 23 November 2026
 
 Tests for vaila/quickmeasure.py — Kinovea-style quick on-image measurements
 for getpixelvideo.py (Distance / Area / Velocity / Acceleration), with and
@@ -21,9 +21,11 @@ Fixtures live in tests/fixtures/quickmeasure/:
 import math
 import os
 
+import numpy as np
 import pandas as pd
 import pytest
 
+from vaila.kick_measure import CameraTrack
 from vaila.quickmeasure import (
     CALIBRATION_CLICKS,
     LIVE_MODE_KEYS,
@@ -31,6 +33,7 @@ from vaila.quickmeasure import (
     CalibrationDraft,
     QuickMeasureCalibration,
     QuickMeasureError,
+    QuickMeasurePoint,
     QuickMeasureSession,
     Ref3dCalibrationDraft,
     draw_calibration_overlay,
@@ -862,7 +865,22 @@ def test_live_mode_keys_mapping():
         "4": "velocity",
         "5": "acceleration",
         "6": "level",
+        "7": "height",
+        "8": "lineplane",
+        "9": "event",
+        "0": "spin",
+        ",": "arc",
+        ".": "heightline",
     }
+    # the six original digit modes keep their keys
+    assert [LIVE_MODE_KEYS[k] for k in "123456"] == [
+        "distance",
+        "area",
+        "angle",
+        "velocity",
+        "acceleration",
+        "level",
+    ]
 
 
 def test_snap_level_endpoint_horizontal_and_vertical():
@@ -967,11 +985,19 @@ def test_live_mode_velocity_requires_fps_and_two_frames():
     assert done["unit"] == "px/s"
 
 
-def test_live_mode_reserved_key():
+def test_live_mode_keys_7_to_0_are_no_longer_reserved():
+    # 9 (event) and 0 (spin) need the FPS, 7 (height) and 8 (line-plane) need camera3d
     session = QuickMeasureSession()
-    msg = session.set_live_mode("9")
-    assert "reserved" in msg.lower()
+    for key in "9", "0":
+        with pytest.raises(QuickMeasureError, match="FPS"):
+            session.set_live_mode(key)
+    for key in "7", "8", ".":
+        with pytest.raises(QuickMeasureError, match="camera3d"):
+            session.set_live_mode(key)
     assert session.active_mode is None
+    assert "event" in QuickMeasureSession(fps=30.0).set_live_mode("9").lower()
+    with pytest.raises(QuickMeasureError):
+        session.set_live_mode("x")
 
 
 def test_live_mode_save_writes_per_type_results(tmp_path):
@@ -1111,3 +1137,620 @@ def test_dlt_dialog_fixed_sequence_and_mismatch(tmp_path, monkeypatch, count):
         assert result is None
         error.assert_called_once()
     root.destroy.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Kick Measure: camera3d calibration and modes 7 / 8 / 9 / 0 / "," / "."
+# (synthetic broadcast camera: fixed centre, pan and zoom change every frame)
+# ---------------------------------------------------------------------------
+
+_W, _H = 1920, 1080
+_CENTRE = np.array([0.0, -75.0, 22.0])
+_FPS = 30.0
+
+
+def _true_camera(frame: int) -> np.ndarray:
+    target = np.array([-30.0 + 2.0 * frame, 0.0, 0.0])
+    zc = (target - _CENTRE) / np.linalg.norm(target - _CENTRE)
+    xc = np.cross(zc, [0.0, 0.0, 1.0])
+    xc /= np.linalg.norm(xc)
+    yc = np.cross(zc, xc)
+    R = np.array([xc, yc, zc])
+    f = 2200.0 + 40.0 * frame
+    K = np.array([[f, 0, _W / 2], [0, f, _H / 2], [0, 0, 1.0]])
+    return K @ np.c_[R, -R @ _CENTRE]
+
+
+def _track(n_frames: int = 40) -> CameraTrack:
+    return CameraTrack.from_matrices({f: _true_camera(f) for f in range(n_frames)})
+
+
+def _px(frame: int, xyz) -> tuple[float, float]:
+    """Pixel of a pitch point (x, y, z) m in ``frame`` of the synthetic camera."""
+    X = np.array([*xyz, 1.0]) if len(xyz) == 3 else np.array([*xyz, 0.0, 1.0])
+    h = _true_camera(frame) @ X
+    return float(h[0] / h[2]), float(h[1] / h[2])
+
+
+def _camera_session(fps: float | None = _FPS) -> QuickMeasureSession:
+    session = QuickMeasureSession(fps=fps)
+    session.set_calibration(QuickMeasureCalibration.from_camera_track(_track()))
+    return session
+
+
+def test_camera3d_calibration_pixel_to_real_at_each_frame():
+    track = _track()
+    calib = QuickMeasureCalibration.from_camera_track(track, source="synthetic.json")
+    assert calib.kind == "camera3d" and calib.unit_label == "m"
+    assert calib.real_measures["n_frames"] == 40
+    assert calib.real_measures["frames_given"] == 40
+    assert "Camera3D" in calib.describe()
+    for frame, ground in ((0, (-20.0, 3.0)), (17, (4.0, -6.0)), (33, (25.0, 8.0))):
+        u, v = _px(frame, ground)
+        x, y = calib.pixel_to_real_at(frame, u, v)
+        assert (x, y) == pytest.approx(ground, abs=1e-6)
+    # without a frame the calibration cannot know which camera to use ...
+    with pytest.raises(QuickMeasureError, match="frame"):
+        calib.pixel_to_real(960.0, 540.0)
+    # ... unless it was installed for one frame (per-frame override)
+    session = QuickMeasureSession()
+    session.set_calibration(calib, frame=17)
+    u, v = _px(17, (4.0, -6.0))
+    assert calib.pixel_to_real(u, v) == pytest.approx((4.0, -6.0), abs=1e-6)
+    # a pixel above the horizon never reaches the grass: nan, no exception
+    x, y = calib.pixel_to_real_at(0, 960.0, -5000.0)
+    assert math.isnan(x) and math.isnan(y)
+
+
+def test_camera3d_calibration_other_kinds_ignore_the_frame():
+    calib = QuickMeasureCalibration.from_dlt2d_file(_fixture("sample.dlt2d"))
+    assert calib.pixel_to_real_at(99, 200.0, 300.0) == calib.pixel_to_real(200.0, 300.0)
+
+
+def test_camera3d_modes_1_to_6_give_metres_in_any_frame():
+    session = _camera_session()
+    assert session.unit_label == "m" and session.is_calibrated
+    # distance: 10 m along the pitch seen at frame 25 (a different camera than frame 0)
+    session.set_live_mode("1")
+    session.add_live_point(25, *_px(25, (0.0, 0.0, 0.0)))
+    _msg, done = session.add_live_point(25, *_px(25, (10.0, 0.0, 0.0)))
+    assert done is not None
+    assert done["value"] == pytest.approx(10.0, abs=1e-6)
+    assert done["calibration"] == "camera3d" and done["unit"] == "m"
+    # velocity across two frames with two different cameras: 2 m in 3 frames at 30 fps = 20 m/s
+    session.set_live_mode("4")
+    session.add_live_point(10, *_px(10, (0.0, 5.0, 0.0)))
+    _msg, done = session.add_live_point(13, *_px(13, (2.0, 5.0, 0.0)))
+    assert done is not None
+    assert done["value"] == pytest.approx(2.0 / (3 / _FPS), rel=1e-6)
+    assert done["unit"] == "m/s"
+    # angle at a vertex: 90 degrees on the grass
+    session.set_live_mode("3")
+    session.add_live_point(5, *_px(5, (3.0, 0.0, 0.0)))
+    session.add_live_point(5, *_px(5, (0.0, 0.0, 0.0)))
+    _msg, done = session.add_live_point(5, *_px(5, (0.0, 4.0, 0.0)))
+    assert done is not None and done["value"] == pytest.approx(90.0, abs=1e-6)
+    # area of a 4 x 3 m rectangle
+    session.set_live_mode("2")
+    for xy in ((0, 0), (4, 0), (4, 3), (0, 3)):
+        session.add_live_point(8, *_px(8, (*xy, 0.0)))
+    _msg, done = session.finalize_live_area(8)
+    assert done is not None and done["value"] == pytest.approx(12.0, abs=1e-6)
+
+
+def test_camera3d_hover_text_and_approximate_flag():
+    track = CameraTrack.from_matrices({0: _true_camera(0), 10: _true_camera(10)}, n_frames=20)
+    session = QuickMeasureSession()
+    session.set_calibration(QuickMeasureCalibration.from_camera_track(track))
+    u, v = _px(0, (-20.0, 3.0))
+    text = format_hover_coords(session, u, v, frame=0)
+    assert "Real: (-20.000, 3.000) m" in text and "approx" not in text
+    assert "[approx. camera]" in format_hover_coords(session, u, v, frame=5)
+    # nan (above the horizon) and a missing frame fall back to the pixel text
+    assert "Real" not in format_hover_coords(session, 960.0, -5000.0, frame=0)
+    assert "Real" not in format_hover_coords(session, u, v)
+
+
+def test_mode_7_height_base_top():
+    session = _camera_session()
+    session.set_live_mode("7")
+    _msg, none_yet = session.add_live_point(12, *_px(12, (6.0, -3.0, 0.0)))
+    assert none_yet is None
+    msg, done = session.add_live_point(12, *_px(12, (6.0, -3.0, 1.0)))
+    assert done is not None and done["type"] == "height"
+    assert done["value"] == pytest.approx(1.0, abs=0.01)
+    assert done["unit"] == "m" and done["n_points"] == 2 and done["mode_key"] == "7"
+    extra = done["extra"]
+    assert 0.0 < extra["uncertainty"] < 0.2  # +-1 px on either click
+    assert extra["camera_source"] == "given" and extra["approximate"] == 0
+    assert "Height: 1.00" in msg and "±" in msg
+    assert done["frames"] == [12, 12]
+
+
+def test_mode_7_needs_the_same_frame_and_flags_an_approximate_camera():
+    session = _camera_session()
+    session.set_live_mode("7")
+    session.add_live_point(3, *_px(3, (6.0, 0.0, 0.0)))
+    with pytest.raises(QuickMeasureError, match="same frame"):
+        session.add_live_point(4, *_px(4, (6.0, 0.0, 1.0)))
+    # a frame whose camera is a copy of a neighbour is reported, not hidden
+    track = CameraTrack.from_matrices({0: _true_camera(0)}, n_frames=5)
+    session = QuickMeasureSession(fps=_FPS)
+    session.set_calibration(QuickMeasureCalibration.from_camera_track(track))
+    session.set_live_mode("7")
+    session.add_live_point(3, *_px(0, (6.0, 0.0, 0.0)))
+    msg, done = session.add_live_point(3, *_px(0, (6.0, 0.0, 2.0)))
+    assert done is not None and done["extra"]["approximate"] == 1
+    assert done["extra"]["camera_source"] == "approximate" and "approximate camera" in msg
+
+
+def _plane_session() -> tuple[QuickMeasureSession, np.ndarray, float]:
+    """Session with a line kick -> arrival on the grass marked in mode 8 (frame 0)."""
+    session = _camera_session()
+    session.set_live_mode("8")
+    start, end = (-20.0, -5.0), (25.0, 10.0)
+    session.add_live_point(0, *_px(0, (*start, 0.0)))
+    msg, line = session.add_live_point(0, *_px(0, (*end, 0.0)))
+    assert line is not None and line["type"] == "line_plane", msg
+    direction = np.array(end) - np.array(start)
+    length = float(np.hypot(*direction))
+    assert line["value"] == pytest.approx(length, abs=1e-6)
+    return session, direction / length, length
+
+
+def test_mode_8_line_then_ball_positions_in_the_plane():
+    session, heading, _length = _plane_session()
+    assert session.plane_ready
+    start = np.array([-20.0, -5.0])
+    # ball in the vertical plane of the line: s = 12 m along it, 3.5 m high, seen at frame 7
+    xy = start + 12.0 * heading
+    msg, done = session.add_live_point(7, *_px(7, (xy[0], xy[1], 3.5)))
+    assert done is not None and done["type"] == "plane_point"
+    assert done["value"] == pytest.approx(3.5, abs=1e-6)
+    assert done["extra"]["s"] == pytest.approx(12.0, abs=1e-6)
+    assert done["extra"]["x"] == pytest.approx(xy[0], abs=1e-6)
+    assert done["reals"][0] == pytest.approx((xy[0], xy[1]), abs=1e-6)
+    assert done["n_points"] == 1 and len(done["pixels"]) == 1
+    # one camera cannot know the lateral position: the bound is reported and is a few dm
+    assert 0.0 < done["extra"]["uncertainty"] < 1.5
+    assert "s 12.000" in msg and "±" in msg
+    assert math.isnan(done["extra"]["speed"])  # one position: no speed yet
+
+
+def test_mode_8_speed_and_acceleration_of_the_sequence():
+    session, heading, _length = _plane_session()
+    start = np.array([-20.0, -5.0])
+    # uniform motion 1.2 m along the line per frame at z = 2 (36 m/s), then it speeds up
+    results = []
+    for frame, s_m in ((2, 4.0), (3, 5.2), (4, 6.4), (5, 7.9)):
+        xy = start + s_m * heading
+        _msg, done = session.add_live_point(frame, *_px(frame, (xy[0], xy[1], 2.0)))
+        assert done is not None
+        results.append(done)
+    assert results[1]["extra"]["speed"] == pytest.approx(1.2 * _FPS, rel=1e-5)
+    assert results[2]["extra"]["speed"] == pytest.approx(1.2 * _FPS, rel=1e-5)
+    assert results[2]["extra"]["accel"] == pytest.approx(0.0, abs=1e-3)
+    assert results[3]["extra"]["speed"] == pytest.approx(1.5 * _FPS, rel=1e-5)
+    assert results[3]["extra"]["accel"] == pytest.approx(0.3 * _FPS / (1 / _FPS), rel=1e-4)
+    # the series of the clicked frames (consecutive frames, so every row is a click)
+    series = session.lineplane_series()
+    assert series["frame"].tolist() == [2, 3, 4, 5]
+    assert series["clicked"].all()
+    assert series["z"].to_numpy() == pytest.approx([2.0] * 4, abs=1e-6)
+    assert series["speed"].iloc[1] == pytest.approx(1.2 * _FPS, rel=1e-4)
+    assert series.columns.tolist()[:5] == ["frame", "time_s", "clicked", "x", "y"]
+
+
+def test_mode_8_series_interpolates_between_sparse_clicks_and_needs_two():
+    session, heading, _length = _plane_session()
+    with pytest.raises(QuickMeasureError, match="at least 2"):
+        session.lineplane_series()
+    start = np.array([-20.0, -5.0])
+    for frame, s_m in ((2, 4.0), (6, 8.0)):
+        xy = start + s_m * heading
+        session.add_live_point(frame, *_px(frame, (xy[0], xy[1], 2.0)))
+    series = session.lineplane_series()
+    assert series["frame"].tolist() == [2, 3, 4, 5, 6]
+    assert series["clicked"].tolist() == [True, False, False, False, True]
+    assert series["s"].to_numpy() == pytest.approx([4.0, 5.0, 6.0, 7.0, 8.0], abs=1e-5)
+
+
+def test_mode_8_without_fps_still_gives_position_and_series_refuses():
+    session = _camera_session(fps=None)
+    session.set_live_mode("8")
+    session.add_live_point(0, *_px(0, (-20.0, -5.0, 0.0)))
+    session.add_live_point(0, *_px(0, (25.0, 10.0, 0.0)))
+    xy = np.array([-20.0, -5.0]) + 5.0 * np.array([45.0, 15.0]) / np.hypot(45.0, 15.0)
+    _msg, done = session.add_live_point(3, *_px(3, (xy[0], xy[1], 1.0)))
+    assert done is not None and done["value"] == pytest.approx(1.0, abs=1e-6)
+    with pytest.raises(QuickMeasureError, match="FPS"):
+        session.lineplane_series()
+
+
+def test_mode_8_keeps_the_line_when_you_return_and_redefines_on_second_press():
+    session, heading, _length = _plane_session()
+    # leaving to another mode and coming back keeps the line: one click = one ball position
+    session.set_live_mode("6")
+    msg = session.set_live_mode("8")
+    assert session.plane_ready and "click the ball" in msg
+    xy = np.array([-20.0, -5.0]) + 6.0 * heading
+    _msg, done = session.add_live_point(4, *_px(4, (xy[0], xy[1], 1.0)))
+    assert done is not None and done["type"] == "plane_point"
+    # pressing 8 while already in mode 8 starts a new line (2 clicks again)
+    msg = session.set_live_mode("8")
+    assert not session.plane_ready and "kick point" in msg
+    session.add_live_point(0, *_px(0, (0.0, 0.0, 0.0)))
+    _msg, line = session.add_live_point(0, *_px(0, (10.0, 0.0, 0.0)))
+    assert line is not None and line["type"] == "line_plane"
+    assert line["value"] == pytest.approx(10.0, abs=1e-6)
+
+
+def test_mode_8_undo_redoes_the_line_state():
+    session, heading, _length = _plane_session()
+    assert session.plane_ready
+    session.undo_measure()  # undoes the arrival click: the line result is gone
+    assert not session.plane_ready
+    assert session._active_line_plane() is None
+    session.redo_measure()
+    assert session.plane_ready and session._active_line_plane() is not None
+
+
+def test_mode_8_rejects_a_line_on_two_frames_and_a_point_without_a_line():
+    session = _camera_session()
+    session.set_live_mode("8")
+    session.add_live_point(0, *_px(0, (0.0, 0.0, 0.0)))
+    with pytest.raises(QuickMeasureError, match="same frame"):
+        session.add_live_point(1, *_px(1, (10.0, 0.0, 0.0)))
+    fresh = _camera_session()
+    fresh.points.append(QuickMeasurePoint(0, 960.0, 540.0))
+    with pytest.raises(QuickMeasureError, match="line"):
+        fresh.measure("plane_point")
+
+
+def test_mode_9_event_duration_and_mean_speed():
+    session = _camera_session()
+    session.set_live_mode("9")
+    session.add_live_point(10, *_px(10, (0.0, 0.0, 0.0)))
+    msg, done = session.add_live_point(25, *_px(25, (18.0, 0.0, 0.0)))
+    assert done is not None and done["type"] == "event"
+    assert done["value"] == pytest.approx(0.5, abs=1e-9)  # 15 frames at 30 fps
+    assert done["unit"] == "s" and done["dt"] == pytest.approx(0.5)
+    assert done["extra"]["speed"] == pytest.approx(36.0, rel=1e-6)
+    assert done["extra"]["uncertainty"] == pytest.approx(1.0 / _FPS)
+    assert (done["extra"]["frame_start"], done["extra"]["frame_end"]) == (10, 25)
+    assert "mean speed 36.000 m/s" in msg and "±" in msg
+    # clicking the end first gives the same event (start = earlier frame)
+    session.set_live_mode("9")
+    session.add_live_point(25, *_px(25, (18.0, 0.0, 0.0)))
+    _msg, done2 = session.add_live_point(10, *_px(10, (0.0, 0.0, 0.0)))
+    assert done2 is not None and done2["value"] == pytest.approx(0.5)
+
+
+def test_mode_9_needs_distinct_frames_and_fps():
+    session = QuickMeasureSession(fps=25.0)
+    session.set_live_mode("9")
+    session.add_live_point(5, 0.0, 0.0)
+    with pytest.raises(QuickMeasureError, match="different frames"):
+        session.add_live_point(5, 3.0, 4.0)
+    with pytest.raises(QuickMeasureError, match="FPS"):
+        QuickMeasureSession().set_live_mode("9")
+    # uncalibrated: the speed is in px/s
+    s2 = QuickMeasureSession(fps=10.0)
+    s2.set_live_mode("9")
+    s2.add_live_point(0, 0.0, 0.0)
+    _msg, done = s2.add_live_point(10, 30.0, 40.0)
+    assert done is not None and done["value"] == pytest.approx(1.0)
+    assert done["extra"]["speed"] == pytest.approx(50.0)
+    assert done["extra"]["length_unit"] == "px"
+
+
+def test_mode_0_spin_rate_updates_on_every_click():
+    session = QuickMeasureSession(fps=_FPS)
+    session.set_live_mode("0")
+    msg, done = session.add_live_point(0, 100.0, 100.0)
+    assert done is None and "1 mark" in msg
+    msg, done = session.add_live_point(6, 101.0, 100.0)  # 5 rps = one turn every 6 frames
+    assert done is not None and done["type"] == "spin"
+    assert done["value"] == pytest.approx(5.0) and done["extra"]["turns"] == 1
+    assert done["running"] is True
+    session.add_live_point(12, 102.0, 100.0)
+    _msg, done = session.add_live_point(18, 103.0, 100.0)
+    assert len(session.results) == 1  # the same result is replaced, not stacked
+    assert done is session.results[0]
+    assert done["extra"]["turns"] == 3 and done["extra"]["rps"] == pytest.approx(5.0)
+    assert done["extra"]["rpm"] == pytest.approx(300.0)
+    assert done["extra"]["uncertainty"] == pytest.approx(5.0 * (1 / _FPS) / 0.6)
+    assert done["extra"]["rpm_uncertainty"] == pytest.approx(60.0 * done["extra"]["uncertainty"])
+    assert done["n_points"] == 4 and done["frames"] == [0, 6, 12, 18]
+    assert done["point_ids"] == [1, 2, 3, 4] and len(session.points) == 4
+    text = format_result(done)
+    assert "Spin: 5.0000 rps" in text and "3 turn(s)" in text and "300.0 rpm" in text
+    # Enter closes it; the next click starts a new count
+    msg, closed = session.finalize_live_area(18)
+    assert "closed" in msg and closed is done and "running" not in done
+    assert not session.draft_points
+    session.add_live_point(30, 100.0, 100.0)
+    _msg, second = session.add_live_point(40, 100.0, 100.0)
+    assert len(session.results) == 2 and second is session.results[1]
+    assert second["extra"]["rps"] == pytest.approx(3.0)
+
+
+def test_mode_0_spin_errors_and_aliasing_note():
+    session = QuickMeasureSession(fps=30.0)
+    session.set_live_mode("0")
+    session.add_live_point(4, 0.0, 0.0)
+    with pytest.raises(QuickMeasureError, match="different frames"):
+        session.add_live_point(4, 1.0, 1.0)
+    # the failed click was not kept
+    assert len(session.draft_points) == 1 and len(session.points) == 1
+    _msg, done = session.add_live_point(6, 0.0, 0.0)  # 1 turn in 2 frames = 15 rps = fps / 2
+    assert done is not None and "aliases" in done["extra"]["note"]
+    assert "aliases" in format_result(done)
+
+
+def test_mode_0_spin_undo_removes_the_last_mark():
+    session = QuickMeasureSession(fps=_FPS)
+    session.set_live_mode("0")
+    for frame in (0, 6, 12):
+        session.add_live_point(frame, 1.0, 1.0)
+    assert session.results[0]["extra"]["turns"] == 2
+    session.undo_measure()
+    assert len(session.draft_points) == 2 and session.results[0]["extra"]["turns"] == 1
+
+
+def _arc_clicks(radius: float, centre, angles_deg, frame: int = 20):
+    return [
+        _px(frame, (centre[0] + radius * math.cos(math.radians(a)),
+                    centre[1] + radius * math.sin(math.radians(a)), 0.0))
+        for a in angles_deg
+    ]  # fmt: skip
+
+
+def test_arc_mode_comma_fits_a_circle_on_the_grass():
+    session = _camera_session()
+    session.set_live_mode(",")
+    angles = (10, 25, 40, 55, 70)
+    done = None
+    for i, (u, v) in enumerate(_arc_clicks(12.0, (0.0, 0.0), angles)):
+        msg, done = session.add_live_point(20, u, v)
+        if i < 2:
+            assert done is None and "point(s)" in msg
+    assert done is not None and done["type"] == "arc" and len(session.results) == 1
+    chord_len = 2 * 12.0 * math.sin(math.radians(30))
+    assert done["extra"]["radius"] == pytest.approx(12.0, abs=1e-5)
+    assert done["extra"]["angle_deg"] == pytest.approx(60.0, abs=1e-4)
+    assert done["extra"]["sagitta"] == pytest.approx(
+        12.0 * (1 - math.cos(math.radians(30))), abs=1e-5
+    )
+    assert done["extra"]["arc_length"] == pytest.approx(12.0 * math.radians(60), abs=1e-5)
+    # the polyline through 5 clicks is a bit shorter than the arc and longer than the chord
+    assert chord_len < done["value"] < done["extra"]["arc_length"] + 1e-9
+    assert done["extra"]["uncertainty"] < 1e-5
+    text = format_result(done)
+    assert "R 12.000 m" in text and "60.0 deg" in text and "sagitta" in text
+    # a straight line has no finite radius but is not an error
+    session.set_live_mode(",")
+    for x in (0.0, 5.0, 10.0):
+        done = session.add_live_point(20, *_px(20, (x, 3.0, 0.0)))[1]
+    assert done is not None and math.isinf(done["extra"]["radius"])
+    assert done["value"] == pytest.approx(10.0, abs=1e-6)
+
+
+def test_arc_mode_works_in_pixels_without_calibration():
+    session = QuickMeasureSession()
+    session.set_live_mode(",")
+    for a in (0, 30, 60, 90):
+        done = session.add_live_point(
+            0, 100 + 50 * math.cos(math.radians(a)), 100 + 50 * math.sin(math.radians(a))
+        )[1]
+    assert done is not None and done["unit"] == "px"
+    assert done["extra"]["radius"] == pytest.approx(50.0, abs=1e-6)
+    assert done["extra"]["angle_deg"] == pytest.approx(90.0, abs=1e-4)
+
+
+def test_height_line_mode_point_draws_guides_over_the_video():
+    session, heading, length = _plane_session()
+    session.set_live_mode(".")
+    assert session.active_mode == "heightline"
+    xy = np.array([-20.0, -5.0]) + 10.0 * heading
+    msg, done = session.add_live_point(9, *_px(9, (xy[0], xy[1], 2.44)))
+    assert done is not None and done["type"] == "height_line"
+    assert done["value"] == pytest.approx(2.44, abs=1e-6) and "Height line" in msg
+    assert done["extra"]["z"] == pytest.approx(2.44)
+    # the guide is the horizontal line at 2.44 m over the whole line, in any frame
+    plane = session._active_line_plane()
+    assert plane is not None
+    for frame in (0, 9, 30):
+        guides = session.height_line_guides(frame)
+        assert len(guides) == 1 and guides[0][0] == pytest.approx(2.44)
+        uv = guides[0][1]
+        assert uv.shape == (2, 2)
+        s_end, z_end = plane.locate(frame, uv[1])
+        assert s_end == pytest.approx(length, abs=1e-5) and z_end == pytest.approx(2.44, abs=1e-5)
+    # a typed height adds another guide; undo takes it away
+    typed = session.add_height_line(1.0, frame=9)
+    assert typed["n_points"] == 0 and len(session.height_line_guides(0)) == 2
+    session.undo_measure()
+    assert len(session.height_line_guides(0)) == 1
+
+
+def test_height_line_mode_needs_a_line_first():
+    session = _camera_session()
+    with pytest.raises(QuickMeasureError, match="line"):
+        session.set_live_mode(".")
+    with pytest.raises(QuickMeasureError, match="line"):
+        session.add_height_line(2.0)
+    assert session.height_line_guides(0) == []
+
+
+def test_new_results_export_columns_files_and_report(tmp_path):
+    session, heading, _length = _plane_session()
+    start = np.array([-20.0, -5.0])
+    for frame, s_m in ((2, 4.0), (3, 5.2), (4, 6.4)):
+        xy = start + s_m * heading
+        session.add_live_point(frame, *_px(frame, (xy[0], xy[1], 2.0)))
+    session.set_live_mode("7")
+    session.add_live_point(12, *_px(12, (6.0, -3.0, 0.0)))
+    session.add_live_point(12, *_px(12, (6.0, -3.0, 1.0)))
+    session.set_live_mode("9")
+    session.add_live_point(10, *_px(10, (0.0, 0.0, 0.0)))
+    session.add_live_point(25, *_px(25, (18.0, 0.0, 0.0)))
+    session.set_live_mode("0")
+    for frame in (0, 6, 12):
+        session.add_live_point(frame, 5.0, 5.0)
+    session.set_live_mode(",")
+    for u, v in _arc_clicks(10.0, (0.0, 0.0), (0, 30, 60)):
+        session.add_live_point(20, u, v)
+    session.set_live_mode("1")
+    session.add_live_point(5, *_px(5, (0.0, 0.0, 0.0)))
+    session.add_live_point(5, *_px(5, (3.0, 4.0, 0.0)))
+
+    paths = session.save_session(str(tmp_path), stem="kick.mp4")
+    df = pd.read_csv(paths["results"])
+    assert {"line_plane", "plane_point", "height", "event", "spin", "arc", "distance"} == set(
+        df["type"]
+    )
+    for column in (
+        "uncertainty",
+        "length_unit",
+        "camera_source",
+        "approximate",
+        "plane",
+        "frame_start",
+        "frame_end",
+        "s",
+        "z",
+        "speed",
+        "accel",
+        "turns",
+        "rps",
+        "rpm",
+        "radius",
+        "angle_deg",
+        "sagitta",
+        "note",
+    ):
+        assert column in df.columns, column
+    assert (df["calibration"].isin({"camera3d", "none"})).all()
+    height = df[df["type"] == "height"].iloc[0]
+    assert height["value"] == pytest.approx(1.0, abs=0.01) and height["unit"] == "m"
+    assert height["camera_source"] == "given" and height["uncertainty"] > 0
+    event = df[df["type"] == "event"].iloc[0]
+    assert event["value"] == pytest.approx(0.5) and event["speed"] == pytest.approx(36.0, rel=1e-6)
+    assert event["elapsed_time_s"] == pytest.approx(0.5)
+    spin = df[df["type"] == "spin"].iloc[0]
+    assert (
+        spin["turns"] == 2
+        and spin["rps"] == pytest.approx(5.0)
+        and spin["rpm"] == pytest.approx(300)
+    )
+    # old modes leave the new columns blank
+    distance = df[df["type"] == "distance"].iloc[0]
+    assert distance["value"] == pytest.approx(5.0, abs=1e-6) and pd.isna(distance["uncertainty"])
+    # per-type files share the schema; camera and series files are written
+    for kind in ("height", "line_plane", "plane_point", "event", "spin", "arc"):
+        sub = pd.read_csv(paths[f"results_{kind}"])
+        assert sub.columns.tolist() == df.columns.tolist() and set(sub["type"]) == {kind}
+    cams = pd.read_csv(paths["camera3d"])
+    assert len(cams) == 40 and {"frame", "source", "approximate", "P11", "P34"} <= set(cams.columns)
+    series = pd.read_csv(paths["lineplane_series"])
+    assert series["frame"].tolist() == [2, 3, 4] and series["clicked"].all()
+    calib = pd.read_csv(paths["calibration"])
+    assert set(calib["kind"]) == {"camera3d"}
+    assert {"n_frames", "frames_given"} <= set(calib["measure_name"])
+    with open(paths["report"], encoding="utf-8") as handle:
+        report = handle.read()
+    for word in ("Camera3D", "Line plane", "Event time", "Spin", "Arc / curve", "Height line"):
+        assert word in report
+    with open(paths["readme"], encoding="utf-8") as handle:
+        assert "Camera3D" in handle.read()
+
+
+def test_format_result_of_the_old_types_is_unchanged():
+    assert (
+        format_result({"type": "distance", "value": 2.0, "unit": "m", "extra": {}})
+        == "Distance: 2.0000 m"
+    )
+    assert (
+        format_result({"type": "level", "value": 1.0, "unit": "px", "axis": "H"})
+        == "Level (H): 1.0000 px"
+    )
+    assert format_result({"type": "height_line", "value": 2.44, "unit": "m"}) == (
+        "Height line: 2.4400 m"
+    )
+
+
+def test_draw_quickmeasure_overlay_new_modes_and_guides():
+    pygame = pytest.importorskip("pygame")
+    pygame.font.init()
+    font = pygame.font.Font(None, 18)
+    from vaila.quickmeasure import draw_quickmeasure_overlay
+
+    session, heading, _length = _plane_session()
+    xy = np.array([-20.0, -5.0]) + 10.0 * heading
+    session.add_live_point(9, *_px(9, (xy[0], xy[1], 2.0)))
+    session.set_live_mode(".")
+    session.add_live_point(9, *_px(9, (xy[0], xy[1], 2.44)))
+    session.set_live_mode("0")
+    session.add_live_point(1, 400.0, 300.0)
+    session.add_live_point(7, 410.0, 300.0)
+    surface = pygame.Surface((_W, _H))
+    surface.fill((0, 0, 0))
+    draw_quickmeasure_overlay(surface, session, 1.0, 0, 0, font, frame=9)
+    assert surface.get_bounding_rect().width > 0
+    plain = pygame.Surface((_W, _H))
+    plain.fill((0, 0, 0))
+    draw_quickmeasure_overlay(plain, session, 1.0, 0, 0, font)  # no frame: no guide, no crash
+    guided = pygame.image.tobytes(surface, "RGB")
+    assert guided != pygame.image.tobytes(plain, "RGB")
+
+
+def test_overlay_badges_use_portuguese_names_when_lang_is_pt() -> None:
+    """The result badge on the video says ``altura`` in PT and ``height`` in EN (default)."""
+    pygame = pytest.importorskip("pygame")
+    pygame.font.init()
+    from vaila.quickmeasure import (
+        RESULT_TYPE_LABELS_PT,
+        draw_quickmeasure_overlay,
+        result_type_label,
+    )
+
+    session = QuickMeasureSession(fps=30.0)
+    session.results.append(
+        {"type": "height", "value": 1.4996, "unit": "m", "pixels": [(100.0, 200.0), (100.0, 90.0)]}
+    )
+    seen: dict[str, list[str]] = {"en": [], "pt": []}
+
+    class _Font:
+        def __init__(self, lang: str) -> None:
+            self.lang = lang
+            self._f = pygame.font.Font(None, 16)
+
+        def render(self, text, *a, **k):
+            seen[self.lang].append(str(text))
+            return self._f.render(text, *a, **k)
+
+    for lang in ("en", "pt"):
+        surface = pygame.Surface((_W, _H))
+        if lang == "en":
+            draw_quickmeasure_overlay(surface, session, 1.0, 0, 0, _Font(lang))
+        else:
+            draw_quickmeasure_overlay(surface, session, 1.0, 0, 0, _Font(lang), lang="pt")
+    assert "#1 · height · 1.500 m" in seen["en"]
+    assert "#1 · altura · 1.500 m" in seen["pt"]
+    assert result_type_label("spin", "pt") == "giro" and result_type_label("spin") == "spin"
+    assert set(RESULT_TYPE_LABELS_PT) >= {
+        "distance",
+        "area",
+        "angle",
+        "velocity",
+        "acceleration",
+        "level",
+        "height",
+        "line_plane",
+        "plane_point",
+        "height_line",
+        "event",
+        "spin",
+        "arc",
+    }
