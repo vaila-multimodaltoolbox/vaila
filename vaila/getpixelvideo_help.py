@@ -6,7 +6,7 @@ Pixel Coordinate Tool - help content (getpixelvideo_help.py)
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 14 November 2026
-Update: 18 November 2026
+Update: 24 November 2026
 Version: 0.4.19
 Python Version: 3.12.16
 
@@ -481,6 +481,32 @@ _ENTRIES: tuple[HelpEntry, ...] = (
         keys=("Ctrl+W", "Ctrl+M"),
         button="Model",
     ),
+    _E(
+        "ai",
+        "Net: open the AI Track network window (the folder where the network is kept, "
+        "download / upload on Hugging Face, retrain, go back to an earlier version). "
+        "The same window: python -m vaila.ai_tracker_hub gui.",
+        "Net: abre a janela da rede do AI Track (a pasta onde a rede fica guardada, baixar / "
+        "enviar no Hugging Face, retreinar, voltar a uma versão anterior). A mesma janela: "
+        "python -m vaila.ai_tracker_hub gui.",
+        button="Net",
+    ),
+    _E(
+        "ai",
+        "Where the AI Track network lives: the folder you choose (asked once, the first "
+        "time it saves), outside vailá, so reinstalling vailá does not lose it. Start with "
+        "--ai-models DIR (or VAILA_AI_MODELS_HOME) to use another folder. It keeps one "
+        "network per feature space (Deep on or off), the points you placed by hand for "
+        "retraining, and earlier versions. It is saved when AI Track goes off, on Save, "
+        "when Net opens and when the window closes, even with AI Track still on.",
+        "Onde a rede do AI Track fica: na pasta que você escolhe (perguntada uma vez, na "
+        "primeira gravação), fora do vailá, então reinstalar o vailá não a perde. Abra com "
+        "--ai-models PASTA (ou VAILA_AI_MODELS_HOME) para usar outra pasta. Ela guarda uma "
+        "rede por espaço de features (Deep ligado ou desligado), os pontos que você marcou "
+        "à mão para retreinar e as versões anteriores. É salva quando o AI Track desliga, "
+        "ao salvar, ao abrir o Net e ao fechar a janela, mesmo com o AI Track ligado.",
+        button="Net",
+    ),
     # --- timeline -------------------------------------------------------------------
     _E(
         "timeline",
@@ -526,6 +552,145 @@ _ENTRIES: tuple[HelpEntry, ...] = (
         "What to measure: 1 distance, 2 area, 3 angle, 4 velocity, 5 acceleration, 6 level.",
         "O que medir: 1 distância, 2 área, 3 ângulo, 4 velocidade, 5 aceleração, 6 nível.",
         keys=("1 … 6",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure (needs --kick-run, see Tpl: K): 7 height of an object, 2 clicks in "
+        "the same frame (base on the grass, then top).",
+        "Kick Measure (precisa de --kick-run, veja Tpl: K): 7 altura de um objeto, 2 "
+        "cliques no mesmo quadro (base no gramado, depois o topo).",
+        keys=("7",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure: 8 line plane. 2 clicks on the grass (kick, arrival) fix a vertical "
+        "plane; then each click on the ball gives the distance along the line and the height. "
+        "The bottom of the window shows s, z, speed and acceleration of the current frame.",
+        "Kick Measure: 8 plano da linha. 2 cliques no gramado (chute, chegada) fixam um plano "
+        "vertical; depois cada clique na bola dá a distância ao longo da linha e a altura. "
+        "A base da janela mostra s, z, velocidade e aceleração do quadro atual.",
+        keys=("8",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure: 9 event. 2 clicks, each in its own frame: duration, average speed "
+        "between the two points and the frame rate.",
+        "Kick Measure: 9 evento. 2 cliques, cada um no seu quadro: duração, velocidade "
+        "média entre os dois pontos e a taxa de quadros.",
+        keys=("9",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure: 0 spin. Click the same mark of the ball in each frame it shows up: "
+        "turns, rps and rpm (Enter closes the result).",
+        "Kick Measure: 0 giro. Clique a mesma marca da bola em cada quadro em que ela "
+        "aparece: voltas, rps e rpm (Enter encerra o resultado).",
+        keys=("0",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure: arc / curve. Click points along it: length, arc radius, angle and "
+        "rise of the fitted arc (Enter closes the result).",
+        "Kick Measure: arco / curva. Clique pontos ao longo dela: comprimento, raio, ângulo "
+        "e flecha do arco ajustado (Enter encerra o resultado).",
+        keys=(",",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure: height line. One click at the wanted height (after the line of 8): "
+        "horizontal guides at that height are drawn on the video.",
+        "Kick Measure: linha de altura. Um clique na altura desejada (depois da linha do 8): "
+        "guias horizontais naquela altura são desenhadas no vídeo.",
+        keys=(".",),
+    ),
+    _E(
+        "measure",
+        "Kick Measure: open a FreeKiki kick_analysis folder to measure on its video, in "
+        "metres of the pitch, in any frame. Same as uv run --no-sync vaila/getpixelvideo.py "
+        "--kick-run DIR -f VIDEO. After loading only the pitch lines are drawn (check the "
+        "calibration); the Kick panel on the right does the rest, step by step. Hover shows "
+        "Real: (x, y) m.",
+        "Kick Measure: abre uma pasta kick_analysis do FreeKiki para medir no vídeo dela, em "
+        "metros do campo, em qualquer quadro. Igual a uv run --no-sync vaila/getpixelvideo.py "
+        "--kick-run PASTA -f VIDEO. Depois de carregar só as linhas do campo aparecem (confira "
+        "a calibração); o painel Kick, à direita, faz o resto, por etapas. O mouse mostra "
+        "Real: (x, y) m.",
+        keys=("Tpl: K",),
+    ),
+    _E(
+        "measure",
+        "Per-frame calibration (frame by frame): the SAM 3 output folder of the camera "
+        "(processed_sam3dinov3_*/<stem>/) keeps <stem>_frames.dlt3d (the camera of EVERY "
+        "frame, 11 DLT3D parameters per row), <stem>_frames.dlt2d (the pitch-plane homography "
+        "of every frame) and <stem>_frames_cameras.csv (frame, source: dlt3d / solved / "
+        "tracked / approximate). Loaded, the video is calibrated in metres of the pitch in any "
+        "frame: keys 1-6 give real distances, 7 heights. Auto-load, only when the session has "
+        "no calibration yet: --kick-run; Load Tracking CSV of the SAM 3 folder; opening the "
+        "video when <video folder>/kick_analysis_*/work/<stem>/sam3dinov3/... holds the file. "
+        "Manual: CALIB (Shift+Q) then L and pick the *_frames.dlt3d / *_frames.dlt2d, or "
+        "uv run --no-sync vaila/getpixelvideo.py -f VIDEO --calib-frames FILE. The file must "
+        "have one row per video frame. On frames whose camera is approximate (copied from "
+        "another frame) a warning is shown: measure with care there.",
+        "Calibração por quadro: a pasta de saída do SAM 3 da câmera "
+        "(processed_sam3dinov3_*/<stem>/) guarda <stem>_frames.dlt3d (a câmera de TODOS os "
+        "quadros, 11 parâmetros DLT3D por linha), <stem>_frames.dlt2d (a homografia do plano "
+        "do campo de cada quadro) e <stem>_frames_cameras.csv (quadro, origem: dlt3d / solved "
+        "/ tracked / approximate). Carregado, o vídeo fica calibrado em metros do campo em "
+        "qualquer quadro: teclas 1-6 dão distâncias reais, 7 alturas. Carga automática, só "
+        "quando a sessão ainda não tem calibração: --kick-run; Load Tracking CSV da pasta do "
+        "SAM 3; ao abrir o vídeo quando <pasta do vídeo>/kick_analysis_*/work/<stem>/"
+        "sam3dinov3/... tem o arquivo. Manual: CALIB (Shift+Q) depois L e escolha o "
+        "*_frames.dlt3d / *_frames.dlt2d, ou uv run --no-sync vaila/getpixelvideo.py -f VIDEO "
+        "--calib-frames ARQUIVO. O arquivo precisa ter uma linha por quadro do vídeo. Nos "
+        "quadros com câmera aproximada (copiada de outro quadro) aparece um aviso: meça com "
+        "cautela ali.",
+        keys=("Shift+Q, L",),
+    ),
+    _E(
+        "measure",
+        "Kick SAM: with the video open, click it and pick the kick_analysis folder (the "
+        "one with the SAM 3 run). Same as Tpl: K, without the Tpl dialog.",
+        "Kick SAM: com o vídeo aberto, clique e escolha a pasta kick_analysis (a da "
+        "rodada do SAM 3). Igual ao Tpl: K, sem passar pelo diálogo do Tpl.",
+        button="Kick SAM",
+    ),
+    _E(
+        "measure",
+        "Kick panel (right side, after Kick SAM / --kick-run), 4 steps by its tabs. 1 "
+        "Calibration: frames per camera source and the pitch lines on the video (green = "
+        "DLT3D, yellow = solved, orange = approximate). 2 Layers: boxes, 2D pose, ball and "
+        "labels are off until you switch them on; filter people by role or team and tick the "
+        "ones to measure; Ball -> p0 copies the ball track into the editable marker p0. 3 "
+        "Metrics: pick a metric (speed, distance to the ball or to a person, height of a "
+        "body point, jump, point speed) for the ticked person and + Add: its value is shown "
+        "above the person; or Measure by hand (Quick Measure modes). 4 Export: mkvis3d "
+        "(.c3d), Blender (.bvh + script), metrics CSV or all, into "
+        "processed_kickmeasure_* inside the kick_analysis folder; Open mkvis3d / Open "
+        "Blender show the last export. The terminal prints the command that repeats it.",
+        "Painel Kick (à direita, depois do Kick SAM / --kick-run), 4 etapas pelas abas. 1 "
+        "Calibração: quadros por fonte de câmera e as linhas do campo no vídeo (verde = "
+        "DLT3D, amarelo = resolvida, laranja = aproximada). 2 Camadas: caixas, pose 2D, "
+        "bola e rótulos ficam desligados até você ligar; filtre as pessoas por função ou "
+        "time e marque as que quer medir; Bola -> p0 copia a trilha da bola para o "
+        "marcador p0 editável. 3 Métricas: escolha uma métrica (velocidade, distância à "
+        "bola ou a uma pessoa, altura de um ponto do corpo, salto, velocidade do ponto) "
+        "para a pessoa marcada e + Adicionar: o valor aparece acima da pessoa; ou Medir "
+        "à mão (modos do Quick Measure). 4 Exportar: mkvis3d (.c3d), Blender (.bvh + "
+        "script), CSV das métricas ou tudo, em processed_kickmeasure_* dentro da pasta "
+        "kick_analysis; Abrir mkvis3d / Abrir Blender mostram a última exportação. O "
+        "terminal imprime o comando que repete a exportação.",
+        button="Kick SAM",
+    ),
+    _E(
+        "measure",
+        "Kick panel: click a player (box or skeleton) to select it for the metrics, click "
+        "again to unselect (steps 2 and 3, with the boxes or pose layer on and no measure "
+        "mode). The mouse wheel over the panel scrolls its lists instead of zooming.",
+        "Painel Kick: clique num jogador (caixa ou esqueleto) para selecioná-lo nas "
+        "métricas, clique de novo para desmarcar (etapas 2 e 3, com a camada de caixas ou "
+        "pose ligada e sem modo de medida). A roda do mouse sobre o painel rola as listas "
+        "em vez de dar zoom.",
+        mouse="Left click",
     ),
     _E(
         "measure",
@@ -1132,6 +1297,11 @@ TOOLBAR_HINTS: dict[str, tuple[tuple[str, ...], str, str]] = {
         "Marcador acompanha a imagem (Shift+T: vídeo inteiro)",
     ),
     "ai_deep": ((), "Neural network features for AI Track", "Rede neural para o AI Track"),
+    "ai_net": (
+        (),
+        "AI Track network: folder, Hugging Face, retrain, versions",
+        "Rede do AI Track: pasta, Hugging Face, retreino, versões",
+    ),
     "ai_shape": (
         (),
         "Track a point, a circle or a box",
@@ -1148,6 +1318,11 @@ TOOLBAR_HINTS: dict[str, tuple[tuple[str, ...], str, str]] = {
         ("F8",),
         "Add video: the 1-line points go with you",
         "Add video: os pontos do 1-line vão junto",
+    ),
+    "kick_sam": (
+        (),
+        "Kick SAM: pick a kick_analysis folder; the Kick panel then guides the measure",
+        "Kick SAM: escolhe a pasta kick_analysis; o painel Kick guia a medida",
     ),
     "load": ((), "Load saved markers (CSV)", "Carrega marcadores salvos (CSV)"),
     "save": (

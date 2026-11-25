@@ -6,7 +6,7 @@ Pixel Coordinate Tool - getpixelvideo.py
 Authors: Prof. Dr. Paulo R. P. Santiago and Rafael L. M. Monteiro
 https://github.com/vaila-multimodaltoolbox/vaila
 Date: 22 July 2025
-Update: 18 November 2026
+Update: 24 November 2026
 Version: 0.4.19
 Python Version: 3.12.16
 
@@ -26,12 +26,22 @@ AI Track & JIT Online Learning (toolbar AI Track button / T key):
   - Semi-automatic tracking: NCC + sub-pixel parabolic refinement + 2D Gaussian
     spatial prior + Kalman-filter velocity prediction + online linear appearance model.
   - JIT Training & Checkpoint Persistence: every manual marker placement/adjustment
-    retrains the online model on-the-fly and saves checkpoints to
-    ``vaila/models/ai_tracker/discriminator_<profile>.npz`` (default: discriminator_default.npz).
+    retrains the online model on-the-fly. The network lives in the AI models folder you
+    choose (``--ai-models DIR``, else ``VAILA_AI_MODELS_HOME``, else ``~/.vaila/ai_models.json``,
+    asked once in a dialog the first time AI Track saves; without any of them the legacy
+    ``vaila/models/ai_tracker`` inside vailá is used, with no backup): one checkpoint per
+    feature space, ``<folder>/ai_tracker/discriminators/discriminator_<profile>__<key>.npz``
+    (key ``classic``, or ``<backbone>-<sha8>`` with Deep), plus the points you placed by hand
+    as samples for retraining (``<folder>/ai_tracker/samples/``), with up to 10 previous
+    versions in ``history/``. It is saved when AI Track is turned OFF, on Save (Ctrl+S), when
+    the Net button opens its window and when the window closes or switches video, even with
+    AI Track still ON. The **Net** toolbar button (right of Deep) opens the AI Track network
+    window (``python -m vaila.ai_tracker_hub gui``): folder, Hugging Face download/upload,
+    retrain, restore a version.
     Subsequent sessions load and incrementally update the checkpoint via sample-count
     weighted averaging (transfer learning), preventing catastrophic forgetting.
   - Deep NN Features: optional ResNet50/ResNet152/MobileNetV3/EfficientNet semantic
-    embedding via PyTorch/CUDA. Weights live under ``vaila/models/ai_tracker/``
+    embedding via PyTorch/CUDA. Backbone weights live under ``vaila/models/ai_tracker/``
     (browse or download clean official ImageNet checkpoints when missing); also
     optionally concatenated into the retrained online discriminator's feature vector.
   - Track CSV at start-up: ``--track-csv PATH`` loads a tracking CSV without the dialog (the
@@ -92,7 +102,10 @@ Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
   type the real measurement(s), or right-click to correct a point.
   Future DLT3D (11 params) is reserved. **MEASURE** then uses digit keys:
   ``1`` distance, ``2`` area, ``3`` angle, ``4`` velocity, ``5`` acceleration,
-  ``6`` level (H+V laser guide + axis-snapped tape); ``7``–``0`` reserved.
+  ``6`` level (H+V laser guide + axis-snapped tape). Kick Measure modes (need a
+  ``camera3d`` calibration, i.e. ``--kick-run``): ``7`` height (base + top), ``8`` line
+  plane (distance along the kick line + height of every ball click), ``9`` event time,
+  ``0`` ball spin (rps / rpm), ``,`` arc / curve, ``.`` height guide lines.
   Each completed set is drawn on the image with its value. ``Enter`` closes an
   area polygon or opens the save menu. Toolbar **Clear** / Backspace wipe drawn
   feedback (keeps calib). ``Ctrl+Z`` / ``Ctrl+Y`` undo/redo measure actions while
@@ -102,6 +115,23 @@ Quick Measure / CALIB + MEASURE (see ``vaila/quickmeasure.py``):
   FPS: metadata supplies it automatically; ``I`` or the **FPS … Hz** button
   overrides it. Recompute via
   ``uv run python -m vaila.quickmeasure --points-csv POINTS.csv --measure distance``.
+
+Kick Measure (``--kick-run DIR`` or ``Tpl: -> K``):
+  Open a FreeKiki ``kick_analysis_*`` folder to measure on its reference (or other) camera,
+  in any frame, in metres of the pitch: ``uv run --no-sync vaila/getpixelvideo.py
+  --kick-run DIR -f VIDEO`` (``-f`` optional: the reference video is used). The camera of every
+  frame (DLT3D of the pipeline, or solved / approximate where it had none) becomes one
+  ``camera3d`` calibration, so keys ``1``-``6`` give real metres; the ball track becomes the
+  editable marker p0 (AI Track still works) and the SAM people are drawn with box, ID, foot
+  point and ``ID n . (x, y) m``. Hover shows ``Real: (x, y) m`` (``[approx. camera]`` when the
+  frame had no calibration); in mode ``8`` the HUD shows s, z, v and a of the current frame.
+
+Per-frame calibration (``--calib-frames FILE``):
+  ``<stem>_frames.dlt3d`` (the camera of every video frame) / ``<stem>_frames.dlt2d`` written next
+  to the SAM 3 outputs calibrate the video in metres in any frame (``camera3d``). Loaded by
+  ``--calib-frames``, CALIB ``L``, ``--kick-run``, Load Tracking CSV of the SAM 3 folder, or on
+  opening a video that has ``kick_analysis_*/work/<stem>/sam3dinov3/...`` next to it (only when the
+  session has no calibration yet). Frames whose camera is ``approximate`` show a HUD warning.
 
 Pose / ML:
   **F9** exports a YOLO-pose layout (``data.yaml``, train/val/test, may write
@@ -200,6 +230,7 @@ Visit the project repository: https://github.com/vaila-multimodaltoolbox/vaila
 import bisect
 import contextlib
 import copy
+import glob
 import io
 import json
 import math
@@ -230,6 +261,16 @@ except ImportError:
     import quickmeasure  # ty: ignore[unresolved-import]
 
 try:
+    from . import kick_measure
+except ImportError:
+    import kick_measure  # ty: ignore[unresolved-import]
+
+try:
+    from . import kick_panel
+except ImportError:
+    import kick_panel  # ty: ignore[unresolved-import]
+
+try:
     from . import skeleton_catalog
 except ImportError:
     import skeleton_catalog  # ty: ignore[unresolved-import]
@@ -243,6 +284,13 @@ try:
     from . import ref3d_builder
 except ImportError:
     import ref3d_builder  # ty: ignore[unresolved-import]
+
+try:
+    from . import ai_tracker_store
+except ImportError:
+    # Script mode (``uv run vaila/getpixelvideo.py``): take the PACKAGE module, the one
+    # ``vaila.tracking`` imports, so ``--ai-models`` (set_session_home) reaches the tracker.
+    from vaila import ai_tracker_store
 
 if platform.system() == "Linux":
     os.environ["SDL_VIDEODRIVER"] = "x11"
@@ -460,7 +508,7 @@ def draw_help_chip(surface, font, text: str, x: int, y: int, *, mouse: bool = Fa
     return chip.right
 
 
-GETPIXELVIDEO_UPDATE_DATE = "16 November 2026"
+GETPIXELVIDEO_UPDATE_DATE = "24 November 2026"
 GETPIXELVIDEO_BUILD_LINE = f"Update: {GETPIXELVIDEO_UPDATE_DATE} Version: {GETPIXELVIDEO_VERSION}"
 GETPIXELVIDEO_WINDOW_TITLE = f"{VAILA_MARK} getpixelvideo — {GETPIXELVIDEO_BUILD_LINE}"
 
@@ -2813,6 +2861,308 @@ def load_pitch_guide_points(
     return [], "", []
 
 
+# Tpl dialog answer "K": open a kick_analysis folder to measure on (see _kick_load).
+KICK_LOAD_ID = "kick_load"
+KICK_LOAD_LINE = "K = Kick Measure: open a kick_analysis folder (measure in metres)"
+
+# Colours of the SAM people of a Kick Measure run (one per ID, repeated).
+KICK_PERSON_COLORS: tuple[tuple[int, int, int], ...] = (
+    (255, 200, 0),
+    (0, 200, 255),
+    (255, 90, 200),
+    (120, 255, 120),
+    (255, 140, 60),
+    (170, 130, 255),
+)
+
+
+def _kick_freekiki():
+    """The freekiki module (lazy: Kick Measure only needs its folder helpers)."""
+    try:
+        from . import freekiki as fk
+    except ImportError:
+        import freekiki as fk  # ty: ignore[unresolved-import]
+    return fk
+
+
+def kick_run_video(folder, camera: str = "reference") -> Path:
+    """Video of one camera of a ``kick_analysis_*`` folder (``ValueError`` when it has none)."""
+    return Path(_kick_freekiki().kick_run_camera(folder, camera)["video"])
+
+
+def kick_run_pick_camera(folder, video_path) -> tuple[str, str]:
+    """``(camera, note)``: the camera of the kick folder whose video is ``video_path``.
+
+    ``camera`` is ``"reference"`` or ``"other"``. When the video is not a camera of the folder
+    the reference camera is used and ``note`` says so (empty when it matched).
+    """
+    fk = _kick_freekiki()
+    wanted = Path(video_path) if video_path else None
+    for camera in ("reference", "other"):
+        try:
+            video = Path(fk.kick_run_camera(folder, camera)["video"])
+        except (OSError, ValueError, KeyError):
+            continue
+        if wanted is not None and (
+            video.resolve() == wanted.resolve() or video.name == wanted.name
+        ):
+            return camera, ""
+    return "reference", "this video is not a camera of the run: reference camera used"
+
+
+FRAMES_CALIB_SUFFIX = "_frames.dlt3d"
+
+
+def _newest(paths) -> Path | None:
+    """The most recent of ``paths`` (modification time, then name), ``None`` when empty."""
+    found = []
+    for item in paths:
+        try:
+            found.append((item.stat().st_mtime, str(item), item))
+        except OSError:
+            continue
+    return max(found)[2] if found else None
+
+
+def find_frames_calibration_near_files(path, video_stem: str | None = None) -> Path | None:
+    """The per-frame ``*_frames.dlt3d`` that sits with the SAM 3 files that ``path`` belongs to.
+
+    ``path`` is a file (or folder) of a SAM 3 output folder ``processed_sam3dinov3_*/<stem>/``
+    (its ``sam3/sam_tracks.csv``, ``<stem>_id_NN_*.csv``...). The folder itself, then up to two
+    parents are searched: ``<video_stem>_frames.dlt3d`` first, else the only ``*_frames.dlt3d``.
+    """
+    here = Path(path)
+    if here.is_file() or here.suffix:
+        here = here.parent
+    for folder in (here, *list(here.parents)[:2]):
+        try:
+            if video_stem:
+                exact = folder / f"{video_stem}{FRAMES_CALIB_SUFFIX}"
+                if exact.is_file():
+                    return exact
+            files = sorted(folder.glob(f"*{FRAMES_CALIB_SUFFIX}"))
+        except OSError:
+            continue
+        if len(files) == 1:
+            return files[0]
+        if files and not video_stem:
+            return _newest(files)
+    return None
+
+
+def find_frames_calibration_for_video(video_path) -> Path | None:
+    """Per-frame calibration of a video, found cheaply (fixed-depth globs, no tree walk).
+
+    1. ``<video_dir>/<stem>_frames.dlt3d`` (copied next to the video);
+    2. ``<video_dir>/kick_analysis_*/work/<stem>/sam3dinov3/processed_sam3dinov3_*/<stem>/
+       <stem>_frames.dlt3d``, the newest kick run that has it first.
+    """
+    if not video_path:
+        return None
+    video = Path(video_path)
+    if not video.is_file():
+        return None
+    stem, folder = video.stem, video.parent
+    name = f"{stem}{FRAMES_CALIB_SUFFIX}"
+    try:
+        if (folder / name).is_file():
+            return folder / name
+        runs = sorted((r for r in folder.glob("kick_analysis_*") if r.is_dir()), reverse=True)
+        for run in runs:  # names carry the timestamp: newest run first
+            esc = glob.escape(stem)
+            found = _newest(
+                run.glob(f"work/{esc}/sam3dinov3/processed_sam3dinov3_*/{esc}/{glob.escape(name)}")
+            )
+            if found is not None:
+                return found
+    except OSError:
+        return None
+    return None
+
+
+def parse_calib_frames_arg(argv) -> str | None:
+    """``--calib-frames PATH`` from ``argv`` (``SystemExit`` when the path is missing/absent)."""
+    if "--calib-frames" not in argv:
+        return None
+    pos = list(argv).index("--calib-frames")
+    if pos + 1 >= len(argv) or str(argv[pos + 1]).startswith("-"):
+        raise SystemExit("--calib-frames requires a *_frames.dlt3d or *_frames.dlt2d path")
+    path = str(argv[pos + 1])
+    if not os.path.isfile(path):
+        raise SystemExit(f"--calib-frames file not found: {path}")
+    if not path.lower().endswith((".dlt3d", ".dlt2d")):
+        raise SystemExit(f"--calib-frames expects a .dlt3d or .dlt2d file: {path}")
+    return path
+
+
+def kick_person_caption(run, frame: int, person) -> str:
+    """Legend of a person of a Kick Measure run: ``ID n · (x, y) m`` at the foot (grass)."""
+    xy = person.foot_xy
+    if xy is None:
+        ground = run.cameras.ground_point(frame, person.foot_uv[0], person.foot_uv[1])
+        xy = (float(ground[0]), float(ground[1]))
+    if not (math.isfinite(xy[0]) and math.isfinite(xy[1])):
+        return f"ID {person.id}"
+    return f"ID {person.id} · ({xy[0]:.1f}, {xy[1]:.1f}) m"
+
+
+def draw_kick_people(
+    screen,
+    run,
+    frame: int,
+    zoom_level,
+    crop_x,
+    crop_y,
+    font,
+    pad_x=0,
+    pad_y=0,
+    *,
+    visible=None,
+    selected=(),
+    labels: bool = True,
+) -> int:
+    """Draw the SAM people of ``frame``: box, foot point and ``ID n · (x, y) m``. Returns how many.
+
+    ``visible`` (optional ``id -> bool``) leaves out the people it refuses, ``selected`` (ids)
+    draws those thicker and ``labels=False`` drops the ``ID n · (x, y) m`` legend. The defaults
+    draw everybody with their legend.
+    """
+
+    def _to_screen(x: float, y: float) -> tuple[int, int]:
+        return int((x * zoom_level) - crop_x + pad_x), int((y * zoom_level) - crop_y + pad_y)
+
+    drawn = 0
+    for person in run.people_at(frame):
+        if visible is not None and not visible(person.id):
+            continue
+        chosen = person.id in selected
+        color = KICK_PERSON_COLORS[int(person.id) % len(KICK_PERSON_COLORS)]
+        bx, by, bw, bh = person.bbox
+        x0, y0 = _to_screen(bx, by)
+        x1, y1 = _to_screen(bx + bw, by + bh)
+        rect = pygame.Rect(x0, y0, max(1, x1 - x0), max(1, y1 - y0))
+        if chosen:  # a white halo around the thick box: the selection reads at a glance
+            pygame.draw.rect(screen, (255, 255, 255), rect.inflate(10, 10), 1)
+        pygame.draw.rect(screen, color, rect, 4 if chosen else 2)
+        foot = _to_screen(person.foot_uv[0], person.foot_uv[1])
+        pygame.draw.circle(screen, color, foot, 7 if chosen else 5)
+        pygame.draw.circle(screen, (0, 0, 0), foot, 7 if chosen else 5, 1)
+        if labels:
+            label = font.render(
+                kick_person_caption(run, frame, person), True, (255, 255, 255), (0, 0, 0)
+            )
+            screen.blit(label, (x0, max(0, y0 - label.get_height() - 2)))
+        drawn += 1
+    return drawn
+
+
+# Pitch-line colour by the source of the frame's camera (same colours as the Kick panel).
+KICK_FIELD_COLOURS = {
+    kick_measure.SOURCE_DLT3D: (84, 204, 104),
+    kick_measure.SOURCE_SOLVED: (242, 212, 72),
+    kick_measure.SOURCE_TRACKED: (110, 190, 240),
+    kick_measure.SOURCE_APPROX: (248, 152, 52),
+}
+
+
+def draw_kick_field(
+    screen, segments, colour, zoom_level, crop_x, crop_y, pad_x=0, pad_y=0, clip=None
+) -> int:
+    """Draw the pitch lines (``[((u0, v0), (u1, v1)), ...]`` in video px) re-projected by the
+    camera of the frame: the calibration check. ``clip`` (a Rect) keeps them inside the video."""
+    prev = screen.get_clip()
+    if clip is not None:
+        screen.set_clip(clip.clip(prev))
+    try:
+        for (u0, v0), (u1, v1) in segments:
+            a = (int(u0 * zoom_level - crop_x + pad_x), int(v0 * zoom_level - crop_y + pad_y))
+            b = (int(u1 * zoom_level - crop_x + pad_x), int(v1 * zoom_level - crop_y + pad_y))
+            pygame.draw.line(screen, colour, a, b, 2)
+    finally:
+        screen.set_clip(prev)
+    return len(segments)
+
+
+def draw_kick_pose(
+    screen, pose, connections, colour, zoom_level, crop_x, crop_y, pad_x=0, pad_y=0, width=2
+) -> int:
+    """Draw a 2D skeleton: ``pose`` ``(n, 2)`` video px (NaN = missing), ``connections`` index
+    pairs. Returns the number of bones drawn."""
+    pts: list[tuple[int, int] | None] = []
+    for u, v in pose:
+        if math.isfinite(u) and math.isfinite(v):
+            pts.append((int(u * zoom_level - crop_x + pad_x), int(v * zoom_level - crop_y + pad_y)))
+        else:
+            pts.append(None)
+    drawn = 0
+    for a, b in connections:
+        if a < len(pts) and b < len(pts) and pts[a] is not None and pts[b] is not None:
+            pygame.draw.line(screen, colour, pts[a], pts[b], width)
+            drawn += 1
+    for pt in pts:
+        if pt is not None:
+            pygame.draw.circle(screen, colour, pt, width + 1)
+    return drawn
+
+
+def kick_person_hit(
+    run, frame: int, vx: float, vy: float, *, visible=None, boxes=True, poses_at=None
+) -> int | None:
+    """Id of the person under the video point ``(vx, vy)``: inside its SAM box (``boxes``) or
+    near its 2D pose (``poses_at`` = ``{id: (n, 2) array}`` of the frame). The smallest box wins
+    when several overlap; None when nobody is there."""
+    best: int | None = None
+    best_area = math.inf
+
+    def consider(pid: int, x0: float, y0: float, x1: float, y1: float) -> None:
+        nonlocal best, best_area
+        if visible is not None and not visible(pid):
+            return
+        area = max(1.0, (x1 - x0) * (y1 - y0))
+        if x0 <= vx <= x1 and y0 <= vy <= y1 and area < best_area:
+            best, best_area = pid, area
+
+    if boxes:
+        for person in run.people_at(frame):
+            bx, by, bw, bh = person.bbox
+            consider(person.id, bx, by, bx + bw, by + bh)
+    for pid, pose in (poses_at or {}).items():
+        ok = np.isfinite(pose).all(axis=1)
+        if ok.any():
+            xs, ys = pose[ok, 0], pose[ok, 1]
+            m = 6.0  # a thin skeleton is hard to hit: a few pixels around it count
+            consider(
+                int(pid),
+                float(xs.min()) - m,
+                float(ys.min()) - m,
+                float(xs.max()) + m,
+                float(ys.max()) + m,
+            )
+    return best
+
+
+def draw_kick_metric_texts(
+    screen, run, frame: int, items, zoom_level, crop_x, crop_y, font, pad_x=0, pad_y=0, *, labels
+) -> int:
+    """Write ``(person_id, text)`` above each person's box (several metrics stack upwards)."""
+    stack: dict[int, int] = {}
+    boxes = {p.id: p.bbox for p in run.people_at(frame)}
+    drawn = 0
+    for pid, text in items:
+        if pid not in boxes:
+            continue
+        bx, by, _bw, _bh = boxes[pid]
+        x0 = int(bx * zoom_level - crop_x + pad_x)
+        y0 = int(by * zoom_level - crop_y + pad_y)
+        surf = font.render(text, True, (255, 255, 255), (0, 90, 90))
+        level = stack.get(pid, 0)
+        stack[pid] = level + 1
+        lift = (surf.get_height() + 2) * (level + 1 + (1 if labels else 0))
+        screen.blit(surf, (x0, max(0, y0 - lift)))
+        drawn += 1
+    return drawn
+
+
 def play_video_with_controls(
     video_path,
     coordinates=None,
@@ -2826,6 +3176,8 @@ def play_video_with_controls(
     freekiki_options: dict | None = None,
     initial_track_csv: str | None = None,
     initial_one_line: dict | None = None,
+    initial_kick_run: str | None = None,
+    initial_calib_frames: str | None = None,
 ):
     if frame_source is not None:
         cap = frame_source
@@ -3081,6 +3433,8 @@ def play_video_with_controls(
     # AI tracking mode variables (interactive frame-by-frame live tracking)
     track_ai_active = False
     live_tracker: Any = None  # AITracker instance
+    # The AI Track folder question is asked at most once per run (cancel = legacy folder).
+    ai_home_declined = False
     live_track_target_marker: int = 0
     live_track_last_frame: int = -1
     track_ai_use_deep: bool = False
@@ -3123,6 +3477,7 @@ def play_video_with_controls(
     # When opening with a dataset (e.g. after F8 switch or --dataset), auto-load project for this video
     switch_to_video = None  # If set, exit and run_getpixelvideo will reopen with this path
     switch_freekiki_run = None  # FreeKiki Load: detect run to open in correction mode after switch
+    switch_kick_run = None  # Kick Measure load: kick_analysis folder to open after the switch
     auto_load_project_done = False
 
     # Feature: Click & Pass
@@ -3136,6 +3491,20 @@ def play_video_with_controls(
     # Checkbox beside MEASURE: draw completed measurement geometry + value badges.
     show_measure_overlay = True
     quickmeasure_session: quickmeasure.QuickMeasureSession | None = None
+    # Kick Measure (--kick-run / Tpl -> K): the opened kick_analysis folder, None otherwise.
+    kick_run_data: kick_measure.KickMeasureRun | None = None
+    # Per-frame calibration installed from a ``*_frames.dlt3d`` / ``.dlt2d`` file (the SAM 3 folder,
+    # --calib-frames, Calib L) or from the kick run: its file, kind and the camera source of
+    # every frame (``approximate`` frames get a HUD warning).
+    frames_calib: dict[str, Any] = {"path": None, "kind": "", "origin": "", "sources": {}}
+    # Kick panel (right column): its state, the 2D poses by frame, caches of what it draws.
+    kick_panel_obj: kick_panel.KickPanel | None = None
+    kick_pose_by_frame: dict[int, dict[int, Any]] = {}
+    kick_pose_conns: list[tuple[int, int]] = []
+    kick_people_info: dict[int, kick_measure.PersonInfo] = {}
+    kick_field_cache: dict[str, Any] = {"frame": None, "segments": []}
+    kick_metric_cache: dict[str, tuple[kick_measure.MetricSeries, dict]] = {}
+    kick_panel_fonts: dict[str, Any] = {}
     # While True, left-clicks feed the active CalibrationDraft / Ref3d draft.
     quick_measure_calibrating = False
     # Pending scope for the in-progress calib draft: None = default (all frames).
@@ -3489,7 +3858,7 @@ def play_video_with_controls(
             "2 = Plane (4 clicks + width/height → DLT2D)\n"
             "3 = REF3D (drop axis → planar DLT2D)\n"
             "4 = REF3D builder -> DLT3D (same as the REF3D button)\n"
-            "L = Load .dlt2d / REF2D / REF3D file\n"
+            "L = Load .dlt2d / per-frame *_frames.dlt3d / REF2D / REF3D file\n"
             "0 = Clear / stay in pixels",
             "1",
         )
@@ -3502,6 +3871,7 @@ def play_video_with_controls(
             session.calibration = None
             session.calibrations_by_frame.clear()
             session.calibration_skipped = True
+            frames_calib.update(path=None, kind="", origin="", sources={})
             return "Calib: cleared — MEASURE stays in PIXELS until you calibrate."
 
         if choice in ("4", "dlt3d", "3d", "ref3d"):
@@ -3520,6 +3890,12 @@ def play_video_with_controls(
                 for index, frame_calib in enumerate(calib):
                     session.set_calibration(frame_calib, frame=index)
                 session.calibration_skipped = False
+                frames_calib.update(
+                    path=calib[0].source,
+                    kind=calib[0].kind,
+                    origin="Calib L",
+                    sources=quickmeasure.read_frame_sources(calib[0].source),
+                )
                 try:
                     out_dir, stem = _media_out_dir_and_stem(frame_count)
                     paths = session.save_session(out_dir, stem=stem)
@@ -3527,6 +3903,16 @@ def play_video_with_controls(
                 except (quickmeasure.QuickMeasureError, OSError) as exc:
                     return f"Calib: {msg} Auto-save failed: {exc}"
                 return f"Calib: {msg}"
+            if calib.kind == "camera3d":
+                # Per-frame DLT3D (``*_frames.dlt3d``): one camera per video frame, the default.
+                text = _install_frames_calibration(calib.source, origin="Calib L", force=True)
+                try:
+                    out_dir, stem = _media_out_dir_and_stem(frame_count)
+                    paths = session.save_session(out_dir, stem=stem)
+                    print(f">> vaila/quickmeasure: calibration saved in {paths['dir']}")
+                except (quickmeasure.QuickMeasureError, OSError) as exc:
+                    return f"Calib: {text or msg} Auto-save failed: {exc}"
+                return f"Calib: {text or msg}"
             scope = _ask_calib_scope()
             if scope is None:
                 return "Calib: cancelled."
@@ -4488,6 +4874,14 @@ def play_video_with_controls(
         try:
             print(f"Loading tracking CSV: {csv_path}")
             df = pd.read_csv(csv_path)
+            # SAM 3 folder with a per-frame calibration: measure in metres right away (only
+            # when the session has no calibration yet; Calib L / --calib-frames replace it).
+            _auto_install_frames_calibration(
+                find_frames_calibration_near_files(
+                    csv_path, Path(video_path).stem if video_path else None
+                ),
+                "SAM 3 folder",
+            )
 
             # Debug: Print CSV info
             print(f"CSV shape: {df.shape}")
@@ -5995,6 +6389,129 @@ def play_video_with_controls(
         save_message_timer = 60
         print(f">> AI Track Deep checkbox: {state_str}")
 
+    def _ai_net_hud(text: str, frames: int = 150) -> None:
+        """One HUD line about the AI Track network (saved, folder, Net window)."""
+        nonlocal save_message_text, showing_save_message, save_message_timer
+        save_message_text = text
+        showing_save_message = True
+        save_message_timer = frames
+
+    def _ai_tracker_prepare(tracker: Any, marker_idx: int) -> None:
+        """New AITracker: say where its human samples come from, load its own checkpoint.
+
+        The checkpoint is per feature space (classic, or <backbone>-<sha8> with Deep), so a
+        Deep session never loads (or overwrites) the classic one. Failures stay silent, as
+        before: the tracker then simply starts without the head start.
+        """
+        tracker.sample_context = {"video": Path(video_path).stem, "marker": int(marker_idx)}
+        try:
+            from vaila.tracking import default_checkpoint_path
+
+            ckpt = default_checkpoint_path(feature_key=tracker.checkpoint_key())
+            if tracker.load_checkpoint(ckpt):
+                print(f">> Track AI: checkpoint loaded: {ckpt}")
+            else:
+                print(f">> Track AI: no checkpoint for this feature space ({ckpt.name}); fresh")
+        except Exception:
+            print(">> Track AI: checkpoint not loaded; starting fresh")
+
+    def _ask_ai_models_home(suggested: Path) -> str | None:
+        """First-time question (Tk): where the AI Track network is kept. None = cancelled."""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog, messagebox
+
+            root = tk.Tk()
+            root.withdraw()
+            try:
+                root.attributes("-topmost", True)
+                messagebox.showinfo(
+                    "AI Track network",
+                    "Choose the folder where the AI Track network is kept "
+                    "(outside vailá, survives reinstalls).\n\n"
+                    f"Suggested: {suggested}",
+                    parent=root,
+                )
+                start = suggested if suggested.exists() else suggested.parent
+                chosen = filedialog.askdirectory(
+                    parent=root,
+                    title="AI Track network folder",
+                    initialdir=str(start),
+                    mustexist=False,
+                )
+            finally:
+                root.destroy()
+            return str(chosen) if chosen else None
+        except Exception as exc:  # no display / no Tk: behave like a cancel
+            print(f">> AI Track: could not ask for the network folder ({exc})")
+            return None
+
+    def _persist_ai_tracker(reason: str) -> str | None:
+        """Retrain and save the AI Track network (checkpoint + human samples) to its folder.
+
+        Called when AI Track goes OFF, on Save, before the Net window opens and when the main
+        loop ends (quit, close, F8 / video switch), so no way out of the window loses what the
+        tracker learned. Returns the checkpoint path (or None when nothing was written); never
+        raises. A tracker without human samples learned nothing: nothing is written and the
+        folder question is not asked.
+        """
+        nonlocal ai_home_declined
+        import builtins
+
+        tracker = live_tracker
+        if tracker is None or not getattr(tracker, "sample_log", None):
+            return None
+        try:
+            if not ai_tracker_store.is_configured() and not ai_home_declined:
+                ai_tracker_store.ensure_home(prompt_fn=_ask_ai_models_home)
+                if not ai_tracker_store.is_configured():
+                    ai_home_declined = True
+            result = tracker.persist()
+            ckpt, samples = result.get("checkpoint"), result.get("samples")
+            if ckpt is None and samples is None:
+                return None
+            line = f">> vaila/getpixelvideo: AI Track saved ({reason}): {ckpt}"
+            if samples is not None:
+                line += f" + samples {Path(samples).name}"
+            builtins.print(line, flush=True)
+            if ai_tracker_store.resolve_home().backed_up:
+                _ai_net_hud(f"AI Track saved ({reason})", 90)
+            else:
+                _ai_net_hud("AI Track saved inside vailá (no backup folder: Net button)")
+            return str(ckpt) if ckpt is not None else None
+        except ValueError as err:  # a chosen folder that cannot be used (unplugged disk...)
+            ai_home_declined = True  # do not ask again in this run
+            builtins.print(f">> vaila/getpixelvideo: AI Track NOT saved ({reason}): {err}")
+            _ai_net_hud(f"AI Track not saved: {err}")
+        except Exception as err:
+            builtins.print(f">> vaila/getpixelvideo: AI Track NOT saved ({reason}): {err!r}")
+            _ai_net_hud(f"AI Track not saved: {err}")
+        return None
+
+    def _open_ai_net_window() -> None:
+        """Net button: save, then open the AI Track network window in its own process."""
+        import builtins
+
+        _persist_ai_tracker("net")
+        argv = [sys.executable, "-m", "vaila.ai_tracker_hub"]
+        mirror = "uv run --no-sync python -m vaila.ai_tracker_hub"
+        try:
+            home = ai_tracker_store.resolve_home()
+        except ValueError:
+            home = None
+        if home is not None and home.source == "cli":  # --ai-models: the window must agree
+            argv += ["--ai-models", str(home.root.parent)]
+            mirror += f" --ai-models {home.root.parent}"
+        argv.append("gui")
+        mirror += " gui"
+        try:
+            subprocess.Popen(argv, cwd=str(Path(__file__).resolve().parent.parent))
+        except OSError as err:
+            _ai_net_hud(f"AI Track network window did not open: {err}")
+            return
+        builtins.print(f">> vaila/ai_tracker_hub: {mirror}", flush=True)
+        _ai_net_hud("AI Track network window opened", 120)
+
     def toggle_track_ai(explicit_state: bool | None = None) -> None:
         """Toggle live AI tracking mode ON/OFF with stateful UI feedback."""
         nonlocal track_ai_active, live_tracker, live_track_target_marker, live_track_last_frame
@@ -6005,17 +6522,7 @@ def play_video_with_controls(
         new_state = (not track_ai_active) if explicit_state is None else bool(explicit_state)
 
         if not new_state:
-            if (
-                live_tracker is not None
-                and getattr(live_tracker, "discriminator_w", None) is not None
-            ):
-                try:
-                    from vaila.tracking import default_checkpoint_path
-
-                    live_tracker.retrain_online_model()
-                    live_tracker.save_checkpoint(default_checkpoint_path())
-                except Exception:
-                    pass
+            _persist_ai_tracker("ai_track_off")
             track_ai_active = False
             live_tracker = None
             # Keep marker_selection_locked as-is. Unlock only via B key or Lock
@@ -6164,12 +6671,7 @@ def play_video_with_controls(
             if track_ai_params is not None and getattr(track_ai_params, "deep_weights_path", ""):
                 params.deep_weights_path = track_ai_params.deep_weights_path
             tracker = AITracker(parameters=params)
-            try:
-                from vaila.tracking import default_checkpoint_path
-
-                tracker.load_checkpoint(default_checkpoint_path())
-            except Exception:
-                pass
+            _ai_tracker_prepare(tracker, target_marker)
 
             # Read anchor frame image
             if anchor_frame == frame_count and last_valid_frame is not None:
@@ -6194,7 +6696,9 @@ def play_video_with_controls(
             # flags the window as "Not Responding" even though nothing is actually hung.
             def _init_reference_and_seed_anchors() -> int:
                 nonlocal frame_count, last_valid_frame
-                tracker.set_reference(anchor_img, anchor_pt)
+                # Existing coordinates (maybe written by the tracker or loaded from a CSV):
+                # train the in-memory model but never log them as human samples.
+                tracker.set_reference(anchor_img, anchor_pt, record_sample=False)
 
                 # Also seed any other known anchor points across the video into the online model!
                 extra_count = 0
@@ -6218,7 +6722,10 @@ def play_video_with_controls(
                                         f_img = None
                                 if f_img is not None:
                                     tracker.add_anchor(
-                                        f_img, (float(pt_k[0]), float(pt_k[1])), f_idx
+                                        f_img,
+                                        (float(pt_k[0]), float(pt_k[1])),
+                                        f_idx,
+                                        record_sample=False,
                                     )
                                     extra_count += 1
 
@@ -6322,17 +6829,24 @@ def play_video_with_controls(
                 try:
                     if hasattr(live_tracker, "update_from_correction"):
                         live_tracker.update_from_correction(
-                            curr_frame_img, (float(pt_sw[0]), float(pt_sw[1])), curr_frame_idx
+                            curr_frame_img,
+                            (float(pt_sw[0]), float(pt_sw[1])),
+                            curr_frame_idx,
+                            record_sample=False,
                         )
                     else:
                         live_tracker.add_anchor(
-                            curr_frame_img, (float(pt_sw[0]), float(pt_sw[1])), curr_frame_idx
+                            curr_frame_img,
+                            (float(pt_sw[0]), float(pt_sw[1])),
+                            curr_frame_idx,
+                            record_sample=False,
                         )
                         live_tracker.retrain_online_model()
                         live_tracker.set_reference(
                             curr_frame_img,
                             (float(pt_sw[0]), float(pt_sw[1])),
                             reset_online=False,
+                            record_sample=False,
                         )
                     live_track_last_frame = curr_frame_idx
                     track_ai_lost_streak = 0
@@ -6353,17 +6867,24 @@ def play_video_with_controls(
                     try:
                         if hasattr(live_tracker, "update_from_correction"):
                             live_tracker.update_from_correction(
-                                curr_frame_img, (float(pt[0]), float(pt[1])), curr_frame_idx
+                                curr_frame_img,
+                                (float(pt[0]), float(pt[1])),
+                                curr_frame_idx,
+                                record_sample=False,
                             )
                         else:
                             live_tracker.add_anchor(
-                                curr_frame_img, (float(pt[0]), float(pt[1])), curr_frame_idx
+                                curr_frame_img,
+                                (float(pt[0]), float(pt[1])),
+                                curr_frame_idx,
+                                record_sample=False,
                             )
                             live_tracker.retrain_online_model()
                             live_tracker.set_reference(
                                 curr_frame_img,
                                 (float(pt[0]), float(pt[1])),
                                 reset_online=False,
+                                record_sample=False,
                             )
                         live_track_last_frame = curr_frame_idx
                         track_ai_lost_streak = 0
@@ -6635,10 +7156,13 @@ def play_video_with_controls(
         selected_marker_idx = 0
 
     def _ask_template_mode() -> str | None:
-        """Open column dialog to pick Free / Soccer-Kiki / FreeKiki / pose presets."""
-        return skeleton_catalog.resolve_dialog_choice(
-            show_input_dialog(skeleton_catalog.format_template_dialog_prompt(), "0")
+        """Open column dialog to pick Free / Soccer-Kiki / FreeKiki / pose presets (K = Kick)."""
+        answer = show_input_dialog(
+            skeleton_catalog.format_template_dialog_prompt() + "\n" + KICK_LOAD_LINE, "0"
         )
+        if answer is not None and str(answer).strip().lower() in ("k", "kick"):
+            return KICK_LOAD_ID
+        return skeleton_catalog.resolve_dialog_choice(answer)
 
     def _cycle_template_mode() -> str | None:
         """Open the Tpl picker dialog and apply. Returns chosen id, or None if cancelled."""
@@ -6648,6 +7172,11 @@ def play_video_with_controls(
             return None
         if chosen == skeleton_catalog.FREEKIKI_LOAD_ID:
             save_message_text = _freekiki_load()
+            showing_save_message = True
+            save_message_timer = 240
+            return "error"  # message already set; callers keep it
+        if chosen == KICK_LOAD_ID:
+            save_message_text = _kick_load()
             showing_save_message = True
             save_message_timer = 240
             return "error"  # message already set; callers keep it
@@ -6883,7 +7412,9 @@ def play_video_with_controls(
         info_x += frame_info.get_width() + 25
         if hover_pixel_xy is not None:
             _px, _py = hover_pixel_xy
-            if (measure_mode or calib_mode) and quickmeasure_session is not None:
+            if (
+                measure_mode or calib_mode or kick_run_data is not None
+            ) and quickmeasure_session is not None:
                 _hover_label = quickmeasure.format_hover_coords(
                     quickmeasure_session, _px, _py, frame=frame_count
                 )
@@ -7103,6 +7634,7 @@ def play_video_with_controls(
         track_deep_check_size = 12 if is_compact else 14
         track_deep_label_w = 30 if is_compact else 36
         track_deep_group_width = track_deep_check_size + 4 + track_deep_label_w
+        track_net_button_width = 30 if is_compact else 34  # Net: AI Track network window
         track_shape_button_width = 44 if is_compact else 52
         track_cfg_button_width = 30 if is_compact else 36
         track_weights_button_width = 44 if is_compact else 52  # Model (.pt/.pth selector)
@@ -7120,6 +7652,7 @@ def play_video_with_controls(
         else:
             open_media_label = "Open"
             open_media_button_width = 40 if is_compact else 50
+        kick_button_width = 58 if is_compact else 66  # Kick SAM: open a kick_analysis folder
 
         # Top row: VISUAL/INSERT + Template + annotation modes + Help
         total_top_width = (
@@ -7156,6 +7689,8 @@ def play_video_with_controls(
             + track_rts_button_width
             + 4
             + track_deep_group_width
+            + 4
+            + track_net_button_width
             + button_gap
             + track_shape_button_width
             + button_gap
@@ -7164,6 +7699,8 @@ def play_video_with_controls(
             + track_weights_button_width
             + button_gap
             + open_media_button_width  # Open / Add video (F8)
+            + button_gap
+            + kick_button_width  # Kick SAM (kick_analysis folder)
             + button_gap
             + button_width  # Load
             + button_gap
@@ -7552,7 +8089,21 @@ def play_video_with_controls(
                 cluster_y_bottom + (button_height - _deep_lbl.get_height()) // 2,
             ),
         )
-        current_x += track_deep_group_width + button_gap
+        current_x += track_deep_group_width + 4
+
+        # Net: opens the AI Track network window (folder, Hugging Face, retrain, versions).
+        track_net_button_rect = pygame.Rect(
+            current_x,
+            cluster_y_bottom,
+            track_net_button_width,
+            button_height,
+        )
+        current_x += track_net_button_width + button_gap
+        pygame.draw.rect(control_surface, (70, 74, 90), track_net_button_rect)
+        track_net_text = btn_font.render("Net", True, (235, 235, 240))
+        control_surface.blit(
+            track_net_text, track_net_text.get_rect(center=track_net_button_rect.center)
+        )
 
         # 4b. Track AI Shape selector button (Point, Circle, Box)
         track_shape_button_rect = pygame.Rect(
@@ -7610,6 +8161,15 @@ def play_video_with_controls(
         control_surface.blit(
             open_media_text, open_media_text.get_rect(center=open_media_button_rect.center)
         )
+
+        # 5c. Kick SAM: pick a kick_analysis folder and measure on the open video
+        kick_button_rect = pygame.Rect(
+            current_x, cluster_y_bottom, kick_button_width, button_height
+        )
+        current_x += kick_button_width + button_gap
+        pygame.draw.rect(control_surface, (40, 120, 120), kick_button_rect)
+        kick_text = btn_font.render("Kick SAM", True, (255, 255, 255))
+        control_surface.blit(kick_text, kick_text.get_rect(center=kick_button_rect.center))
 
         # 6. Load button (Steel blue)
         load_button_rect = pygame.Rect(current_x, cluster_y_bottom, button_width, button_height)
@@ -7721,10 +8281,12 @@ def play_video_with_controls(
                     ("bbox_coords", bbox_coords_button_rect),
                     ("ai_track", track_rts_button_rect),
                     ("ai_deep", track_deep_button_rect),
+                    ("ai_net", track_net_button_rect),
                     ("ai_shape", track_shape_button_rect),
                     ("ai_cfg", track_cfg_button_rect),
                     ("ai_model", track_weights_button_rect),
                     ("open_next" if open_media_carries else "open", open_media_button_rect),
+                    ("kick_sam", kick_button_rect),
                     ("load", load_button_rect),
                     ("save", save_button_rect),
                     ("restore", restore_button_rect),
@@ -7761,6 +8323,7 @@ def play_video_with_controls(
             bbox_coords_button_rect,  # Add BBox to Coords button to return
             track_rts_button_rect,  # AI Track on/off
             track_deep_button_rect,  # Deep checkbox (option for AI Track)
+            track_net_button_rect,  # Net: AI Track network window
             track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
             track_weights_button_rect,  # Track AI Model weights (.pt/.pth) selector
@@ -7777,6 +8340,7 @@ def play_video_with_controls(
             geom_tracker_button_rect,  # Geo Homog: standalone planar homography tracker
             open_media_button_rect,  # Open another video / Add video (F8)
             ref3d_button_rect,  # REF3D builder (Shift+R)
+            kick_button_rect,  # Kick SAM: open a kick_analysis folder
             marker_timeline_rect,
             slider_margin_left,
             slider_y,
@@ -10676,6 +11240,11 @@ def play_video_with_controls(
         except quickmeasure.QuickMeasureError:
             return None
         print(f">> vaila/quickmeasure: saved CSVs in {paths['dir']}")
+        import builtins
+
+        for _kind, _file in paths.items():  # every file written, by path (no soft wrapping)
+            if _kind != "dir":
+                builtins.print(f"   {_kind}: {_file}")
         return paths["dir"]
 
     def _save_markers_csv_smart() -> tuple[str | None, str]:
@@ -10848,6 +11417,7 @@ def play_video_with_controls(
         if choice is None:
             return
 
+        _persist_ai_tracker("save")  # the network is saved with the markers (Ctrl+S / Save)
         choice = choice.strip()
         if choice in ("", "1"):
             if in_freekiki:
@@ -13203,6 +13773,554 @@ def play_video_with_controls(
         switch_to_video, switch_freekiki_run, running = str(video), str(run), False
         return f"Opening {video.name} for correction..."
 
+    def _kick_ball_to_p0() -> int:
+        """Copy the ball track of the kick run into marker p0 (a frame that already has a p0
+        keeps it, so a click or an AI Track result is never overwritten). Returns how many."""
+        nonlocal selected_marker_idx
+        run = kick_run_data
+        n_ball = 0
+        if run is None or not isinstance(coordinates, dict) or not run.ball_uv:
+            return 0
+        for fi, (u, v) in run.ball_uv.items():
+            if not 0 <= int(fi) < total_frames:
+                continue
+            row = coordinates.setdefault(int(fi), [])
+            if not row:
+                row.append((float(u), float(v)))
+            elif row[0] is None or row[0][0] is None or row[0][1] is None:
+                row[0] = (float(u), float(v))
+            else:
+                continue  # a p0 already clicked / loaded: never overwritten
+            n_ball += 1
+        selected_marker_idx = 0
+        _refresh_restore_snapshot()
+        return n_ball
+
+    def _session_has_calibration() -> bool:
+        session = quickmeasure_session
+        return session is not None and (
+            session.calibration is not None or bool(session.calibrations_by_frame)
+        )
+
+    def _install_frames_calibration(path, *, origin: str, force: bool = False) -> str | None:
+        """Install a per-frame calibration file (``*_frames.dlt3d`` camera3d, or ``.dlt2d``).
+
+        Without ``force`` nothing is replaced when the session already has a calibration.
+        Returns the status text (also printed, with the command that repeats it) or ``None``
+        when nothing was installed.
+        """
+        if not force and _session_has_calibration():
+            return None
+        path = Path(path)
+        try:
+            loaded = quickmeasure.load_frames_calibration(path, total_frames=total_frames)
+        except quickmeasure.QuickMeasureError as exc:
+            print(f"Warning: per-frame calibration not loaded ({path}): {exc}")
+            return f"Calib frames not loaded: {exc}"
+        session = _ensure_quickmeasure_session()
+        session.calibration = None
+        session.calibrations_by_frame.clear()
+        calibs = loaded if isinstance(loaded, list) else [loaded]
+        if len(calibs) == 1:
+            session.set_calibration(calibs[0])  # one fixed row / the camera3d track: the default
+        else:
+            for index, frame_calib in enumerate(calibs):
+                session.set_calibration(frame_calib, frame=index)
+        session.calibration_skipped = False
+        sources = quickmeasure.read_frame_sources(path)
+        frames_calib.update(path=str(path), kind=calibs[0].kind, origin=origin, sources=sources)
+        counts: dict[str, int] = {}
+        for src in sources.values():
+            counts[src] = counts.get(src, 0) + 1
+        detail = ", ".join(f"{n} {k}" for k, n in sorted(counts.items()))
+        n_cal = len(calibs) if len(calibs) > 1 else total_frames
+        print(
+            f">> vaila/getpixelvideo: per-frame calibration installed ({origin}): {path} -> "
+            f"{calibs[0].kind} for {n_cal} frames{f' ({detail})' if detail else ''}"
+        )
+        import builtins
+
+        builtins.print(
+            ">> uv run --no-sync vaila/getpixelvideo.py "
+            f"-f {shlex.quote(str(video_path))} --calib-frames {shlex.quote(str(path))}"
+        )
+        n_approx = counts.get(quickmeasure.FRAMES_CAMERA_SOURCES_APPROX, 0)
+        return (
+            f"Calibrated frame by frame ({calibs[0].kind}, {origin}): {path.name}"
+            f"{f' - {n_approx} approx. frames' if n_approx else ''}. MEASURE (Q): keys 1-6 in metres"
+        )
+
+    def _auto_install_frames_calibration(path, origin: str) -> str | None:
+        """Install ``path`` only when the session has no calibration yet (auto-load rules)."""
+        if path is None:
+            return None
+        return _install_frames_calibration(path, origin=origin)
+
+    def _frames_calib_hud(frame: int) -> tuple[str, bool]:
+        """``(text, warning)`` of the per-frame calibration HUD for ``frame``.
+
+        Calibrated frames show the file; frames whose camera is ``approximate`` show a warning
+        (EN/PT from the Help language). Other sources (dlt3d, solved, tracked) need none.
+        """
+        lang = HELP_STATE["lang"]
+        source = frames_calib["sources"].get(int(frame))
+        warn = quickmeasure.approximate_frame_warning(source, lang)
+        if warn:
+            return warn, True
+        if not frames_calib["path"]:
+            return "", False
+        pt = str(lang).lower().startswith("pt")
+        label = "Calibrado por quadro" if pt else "Calibrated per frame"
+        name = Path(frames_calib["path"]).name
+        extra = f" | camera {source}" if source else ""
+        return f"{label}: {name}{extra}", False
+
+    def _load_kick_run(folder) -> str:
+        """Kick Measure: open a kick_analysis folder on this video, ready to measure in metres.
+
+        One ``camera3d`` calibration (the camera of every frame) becomes the default of the
+        Quick Measure session. Nothing else is drawn but the pitch lines (to check the
+        calibration): the Kick panel on the right turns on the boxes, the 2D pose and the ball,
+        picks the metrics and exports; the ball is copied into marker p0 only when asked.
+        """
+        nonlocal kick_run_data, kick_panel_obj, kick_pose_by_frame, kick_pose_conns
+        nonlocal kick_people_info
+        folder = Path(folder)
+        try:
+            camera, cam_note = kick_run_pick_camera(folder, video_path)
+            run = kick_measure.load_kick_measure_run(folder, camera=camera)
+        except (OSError, ValueError, KeyError) as exc:
+            return f"Kick run not loaded: {exc}"
+        session = _ensure_quickmeasure_session()
+        calib = quickmeasure.QuickMeasureCalibration.from_camera_track(
+            run.cameras, source=str(run.run_dir)
+        )
+        session.set_calibration(calib)  # the video default: no frame=, source_frame stays None
+        session.calibration_skipped = False
+        kick_run_data = run
+        # Where the cameras come from: the per-frame file of the SAM 3 folder when there is one.
+        cam_origin = "built from the FreeKiki DLT3D + raw keypoints"
+        finder = getattr(kick_measure, "find_frame_calibration", None)
+        if finder is not None:
+            try:
+                found = finder(run.run_dir / "work" / run.stem, run.stem)
+            except (OSError, ValueError):
+                found = None
+            if found:
+                cam_origin = f"per-frame file {Path(found).name}"
+        frames_calib.update(
+            path=None,
+            kind="camera3d",
+            origin="kick run",
+            sources={int(f): fc.source for f, fc in run.cameras.frames.items()},
+        )
+        poses = kick_measure.load_pose_2d(run)
+        by_frame: dict[int, dict[int, Any]] = {}
+        for (fi, pid), arr in poses.items():
+            by_frame.setdefault(int(fi), {})[int(pid)] = arr
+        kick_pose_by_frame = by_frame
+        kick_pose_conns = kick_measure.pose_connections()
+        kick_people_info = kick_measure.load_people_info(run)
+        counts = run.cameras.counts()
+        kick_panel_obj = kick_panel.KickPanel(
+            [
+                kick_panel.PanelPerson(
+                    id=info.id,
+                    role=info.role,
+                    team=info.team,
+                    first=info.first_frame,
+                    last=info.last_frame,
+                    n=info.n_frames,
+                    has_pose=info.has_pose_2d or info.has_pose_3d,
+                )
+                for info in kick_people_info.values()
+            ],
+            counts,
+            run.n_frames,
+            lang=HELP_STATE["lang"],
+            has_pose=bool(poses),
+            has_ball=bool(run.ball_uv),
+        )
+        kick_metric_cache.clear()
+        kick_field_cache.update(frame=None, segments=[])
+        n_approx = counts.get(kick_measure.SOURCE_APPROX, 0)
+        print(
+            f">> vaila/getpixelvideo: Kick run loaded: {run.run_dir.name} ({camera} camera), "
+            f"calibration camera3d installed for {run.cameras.n_frames} frames {counts} "
+            f"({cam_origin}), "
+            f"ball track {len(run.ball_uv)} frames ({run.ball_source or 'none'}), "
+            f"{run.n_people()} people ids, 2D pose {len({p for _f, p in poses})} ids"
+        )
+        for warning in run.warnings:
+            print(f"Warning: Kick run: {warning}")
+        # Same command line again: copy it to repeat this session from a terminal.
+        import builtins
+
+        builtins.print(
+            ">> uv run --no-sync vaila/getpixelvideo.py "
+            f"--kick-run {shlex.quote(str(run.run_dir))} -f {shlex.quote(str(video_path))}"
+        )
+        text = (
+            f"Kick run ({camera}): camera3d for {run.cameras.n_frames} frames"
+            f"{f', {n_approx} approx.' if n_approx else ''} ({cam_origin}). Check that the pitch "
+            "lines sit on the grass, then follow the Kick panel on the right (2 Layers, 3 Metrics, "
+            "4 Export)"
+        )
+        if cam_note:
+            text = f"{cam_note} | {text}"
+        return text
+
+    def _kick_load() -> str:
+        """Tpl -> K Kick Measure: pick a kick_analysis folder and measure on its camera video."""
+        nonlocal switch_to_video, switch_kick_run, running
+        start = os.path.dirname(video_path) if video_path else os.path.expanduser("~")
+        if sys.platform == "linux":
+            pick = show_file_browser(
+                start,
+                title="Kick Measure: open the kick_analysis folder, then Enter = use this folder",
+                extensions=[".csv", ".txt"],
+                select_dir=True,
+            )
+        else:
+            pick = None
+            try:
+                from tkinter import Tk, filedialog
+
+                root = Tk()
+                root.withdraw()
+                root.attributes("-topmost", True)
+                pick = filedialog.askdirectory(title="kick_analysis folder", initialdir=start)
+                root.destroy()
+            except Exception:
+                pass
+        if not pick:
+            return "Kick Measure Load cancelled"
+        try:
+            camera, cam_note = kick_run_pick_camera(pick, video_path)
+            video = kick_run_video(pick, camera)
+        except (OSError, ValueError, KeyError) as exc:
+            return f"Kick Measure Load: {exc}"
+        if not cam_note:
+            return _load_kick_run(pick)
+        if freekiki_session is not None:
+            _review_sync_all()
+            freekiki_api.save_review_session(freekiki_session)
+        switch_to_video, switch_kick_run, running = str(video), str(pick), False
+        return f"Opening {video.name} to measure the kick..."
+
+    def _kick_update_metrics() -> None:
+        """(Re)compute the series of the metrics the panel lists (cached by request key); a
+        request that cannot be computed is dropped and the reason goes to ``panel.message``."""
+        run, panel = kick_run_data, kick_panel_obj
+        if run is None or panel is None:
+            return
+        keys = {req.key() for req in panel.metrics}
+        for key in [k for k in kick_metric_cache if k not in keys]:
+            del kick_metric_cache[key]
+        for req in list(panel.metrics):
+            key = req.key()
+            if key in kick_metric_cache:
+                continue
+            try:
+                series = kick_measure.metric_series(
+                    run, req.kind, req.person, other=req.other, point=req.point or "pelvis"
+                )
+            except (ValueError, KeyError, OSError) as exc:
+                panel.remove_metric(key)
+                panel.message = str(exc)
+                continue
+            kick_metric_cache[key] = (series, series.summary())
+
+    def _kick_metric_texts(frame: int) -> tuple[dict[str, str], list[tuple[int, str]]]:
+        """``({key: "now 3.12 m/s · max 3.51"}, [(person, "label: 3.12 m/s")])`` of ``frame``."""
+        panel = kick_panel_obj
+        if panel is None:
+            return {}, []
+        now_word, max_word = ("agora", "máx") if panel.lang == "pt" else ("now", "max")
+        panel_text: dict[str, str] = {}
+        on_video: list[tuple[int, str]] = []
+        for req in panel.metrics:
+            entry = kick_metric_cache.get(req.key())
+            if entry is None:
+                continue
+            series, summary = entry
+            value = series.at(frame)
+            now = f"{value:.2f} {series.unit}" if math.isfinite(value) else "—"
+            top = summary.get("max", math.nan)
+            peak = f"{top:.2f}" if isinstance(top, float) and math.isfinite(top) else "—"
+            panel_text[req.key()] = f"{now_word} {now} · {max_word} {peak}"
+            on_video.append((req.person, f"{panel.metric_label(req)}: {now}"))
+        return panel_text, on_video
+
+    def _kick_export(what: str) -> str:
+        """Write the scene (mkvis3d C3D, Blender BVH + script, metrics) of the ticked people
+        into ``<run>/processed_kickmeasure_<stamp>/`` and print the CLI line that repeats it."""
+        run, panel = kick_run_data, kick_panel_obj
+        if run is None or panel is None:
+            return ""
+        people = sorted(panel.selected)
+        if not people:  # nobody ticked: everybody with a 3D pose (the CLI default as well)
+            people = [pid for pid, info in kick_people_info.items() if info.has_pose_3d]
+        do_mkvis3d = what in ("mkvis3d", "all")
+        do_blender = what in ("blender", "all")
+        metrics = list(panel.metrics) if what in ("metrics", "all") else []
+        if what == "metrics" and not metrics:
+            panel.message = "Add a metric in step 3 first"
+            return ""
+        out_dir = run.run_dir / f"processed_kickmeasure_{datetime.now():%Y%m%d_%H%M%S}"
+        try:
+            written = kick_measure.export_scene(
+                run, out_dir, people, metrics=metrics, mkvis3d=do_mkvis3d, blender=do_blender
+            )
+        except (ValueError, OSError, KeyError) as exc:
+            panel.message = f"Export failed: {exc}"
+            return ""
+        panel.last_export = str(out_dir)
+        panel.message = ""
+        cmd = ["uv", "run", "--no-sync", "python", "-m", "vaila.kick_measure"]
+        cmd += ["--run", str(run.run_dir)]
+        if run.camera_name != "reference":
+            cmd += ["--camera", run.camera_name]
+        cmd += ["--export-scene", str(out_dir)]
+        if panel.selected:
+            cmd += ["--people", ",".join(str(pid) for pid in people)]
+        for req in metrics:
+            spec = f"{req.kind}:{req.person}"
+            if req.other is not None:
+                spec += f":{req.other}"
+            elif req.point and req.kind in ("height_kpt", "kpt_speed"):
+                spec += f":{req.point}"
+            cmd += ["--metric", spec]
+        if not do_blender:
+            cmd.append("--no-blender")
+        if not do_mkvis3d:
+            cmd.append("--no-mkvis3d")
+        import builtins
+
+        for key, path in written.items():
+            builtins.print(f">> vaila/getpixelvideo: Kick export {key}: {path}")
+        builtins.print(">> " + shlex.join(cmd))
+        return f"Exported {len(written)} files to {out_dir}"
+
+    def _kick_open(what: str) -> str:
+        """Open the last export in mkvis3d or in Blender (a separate process, never blocks)."""
+        panel = kick_panel_obj
+        if panel is None:
+            return ""
+        import builtins
+
+        last = Path(panel.last_export) if panel.last_export else None
+        if what == "mkvis3d":
+            c3d = last / "kick_scene.c3d" if last else None
+            if c3d is None or not c3d.is_file():
+                panel.message = "Export for mkvis3d first (step 4)"
+                return ""
+            argv = kick_measure.mkvis3d_argv(c3d)
+            if argv is None:
+                panel.message = "mkvis3d not found: set VAILA_MKVIS3D=/path/to/mkvis3d.py"
+                return ""
+            try:
+                subprocess.Popen(argv, start_new_session=True)
+            except OSError as exc:
+                panel.message = f"mkvis3d not started: {exc}"
+                return ""
+            builtins.print(">> " + shlex.join(argv))
+            return "mkvis3d opened with kick_scene.c3d"
+        script = last / "blender" / "kick_scene_blender.py" if last else None
+        if script is None or not script.is_file():
+            panel.message = "Export for Blender first (step 4)"
+            return ""
+        try:
+            from . import blender_viz
+        except ImportError:
+            import blender_viz  # ty: ignore[unresolved-import]
+        exe = blender_viz.find_blender_executable(gui=False)
+        if exe is None:
+            panel.message = "Blender not found: install it or set VAILA_BLENDER=/path/to/blender"
+            return ""
+        try:
+            blender_viz.launch_blender(script, exe)
+        except OSError as exc:
+            panel.message = f"Blender not started: {exc}"
+            return ""
+        return "Blender opened with kick_scene_blender.py"
+
+    def _kick_panel_action(action: tuple[str, ...]) -> str:
+        """React to what ``KickPanel.handle_click`` returned; the text is the status message."""
+        kind = action[0]
+        panel = kick_panel_obj
+        if panel is None:
+            return ""
+        if kind == "measure":
+            if not measure_mode:
+                _toggle_measure_mode()
+            session = _ensure_quickmeasure_session()
+            session.fps = fps
+            try:
+                return session.set_live_mode(action[1]) + " (Q = leave the measure)"
+            except quickmeasure.QuickMeasureError as exc:
+                return f"Measure: {exc}"
+        if kind == "ball_to_p0":
+            n = _kick_ball_to_p0()
+            if n:
+                return f"Ball track copied into marker p0 in {n} frames (AI Track / edit it now)"
+            return "Ball -> p0: nothing to copy (no ball track, or p0 already filled)"
+        if kind == "metrics":
+            _kick_update_metrics()
+            return ""
+        if kind == "export":
+            return _kick_export(action[1])
+        if kind == "open":
+            return _kick_open(action[1])
+        return ""  # consumed / layers / selection: the panel state is read when drawing
+
+    def _measure_view_rect() -> tuple[int, int, int, int]:
+        """Where the video image shows: not the black bars, not under the open Kick panel.
+
+        Quick Measure clips the lines anchored on the pitch to it and puts the edge marker of a
+        spot that left the image on its border.
+        """
+        view = pygame.Rect(
+            int(pad_x - crop_x),
+            int(pad_y - crop_y),
+            int(original_width * zoom_level),
+            int(original_height * zoom_level),
+        ).clip(pygame.Rect(0, 0, window_width, window_height))
+        panel = kick_panel_obj
+        panel_rect = getattr(panel, "_rect", None) if kick_run_data is not None else None
+        if (
+            panel is not None
+            and panel.is_open
+            and panel_rect is not None
+            and view.left < panel_rect.left < view.right
+        ):
+            view.width = panel_rect.left - view.left
+        return view.x, view.y, view.w, view.h
+
+    def _draw_kick_layers() -> None:
+        """Kick run on the video: only the layers the panel switched on (pitch lines first)."""
+        run, panel = kick_run_data, kick_panel_obj
+        if run is None or panel is None:
+            return
+        frame = frame_count
+        geo = {"crop_x": crop_x, "crop_y": crop_y, "pad_x": pad_x, "pad_y": pad_y}
+        if panel.layers.get("field"):
+            if kick_field_cache["frame"] != frame:
+                kick_field_cache.update(
+                    frame=frame, segments=kick_measure.field_segments_px(run, frame)
+                )
+            draw_kick_field(
+                screen,
+                kick_field_cache["segments"],
+                KICK_FIELD_COLOURS.get(run.cameras.source(frame), (255, 255, 255)),
+                zoom_level,
+                clip=pygame.Rect(  # the image itself, not the black bars around it
+                    int(pad_x - crop_x),
+                    int(pad_y - crop_y),
+                    int(original_width * zoom_level),
+                    int(original_height * zoom_level),
+                ).clip(pygame.Rect(0, 0, window_width, window_height)),
+                **geo,
+            )
+        if panel.layers.get("boxes"):
+            draw_kick_people(
+                screen,
+                run,
+                frame,
+                zoom_level,
+                geo["crop_x"],
+                geo["crop_y"],
+                font,
+                pad_x=pad_x,
+                pad_y=pad_y,
+                visible=panel.person_visible,
+                selected=panel.selected,
+                labels=bool(panel.layers.get("labels")),
+            )
+        if panel.layers.get("pose"):
+            for pid, pose in kick_pose_by_frame.get(frame, {}).items():
+                if panel.person_visible(pid):
+                    draw_kick_pose(
+                        screen,
+                        pose,
+                        kick_pose_conns,
+                        KICK_PERSON_COLORS[pid % len(KICK_PERSON_COLORS)],
+                        zoom_level,
+                        width=3 if pid in panel.selected else 2,
+                        **geo,
+                    )
+        if panel.layers.get("ball") and frame in run.ball_uv:
+            bu, bv = run.ball_uv[frame]
+            centre = (
+                int(bu * zoom_level - crop_x + pad_x),
+                int(bv * zoom_level - crop_y + pad_y),
+            )
+            pygame.draw.circle(screen, (0, 0, 0), centre, 12, 4)
+            pygame.draw.circle(screen, (255, 255, 255), centre, 11, 2)
+        _texts, on_video = _kick_metric_texts(frame)
+        if on_video:
+            draw_kick_metric_texts(
+                screen,
+                run,
+                frame,
+                on_video,
+                zoom_level,
+                geo["crop_x"],
+                geo["crop_y"],
+                font,
+                pad_x=pad_x,
+                pad_y=pad_y,
+                labels=bool(panel.layers.get("boxes") and panel.layers.get("labels")),
+            )
+
+    def _draw_kick_panel() -> None:
+        """The Kick panel docked on the right of the video, over it."""
+        run, panel = kick_run_data, kick_panel_obj
+        if run is None or panel is None:
+            return
+        panel.lang = "pt" if HELP_STATE["lang"] == "pt" else "en"
+        if "panel" not in kick_panel_fonts:
+            kick_panel_fonts["panel"] = pygame.font.SysFont("verdana,arial,helvetica", 12)
+        texts, _on_video = _kick_metric_texts(frame_count)
+        rect = panel.panel_rect(window_width, window_height)
+        if panel.is_open:  # the panel paints a translucent veil: opaque below it, so boxes and
+            pygame.draw.rect(screen, (16, 20, 26), rect)  # labels of the video never show through
+        panel.draw(
+            screen,
+            rect,
+            kick_panel_fonts["panel"],
+            frame=frame_count,
+            frame_source=run.cameras.source(frame_count),
+            metric_text=texts,
+        )
+
+    kick_hud_cache: dict = {"key": None, "series": None}
+
+    def _kick_series_hud(frame: int) -> str:
+        """Mode 8: s, z, v, a of the ball of the current frame (blank in any other mode)."""
+        session = quickmeasure_session
+        if session is None or session.active_mode != "lineplane" or not session.plane_ready:
+            return ""
+        key = (len(session.results), session.fps)
+        if kick_hud_cache["key"] != key:
+            try:
+                series = session.lineplane_series()
+            except quickmeasure.QuickMeasureError:
+                series = None
+            kick_hud_cache.update(key=key, series=series)
+        series = kick_hud_cache["series"]
+        if series is None:
+            return "Line plane: click the ball in 2 frames for s, z, v, a"
+        row = series[series["frame"] == frame]
+        if row.empty:
+            return f"Line plane: frame {frame} is outside the clicked frames"
+        r = row.iloc[0]
+        text = (
+            f"Frame {frame}: s {r['s']:.2f} m  z {r['z']:.2f} m  "
+            f"v {r['speed']:.1f} m/s  a {r['accel']:.1f} m/s²"
+        )
+        return text if bool(r["clicked"]) else text + " (interpolated)"
+
     review_hints_memo: dict = {"key": None, "hints": None}
     # Discarded review frames (X) are hidden from navigation; Shift+X shows them again.
     review_nav: dict = {"show_discarded": False, "last_frame": frame_count}
@@ -13256,6 +14374,28 @@ def play_video_with_controls(
 
     if initial_track_csv:
         load_tracking_csv(preset_path=initial_track_csv)
+
+    if initial_kick_run:
+        save_message_text = _load_kick_run(initial_kick_run)
+        showing_save_message = True
+        save_message_timer = 300
+
+    # Per-frame calibration: the explicit file wins; otherwise a SAM 3 / kick run file of this
+    # video, found without scanning deep trees. Nothing is replaced when a calibration exists.
+    if initial_calib_frames:
+        _msg = _install_frames_calibration(
+            initial_calib_frames, origin="--calib-frames", force=True
+        )
+    elif not _session_has_calibration():
+        _msg = _auto_install_frames_calibration(
+            find_frames_calibration_for_video(video_path), "next to the video / kick run"
+        )
+    else:
+        _msg = None
+    if _msg:
+        save_message_text = _msg
+        showing_save_message = True
+        save_message_timer = 300
 
     if freekiki_session is not None:
         if (
@@ -13935,7 +15075,34 @@ def play_video_with_controls(
                 pad_x=pad_x,
                 pad_y=pad_y,
                 show_results=show_measure_overlay,
+                frame=frame_count,
+                lang=HELP_STATE["lang"],
+                view_rect=_measure_view_rect(),
             )
+
+        # Kick Measure: only the layers the Kick panel switched on (pitch lines at the start),
+        # then the series HUD of mode 8.
+        if kick_run_data is not None:
+            _draw_kick_layers()
+        if kick_run_data is not None and quickmeasure_session is not None:
+            _kick_hud = _kick_series_hud(frame_count)
+            if _kick_hud:
+                _hud_surf = font.render(_kick_hud, True, (255, 255, 255), (0, 0, 0))
+                screen.blit(_hud_surf, (8, max(0, window_height - _hud_surf.get_height() - 6)))
+        else:
+            _kick_hud = ""
+
+        # Per-frame calibration: which file calibrates the video, and a warning on frames whose
+        # camera is only approximate (copied from another frame).
+        _fc_text, _fc_warn = _frames_calib_hud(frame_count)
+        if _fc_text:
+            _fc_surf = font.render(
+                _fc_text, True, (255, 200, 120) if _fc_warn else (160, 235, 170), (0, 0, 0)
+            )
+            _fc_y = window_height - _fc_surf.get_height() - 6
+            if _kick_hud:
+                _fc_y -= _fc_surf.get_height() + 4
+            screen.blit(_fc_surf, (8, max(0, _fc_y)))
 
         # Calibration-first overlay: clicked calibration points + next step.
         if calib_mode and quick_measure_calibrating and quickmeasure_draft is not None:
@@ -13972,6 +15139,8 @@ def play_video_with_controls(
         else:
             hover_pixel_xy = None
 
+        _draw_kick_panel()
+
         (
             template_button_rect,
             marker_mode_button_rect,
@@ -13994,6 +15163,7 @@ def play_video_with_controls(
             bbox_coords_button_rect,  # Add BBox to Coords button to return
             track_rts_button_rect,  # AI Track on/off
             track_deep_button_rect,  # Deep checkbox (option for AI Track)
+            track_net_button_rect,  # Net: AI Track network window
             track_shape_button_rect,  # Track AI Shape selector (Point/Circle/Box)
             track_cfg_button_rect,  # Track AI TOML configuration dialog
             track_weights_button_rect,  # Track AI Model weights (.pt/.pth) selector
@@ -14010,6 +15180,7 @@ def play_video_with_controls(
             geom_tracker_button_rect,  # Geo Homog: standalone planar homography tracker
             open_media_button_rect,  # Open another video / Add video (F8)
             ref3d_button_rect,  # REF3D builder (Shift+R)
+            kick_button_rect,  # Kick SAM: open a kick_analysis folder
             marker_timeline_rect,
             slider_x,
             slider_y,
@@ -14560,6 +15731,8 @@ def play_video_with_controls(
                         pygame.K_KP7,
                         pygame.K_KP8,
                         pygame.K_KP9,
+                        pygame.K_COMMA,
+                        pygame.K_PERIOD,
                     )
                 ):
                     key_map = {
@@ -14583,6 +15756,8 @@ def play_video_with_controls(
                         pygame.K_KP7: "7",
                         pygame.K_KP8: "8",
                         pygame.K_KP9: "9",
+                        pygame.K_COMMA: ",",
+                        pygame.K_PERIOD: ".",
                     }
                     quickmeasure_session.fps = fps
                     try:
@@ -14599,7 +15774,7 @@ def play_video_with_controls(
                     event.key == pygame.K_RETURN
                     and measure_mode
                     and quickmeasure_session is not None
-                    and quickmeasure_session.active_mode == "area"
+                    and quickmeasure_session.active_mode in ("area", "spin", "arc")
                     and quickmeasure_session.draft_points
                 ):
                     quickmeasure_session.fps = fps
@@ -15231,6 +16406,59 @@ def play_video_with_controls(
                         showing_save_message = True
                         save_message_timer = 60
                     continue
+                if kick_panel_obj is not None and kick_run_data is not None and y < window_height:
+                    # Kick panel: its buttons, its list wheel, and a click on a player.
+                    _kp = kick_panel_obj
+                    if _kp.panel_rect(window_width, window_height).collidepoint(x, y):
+                        if event.button == 1:
+                            _kick_act = _kp.handle_click((x, y))
+                            if _kick_act is not None:
+                                _kick_msg = _kick_panel_action(_kick_act)
+                                if _kick_msg:
+                                    save_message_text = _kick_msg
+                                    showing_save_message = True
+                                    save_message_timer = 240
+                        # Buttons 4/5 are the legacy twin of MOUSEWHEEL (which scrolls the panel):
+                        # swallowed here so the list does not scroll twice and nothing zooms.
+                        continue
+                    if (
+                        event.button == 1
+                        and _kp.step in (2, 3)
+                        and (_kp.layers.get("boxes") or _kp.layers.get("pose"))
+                        and not measure_mode
+                        and not calib_mode
+                    ):
+                        _kvx, _kvy = screen_to_video_coords(
+                            x,
+                            y,
+                            zoom_level=zoom_level,
+                            crop_x=crop_x,
+                            crop_y=crop_y,
+                            pad_x=pad_x,
+                            pad_y=pad_y,
+                        )
+                        _khit = kick_person_hit(
+                            kick_run_data,
+                            frame_count,
+                            _kvx,
+                            _kvy,
+                            visible=_kp.person_visible,
+                            boxes=bool(_kp.layers.get("boxes")),
+                            poses_at=(
+                                kick_pose_by_frame.get(frame_count, {})
+                                if _kp.layers.get("pose")
+                                else None
+                            ),
+                        )
+                        if _khit is not None:
+                            _kp.toggle_person(_khit)
+                            save_message_text = (
+                                f"ID {_khit} {'selected' if _khit in _kp.selected else 'unselected'}"
+                                f" ({len(_kp.selected)} selected)"
+                            )
+                            showing_save_message = True
+                            save_message_timer = 60
+                            continue
                 # Toolbar / control panel: primary (left) button only — ignore
                 if freekiki_session is not None and event.button in (1, 3):
                     if event.button == 1 and any(
@@ -15258,6 +16486,11 @@ def play_video_with_controls(
                     rel_y = y - window_height
                     if open_media_button_rect.collidepoint(x, rel_y):
                         open_another_media()
+                    elif kick_button_rect.collidepoint(x, rel_y):
+                        # Kick SAM: same as Tpl -> K, without the Tpl dialog
+                        save_message_text = _kick_load()
+                        showing_save_message = True
+                        save_message_timer = 240
                     elif load_button_rect.collidepoint(x, rel_y):
                         # Carregar novo arquivo
                         if editor_mode == "insert":
@@ -15465,6 +16698,8 @@ def play_video_with_controls(
                             toggle_track_ai()
                     elif track_deep_button_rect.collidepoint(x, rel_y):
                         toggle_track_ai_deep()
+                    elif track_net_button_rect.collidepoint(x, rel_y):
+                        _open_ai_net_window()
                     elif track_shape_button_rect.collidepoint(x, rel_y):
                         if track_ai_shape == "point":
                             track_ai_shape = "circle"
@@ -15833,14 +17068,7 @@ def play_video_with_controls(
                                                 track_ai_params.deep_weights_path
                                             )
                                         tracker = AITracker(parameters=params)
-                                        try:
-                                            from vaila.tracking import (
-                                                default_checkpoint_path,
-                                            )
-
-                                            tracker.load_checkpoint(default_checkpoint_path())
-                                        except Exception:
-                                            pass
+                                        _ai_tracker_prepare(tracker, placed_marker_idx)
                                         tracker.set_reference(
                                             frame, (video_x, video_y), frame_idx=frame_count
                                         )
@@ -16069,12 +17297,7 @@ def play_video_with_controls(
                                     params.deep_weights_path = track_ai_params.deep_weights_path
                                 if live_tracker is None:
                                     tracker = AITracker(parameters=params)
-                                    try:
-                                        from vaila.tracking import default_checkpoint_path
-
-                                        tracker.load_checkpoint(default_checkpoint_path())
-                                    except Exception:
-                                        pass
+                                    _ai_tracker_prepare(tracker, target_idx)
                                     tracker.set_reference(
                                         frame,
                                         (float(marker_xy[0]), float(marker_xy[1])),
@@ -16264,6 +17487,10 @@ def play_video_with_controls(
                     paused = True
 
             elif event.type == pygame.MOUSEWHEEL:
+                if kick_panel_obj is not None and kick_panel_obj.handle_wheel(
+                    pygame.mouse.get_pos(), int(event.y)
+                ):
+                    continue  # the wheel over the Kick panel scrolls its lists, no zoom
                 # Zoom on Scroll
                 # event.y > 0 means scroll up (zoom in)
                 # event.y < 0 means scroll down (zoom out)
@@ -16352,6 +17579,10 @@ def play_video_with_controls(
             # Se em reprodução, limitamos à taxa de FPS do vídeo
             clock.tick(fps)
 
+    # Every way out of the window (quit, Esc, close, F8 / video switch, kick or FreeKiki
+    # switch) lands here: save what AI Track learned even if it is still ON (defect 2).
+    _persist_ai_tracker("exit")
+
     if switch_to_video:
         if freekiki_session is not None:
             freekiki_api.save_review_session(freekiki_session)
@@ -16380,6 +17611,7 @@ def play_video_with_controls(
             labeling_mode,
             switch_freekiki_run,
             carried_one_line,
+            switch_kick_run,
         )
 
     cap.release()
@@ -19512,6 +20744,8 @@ def run_getpixelvideo(
     freekiki_options: dict | None = None,
     initial_track_csv: str | None = None,
     initial_one_line_csv: str | None = None,
+    initial_kick_run: str | None = None,
+    initial_calib_frames: str | None = None,
 ):
     # Print the script version and directory
     print(f"Running script: {Path(__file__).name}")
@@ -19606,10 +20840,15 @@ def run_getpixelvideo(
             freekiki_options=freekiki_options,
             initial_track_csv=initial_track_csv,
             initial_one_line=initial_one_line,
+            initial_kick_run=initial_kick_run,
+            initial_calib_frames=initial_calib_frames,
         )
+        initial_calib_frames = None  # an explicit calibration file is for the first video only
         initial_track_csv = None  # the preset track is for the first video only
         # F8 with 1-line on hands the points over to the next video.
         initial_one_line = result[5] if result and len(result) > 5 else None
+        # Tpl -> K: the folder to measure on the video opened next (None for a plain F8).
+        initial_kick_run = result[6] if result and len(result) > 6 else None
         # F8 "Open another video" returns (switch_video, new_path, current_dataset_dir, labeling_mode)
         if result and len(result) >= 3 and result[0] == "switch_video":
             if len(result) > 4 and result[4]:
@@ -19680,7 +20919,14 @@ if __name__ == "__main__":
             "  --freekiki-export-mode MODE  Default export mode: full (all frames) or only_correct\n"
             "  --freekiki-videos DIR  Review videos in a folder\n"
             "  --freekiki-run DIR  FreeKiki Load: open a freekiki detect run/batch folder (finds the video)\n"
+            "  --kick-run DIR  Kick Measure: open a FreeKiki kick_analysis folder to measure on its video\n"
+            "                  (with -f VIDEO: that camera; without: the reference camera)\n"
+            "  --calib-frames PATH  Per-frame calibration: a <stem>_frames.dlt3d (camera of every frame,\n"
+            "                  metres + heights) or <stem>_frames.dlt2d written next to the SAM 3 outputs;\n"
+            "                  also loaded by itself from the SAM 3 folder / kick_analysis_*/work\n"
             "  --track-csv PATH  Load a tracking CSV at start-up (no dialog), e.g. a FreeKiki ball track\n"
+            "  --ai-models DIR  Folder where the AI Track network is kept (beats VAILA_AI_MODELS_HOME);\n"
+            "                  the Net button opens its window (python -m vaila.ai_tracker_hub gui)\n"
             "  --one-line CSV  Open in 1-line mode with the points of a *_markers_1_line.csv and add\n"
             "                  to them (build one DLT calibration row over several videos; F8 = next)\n"
             "  --export-bbox-coords PATH  Convert bbox tracking/contours to five coordinate CSVs and exit\n"
@@ -19688,6 +20934,16 @@ if __name__ == "__main__":
             "Full options are documented in the module docstring (top of getpixelvideo.py)."
         )
         raise SystemExit(0)
+
+    if "--ai-models" in sys.argv:
+        pos = sys.argv.index("--ai-models")
+        if pos + 1 >= len(sys.argv) or sys.argv[pos + 1].startswith("-"):
+            raise SystemExit("--ai-models requires a folder")
+        ai_tracker_store.set_session_home(sys.argv[pos + 1])
+        try:
+            ai_tracker_store.resolve_home()  # creates the folder now: a bad path stops here
+        except ValueError as exc:
+            raise SystemExit(f"--ai-models: {exc}") from exc
 
     if "--export-bbox-coords" in sys.argv:
         idx = sys.argv.index("--export-bbox-coords")
@@ -19885,6 +21141,26 @@ if __name__ == "__main__":
         if not os.path.isfile(initial_one_line_csv):
             raise SystemExit(f"--one-line file not found: {initial_one_line_csv}")
 
+    initial_kick_run = None
+    if "--kick-run" in sys.argv:
+        pos = sys.argv.index("--kick-run")
+        if pos + 1 >= len(sys.argv) or sys.argv[pos + 1].startswith("-"):
+            raise SystemExit("--kick-run requires a kick_analysis folder")
+        initial_kick_run = sys.argv[pos + 1]
+        if initial_media_path is None:  # no -f: the reference camera video of the run
+            try:
+                kick_video = kick_run_video(initial_kick_run)
+            except (OSError, ValueError, KeyError) as exc:
+                raise SystemExit(f"--kick-run: {exc}") from exc
+            resolved_path, resolved_type, resolved_start = classify_media_path(str(kick_video))
+            if not (resolved_path and resolved_type):
+                raise SystemExit(f"--kick-run: video not usable: {kick_video}")
+            initial_media_path = resolved_path
+            initial_source_type = resolved_type
+            initial_start_frame = resolved_start
+
+    initial_calib_frames = parse_calib_frames_arg(sys.argv)
+
     run_getpixelvideo(
         initial_dataset_dir=initial_dataset_dir,
         initial_media_path=initial_media_path,
@@ -19894,4 +21170,6 @@ if __name__ == "__main__":
         freekiki_options=freekiki_options,
         initial_track_csv=initial_track_csv,
         initial_one_line_csv=initial_one_line_csv,
+        initial_kick_run=initial_kick_run,
+        initial_calib_frames=initial_calib_frames,
     )

@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.17
+Version: 0.4.19
 Created: 27 October 2026
-Update Date: 12 November 2026
+Update Date: 24 November 2026
 
 Description:
     Every text the report, its figures, its animation and its interactive editor show outside
@@ -200,6 +200,10 @@ _STRINGS: dict[str, dict[str, str]] = {
         "contact_limit_first_frame": (
             "<b>O chute é o primeiro quadro do vídeo ou acontece logo antes.</b> A saída da bola tem "
             "até um quadro de incerteza, e não há bola antes do contato para medir."
+        ),
+        "contact_limit_feet": (
+            "<b>O contato foi lido nos pés do batedor</b>: o último quadro com a bola junto ao pé dele, "
+            "seguido de afastamento e de mudança brusca da velocidade da bola. A incerteza é de um quadro."
         ),
         "contact_limit_manual": "<b>O quadro do contato foi informado à mão.</b>",
         "contact_limit_rest": "<b>O contato é o primeiro quadro em que a bola deixa o repouso.</b>",
@@ -691,6 +695,11 @@ _STRINGS: dict[str, dict[str, str]] = {
         "contact_limit_first_frame": (
             "<b>The kick is the first frame of the video or just before it.</b> The launch is uncertain "
             "by up to one frame, and there is no ball before the contact to measure."
+        ),
+        "contact_limit_feet": (
+            "<b>The contact was read at the kicker's feet</b>: the last frame with the ball next to his "
+            "foot, followed by the ball moving away and a sharp change of its speed. It is uncertain "
+            "by one frame."
         ),
         "contact_limit_manual": "<b>The contact frame was given by hand.</b>",
         "contact_limit_rest": "<b>The contact is the first frame in which the ball leaves its rest.</b>",

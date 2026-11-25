@@ -1,10 +1,9 @@
 # Train AI Tracker
 
-Version: 0.4.4  
-Updated: 2026-09-18
+Version: 0.4.19  
+Updated: 24 November 2026
 
-Offline fine-tuning for *vailá* Track AI assets under `vaila/models/ai_tracker/`,
-using YOLO datasets produced by **getpixelvideo → Save ML**.
+Offline fine-tuning for *vailá* Track AI assets, using YOLO datasets produced by **getpixelvideo → Save ML**, or the points you clicked while AI Track was on (`--from-samples`, see below). The assets live in the AI Track folder (`<home>/ai_tracker/`; see [ai_tracker_models](ai_tracker_models.md)). If no folder was chosen, the old `vaila/models/ai_tracker/` is used.
 
 ## Goal
 
@@ -40,12 +39,49 @@ uv run --no-sync python -m vaila.ai_tracker_train \
 
 Outputs:
 
-- `vaila/models/ai_tracker/{variant}_finetuned_YYYYMMDD_HHMMSS.pth`
-- `vaila/models/ai_tracker/discriminator_<profile>.npz`
+- `<home>/ai_tracker/backbones/{variant}_finetuned_YYYYMMDD_HHMMSS.pth`
+- `<home>/ai_tracker/discriminators/discriminator_<profile>__<key>.npz`
 
 Never overwrites `*_imagenet.pth` automatically. Load the finetuned `.pth` in
 getpixelvideo Track AI (Deep / Cfg / browse). Discriminator profiles load via
 the existing Track AI checkpoint path.
+
+## Retrain from your own clicks (`--from-samples`)
+
+AI Track keeps the points you click while it is on (only mouse clicks) as samples in
+`<home>/ai_tracker/samples/`. `--from-samples ROOT` (ROOT = the `<home>/ai_tracker` folder)
+retrains from them. The **Retrain (GPU)** button of the Net window in getpixelvideo runs the
+same command.
+
+```bash
+uv run --no-sync python -m vaila.ai_tracker_train \
+  --from-samples ~/vaila_ai_models/ai_tracker --mode both --device auto
+uv run --no-sync python -m vaila.ai_tracker_train --from-samples ~/vaila_ai_models/ai_tracker --dry-run
+```
+
+- **Backbone:** a marker / background classifier on the context crops. By default only the last
+  stage plus a new 2-class head is trained (`--unfreeze last`); `--unfreeze all` trains the whole
+  network. Defaults: 5 epochs, batch 32, learning rate 1e-4. Needs at least 40 training samples
+  (`--min-samples`).
+- **Hold-out and activation rule:** with samples from two or more videos, whole videos are held
+  out (about `--val-fraction`, default 0.2); with one video, the last block of frames is. The
+  measure is the held-out ROC AUC of a discriminator trained on the train split with the live
+  tracker features, with the old backbone (before) and the new one (after). The new backbone is
+  saved as `backbones/<variant>_finetuned_<time>.pth` and becomes active in `manifest.json`
+  only if after >= before. Otherwise it stays on disk, the old backbone stays active and the
+  status is `kept_previous`.
+- **Discriminators:** rebuilt on all samples with the same features the live tracker uses (808
+  classic values, plus the deep embedding of the active backbone), so AI Track loads them. This
+  fixes the old offline file of 2048 values that the live tracker never loaded. A classic (808)
+  one is written too.
+- **Device rule:** `--device auto` (default) uses CUDA only if at least 3 GiB are free, else the
+  CPU. `cpu` and `cuda` force one.
+- **Result:** `manifest.json` gets `last_retrain` (status `activated`, `kept_previous` or
+  `error`, mode, variant, device, number of samples and videos, metric before and after, reason,
+  log). The log is `<ROOT>/logs/retrain_<time>.log`. Exit code 0 = finished, activated or not.
+- Other options: `--variant`, `--weights`, `--profile`, `--seed`, `--ai-models DIR`.
+
+Next step: send the result to Hugging Face or restore a version, see [ai_tracker_models](ai_tracker_models.md).
 
 ## Notes
 

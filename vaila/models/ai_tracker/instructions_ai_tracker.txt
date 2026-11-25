@@ -1,29 +1,46 @@
-# AI Tracker Discriminator Checkpoints & Weights
+# AI Tracker network: where it lives (vaila 0.4.19)
 
-This directory is the sole canonical local location for the AI Tracker
-(getpixelvideo.py):
+The learned AI Track network (online discriminators, fine-tuned backbones and the
+human-placed training samples) is kept in a folder YOU choose, outside the vaila install,
+so deleting or reinstalling vaila does not lose it.
 
-  - Online-discriminator checkpoints: discriminator_<profile>.npz
-    (default: discriminator_default.npz). Updated across sessions (JIT /
-    transfer learning); kept local to the user/machine.
-  - Offline-trained discriminator: same naming via Markerless 2D →
-    Train AI Tracker (vaila/ai_tracker_train.py) using getpixelvideo Save ML
-    datasets (pose or detect).
-  - Backbone ImageNet weights (scientist-visible, reusable, retrainable):
-      resnet50_imagenet.pth          (default primary)
-      resnet152_imagenet.pth         (optional)
-      mobilenet_v3_small_imagenet.pth (optional, CPU-friendly)
-      efficientnet_b0_imagenet.pth   (optional, CPU-friendly)
-  - Fine-tuned backbones from Train AI Tracker:
-      {variant}_finetuned_YYYYMMDD_HHMMSS.pth
-    Load these in Track AI (Deep / browse) like any other local .pth.
+Choosing the folder (first match wins):
+  1. getpixelvideo --ai-models DIR
+  2. environment variable VAILA_AI_MODELS_HOME
+  3. ~/.vaila/ai_models.json  ({"home": "/abs/path"}, written when you choose in the GUI)
+  4. this legacy folder, vaila/models/ai_tracker/ (no backup outside the checkout)
+
+Layout of <home>/ai_tracker/ :
+  manifest.json      active backbone, sha256 of every file, n_samples, Hugging Face sync info
+  README.txt
+  backbones/         {variant}_finetuned_YYYYMMDD_HHMMSS.pth  (from Train AI Tracker)
+  discriminators/    discriminator_<profile>__<key>.npz
+                       key = classic            (808 classical features)
+                           = <variant>-<sha8>   (808 + deep backbone; sha8 = first 8 hex
+                                                 digits of the backbone .pth sha256)
+  samples/           <session timestamp>_<video stem>.npz  (points you placed by hand;
+                     local only, never uploaded)
+  history/<file>/    up to 10 previous versions of each file (every save is atomic)
+  logs/
+
+A discriminator is tied to its feature space: a Deep checkpoint is never overwritten by a
+Deep-off session and is never loaded by a tracker whose backbone file differs.
+
+This legacy folder still holds the OFFICIAL ImageNet weights (re-downloadable, never copied
+to your home):
+  resnet50_imagenet.pth          (default primary)
+  resnet152_imagenet.pth         (optional)
+  mobilenet_v3_small_imagenet.pth (optional, CPU-friendly)
+  efficientnet_b0_imagenet.pth   (optional, CPU-friendly)
+Flat discriminator_<profile>.npz files left here by older versions are COPIED (never moved)
+into discriminators/ under the right key when you choose a home.
 
 When Deep NN is enabled and a variant has no file here, getpixelvideo prompts:
   1 = Browse an existing .pth/.pt
   2 = Download a clean official torchvision ImageNet checkpoint into THIS folder
 
 Torch hub cache (~/.cache/torch/hub/checkpoints/) is never the permanent home.
-If a matching file is found only there, vailá copies it here once and prints the
+If a matching file is found only there, vaila copies it here once and prints the
 destination path so the weights stay easy to find on Linux, macOS, and Windows.
 
 Do not commit large weights or user-specific .npz models to git

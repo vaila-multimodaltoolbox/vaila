@@ -8,9 +8,9 @@ https://github.com/vaila-multimodaltoolbox/vaila
 Please see AUTHORS for contributors.
 
 Author: Paulo Santiago
-Version: 0.4.10
+Version: 0.4.19
 Created: 06 September 2026
-Last Updated: 19 October 2026
+Update Date: 24 November 2026
 ================================================================================
 Description:
     Kinovea-style on-image calibration and measurements for `getpixelvideo.py`.
@@ -21,8 +21,11 @@ Description:
     **per-frame** overrides; measures resolve ``frame → override → default``.
 
     Calibration modes now: ``line``, ``plane`` (DLT2D), ``ref3d`` (drop one
-    world axis → planar DLT2D). Future: ``dlt3d`` (11 params); when one world
-    axis is held at 0 that model is usable as planar 2D — not implemented yet.
+    world axis → planar DLT2D) and ``camera3d`` (one 3x4 camera per video frame
+    from ``vaila.kick_measure.CameraTrack``: a pixel becomes a point on the
+    pitch grass of *its own frame*, so modes 1–6 give real metres in any frame
+    of a ``kick_analysis_*`` folder). Future: ``dlt3d`` (11 params); when one
+    world axis is held at 0 that model is usable as planar 2D — not implemented yet.
 
     After ``MEASURE`` is on (and optionally calibrated):
       ``1`` distance   — 2 clicks → line + length label (repeat for more pairs)
@@ -31,7 +34,20 @@ Description:
       ``4`` velocity   — 2 clicks on different frames (needs FPS)
       ``5`` acceleration — 3 clicks on distinct frames (needs FPS)
       ``6`` level      — laser-style H+V crosshair + axis-snapped tape (2 clicks)
-      ``7``–``0``      — reserved
+      ``7`` height     — 2 clicks, same frame: base on the grass, top (needs ``camera3d``)
+      ``8`` plane line — 2 clicks on the grass (kick → arrival) fix a vertical plane; every
+                         click after that gives the ball's distance along the line ``s`` and
+                         height ``z`` in that plane, plus 3D speed / acceleration of the
+                         sequence (needs ``camera3d``; FPS optional, for speed / acceleration)
+      ``9`` event      — 2 clicks on different frames: start and end → duration, mean speed
+      ``0`` spin       — each click marks the *same* ball mark in another frame; from the
+                         2nd click the result updates (turns, rps, rpm, ±1 frame)
+      ``,`` arc/curve  — polyline of ≥3 clicks: curve length + fitted arc (radius, angle,
+                         sagitta); the result updates on every click
+      ``.`` height line— 1 click in the plane of ``8`` → guide at that height, drawn over
+                         the video in every frame (``QuickMeasureSession.height_line_guides``)
+      ``,`` and ``.`` are the free keys of getpixelvideo's main loop (no other binding), exist
+      on US and ABNT2 keyboards, and cannot be confused with the digit row.
       Clear / Backspace — wipe draft + points + drawn results (keeps calib)
       Ctrl+Z / Ctrl+Y  — undo / redo measure actions
 
@@ -80,7 +96,8 @@ import os
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pandas as pd
@@ -98,6 +115,21 @@ except ImportError:
         normalize_ref3d_to_format1,
     )
     from rec2d_one_dlt2d import rec2d  # ty: ignore[unresolved-import]
+
+if TYPE_CHECKING:  # kick_measure (scipy) is imported lazily: keep the GUI start-up light
+    try:
+        from .kick_measure import CameraTrack, LinePlane
+    except ImportError:
+        from kick_measure import CameraTrack, LinePlane  # ty: ignore[unresolved-import]
+
+
+def _kick_measure():
+    """Lazy import of ``kick_measure`` (dual-import pattern, loads scipy on first use)."""
+    try:
+        from . import kick_measure as km
+    except ImportError:
+        import kick_measure as km  # ty: ignore[unresolved-import]
+    return km
 
 
 MEASURE_TYPES: tuple[str, ...] = (
@@ -117,8 +149,16 @@ LIVE_MODE_KEYS: dict[str, str] = {
     "4": "velocity",
     "5": "acceleration",
     "6": "level",
+    # Kick Measure modes (need a ``camera3d`` calibration unless noted).
+    "7": "height",
+    "8": "lineplane",
+    "9": "event",
+    "0": "spin",
+    ",": "arc",
+    ".": "heightline",
 }
-# Auto-finalize after this many draft clicks. ``None`` means press Enter (area).
+# Auto-finalize after this many draft clicks. ``None`` means press Enter (area) or, for the
+# modes in LIVE_MODE_RUNNING_MIN, a result that updates on every click.
 LIVE_MODE_AUTO_POINTS: dict[str, int | None] = {
     "distance": 2,
     "area": None,
@@ -126,8 +166,55 @@ LIVE_MODE_AUTO_POINTS: dict[str, int | None] = {
     "velocity": 2,
     "acceleration": 3,
     "level": 2,
+    "height": 2,
+    "lineplane": 2,  # 2 clicks fix the line, then 1 click per ball position (see _auto_points)
+    "event": 2,
+    "spin": None,
+    "arc": None,
+    "heightline": 1,
 }
-LIVE_MODE_NEEDS_FPS: frozenset[str] = frozenset({"velocity", "acceleration"})
+LIVE_MODE_NEEDS_FPS: frozenset[str] = frozenset({"velocity", "acceleration", "event", "spin"})
+# Open-ended modes: the result appears at this many clicks and is replaced by every new click
+# (Enter / another mode key closes it). The host needs no Enter handling for them.
+LIVE_MODE_RUNNING_MIN: dict[str, int] = {"spin": 2, "arc": 3}
+# Modes that only work with a ``camera3d`` calibration.
+LIVE_MODE_NEEDS_CAMERA: frozenset[str] = frozenset({"height", "lineplane", "heightline"})
+# Result ``type`` of each mode when it differs from the mode name.
+LIVE_MODE_RESULT_TYPE: dict[str, str] = {"heightline": "height_line"}
+KICK_MEASURE_TYPES: tuple[str, ...] = (
+    "height",
+    "line_plane",
+    "plane_point",
+    "height_line",
+    "event",
+    "spin",
+    "arc",
+)
+# Scalar columns of ``results_dataframe`` filled from ``result["extra"]`` (blank when absent).
+RESULT_EXTRA_COLUMNS: tuple[str, ...] = (
+    "uncertainty",  # +- in the unit of ``value`` (see the per-type definition in the report)
+    "length_unit",
+    "camera_source",
+    "approximate",
+    "plane",
+    "frame_start",
+    "frame_end",
+    "s",
+    "x",
+    "y",
+    "z",
+    "speed",
+    "accel",
+    "turns",
+    "rps",
+    "rpm",
+    "rpm_uncertainty",
+    "radius",
+    "angle_deg",
+    "sagitta",
+    "arc_length",
+    "note",
+)
 
 # In-memory undo depth for MEASURE draft / result edits (Ctrl+Z / Ctrl+Y).
 MEASURE_UNDO_STACK_MAX = 50
@@ -361,8 +448,31 @@ class QuickMeasureCalibration:
     kept_point_indices: list[int] = field(default_factory=list)
     # None = video-wide default; int = per-frame override (0-based video frame).
     source_frame: int | None = None
+    # ``camera3d`` only: one 3x4 camera per video frame (``kick_measure.CameraTrack``).
+    camera_track: CameraTrack | None = None
+
+    def pixel_to_real_at(self, frame: int, x: float, y: float) -> tuple[float, float]:
+        """Like :meth:`pixel_to_real` but for a given video ``frame``.
+
+        Only ``camera3d`` depends on the frame (each frame has its own camera); every other
+        kind ignores it. ``camera3d`` returns the pitch point ``(x, y)`` m on the grass under
+        the pixel, or ``(nan, nan)`` when the ray never reaches the grass (above the horizon).
+        """
+        if self.kind == "camera3d":
+            if self.camera_track is None:
+                raise QuickMeasureError("camera3d calibration is missing its camera track.")
+            p = self.camera_track.ground_point(int(frame), float(x), float(y), 0.0)
+            return float(p[0]), float(p[1])
+        return self.pixel_to_real(x, y)
 
     def pixel_to_real(self, x: float, y: float) -> tuple[float, float]:
+        if self.kind == "camera3d":
+            # No frame argument here: use the frame this calibration was installed for.
+            if self.source_frame is None:
+                raise QuickMeasureError(
+                    "camera3d calibration depends on the frame: use pixel_to_real_at(frame, x, y)."
+                )
+            return self.pixel_to_real_at(self.source_frame, x, y)
         if self.kind == "line":
             if self.scale is None or self.origin_px is None:
                 raise QuickMeasureError("Line calibration is missing its scale/origin.")
@@ -400,6 +510,18 @@ class QuickMeasureCalibration:
                 f"REF3D→{plane} DLT2D [{scope}] ({self.unit_label}, drop "
                 f"{(self.drop_axis or '?').upper()}, {n} pts) "
                 f"from {os.path.basename(self.ref3d_path or self.source)}"
+            )
+        if self.kind == "camera3d":
+            counts = {
+                k[len("frames_") :]: int(v)
+                for k, v in self.real_measures.items()
+                if k.startswith("frames_")
+            }
+            detail = ", ".join(f"{n} {k}" for k, n in counts.items())
+            return (
+                f"Camera3D (one camera per frame) [{scope}] ({self.unit_label}"
+                f"{', ' + detail if detail else ''}) from "
+                f"{os.path.basename(self.source) or 'kick_measure CameraTrack'}"
             )
         if self.kind == "dlt3d":
             return (
@@ -517,6 +639,29 @@ class QuickMeasureCalibration:
             source="clicks:points",
             calibration_pixels=[(float(p[0]), float(p[1])) for p in pixels],
             calibration_real=[(float(p[0]), float(p[1])) for p in reals],
+        )
+
+    @classmethod
+    def from_camera_track(
+        cls, track: CameraTrack, *, unit_label: str = "m", source: str = ""
+    ) -> QuickMeasureCalibration:
+        """``kind="camera3d"`` calibration holding a ``kick_measure.CameraTrack``.
+
+        Install it as the video default (``session.set_calibration(calib)``): every click then
+        uses the camera of its own frame (``pixel_to_real_at``), the pitch point on the grass
+        in metres of the FreeKiki frame (x along, y across). The counts of frames per camera
+        source (``dlt3d`` / ``solved`` / ``approximate`` / ``given``) are kept in
+        ``real_measures`` so they reach the calibration CSV.
+        """
+        measures: dict[str, float] = {"n_frames": float(track.n_frames)}
+        for name, n in track.counts().items():
+            measures[f"frames_{name}"] = float(n)
+        return cls(
+            unit_label=unit_label,
+            source=source,
+            kind="camera3d",
+            real_measures=measures,
+            camera_track=track,
         )
 
     @classmethod
@@ -934,6 +1079,8 @@ class QuickMeasureSession:
     # Live digit-key mode (``1``–``6``): in-progress clicks + active type.
     active_mode: str | None = None
     draft_points: list[QuickMeasurePoint] = field(default_factory=list)
+    # Mode ``8``: True once the two grass clicks of the line are done (next clicks = ball).
+    plane_ready: bool = False
     # Created once on the first calibration/result save. Every later save from
     # this video session updates the same export instead of minting another
     # timestamped directory.
@@ -1027,6 +1174,7 @@ class QuickMeasureSession:
         self.clear()
         self.clear_results()
         self.active_mode = None
+        self.plane_ready = False
         self._measure_undo_stack.clear()
         self._measure_redo_stack.clear()
         return "Measure: points and results cleared"
@@ -1040,6 +1188,7 @@ class QuickMeasureSession:
             "results": copy.deepcopy(self.results),
             "draft_points": [QuickMeasurePoint(p.frame, p.x, p.y) for p in self.draft_points],
             "active_mode": self.active_mode,
+            "plane_ready": self.plane_ready,
         }
 
     def _restore_measure_state(self, state: dict[str, Any]) -> None:
@@ -1047,6 +1196,7 @@ class QuickMeasureSession:
         self.results = copy.deepcopy(state["results"])
         self.draft_points = list(state["draft_points"])
         self.active_mode = state["active_mode"]
+        self.plane_ready = bool(state.get("plane_ready", False))
 
     def push_measure_undo(self) -> None:
         """Checkpoint current measure state; clears redo branch."""
@@ -1083,7 +1233,8 @@ class QuickMeasureSession:
             hint = "" if self.has_any_calibration() else " (pixels — use CALIB for real units)"
             return (
                 f"MEASURE ({unit}){hint}: press 1=distance 2=area 3=angle "
-                "4=velocity 5=accel 6=level (7–0 reserved) then click"
+                "4=velocity 5=accel 6=level 7=height 8=line-plane 9=event 0=spin "
+                ",=arc .=height-line then click"
             )
         n = len(self.draft_points)
         auto = LIVE_MODE_AUTO_POINTS.get(self.active_mode)
@@ -1098,26 +1249,85 @@ class QuickMeasureSession:
             if n == 1:
                 return "MODE level: 1/2 — click tape end (snaps to H/V)"
             return f"MODE level: {n}/2 point(s) (right-click undo)"
+        if self.active_mode == "height":
+            if n == 0:
+                return "MODE height: 0/2 — click the BASE on the grass"
+            return "MODE height: 1/2 — click the TOP (same frame)"
+        if self.active_mode == "lineplane":
+            if not self.plane_ready:
+                if n == 0:
+                    return "MODE line-plane: 0/2 — click the kick point on the grass"
+                return "MODE line-plane: 1/2 — click the arrival point on the grass"
+            return "MODE line-plane: click the ball in any frame -> (s, z); 8 again = new line"
+        if self.active_mode == "event":
+            if n == 0:
+                return "MODE event: 0/2 — go to the START frame and click the point"
+            return "MODE event: 1/2 — go to the END frame and click the point"
+        if self.active_mode == "spin":
+            return (
+                f"MODE spin: {n} mark(s) — click the SAME ball mark each time it reappears "
+                "(>=2 gives rps/rpm; key 0 again = new count)"
+            )
+        if self.active_mode == "arc":
+            return (
+                f"MODE arc: {n} point(s) — click along the curve (>=3 fits the arc; "
+                "key , again = new curve)"
+            )
+        if self.active_mode == "heightline":
+            return "MODE height-line: click at the wanted height (needs the line of key 8)"
         if auto is None:
             return f"MODE {self.active_mode}: {n} point(s)"
         return f"MODE {self.active_mode}: {n}/{auto} point(s) (right-click undo)"
 
     def set_live_mode(self, key: str) -> str:
-        """Select live measure mode from digit key ``0``–``9``. Clears draft."""
+        """Select a live measure mode from its key (see ``LIVE_MODE_KEYS``). Clears draft.
+
+        Digits ``1``–``0`` plus ``,`` (arc) and ``.`` (height line). Modes 7, 8 and ``.`` need
+        a ``camera3d`` calibration; 9 and 0 need the video FPS.
+        """
         digit = str(key).strip()
-        if digit not in "0123456789":
-            raise QuickMeasureError(f"Live mode key must be 0–9, got {key!r}")
         if digit not in LIVE_MODE_KEYS:
-            self.active_mode = None
-            self.draft_points.clear()
-            return f"Key {digit}: reserved (no measure mode yet). Use 1–6."
+            raise QuickMeasureError(
+                f"Live mode key must be one of {' '.join(LIVE_MODE_KEYS)}, got {key!r}"
+            )
         mode = LIVE_MODE_KEYS[digit]
         if mode in LIVE_MODE_NEEDS_FPS:
             self._require_fps()
+        if mode in LIVE_MODE_NEEDS_CAMERA and not self._has_camera3d():
+            raise QuickMeasureError(
+                f"Mode {digit} ({mode}) needs a camera3d calibration "
+                "(open a kick_analysis run: --kick-run)."
+            )
+        if mode == "heightline" and self._active_line_plane() is None:
+            raise QuickMeasureError("Height lines need the line of mode 8 (2 clicks on the grass).")
         self.push_measure_undo()
+        self._close_running_result()
+        # Mode 8 keeps its line while you leave and re-enter, unless pressed again in mode 8.
+        self.plane_ready = (
+            mode == "lineplane"
+            and self.active_mode != "lineplane"
+            and self._active_line_plane() is not None
+        )
         self.active_mode = mode
         self.draft_points.clear()
         return self.live_mode_status()
+
+    def _auto_points(self, mode: str) -> int | None:
+        """Draft clicks that finalize ``mode`` now (mode 8: 2 for the line, then 1 per ball)."""
+        if mode == "lineplane" and self.plane_ready:
+            return 1
+        return LIVE_MODE_AUTO_POINTS.get(mode)
+
+    def _mode_kind(self, mode: str) -> str:
+        """Measurement ``type`` produced by the active ``mode`` right now."""
+        if mode == "lineplane":
+            return "plane_point" if self.plane_ready else "line_plane"
+        return LIVE_MODE_RESULT_TYPE.get(mode, mode)
+
+    def _close_running_result(self) -> None:
+        """Stop updating the open-ended result (spin / arc) that is still ``running``."""
+        if self.results and self.results[-1].get("running"):
+            self.results[-1].pop("running", None)
 
     def add_live_point(self, frame: int, x: float, y: float) -> tuple[str, dict | None]:
         """Add a click in the active live mode; auto-finalize when enough points.
@@ -1126,21 +1336,48 @@ class QuickMeasureSession:
         """
         if self.active_mode is None:
             raise QuickMeasureError(
-                "No live measure mode — press 1–6 first (distance/area/angle/velocity/accel/level)."
+                "No live measure mode — press 1–6 first (distance/area/angle/velocity/accel/level; "
+                "7 height, 8 line-plane, 9 event, 0 spin, ',' arc, '.' height-line)."
             )
         mode = self.active_mode
         if mode in LIVE_MODE_NEEDS_FPS:
             self._require_fps()
         self.push_measure_undo()
-        self.draft_points.append(QuickMeasurePoint(int(frame), float(x), float(y)))
-        auto = LIVE_MODE_AUTO_POINTS.get(mode)
+        point = QuickMeasurePoint(int(frame), float(x), float(y))
+        self.draft_points.append(point)
+        min_running = LIVE_MODE_RUNNING_MIN.get(mode)
+        if min_running is not None:
+            # Open-ended mode: every click is a point of the session; the result is replaced.
+            self.points.append(point)
+            if len(self.draft_points) < min_running:
+                return self.live_mode_status(), None
+            try:
+                result = self._running_result(mode, int(frame))
+            except QuickMeasureError:
+                self.draft_points.pop()
+                self.points.pop()
+                raise
+            return format_result(result), result
+        auto = self._auto_points(mode)
         if auto is not None and len(self.draft_points) >= auto:
             result = self._finalize_draft(result_frame=int(frame))
             return format_result(result), result
         return self.live_mode_status(), None
 
     def finalize_live_area(self, result_frame: int) -> tuple[str, dict | None]:
-        """Close the area polygon (Enter while in area mode)."""
+        """Close the area polygon (Enter while in area mode).
+
+        In spin / arc mode (open-ended, the result already updates on every click) Enter just
+        closes the running result so the next click starts a new one.
+        """
+        if self.active_mode in LIVE_MODE_RUNNING_MIN:
+            had = bool(self.results and self.results[-1].get("running"))
+            self._close_running_result()
+            self.draft_points.clear()
+            return (
+                f"{self.active_mode.capitalize()} closed — click again to start a new one.",
+                self.results[-1] if had else None,
+            )
         if self.active_mode != "area":
             return "Enter closes the polygon only in area mode (press 2).", None
         if len(self.draft_points) < 3:
@@ -1156,6 +1393,7 @@ class QuickMeasureSession:
         if self.active_mode is None:
             raise QuickMeasureError("No active live measure mode.")
         mode = self.active_mode
+        kind = self._mode_kind(mode)
         draft = list(self.draft_points)
         if not draft:
             raise QuickMeasureError("No draft points to finalize.")
@@ -1170,13 +1408,53 @@ class QuickMeasureSession:
         # Temporarily expose only the draft as the measure point set.
         self.points = draft
         try:
-            result = self._compute_measure(mode)
+            result = self._compute_measure(kind)
         finally:
             self.points = saved
+        result = self._decorate_result(result, mode, draft, start_id, result_frame)
+        self.results.append(result)
+        if kind == "line_plane":
+            self.plane_ready = True  # the next clicks are ball positions in this plane
+        self.draft_points.clear()
+        return result
+
+    def _running_result(self, mode: str, result_frame: int) -> dict:
+        """Compute and *replace* the open-ended result (spin / arc) from the current draft."""
+        kind = self._mode_kind(mode)
+        draft = list(self.draft_points)
+        start_id = len(self.points) - len(draft) + 1
+        saved = self.points
+        self.points = draft
+        try:
+            result = self._compute_measure(kind)
+        finally:
+            self.points = saved
+        result = self._decorate_result(result, mode, draft, start_id, result_frame)
+        result["running"] = True
+        if (
+            self.results
+            and self.results[-1].get("running")
+            and self.results[-1].get("type") == result.get("type")
+        ):
+            self.results[-1] = result
+        else:
+            self.results.append(result)
+        return result
+
+    def _decorate_result(
+        self,
+        result: dict,
+        mode: str,
+        draft: list[QuickMeasurePoint],
+        start_id: int,
+        result_frame: int,
+    ) -> dict:
+        """Add frames, point ids, pixels, reals and calibration provenance to a measure."""
         n_used = int(result["n_points"])
         used = draft[-n_used:] if n_used else draft
         calib = self.calibration_for_frame(int(result_frame))
-        result = {
+        reals = result.pop("reals", None) or [self._to_units(p) for p in used]
+        return {
             **result,
             "frames": [p.frame for p in used],
             "point_ids": list(range(start_id, start_id + len(used))),
@@ -1185,12 +1463,9 @@ class QuickMeasureSession:
             "calibration_frame": self._calib_frame_tag(calib),
             "result_frame": int(result_frame),
             "pixels": [(p.x, p.y) for p in used],
-            "reals": [self._to_units(p) for p in used],
+            "reals": reals,
             "mode_key": next((k for k, v in LIVE_MODE_KEYS.items() if v == mode), ""),
         }
-        self.results.append(result)
-        self.draft_points.clear()
-        return result
 
     def _to_units(self, p: QuickMeasurePoint) -> tuple[float, float]:
         if self.unit_override:
@@ -1198,13 +1473,61 @@ class QuickMeasureSession:
             return p.x, p.y
         calib = self.calibration_for_frame(p.frame)
         if calib is not None:
-            return calib.pixel_to_real(p.x, p.y)
+            return calib.pixel_to_real_at(p.frame, p.x, p.y)
         return p.x, p.y
+
+    def _camera_track_or_none(self, frame: int) -> CameraTrack | None:
+        """Camera track of the ``camera3d`` calibration of ``frame``; ``None`` for any other kind."""
+        if self.unit_override:
+            return None
+        calib = self.calibration_for_frame(int(frame))
+        if calib is None or calib.kind != "camera3d":
+            return None
+        return calib.camera_track
+
+    def world_anchor(self, frame: int, x: float, y: float) -> tuple[float, float] | None:
+        """Pitch point ``(X, Y)`` m under the pixel ``(x, y)`` clicked on ``frame``.
+
+        Uses the ``camera3d`` calibration of ``frame`` (ground plane, ``z = 0``: the same point
+        ``_to_units`` converts the click to). ``None`` when that calibration is not ``camera3d``
+        (the caller keeps drawing at the pixel) or the ray never reaches the grass.
+        """
+        track = self._camera_track_or_none(frame)
+        if track is None:
+            return None
+        p = track.ground_point(int(frame), float(x), float(y), 0.0)
+        if not np.isfinite(p[:2]).all():
+            return None
+        return float(p[0]), float(p[1])
+
+    def world_to_pixel_at(
+        self, frame: int, X: float, Y: float, z: float = 0.0
+    ) -> tuple[float, float] | None:
+        """Pixel ``(u, v)`` where the pitch point ``(X, Y, z)`` m is seen on ``frame``.
+
+        Uses the camera of ``frame`` (``CameraTrack.project``). ``None`` when the calibration of
+        ``frame`` is not ``camera3d``, when the point is behind the camera (sign of the third
+        homogeneous coordinate times the sign of ``det(M)``, as in
+        ``kick_measure.field_segments_px``) or when the projection is not finite / huge.
+        """
+        track = self._camera_track_or_none(frame)
+        if track is None:
+            return None
+        pt = np.array([[float(X), float(Y), float(z)]], dtype=float)
+        if not np.isfinite(pt).all():
+            return None
+        P = np.asarray(track.matrix(int(frame)), dtype=float)
+        sign = 1.0 if np.linalg.det(P[:, :3]) > 0 else -1.0
+        w = sign * float((P @ np.append(pt[0], 1.0))[2])
+        uv = track.project(int(frame), pt)[0]
+        if not (w > 0.0 and np.isfinite(uv).all() and (np.abs(uv) < 1e6).all()):
+            return None
+        return float(uv[0]), float(uv[1])
 
     def _require_fps(self) -> float:
         if not self.fps or self.fps <= 0:
             raise QuickMeasureError(
-                "Velocity/Acceleration need video FPS — press I to set FPS, then retry."
+                "Velocity / acceleration / event / spin need video FPS — press I to set FPS, then retry."
             )
         return float(self.fps)
 
@@ -1330,6 +1653,417 @@ class QuickMeasureSession:
         value = float(np.degrees(np.arccos(cos_a)))
         return {"type": "angle", "value": value, "unit": "deg", "n_points": n_points}
 
+    # ------------------------------------------------------------------
+    # Kick Measure modes (7 height, 8 line-plane, 9 event, 0 spin, "," arc, "." height line).
+    # They use ``vaila.kick_measure`` and, for 7/8/".", the ``camera3d`` calibration.
+    # Each result carries ``extra`` (scalars exported as columns, RESULT_EXTRA_COLUMNS).
+    # ------------------------------------------------------------------
+
+    def _has_camera3d(self) -> bool:
+        return any(c.kind == "camera3d" for _f, c in self.iter_calibrations())
+
+    def _camera_track_at(self, frame: int) -> CameraTrack:
+        calib = self.calibration_for_frame(int(frame))
+        if calib is None or calib.kind != "camera3d" or calib.camera_track is None:
+            raise QuickMeasureError(
+                "This measure needs a camera3d calibration for the frame "
+                "(open a kick_analysis run: --kick-run)."
+            )
+        return calib.camera_track
+
+    def _camera_extra(self, track: CameraTrack, frame: int) -> dict:
+        approx = bool(track.is_approximate(int(frame)))
+        return {
+            "camera_source": track.source(int(frame)),
+            "approximate": int(approx),
+            "length_unit": self.unit_label,
+            "note": "approximate camera (copied from the nearest good frame)" if approx else "",
+        }
+
+    def measure_height(self) -> dict:
+        """Height of a pole / person: 2 clicks in one frame, base on the grass then top.
+
+        Plane: vertical, through the base point, perpendicular to the camera ray of the base
+        (``kick_measure.height_base_top``). ``uncertainty`` = the largest change of the height
+        when any of the 2 clicks moves 1 px up or down.
+        """
+        if len(self.points) < 2:
+            raise QuickMeasureError("Height needs 2 clicks: base on the grass, then top.")
+        base, top = self.points[-2], self.points[-1]
+        if base.frame != top.frame:
+            raise QuickMeasureError("Height needs base and top clicked on the same frame.")
+        km = _kick_measure()
+        track = self._camera_track_at(base.frame)
+        P = track.matrix(base.frame)
+        b, t = (base.x, base.y), (top.x, top.y)
+        value = float(km.height_base_top(P, b, t))
+        if not np.isfinite(value):
+            raise QuickMeasureError(
+                "Height: a click does not reach the grass / the vertical plane."
+            )
+        shifted = []
+        for db in (-1.0, 0.0, 1.0):
+            for dt in (-1.0, 0.0, 1.0):
+                if db == 0.0 and dt == 0.0:
+                    continue
+                h = km.height_base_top(P, (b[0], b[1] + db), (t[0], t[1] + dt))
+                if np.isfinite(h):
+                    shifted.append(abs(float(h) - value))
+        return {
+            "type": "height",
+            "value": value,
+            "unit": self.unit_label,
+            "n_points": 2,
+            "extra": {
+                **self._camera_extra(track, base.frame),
+                "uncertainty": max(shifted) if shifted else float("nan"),
+                "plane": "vertical plane through the base, perpendicular to its camera ray",
+            },
+        }
+
+    def measure_line_plane(self) -> dict:
+        """Mode 8, step 1: the line kick -> arrival on the grass (2 clicks, same frame).
+
+        The vertical plane through that line is where every following click is placed
+        (``kick_measure.LinePlane``). ``value`` = length of the line.
+        """
+        if len(self.points) < 2:
+            raise QuickMeasureError("The line needs 2 clicks on the grass (kick, arrival).")
+        a, b = self.points[-2], self.points[-1]
+        if a.frame != b.frame:
+            raise QuickMeasureError("Both clicks of the line must be on the same frame.")
+        km = _kick_measure()
+        track = self._camera_track_at(a.frame)
+        try:
+            plane = km.LinePlane.from_pixels(track, a.frame, (a.x, a.y), (b.x, b.y))
+        except ValueError as exc:
+            raise QuickMeasureError(f"Line: {exc}") from exc
+        ga, gb = plane.ground_a, plane.ground_b
+        return {
+            "type": "line_plane",
+            "value": float(plane.length),
+            "unit": self.unit_label,
+            "n_points": 2,
+            "extra": {
+                **self._camera_extra(track, a.frame),
+                "uncertainty": float("nan"),
+                "plane": (
+                    f"vertical plane through ({ga[0]:.2f}, {ga[1]:.2f}) -> "
+                    f"({gb[0]:.2f}, {gb[1]:.2f}) m"
+                ),
+                "s": 0.0,
+                "x": float(ga[0]),
+                "y": float(ga[1]),
+            },
+        }
+
+    def _active_line_plane(self) -> LinePlane | None:
+        """The ``LinePlane`` of the latest completed line result (rebuilt from its pixels)."""
+        for r in reversed(self.results):
+            if r.get("type") != "line_plane":
+                continue
+            try:
+                frame = int(r["frames"][0])
+                (u0, v0), (u1, v1) = r["pixels"][0], r["pixels"][1]
+                track = self._camera_track_at(frame)
+                return _kick_measure().LinePlane.from_pixels(track, frame, (u0, v0), (u1, v1))
+            except (KeyError, IndexError, ValueError, QuickMeasureError):
+                return None
+        return None
+
+    def _plane_point_results(self) -> list[dict]:
+        """Ball positions marked in the current line plane, in click order."""
+        out: list[dict] = []
+        for r in reversed(self.results):
+            if r.get("type") == "line_plane":
+                break
+            if r.get("type") == "plane_point":
+                out.append(r)
+        return out[::-1]
+
+    def measure_plane_point(self) -> dict:
+        """Mode 8, step 2: ball position ``(s, z)`` of a click, taken in the plane of the line.
+
+        ``value`` = height ``z`` (m); extras ``s`` (m along the line), ``x``/``y`` (pitch
+        position), ``speed`` / ``accel`` (3D, from the previous clicks on distinct frames,
+        needs FPS) and ``uncertainty`` = change of ``z`` if the plane were shifted 2 m sideways
+        (``LinePlane.lateral_sensitivity``): one camera cannot place the ball across the line.
+        """
+        if not self.points:
+            raise QuickMeasureError("Click the ball.")
+        p = self.points[-1]
+        plane = self._active_line_plane()
+        if plane is None:
+            raise QuickMeasureError("Mark the line on the grass first (key 8, 2 clicks).")
+        uv = (p.x, p.y)
+        X = plane.locate_xyz(p.frame, uv)
+        if not np.all(np.isfinite(X)):
+            raise QuickMeasureError("The ray of this click does not reach the plane of the line.")
+        s, z = plane.locate(p.frame, uv)
+        sens = plane.lateral_sensitivity(p.frame, uv, 2.0)
+        track = self._camera_track_at(p.frame)
+        speed = accel = float("nan")
+        prev = self._plane_point_results()
+        if self.fps and self.fps > 0:
+            fps = float(self.fps)
+            cur = (p.frame, np.array([X[0], X[1], X[2]]))
+            hist = [
+                (int(r["frames"][0]), np.array([r["extra"]["x"], r["extra"]["y"], r["extra"]["z"]]))
+                for r in prev
+            ]
+            if hist and hist[-1][0] != cur[0]:
+                dt1 = abs(cur[0] - hist[-1][0]) / fps
+                speed = float(np.linalg.norm(cur[1] - hist[-1][1]) / dt1)
+                if len(hist) >= 2 and hist[-2][0] != hist[-1][0]:
+                    dt0 = abs(hist[-1][0] - hist[-2][0]) / fps
+                    v0 = float(np.linalg.norm(hist[-1][1] - hist[-2][1]) / dt0)
+                    accel = (speed - v0) / ((dt0 + dt1) / 2.0)
+        return {
+            "type": "plane_point",
+            "value": float(z),
+            "unit": self.unit_label,
+            "n_points": 1,
+            "reals": [(float(X[0]), float(X[1]))],
+            "extra": {
+                **self._camera_extra(track, p.frame),
+                "uncertainty": abs(float(sens)),
+                "plane": "ball taken in the vertical plane of the line (uncertainty: 2 m sideways)",
+                "s": float(s),
+                "x": float(X[0]),
+                "y": float(X[1]),
+                "z": float(z),
+                "speed": speed,
+                "accel": accel,
+            },
+        }
+
+    def lineplane_series(self, smooth_window: int = 0) -> pd.DataFrame:
+        """3D position, velocity and acceleration of the ball clicked in the current line plane.
+
+        One row per frame from the first to the last click (frames between clicks are linearly
+        interpolated, ``clicked`` tells which rows are real clicks); velocity and acceleration
+        are ``kick_measure.velocity_series`` / ``acceleration_series`` (``smooth_window`` odd
+        >= 3 = Savitzky-Golay). Needs FPS and at least 2 clicks on distinct frames.
+        """
+        fps = self._require_fps()
+        by_frame: dict[int, tuple[float, float, float, float]] = {}
+        for r in self._plane_point_results():
+            e = r["extra"]
+            by_frame[int(r["frames"][0])] = (e["x"], e["y"], e["z"], e["s"])
+        if len(by_frame) < 2:
+            raise QuickMeasureError("The series needs ball clicks on at least 2 distinct frames.")
+        km = _kick_measure()
+        known = sorted(by_frame)
+        frames = np.arange(known[0], known[-1] + 1)
+        table = np.array([by_frame[f] for f in known], dtype=float)
+        pos = np.column_stack([np.interp(frames, known, table[:, j]) for j in range(4)])
+        vel = km.velocity_series(pos[:, :3], fps, smooth_window)
+        acc = km.acceleration_series(pos[:, :3], fps, smooth_window)
+        return pd.DataFrame(
+            {
+                "frame": frames,
+                "time_s": (frames - frames[0]) / fps,
+                "clicked": np.isin(frames, known),
+                "x": pos[:, 0],
+                "y": pos[:, 1],
+                "z": pos[:, 2],
+                "s": pos[:, 3],
+                "speed": np.linalg.norm(vel, axis=1),
+                "accel": np.linalg.norm(acc, axis=1),
+                "vx": vel[:, 0],
+                "vy": vel[:, 1],
+                "vz": vel[:, 2],
+                "ax": acc[:, 0],
+                "ay": acc[:, 1],
+                "az": acc[:, 2],
+            }
+        )
+
+    def measure_height_line(self) -> dict:
+        """Mode ``.``: one click in the line plane sets a horizontal guide at its height."""
+        if not self.points:
+            raise QuickMeasureError("Click at the wanted height.")
+        p = self.points[-1]
+        plane = self._active_line_plane()
+        if plane is None:
+            raise QuickMeasureError("Height lines need the line of mode 8 first.")
+        _s, z = plane.locate(p.frame, (p.x, p.y))
+        if not np.isfinite(z):
+            raise QuickMeasureError("The ray of this click does not reach the plane of the line.")
+        track = self._camera_track_at(p.frame)
+        return {
+            "type": "height_line",
+            "value": float(z),
+            "unit": self.unit_label,
+            "n_points": 1,
+            "extra": {
+                **self._camera_extra(track, p.frame),
+                "uncertainty": abs(float(plane.lateral_sensitivity(p.frame, (p.x, p.y), 2.0))),
+                "plane": "horizontal guide at this height over the line (drawn in every frame)",
+                "z": float(z),
+            },
+        }
+
+    def add_height_line(self, z: float, frame: int = 0) -> dict:
+        """Add a guide at height ``z`` (m) over the active line, without a click.
+
+        For a typed height ("show me 2.44 m"). Recorded as a ``height_line`` result.
+        """
+        plane = self._active_line_plane()
+        if plane is None:
+            raise QuickMeasureError("Height lines need the line of mode 8 first.")
+        if not np.isfinite(z):
+            raise QuickMeasureError("The height must be a finite number (m).")
+        self.push_measure_undo()
+        result = {
+            "type": "height_line",
+            "value": float(z),
+            "unit": self.unit_label,
+            "n_points": 0,
+            "frames": [],
+            "point_ids": [],
+            "fps": self.fps,
+            "calibration": "camera3d",
+            "calibration_frame": -1,
+            "result_frame": int(frame),
+            "pixels": [],
+            "reals": [],
+            "mode_key": next((k for k, v in LIVE_MODE_KEYS.items() if v == "heightline"), ""),
+            "extra": {
+                "length_unit": self.unit_label,
+                "plane": "horizontal guide at this height over the line (typed)",
+                "z": float(z),
+            },
+        }
+        self.results.append(result)
+        return result
+
+    def height_line_guides(self, frame: int) -> list[tuple[float, np.ndarray]]:
+        """Guides to draw over ``frame``: ``[(z_m, [[u0, v0], [u1, v1]] px), ...]``.
+
+        One per ``height_line`` result, along the active line from kick to arrival
+        (``LinePlane.height_line``); empty without a line plane.
+        """
+        plane = self._active_line_plane()
+        if plane is None:
+            return []
+        out: list[tuple[float, np.ndarray]] = []
+        for r in self.results:
+            if r.get("type") != "height_line":
+                continue
+            z = float(r["value"])
+            uv = plane.height_line(int(frame), z)
+            if np.all(np.isfinite(uv)):
+                out.append((z, uv))
+        return out
+
+    def measure_event(self) -> dict:
+        """Event time: click the point at the START frame, then at the END frame.
+
+        ``value`` = duration (s) = ``kick_measure.event_time``; ``uncertainty`` = one frame
+        (``1 / fps``); extra ``speed`` = mean speed between the two clicked ground points
+        (``kick_measure.mean_speed``, calibrated units per second).
+        """
+        if len(self.points) < 2:
+            raise QuickMeasureError("Event needs 2 clicks: start frame, end frame.")
+        fps = self._require_fps()
+        a, b = sorted(self.points[-2:], key=lambda q: q.frame)
+        if a.frame == b.frame:
+            raise QuickMeasureError("Event needs the start and the end on different frames.")
+        km = _kick_measure()
+        pa, pb = self._to_units(a), self._to_units(b)
+        duration = float(km.event_time(a.frame, b.frame, fps))
+        try:
+            speed = float(km.mean_speed(pa, pb, a.frame, b.frame, fps))
+        except ValueError as exc:
+            raise QuickMeasureError(f"Event: {exc}") from exc
+        return {
+            "type": "event",
+            "value": duration,
+            "unit": "s",
+            "n_points": 2,
+            "dt": duration,
+            "extra": {
+                "uncertainty": float(km.event_time_uncertainty(fps)),
+                "length_unit": self.unit_label,
+                "frame_start": a.frame,
+                "frame_end": b.frame,
+                "speed": speed,
+                "plane": "ground distance between the two clicked points / duration",
+            },
+        }
+
+    def measure_spin(self) -> dict:
+        """Spin of the ball: every click marks the *same* mark in another frame.
+
+        ``value`` = turns per second; extras ``turns``, ``rps``, ``rpm`` and their +-1 frame
+        uncertainty (``kick_measure.spin_rate``). Each click is the mark seen again, so ``k``
+        clicks = ``k - 1`` turns between the first and the last frame. At ``fps / 2`` turns per
+        second or more the count aliases (flagged in ``note``).
+        """
+        if len(self.points) < 2:
+            raise QuickMeasureError("Spin needs at least 2 clicks of the same mark.")
+        fps = self._require_fps()
+        frames = [p.frame for p in self.points]
+        try:
+            sr = _kick_measure().spin_rate(frames, fps)
+        except ValueError as exc:
+            raise QuickMeasureError(f"Spin: {exc}") from exc
+        note = ""
+        if sr.rps >= fps / 2.0:
+            note = "rps >= fps/2: the mark is seen less than twice per turn, the count aliases"
+        return {
+            "type": "spin",
+            "value": float(sr.rps),
+            "unit": "rps",
+            "n_points": len(self.points),
+            "dt": float(sr.duration_s),
+            "extra": {
+                "uncertainty": float(sr.rps_uncertainty),
+                "length_unit": self.unit_label,
+                "frame_start": min(frames),
+                "frame_end": max(frames),
+                "turns": int(sr.turns),
+                "rps": float(sr.rps),
+                "rpm": float(sr.rpm),
+                "rpm_uncertainty": float(sr.rpm_uncertainty),
+                "plane": "k clicks of one mark = k-1 turns over (last-first)/fps",
+                "note": note,
+            },
+        }
+
+    def measure_arc(self) -> dict:
+        """Curve through >=3 clicks: polyline length plus the fitted circle.
+
+        Works on the calibrated plane coordinates (``camera3d``: the grass, metres). ``value``
+        = length of the clicked polyline; extras ``radius``, ``angle_deg`` (covered from first
+        to last click), ``sagitta``, ``arc_length``; ``uncertainty`` = rms distance of the
+        clicks to the circle (``kick_measure.fit_arc``).
+        """
+        if len(self.points) < 3:
+            raise QuickMeasureError("An arc needs at least 3 clicks along the curve.")
+        km = _kick_measure()
+        pts = np.array([self._to_units(p) for p in self.points], dtype=float)
+        try:
+            fit = km.fit_arc(pts)
+        except ValueError as exc:
+            raise QuickMeasureError(f"Arc: {exc}") from exc
+        return {
+            "type": "arc",
+            "value": float(km.path_length(pts)),
+            "unit": self.unit_label,
+            "n_points": len(self.points),
+            "extra": {
+                "uncertainty": float(fit.rms),
+                "length_unit": self.unit_label,
+                "radius": float(fit.radius),
+                "angle_deg": float(fit.angle_deg),
+                "sagitta": float(fit.sagitta),
+                "arc_length": float(fit.arc_length),
+                "plane": "polyline length; circle fitted in the calibrated plane",
+            },
+        }
+
     def _compute_measure(self, kind: str) -> dict:
         kind = kind.strip().lower()
         dispatch = {
@@ -1339,10 +2073,18 @@ class QuickMeasureSession:
             "velocity": self.measure_velocity,
             "acceleration": self.measure_acceleration,
             "level": self.measure_level,
+            "height": self.measure_height,
+            "line_plane": self.measure_line_plane,
+            "plane_point": self.measure_plane_point,
+            "height_line": self.measure_height_line,
+            "event": self.measure_event,
+            "spin": self.measure_spin,
+            "arc": self.measure_arc,
         }
         if kind not in dispatch:
             raise QuickMeasureError(
-                f"Unknown measurement type: {kind!r} (expected one of {MEASURE_TYPES})"
+                f"Unknown measurement type: {kind!r} "
+                f"(expected one of {MEASURE_TYPES + KICK_MEASURE_TYPES})"
             )
         return dispatch[kind]()
 
@@ -1353,6 +2095,7 @@ class QuickMeasureSession:
         first_id = len(self.points) - n_used + 1
         result_frame = used[-1].frame if used else 0
         calib = self.calibration_for_frame(int(result_frame))
+        reals = result.pop("reals", None) or [self._to_units(p) for p in used]
         result = {
             **result,
             "frames": [p.frame for p in used],
@@ -1362,7 +2105,7 @@ class QuickMeasureSession:
             "calibration_frame": self._calib_frame_tag(calib),
             "result_frame": used[-1].frame if used else None,
             "pixels": [(p.x, p.y) for p in used],
-            "reals": [self._to_units(p) for p in used],
+            "reals": reals,
         }
         self.results.append(result)
         return result
@@ -1494,6 +2237,7 @@ class QuickMeasureSession:
             "calibration",
             "calibration_frame",
             "elapsed_time_s",
+            *RESULT_EXTRA_COLUMNS,
         ]
         point_fields = ("id", "frame", "x_px", "y_px", "x_real", "y_real")
         columns.extend(
@@ -1521,6 +2265,9 @@ class QuickMeasureSession:
                 "calibration_frame": r.get("calibration_frame", -1),
                 "elapsed_time_s": r.get("dt"),
             }
+            extra = r.get("extra") or {}
+            for name in RESULT_EXTRA_COLUMNS:
+                row[name] = extra.get(name)
             for point_index in range(matrix_points):
                 prefix = f"point_{point_index + 1}"
                 pixel = pixels[point_index] if point_index < len(pixels) else (None, None)
@@ -1683,6 +2430,13 @@ class QuickMeasureSession:
             "velocity": "#2471a3",
             "acceleration": "#117a65",
             "level": "#27ae60",
+            "height": "#b03a2e",
+            "line_plane": "#1f618d",
+            "plane_point": "#148f77",
+            "height_line": "#00a5d8",
+            "event": "#af601a",
+            "spin": "#7d3c98",
+            "arc": "#2e4053",
         }
 
         def result_svg(result: dict, index: int) -> str:
@@ -1749,6 +2503,19 @@ class QuickMeasureSession:
                     "Laser-style level tape: origin click draws image-space H+V guides; "
                     "second click snaps to the nearer axis and reports that length."
                 ),
+                "height": (
+                    "Base on the grass, top above it, same frame: the top ray is cut by the "
+                    "vertical plane through the base. +- = 1 px on either click."
+                ),
+                "line_plane": "Two grass clicks (kick, arrival) fix the vertical plane of mode 8.",
+                "plane_point": (
+                    "Ball click taken in that plane: value = height z, s = distance along the "
+                    "line; +- = height change if the plane were 2 m off sideways."
+                ),
+                "height_line": "Guide at this height over the line, drawn in every frame.",
+                "event": "Duration between two clicked frames (+- 1/fps) and mean speed.",
+                "spin": "Same ball mark seen again: k clicks = k-1 turns over (last-first)/fps.",
+                "arc": "Clicked curve: polyline length plus the fitted circle (R, angle, sagitta).",
             }.get(rtype, "Completed Quick Measure result.")
             parts.append(f"<p>{esc(how)}</p>")
             return "".join(parts)
@@ -1819,6 +2586,54 @@ class QuickMeasureSession:
                 f"{self.unit_label}/s^2",
             ),
             (
+                "Height (base + top)",
+                "7",
+                "2 clicks, same frame: base on the grass, top (camera3d)",
+                "Height of a pole or person from one camera.",
+                "top ray cut by the vertical plane through the base; +- = 1 px",
+                self.unit_label,
+            ),
+            (
+                "Line plane (s, z)",
+                "8",
+                "2 grass clicks (kick, arrival), then one click per ball position (camera3d)",
+                "Distance along the line s and height z of the ball, plus 3D speed / acceleration.",
+                "ray cut by the vertical plane of the line; +- = z change for 2 m sideways",
+                f"{self.unit_label}, {self.unit_label}/s, {self.unit_label}/s^2",
+            ),
+            (
+                "Event time",
+                "9",
+                "2 clicks on different frames (start, end)",
+                "Duration of an event and mean speed between the clicked points.",
+                "(end-start)/fps; ground distance / duration; +- = 1/fps",
+                "s, " + self.unit_label + "/s",
+            ),
+            (
+                "Spin",
+                "0",
+                "2 or more clicks of the same ball mark on different frames",
+                "Turns, rps and rpm of the ball.",
+                "(k-1) turns / ((last-first)/fps); +- = 1 frame; aliases above fps/2",
+                "rps, rpm",
+            ),
+            (
+                "Arc / curve",
+                ",",
+                "3 or more clicks along a curve",
+                "Curve length and fitted circle (radius, angle, sagitta).",
+                "polyline length; least-squares circle; +- = rms to the circle",
+                f"{self.unit_label}, deg",
+            ),
+            (
+                "Height line",
+                ".",
+                "1 click in the plane of mode 8",
+                "Horizontal guide at that height over the line, drawn in every frame.",
+                "z of the click in the line plane",
+                self.unit_label,
+            ),
+            (
                 "Level (tape)",
                 "6",
                 "2 points: origin then tape end (snaps to H or V)",
@@ -1840,12 +2655,25 @@ class QuickMeasureSession:
             "results_velocity": "Velocity results only.",
             "results_acceleration": "Acceleration results only.",
             "results_level": "Level (axis-snapped tape) results only.",
+            "results_height": "Height (base + top) results only.",
+            "results_line_plane": "Line of mode 8 (kick -> arrival on the grass) only.",
+            "results_plane_point": "Ball positions (s, z) in the line plane, with speed / accel.",
+            "results_height_line": "Height-line guides only.",
+            "results_event": "Event time results only.",
+            "results_spin": "Spin (turns, rps, rpm) results only.",
+            "results_arc": "Arc / curve results only.",
+            "camera3d": "Camera of every video frame (3x4 matrix, source, approximate flag).",
+            "lineplane_series": "3D position, velocity and acceleration of the ball per frame.",
             "report": "This guide with SVG figures of calibration and measurements.",
             "readme": "Compact plain-text file list and recomputation command.",
         }
         result_columns = [
             ("result_id", "Sequential result number in this session."),
-            ("type", "distance, area, angle, velocity, acceleration, or level."),
+            (
+                "type",
+                "distance, area, angle, velocity, acceleration, level, height, line_plane, "
+                "plane_point, height_line, event, spin or arc.",
+            ),
             ("value", "Computed numeric metric."),
             ("unit", "Unit attached to value; calibrated unit, pixels, degrees, or rate."),
             ("axis", "For level results: H (horizontal) or V (vertical); empty otherwise."),
@@ -1854,7 +2682,28 @@ class QuickMeasureSession:
             ("fps", "Video frames per second used for time-based metrics."),
             ("mode_key", "Quick Measure digit key that selected this type."),
             ("calibration", "Calibration model used by this result."),
-            ("elapsed_time_s", "Elapsed seconds for velocity; blank for other result types."),
+            (
+                "elapsed_time_s",
+                "Elapsed seconds for velocity / event; spin duration; blank for other types.",
+            ),
+            ("uncertainty", "+- in the unit of value (definition per type in the section above)."),
+            ("length_unit", "Length unit of speed / accel / s / x / y / z / radius columns."),
+            (
+                "camera_source",
+                "dlt3d, solved, approximate or given: where the frame's camera came from.",
+            ),
+            ("approximate", "1 when the frame's camera is a copy of a neighbour (less reliable)."),
+            ("plane", "Text: the plane or rule used by the result."),
+            ("frame_start / frame_end", "First and last frame used by event / spin."),
+            ("s, x, y, z", "plane_point: distance along the line and pitch position (m)."),
+            (
+                "speed / accel",
+                "3D speed (unit/s) and acceleration (unit/s^2) of plane_point; "
+                "mean speed of event.",
+            ),
+            ("turns / rps / rpm / rpm_uncertainty", "Spin count and rate."),
+            ("radius / angle_deg / sagitta / arc_length", "Fitted circle of an arc."),
+            ("note", "Warnings: approximate camera, spin aliasing."),
             ("point_N_id", "Source point identifier N."),
             ("point_N_frame", "Source video frame for point N."),
             ("point_N_x_px / point_N_y_px", "Separate image coordinates for point N."),
@@ -1869,7 +2718,7 @@ class QuickMeasureSession:
             ("x_px / y_px", "Horizontal / vertical image coordinate in pixels."),
             ("x_real / y_real", "Coordinates after calibration; equal to pixels if uncalibrated."),
             ("unit", "Coordinate unit."),
-            ("calibration_kind", "none, line, plane, ref2d, dlt2d, or ref3d."),
+            ("calibration_kind", "none, line, plane, ref2d, dlt2d, ref3d, or camera3d."),
         ]
 
         def table(headers: Sequence[str], rows: Sequence[Sequence[object]]) -> str:
@@ -1972,7 +2821,7 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 </div>
 <div class="howto">
 <div><strong>1 · CALIB</strong>Shift+Q / CALIB button — build line, plane, or REF3D scale.</div>
-<div><strong>2 · MEASURE</strong>Q — press 1–6, click the required points; values draw on the image.</div>
+<div><strong>2 · MEASURE</strong>Q — press 1–6, 7 height, 8 line-plane, 9 event, 0 spin, "," arc, "." height line; click the required points; values draw on the image.</div>
 <div><strong>3 · Save</strong>Enter then S (or Save hub) writes this folder + report.</div>
 <div><strong>4 · Read</strong>Open this HTML first; CSVs hold the exact numbers.</div>
 </div>
@@ -1985,6 +2834,11 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
 <span><i class="swatch" style="background:#2471a3"></i>velocity</span>
 <span><i class="swatch" style="background:#117a65"></i>acceleration</span>
 <span><i class="swatch" style="background:#27ae60"></i>level</span>
+<span><i class="swatch" style="background:#b03a2e"></i>height</span>
+<span><i class="swatch" style="background:#148f77"></i>plane point</span>
+<span><i class="swatch" style="background:#af601a"></i>event</span>
+<span><i class="swatch" style="background:#7d3c98"></i>spin</span>
+<span><i class="swatch" style="background:#2e4053"></i>arc</span>
 </p>
 <h2>Calibration figures</h2>
 <p>The known real-world segment or rectangle you clicked, drawn in image-pixel space.</p>
@@ -2049,6 +2903,38 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
                 pd.DataFrame(dlt_rows).to_csv(dlt_path, index=False)
                 paths["dlt2d"] = dlt_path
 
+            # camera3d export: one row per video frame with its 3x4 matrix (shared track once).
+            cam_tracks = []
+            for _fk, calib in self.iter_calibrations():
+                if (
+                    calib.kind == "camera3d"
+                    and calib.camera_track is not None
+                    and all(calib.camera_track is not t for t in cam_tracks)
+                ):
+                    cam_tracks.append(calib.camera_track)
+            if cam_tracks:
+                cam_path = os.path.join(run_dir, f"{safe_stem}_quickmeasure_camera3d.csv")
+                cam_rows = []
+                for track in cam_tracks:
+                    for f in range(track.n_frames):
+                        fc = track.info(f)
+                        cam_rows.append(
+                            {
+                                "frame": f,
+                                "source": fc.source,
+                                "approximate": int(fc.approximate),
+                                "rms_px": None if np.isnan(fc.rms_px) else fc.rms_px,
+                                "n_points": fc.n_points,
+                                **{
+                                    f"P{r + 1}{c + 1}": float(fc.matrix[r, c])
+                                    for r in range(3)
+                                    for c in range(4)
+                                },
+                            }
+                        )
+                pd.DataFrame(cam_rows).to_csv(cam_path, index=False)
+                paths["camera3d"] = cam_path
+
             # REF3D planar export: prefer default, else first per-frame ref3d.
             ref3d_calib = None
             for _fk, calib in self.iter_calibrations():
@@ -2105,6 +2991,18 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
                 tmp.results_dataframe(max_points=matrix_points).to_csv(type_path, index=False)
                 paths[f"results_{kind}"] = type_path
 
+        if self._plane_point_results() and self.fps:
+            try:
+                series = self.lineplane_series()
+            except QuickMeasureError:
+                series = None
+            if series is not None:
+                series_path = os.path.join(
+                    run_dir, f"{safe_stem}_quickmeasure_lineplane_series.csv"
+                )
+                series.to_csv(series_path, index=False)
+                paths["lineplane_series"] = series_path
+
         report = os.path.join(run_dir, "quickmeasure_report.html")
         readme = os.path.join(run_dir, "README_quickmeasure.txt")
         paths["report"] = report
@@ -2135,12 +3033,64 @@ th{{background:#d4e6f1}} code{{background:#eef2f3;padding:2px 5px;border-radius:
         return paths
 
 
+def _finite(value: Any) -> float | None:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if np.isfinite(number) else None
+
+
 def format_result(result: dict) -> str:
-    label = result["type"].capitalize()
+    """One-line text of a result; Kick Measure types add their own detail and ``±`` bound."""
+    rtype = str(result["type"])
+    label = rtype.replace("_", " ").capitalize()
     axis = result.get("axis")
     if axis:
         return f"{label} ({axis}): {result['value']:.4f} {result['unit']}"
-    return f"{label}: {result['value']:.4f} {result['unit']}"
+    text = f"{label}: {result['value']:.4f} {result['unit']}"
+    extra = result.get("extra") or {}
+    if not extra:
+        return text
+    unc = _finite(extra.get("uncertainty"))
+    if unc is not None:
+        text += f" ± {unc:.3g}"
+    unit = str(extra.get("length_unit") or "")
+    details: list[str] = []
+    if rtype == "plane_point":
+        s = _finite(extra.get("s"))
+        if s is not None:
+            details.append(f"s {s:.3f} {unit}")
+        speed, accel = _finite(extra.get("speed")), _finite(extra.get("accel"))
+        if speed is not None:
+            details.append(f"speed {speed:.3f} {unit}/s")
+        if accel is not None:
+            details.append(f"accel {accel:.3f} {unit}/s^2")
+    elif rtype == "event":
+        speed = _finite(extra.get("speed"))
+        if speed is not None:
+            details.append(f"mean speed {speed:.3f} {unit}/s")
+    elif rtype == "spin":
+        turns, rpm = extra.get("turns"), _finite(extra.get("rpm"))
+        details.append(f"{turns} turn(s)")
+        if rpm is not None:
+            details.append(f"{rpm:.1f} rpm")
+    elif rtype == "arc":
+        radius, angle = _finite(extra.get("radius")), _finite(extra.get("angle_deg"))
+        sag = _finite(extra.get("sagitta"))
+        if radius is not None:
+            details.append(f"R {radius:.3f} {unit}")
+        if angle is not None:
+            details.append(f"{angle:.1f} deg")
+        if sag is not None:
+            details.append(f"sagitta {sag:.3f} {unit}")
+    if extra.get("approximate"):
+        details.append("approximate camera")
+    if extra.get("note") and rtype == "spin":
+        details.append(str(extra["note"]))
+    if details:
+        text += " (" + ", ".join(details) + ")"
+    return text
 
 
 def format_hover_coords(
@@ -2162,11 +3112,24 @@ def format_hover_coords(
     if calib is None:
         return pix
     try:
-        rx, ry = calib.pixel_to_real(float(x_px), float(y_px))
+        if frame is not None:
+            rx, ry = calib.pixel_to_real_at(int(frame), float(x_px), float(y_px))
+        else:
+            rx, ry = calib.pixel_to_real(float(x_px), float(y_px))
     except QuickMeasureError:
         return pix
+    if not (np.isfinite(rx) and np.isfinite(ry)):
+        return pix  # camera3d: the ray never reaches the grass (above the horizon)
     unit = calib.unit_label
-    return f"{pix}  Real: ({rx:.3f}, {ry:.3f}) {unit}"
+    text = f"{pix}  Real: ({rx:.3f}, {ry:.3f}) {unit}"
+    if (
+        frame is not None
+        and calib.kind == "camera3d"
+        and calib.camera_track is not None
+        and calib.camera_track.is_approximate(int(frame))
+    ):
+        text += "  [approx. camera]"
+    return text
 
 
 def needs_calibration(session: QuickMeasureSession | None) -> bool:
@@ -2302,6 +3265,154 @@ def main(argv: Sequence[str] | None = None) -> int:
 # -----------------------------------------------------------------------
 
 
+# Result type names on the video badges when the window speaks Portuguese.
+RESULT_TYPE_LABELS_PT: dict[str, str] = {
+    "distance": "distância",
+    "area": "área",
+    "angle": "ângulo",
+    "velocity": "velocidade",
+    "acceleration": "aceleração",
+    "level": "nível",
+    "height": "altura",
+    "line_plane": "plano linha",
+    "plane_point": "ponto no plano",
+    "height_line": "linha de altura",
+    "event": "evento",
+    "spin": "giro",
+    "arc": "arco",
+    "measure": "medida",
+}
+
+
+def result_type_label(rtype: str, lang: str = "en") -> str:
+    """Name of a result type on the video: ``rtype`` itself, or its Portuguese name."""
+    return RESULT_TYPE_LABELS_PT.get(rtype, rtype) if lang == "pt" else rtype
+
+
+# Result types whose points are spots of the pitch (z = 0): with a moving ``camera3d`` they are
+# drawn where that spot is seen on the CURRENT frame (``height`` = base on the grass + top above
+# it). ``level`` (image axes), ``line_plane`` / ``plane_point`` / ``height_line`` (a vertical
+# plane of the image), ``spin`` (a mark on the ball), ``event`` and the generic ``measure`` keep
+# the clicked pixel, as before.
+ANCHORED_RESULT_TYPES: frozenset[str] = frozenset(
+    {"distance", "area", "angle", "velocity", "acceleration", "arc", "height"}
+)
+# Live modes whose draft points are anchored the same way (``height``: only its base click).
+ANCHORED_DRAFT_MODES: frozenset[str] = frozenset(
+    {"distance", "area", "angle", "velocity", "acceleration", "arc", "height"}
+)
+EDGE_MARKER_MARGIN_PX = 14
+
+
+def anchored_edge_marker(
+    xy: Sequence[float], rect: Sequence[float], margin: float = EDGE_MARKER_MARGIN_PX
+) -> tuple[float, float, float, float] | None:
+    """Edge marker of a screen point ``xy`` that lies outside ``rect = (x, y, w, h)``.
+
+    Returns ``(ex, ey, dx, dy)``: ``(ex, ey)`` is where the segment from the centre of ``rect`` to
+    ``xy`` meets the rectangle shrunk by ``margin`` (the marker sits just inside the edge) and
+    ``(dx, dy)`` the unit vector from the centre towards ``xy`` (where the arrow points).
+    ``None`` when ``xy`` is inside ``rect`` or not finite.
+    """
+    x0, y0, w, h = (float(v) for v in rect)
+    px, py = float(xy[0]), float(xy[1])
+    if not (np.isfinite(px) and np.isfinite(py)):
+        return None
+    if x0 <= px <= x0 + w and y0 <= py <= y0 + h:
+        return None
+    cx, cy = x0 + w / 2.0, y0 + h / 2.0
+    vx, vy = px - cx, py - cy
+    norm = float(np.hypot(vx, vy))
+    if norm == 0.0:
+        return None
+    half_w = max(w / 2.0 - float(margin), 0.0)
+    half_h = max(h / 2.0 - float(margin), 0.0)
+    ts = []
+    if vx != 0.0:
+        ts.append(half_w / abs(vx))
+    if vy != 0.0:
+        ts.append(half_h / abs(vy))
+    t = min(ts)
+    return cx + t * vx, cy + t * vy, vx / norm, vy / norm
+
+
+def anchored_screen_uv(
+    session: QuickMeasureSession,
+    cur_frame: int,
+    frames: Sequence[int],
+    pixels: Sequence[Sequence[float]],
+    *,
+    heights: Sequence[float] | None = None,
+    ground_from: Sequence[int] | None = None,
+) -> list[tuple[float, float] | None] | None:
+    """Video pixels, on ``cur_frame``, of the pitch spots clicked at ``pixels`` on ``frames``.
+
+    Each click becomes the pitch point under it on ITS frame (``world_anchor``) and is projected
+    with the camera of ``cur_frame`` (``world_to_pixel_at``). A click made on ``cur_frame`` keeps
+    its own pixel exactly. ``heights[i]`` lifts point ``i`` to ``z = heights[i]`` m and
+    ``ground_from[i]`` takes its ``(X, Y)`` from the click of that index (``height``: the top is
+    above the base). An entry is ``None`` for a spot behind the camera. The whole result is
+    ``None`` (keep drawing at the clicked pixels) unless every click of ``frames`` and the
+    current frame have a ``camera3d`` calibration whose ray reaches the grass.
+    """
+    if not frames or len(frames) != len(pixels):
+        return None
+    if session._camera_track_or_none(int(cur_frame)) is None:
+        return None
+    grounds: list[tuple[float, float]] = []
+    for f, (x, y) in zip(frames, pixels, strict=True):
+        g = session.world_anchor(int(f), float(x), float(y))
+        if g is None:
+            return None
+        grounds.append(g)
+    out: list[tuple[float, float] | None] = []
+    for i, (f, (x, y)) in enumerate(zip(frames, pixels, strict=True)):
+        if int(f) == int(cur_frame):
+            out.append((float(x), float(y)))
+            continue
+        gx, gy = grounds[ground_from[i] if ground_from is not None else i]
+        z = float(heights[i]) if heights is not None else 0.0
+        out.append(session.world_to_pixel_at(int(cur_frame), gx, gy, z))
+    return out
+
+
+def _result_anchored_uv(
+    session: QuickMeasureSession, result: dict, cur_frame: int
+) -> list[tuple[float, float] | None] | None:
+    """``anchored_screen_uv`` of a finished result (``None``: draw it at the clicked pixels)."""
+    rtype = str(result.get("type", "") or "measure")
+    if rtype not in ANCHORED_RESULT_TYPES:
+        return None
+    pixels = result.get("pixels") or []
+    frames = result.get("frames") or []
+    if rtype == "height":
+        if len(pixels) != 2 or len(frames) != 2:
+            return None
+        try:
+            h = float(result["value"])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if not np.isfinite(h):
+            return None
+        return anchored_screen_uv(
+            session, cur_frame, frames, pixels, heights=[0.0, h], ground_from=[0, 0]
+        )
+    return anchored_screen_uv(session, cur_frame, frames, pixels)
+
+
+def _draft_anchored_uv(
+    session: QuickMeasureSession, cur_frame: int
+) -> list[tuple[float, float] | None] | None:
+    """``anchored_screen_uv`` of the draft clicks (``None``: draw them at the clicked pixels)."""
+    mode = session.active_mode
+    pts = session.draft_points
+    if mode not in ANCHORED_DRAFT_MODES or not pts:
+        return None
+    if mode == "height" and len(pts) != 1:
+        return None
+    return anchored_screen_uv(session, cur_frame, [p.frame for p in pts], [(p.x, p.y) for p in pts])
+
+
 def draw_quickmeasure_overlay(
     screen,
     session: QuickMeasureSession,
@@ -2313,18 +3424,47 @@ def draw_quickmeasure_overlay(
     pad_y=0,
     *,
     show_results: bool = True,
+    frame: int | None = None,
+    lang: str = "en",
+    view_rect: Sequence[int] | None = None,
 ):
     """Draw completed measurements (with value badges) + in-progress draft.
 
     ``show_results`` gates completed geometry/labels (MEASURE checkbox). Draft
     points and the live-mode banner stay visible so measuring still works.
+    ``frame`` (current video frame) enables the horizontal height-line guides of mode ``.``.
+    ``lang`` ``"pt"`` writes the badge names in Portuguese (``altura``, ``distância``...).
+    ``view_rect`` ``(x, y, w, h)`` is the part of the window that shows the video image (the host
+    removes the black bars and the side panel); anchored lines are clipped to it and an anchored
+    point outside it gets the edge marker. Default: the whole window. Pixel-anchored drawing
+    ignores it.
+
+    With a per-frame ``camera3d`` calibration (moving camera) and ``frame`` given, the points of
+    ``ANCHORED_RESULT_TYPES`` results and of the draft are drawn where the pitch spot they were
+    clicked on is seen on the CURRENT frame (``anchored_screen_uv``); segments and polygons are
+    drawn in the world and clipped to the window; a spot outside the window gets an edge marker
+    ``P<n> · q<frame>`` with an arrow. Any other calibration draws at the clicked pixels.
     """
     import pygame
+
+    view = screen.get_rect()
+    if view_rect is not None:
+        clipped_view = pygame.Rect(view_rect).clip(view)
+        if clipped_view.width > 2 * EDGE_MARKER_MARGIN_PX and clipped_view.height > 2 * (
+            EDGE_MARKER_MARGIN_PX
+        ):
+            view = clipped_view
 
     def _to_screen(x: float, y: float) -> tuple[int, int]:
         return int((x * zoom_level) - crop_x + pad_x), int((y * zoom_level) - crop_y + pad_y)
 
-    def _badge(text: str, anchor: tuple[int, int], *, border=(255, 0, 255)) -> None:
+    def _to_screen_f(u: float, v: float) -> tuple[int, int]:
+        # Anchored points can be thousands of pixels away (near the horizon): keep ints small.
+        sx = (u * zoom_level) - crop_x + pad_x
+        sy = (v * zoom_level) - crop_y + pad_y
+        return int(round(max(-1e7, min(1e7, sx)))), int(round(max(-1e7, min(1e7, sy))))
+
+    def _badge(text: str, anchor: tuple[int, int], *, border=(255, 0, 255), bounds=None) -> None:
         rendered = font.render(text, True, (255, 255, 220))
         box = pygame.Surface(
             (rendered.get_width() + 10, rendered.get_height() + 6), pygame.SRCALPHA
@@ -2333,7 +3473,7 @@ def draw_quickmeasure_overlay(
         pygame.draw.rect(box, border, box.get_rect(), 1)
         box.blit(rendered, (5, 3))
         rect = box.get_rect(midleft=(anchor[0] + 10, anchor[1] - 14))
-        rect.clamp_ip(screen.get_rect())
+        rect.clamp_ip(screen.get_rect() if bounds is None else bounds)
         screen.blit(box, rect)
 
     def _draw_level_crosshair(ox: int, oy: int, color: tuple[int, int, int]) -> None:
@@ -2341,23 +3481,187 @@ def draw_quickmeasure_overlay(
         pygame.draw.line(screen, color, (0, oy), (w, oy), 1)
         pygame.draw.line(screen, color, (ox, 0), (ox, h), 1)
 
+    def _tag(
+        text: str,
+        centre: tuple[float, float],
+        color: tuple[int, int, int],
+        inward: tuple[float, float] | None = None,
+    ) -> None:
+        """Small label box at ``centre``; ``inward=(dx, dy)`` pushes it away from an edge marker."""
+        rendered = font.render(text, True, (255, 255, 220))
+        box = pygame.Surface((rendered.get_width() + 8, rendered.get_height() + 4), pygame.SRCALPHA)
+        box.fill((40, 10, 50, 220))
+        pygame.draw.rect(box, color, box.get_rect(), 1)
+        box.blit(rendered, (4, 2))
+        cx, cy = centre
+        if inward is not None:
+            cx -= inward[0] * (box.get_width() / 2 + 14)
+            cy -= inward[1] * 14
+        rect = box.get_rect(center=(int(cx), int(cy)))
+        rect.clamp_ip(view)
+        screen.blit(box, rect)
+
+    def _draw_anchored(
+        uv_list,
+        frames,
+        ids,
+        stroke: tuple[int, int, int],
+        *,
+        width: int,
+        closed: bool,
+        result_style: bool,
+        vertex: int | None = None,
+    ) -> tuple[int, int] | None:
+        """Draw anchored points + the segments between them; return the badge anchor.
+
+        ``uv_list`` holds the video pixels of the points on this frame (``None`` = behind the
+        camera). Segments are clipped to the window (``Rect.clipline``); a point outside the
+        window is an edge marker with an arrow and the label ``P<id> · q<click frame>``.
+        """
+        win = view
+        scr = [None if uv is None else _to_screen_f(uv[0], uv[1]) for uv in uv_list]
+        n = len(scr)
+        edges = [(i, i + 1) for i in range(n - 1)]
+        if closed and n >= 3:
+            edges.append((n - 1, 0))
+        pieces: list[tuple[tuple[int, int], tuple[int, int]]] = []
+        for i, j in edges:
+            seg_a, seg_b = scr[i], scr[j]
+            if seg_a is None or seg_b is None:
+                continue
+            clipped = win.clipline(seg_a, seg_b)
+            if clipped:
+                pygame.draw.line(screen, stroke, clipped[0], clipped[1], width)
+                pieces.append((clipped[0], clipped[1]))
+        behind_k = 0
+        placed: list[tuple[float, float]] = []
+        first_marker: tuple[int, int, float, float] | None = None
+        for i, pt in enumerate(scr):
+            label = f"P{ids[i]} · q{int(frames[i])}"
+            if pt is None:
+                label += " · " + ("atrás da câmera" if lang == "pt" else "behind camera")
+                cx = win.left + EDGE_MARKER_MARGIN_PX + 90 + 190 * behind_k
+                cy = win.bottom - EDGE_MARKER_MARGIN_PX - 8
+                behind_k += 1
+                pygame.draw.circle(screen, (40, 10, 50), (cx - 82, cy), 6)
+                pygame.draw.circle(screen, stroke, (cx - 82, cy), 5, 2)
+                _tag(label, (cx + 20, cy), stroke)
+                first_marker = first_marker or (cx - 82, cy, 0.0, 1.0)
+                continue
+            if win.collidepoint(pt):
+                if result_style:
+                    pygame.draw.circle(screen, (40, 10, 50), pt, 6)
+                    pygame.draw.circle(screen, stroke, pt, 5, 2)
+                else:
+                    pygame.draw.circle(screen, stroke, pt, 5, 2)
+                    screen.blit(font.render(str(ids[i]), True, stroke), (pt[0] + 6, pt[1] - 14))
+                continue
+            marker = anchored_edge_marker(pt, tuple(win), EDGE_MARKER_MARGIN_PX)
+            if marker is None:
+                continue
+            ex, ey, dx, dy = marker
+            # Spots far away all land on nearly the same border point: slide along the border.
+            for step in (0, 1, -1, 2, -2, 3, -3):
+                cx = min(max(ex - dy * 24 * step, win.left + 6), win.right - 6)
+                cy = min(max(ey + dx * 24 * step, win.top + 6), win.bottom - 6)
+                if all(np.hypot(cx - px, cy - py) >= 22 for px, py in placed):
+                    ex, ey = cx, cy
+                    break
+            placed.append((ex, ey))
+            pygame.draw.circle(screen, (40, 10, 50), (int(ex), int(ey)), 6)
+            pygame.draw.circle(screen, stroke, (int(ex), int(ey)), 5, 2)
+            tip = (ex + dx * 12, ey + dy * 12)
+            base = (ex + dx * 7, ey + dy * 7)
+            left = (base[0] - dy * 5, base[1] + dx * 5)
+            right = (base[0] + dy * 5, base[1] - dx * 5)
+            pygame.draw.polygon(screen, stroke, [tip, left, right])
+            _tag(label, (ex, ey), stroke, inward=(dx, dy))
+            first_marker = first_marker or (int(ex), int(ey), dx, dy)
+        # Badge: the vertex of an angle, else the middle of the visible part of the line.
+        vertex_pt = scr[vertex] if vertex is not None and vertex < n else None
+        if vertex_pt is not None and win.collidepoint(vertex_pt):
+            return vertex_pt
+        total = sum(float(np.hypot(b[0] - a[0], b[1] - a[1])) for a, b in pieces)
+        if pieces and total > 0.0:
+            remaining = total / 2.0
+            for a, b in pieces:
+                seg = float(np.hypot(b[0] - a[0], b[1] - a[1]))
+                if remaining <= seg:
+                    t = remaining / seg if seg > 0.0 else 0.0
+                    return int(a[0] + t * (b[0] - a[0])), int(a[1] + t * (b[1] - a[1]))
+                remaining -= seg
+        for pt in scr:
+            if pt is not None and win.collidepoint(pt):
+                return pt
+        if first_marker is None:
+            return None
+        # Nothing of the measure is on the image: put the badge into the image, clear of the tags.
+        mx, my, mdx, mdy = first_marker
+        if abs(mdx) >= abs(mdy):
+            return (mx - 300 if mdx > 0 else mx + 80), my
+        return mx - 100, (my - 70 if mdy > 0 else my + 70)
+
     color_done = (255, 0, 255)
     color_draft = (255, 180, 0)
     color_level = (0, 255, 80)
+    color_guide = (0, 200, 255)
+    # Point-only types: their clicks are not a path to join with a line.
+    point_only = {"spin", "plane_point", "height_line"}
+
+    if show_results and frame is not None:
+        for z_m, uv in session.height_line_guides(int(frame)):
+            p0, p1 = _to_screen(uv[0, 0], uv[0, 1]), _to_screen(uv[1, 0], uv[1, 1])
+            pygame.draw.line(screen, color_guide, p0, p1, 2)
+            _badge(f"{result_type_label('height', lang)} {z_m:.2f} m", p1, border=color_guide)
+
+    def _result_label(idx: int, r: dict, rtype: str) -> str:
+        unit = str(r.get("unit", "") or "").strip()
+        try:
+            value = float(r.get("value", float("nan")))
+            value_txt = f"{value:.3f}"
+        except (TypeError, ValueError):
+            value_txt = str(r.get("value", "?"))
+        axis = str(r.get("axis") or "").strip()
+        name = result_type_label(rtype, lang)
+        if rtype == "level" and axis:
+            label = f"#{idx} · {name} · {axis} · {value_txt}"
+        else:
+            label = f"#{idx} · {name} · {value_txt}"
+        if unit:
+            label = f"{label} {unit}"
+        return label
 
     if show_results:
         for idx, r in enumerate(session.results, start=1):
             pixels = r.get("pixels") or []
             if not pixels:
                 continue
-            screen_pts = [_to_screen(px, py) for px, py in pixels]
             rtype = str(r.get("type", "") or "measure")
+            anchored = _result_anchored_uv(session, r, int(frame)) if frame is not None else None
+            if anchored is not None:
+                ids = r.get("point_ids") or []
+                if len(ids) != len(anchored):
+                    ids = list(range(1, len(anchored) + 1))
+                badge_at = _draw_anchored(
+                    anchored,
+                    r.get("frames") or [],
+                    ids,
+                    color_done,
+                    width=2 if rtype == "area" else 3,
+                    closed=rtype == "area",
+                    result_style=True,
+                    vertex=1 if rtype == "angle" and len(anchored) == 3 else None,
+                )
+                if badge_at is not None:
+                    _badge(_result_label(idx, r, rtype), badge_at, border=color_done, bounds=view)
+                continue
+            screen_pts = [_to_screen(px, py) for px, py in pixels]
             stroke = color_level if rtype == "level" else color_done
             if rtype == "level" and screen_pts:
                 _draw_level_crosshair(screen_pts[0][0], screen_pts[0][1], color_level)
             if rtype == "area" and len(screen_pts) >= 3:
                 pygame.draw.polygon(screen, stroke, screen_pts, 2)
-            elif len(screen_pts) >= 2:
+            elif len(screen_pts) >= 2 and rtype not in point_only:
                 pygame.draw.lines(screen, stroke, False, screen_pts, 3)
             for sx, sy in screen_pts:
                 pygame.draw.circle(screen, (40, 10, 50), (sx, sy), 6)
@@ -2370,23 +3674,25 @@ def draw_quickmeasure_overlay(
                 ly = sum(p[1] for p in screen_pts) // len(screen_pts)
             else:
                 continue
-            unit = str(r.get("unit", "") or "").strip()
-            try:
-                value = float(r.get("value", float("nan")))
-                value_txt = f"{value:.3f}"
-            except (TypeError, ValueError):
-                value_txt = str(r.get("value", "?"))
-            axis = str(r.get("axis") or "").strip()
-            if rtype == "level" and axis:
-                label = f"#{idx} · level · {axis} · {value_txt}"
-            else:
-                label = f"#{idx} · {rtype} · {value_txt}"
-            if unit:
-                label = f"{label} {unit}"
-            _badge(label, (lx, ly), border=stroke)
+            _badge(_result_label(idx, r, rtype), (lx, ly), border=stroke)
 
     # In-progress draft for the active live mode.
-    if session.draft_points:
+    draft_anchored = (
+        _draft_anchored_uv(session, int(frame))
+        if frame is not None and session.draft_points
+        else None
+    )
+    if draft_anchored is not None:
+        _draw_anchored(
+            draft_anchored,
+            [p.frame for p in session.draft_points],
+            list(range(1, len(draft_anchored) + 1)),
+            color_draft,
+            width=2,
+            closed=session.active_mode == "area" and len(draft_anchored) >= 3,
+            result_style=False,
+        )
+    elif session.draft_points:
         draft_pts = [_to_screen(p.x, p.y) for p in session.draft_points]
         if session.active_mode == "level" and draft_pts:
             _draw_level_crosshair(draft_pts[0][0], draft_pts[0][1], color_level)
@@ -2395,7 +3701,9 @@ def draw_quickmeasure_overlay(
             draft_color = color_draft
         if len(draft_pts) >= 2:
             closed = session.active_mode == "area" and len(draft_pts) >= 3
-            if session.active_mode == "level":
+            if session.active_mode == "spin":
+                pass  # marks of the same spot: no connecting line
+            elif session.active_mode == "level":
                 # Preview snapped tape toward the second click.
                 o = session.draft_points[0]
                 e = session.draft_points[1]
@@ -2646,6 +3954,165 @@ def _ask_drop_axis_via_dialog(parent=None) -> str | None:
     return axis
 
 
+FRAMES_CAMERA_SOURCES_APPROX = "approximate"
+
+
+def frames_cameras_csv_for(path: str | os.PathLike) -> str:
+    """The ``<stem>_frames_cameras.csv`` that sits next to ``<stem>_frames.dlt3d`` / ``.dlt2d``."""
+    base, _ext = os.path.splitext(os.fspath(path))
+    return base + "_cameras.csv"
+
+
+def read_frame_sources(path: str | os.PathLike) -> dict[int, str]:
+    """``{frame: source}`` from the cameras csv next to a per-frame calibration file.
+
+    ``source`` is ``dlt3d`` | ``solved`` | ``tracked`` | ``approximate``. A missing or unreadable
+    csv gives ``{}`` (the calibration still works; only the approximate-frame warning is lost).
+    """
+    csv_path = frames_cameras_csv_for(path)
+    try:
+        df = pd.read_csv(csv_path)
+        return {int(f): str(s).strip() for f, s in zip(df["frame"], df["source"], strict=True)}
+    except (OSError, ValueError, KeyError, pd.errors.ParserError):
+        return {}
+
+
+def approximate_frame_warning(source: str | None, lang: str = "en") -> str:
+    """Short HUD warning for a frame whose camera is ``approximate`` (empty for any other)."""
+    if source != FRAMES_CAMERA_SOURCES_APPROX:
+        return ""
+    if str(lang).lower().startswith("pt"):
+        return "Camera APROXIMADA neste quadro (copiada de outro): meça com cautela"
+    return "APPROXIMATE camera on this frame (copied from another): measure with care"
+
+
+def _kick_work_dir(path: str, stem: str) -> Path | None:
+    """The ``work/<stem>`` folder of a ``kick_analysis_*`` run that holds ``path``, or None."""
+    for parent in Path(path).resolve().parents:
+        if parent.name == stem and parent.parent.name == "work":
+            return parent
+        cand = parent / "work" / stem
+        if cand.is_dir():
+            return cand
+    return None
+
+
+def _sparse_frames_substitute(path: str, *, is_3d: bool, total_frames: int | None) -> str | None:
+    """Per-frame file to load instead of a sparse FreeKiki ``<stem>.dlt3d`` / ``.dlt2d``.
+
+    The FreeKiki detect run writes one row per video frame but only the frames it calibrated
+    hold numbers; the others are NaN, so a camera3d / per-frame DLT2D built from it answers
+    ``(nan, nan)`` there. Returns ``None`` when the file has no NaN row (or cannot be read here:
+    the normal loader then reports it). Otherwise returns the ``<stem>_frames.dlt3d`` /
+    ``.dlt2d`` of the same kick folder (``kick_measure.find_frame_calibration``) when it has a
+    finite camera on every frame, after printing one line; else raises ``QuickMeasureError``.
+    """
+    try:
+        df = pd.read_csv(path)
+    except (OSError, ValueError, pd.errors.ParserError):
+        return None
+    ncols = 12 if is_3d else 9
+    if df.shape[1] != ncols or len(df) < 2:
+        return None
+    try:
+        params = df.iloc[:, 1:].to_numpy(dtype=float, na_value=np.nan)
+    except (TypeError, ValueError):
+        return None  # not numbers: the normal loader reports it
+    bad = ~np.isfinite(params).all(axis=1)
+    n_bad = int(bad.sum())
+    if n_bad == 0:
+        return None
+    n_rows = len(df)
+    n_expected = int(total_frames) if total_frames is not None else n_rows
+    frame_ids = pd.to_numeric(df.iloc[:, 0], errors="coerce").to_numpy()
+    first = [int(f) if np.isfinite(f) else int(i) for i, f in enumerate(frame_ids) if bad[i]][:5]
+    name = os.path.basename(path)
+    stem = Path(path).stem
+    work = _kick_work_dir(path, stem)
+    kick_dir = work.parent.parent if work is not None else None
+    km = _kick_measure()
+    found = km.find_frame_calibration(work, stem) if work is not None else None
+    if found is not None and not is_3d:
+        found = found.with_suffix(".dlt2d")
+    if found is not None and found.is_file() and found.resolve() != Path(path).resolve():
+        try:
+            good = pd.read_csv(found)
+            ok = (
+                len(good) == n_expected
+                and good.shape[1] == ncols
+                and bool(np.isfinite(good.iloc[:, 1:].to_numpy(dtype=float)).all())
+            )
+        except (OSError, ValueError, pd.errors.ParserError):
+            ok = False
+        if ok:
+            print(
+                f">> vaila/quickmeasure: {name} has no camera on {n_bad} of {n_rows} frames "
+                f"(sparse FreeKiki file); loaded the per-frame calibration {found} instead"
+            )
+            return str(found)
+    where = str(kick_dir) if kick_dir is not None else "<kick folder>"
+    raise QuickMeasureError(
+        f"{name} has no camera on {n_bad} of {n_rows} frames (first: "
+        f"{', '.join(str(f) for f in first)}): it is the sparse FreeKiki file. A per-frame "
+        "calibration needs a camera on every frame and no complete *_frames."
+        f"{'dlt3d' if is_3d else 'dlt2d'} was found in this kick folder. Make one with "
+        f"`uv run --no-sync vaila/freekiki.py kick-cameras {where}` (or the FreeKiki button "
+        "'Calibration per frame'), or open the video with --kick-run so every frame gets its "
+        "camera."
+    )
+
+
+def load_frames_calibration(
+    path: str | os.PathLike,
+    *,
+    total_frames: int | None = None,
+    unit_label: str = "m",
+) -> QuickMeasureCalibration | list[QuickMeasureCalibration]:
+    """Load a per-frame calibration file written next to the SAM 3 outputs.
+
+    * ``<stem>_frames.dlt3d`` (``frame,L1..L11``, one row per video frame) becomes ONE
+      ``camera3d`` calibration (``from_camera_track``): every click uses the camera of its own
+      frame (ground point and heights, in metres of the FreeKiki pitch).
+    * ``<stem>_frames.dlt2d`` (``frame,L1..L8``) becomes the list of per-frame DLT2D
+      calibrations (``from_dlt2d_sequence``); install them with ``set_calibration(c, frame=i)``.
+
+    ``total_frames`` makes a ``.dlt3d`` with a different number of rows than the video an error
+    (a camera per frame is the whole point: a short file would silently reuse the wrong camera).
+    """
+    path = os.fspath(path)
+    lower = path.lower()
+    is_3d = lower.endswith(".dlt3d")  # else .dlt2d, or any CSV with frame + 8 coefficients
+    substitute = _sparse_frames_substitute(path, is_3d=is_3d, total_frames=total_frames)
+    if substitute is not None:
+        return load_frames_calibration(substitute, total_frames=total_frames, unit_label=unit_label)
+    if not is_3d:
+        return QuickMeasureCalibration.from_dlt2d_sequence(
+            path, total_frames=total_frames, unit_label=unit_label
+        )
+    try:
+        df = pd.read_csv(path)
+    except (OSError, ValueError, pd.errors.ParserError) as exc:
+        raise QuickMeasureError(f"Cannot load DLT3D file: {exc}") from exc
+    if df.empty or df.shape[1] != 12:
+        raise QuickMeasureError(
+            "A per-frame DLT3D has a frame column and 11 parameters (frame,L1..L11)."
+        )
+    if total_frames is not None and len(df) != int(total_frames):
+        raise QuickMeasureError(
+            f"DLT3D has {len(df)} rows; the video has {total_frames} frames. A per-frame "
+            "calibration needs exactly one row per video frame (use the *_frames.dlt3d "
+            "written next to the SAM 3 outputs, not the sparse FreeKiki .dlt3d)."
+        )
+    reader = getattr(_kick_measure(), "read_frame_calibration", None)
+    if reader is None:
+        raise QuickMeasureError("This vailá build cannot read per-frame DLT3D files.")
+    try:
+        track = reader(path)
+    except (OSError, ValueError, KeyError) as exc:
+        raise QuickMeasureError(f"Cannot load DLT3D file: {exc}") from exc
+    return QuickMeasureCalibration.from_camera_track(track, unit_label=unit_label, source=path)
+
+
 def _ask_calibration_via_dialog(
     video_path: str | None = None,
     *,
@@ -2660,7 +4127,7 @@ def _ask_calibration_via_dialog(
     try:
         choice = messagebox.askyesnocancel(
             "Quick Measure — Calibration",
-            "Yes: load an existing .dlt2d coefficients file.\n"
+            "Yes: load an existing .dlt2d file or a per-frame *_frames.dlt3d.\n"
             "No: load pixel CSV + reference (.ref2d or .ref3d).\n"
             "Cancel: abort.",
         )
@@ -2668,17 +4135,34 @@ def _ask_calibration_via_dialog(
             return None, "Calibration cancelled."
         if choice:
             dlt2d_file = filedialog.askopenfilename(
-                title="Select .dlt2d coefficients file",
-                filetypes=[("DLT2D files", "*.dlt2d"), ("CSV files", "*.csv")],
+                title="Select .dlt2d or per-frame *_frames.dlt3d file",
+                filetypes=[
+                    ("DLT2D / per-frame DLT3D", "*.dlt2d *.dlt3d"),
+                    ("DLT2D files", "*.dlt2d"),
+                    ("DLT3D frames files", "*.dlt3d"),
+                    ("CSV files", "*.csv"),
+                ],
             )
             if not dlt2d_file:
                 return None, "Calibration cancelled."
-            calibrations = QuickMeasureCalibration.from_dlt2d_sequence(
-                dlt2d_file, total_frames=total_frames
-            )
+            loaded = load_frames_calibration(dlt2d_file, total_frames=total_frames)
+            first = loaded if not isinstance(loaded, list) else loaded[0]
+            swapped = ""
+            if os.path.abspath(first.source) != os.path.abspath(dlt2d_file):
+                # sparse FreeKiki file replaced by its per-frame calibration (see load_frames_calibration)
+                swapped = (
+                    f" (the file you chose has no camera on some frames; "
+                    f"used {os.path.basename(first.source)} instead)"
+                )
+            if not isinstance(loaded, list):
+                return loaded, f"Per-frame DLT3D loaded: {os.path.basename(first.source)}{swapped}"
+            calibrations = loaded
             if len(calibrations) > 1:
-                return calibrations, f"Loaded {len(calibrations)} frame calibrations (row order)."
-            return calibrations[0], f"Calibration loaded: {os.path.basename(dlt2d_file)}"
+                return (
+                    calibrations,
+                    f"Loaded {len(calibrations)} frame calibrations (row order){swapped}.",
+                )
+            return calibrations[0], f"Calibration loaded: {os.path.basename(first.source)}{swapped}"
 
         pixel_file = filedialog.askopenfilename(
             title="Select PIXEL calibration CSV (getpixelvideo markers)",
@@ -2807,12 +4291,13 @@ def show_quickmeasure_menu(
         "MEASURE — save / classify",
         "",
         f"Points: {n}   Results: {len(session.results)}   Unit: {session.unit_label}",
-        f"Live mode: {session.active_mode or '(press 1-6 on video)'}   FPS: {session.fps}",
+        f"Live mode: {session.active_mode or '(press 1-0 , . on video)'}   FPS: {session.fps}",
         f"Calibration: {calib_line}",
         "",
         "On the VIDEO (MEASURE / Q):",
         "  1 distance  2 area  3 angle  4 velocity  5 accel  6 level",
-        "  7-0 reserved — value drawn on-image per completed set",
+        "  7 height  8 line-plane (s,z)  9 event  0 spin  , arc  . height-line",
+        "  (7, 8, . need a camera3d calibration; 9, 0 need FPS)",
         "  Enter closes area; Clear/Backspace wipe feedback; Ctrl+Z/Y undo/redo",
         "",
         "In this menu:",

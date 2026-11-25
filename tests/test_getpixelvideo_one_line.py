@@ -283,7 +283,15 @@ def script():
         elif a == "f1":
             key(pygame.K_F1)
         elif a.startswith("button:"):  # a toolbar button, by its id in TOOLBAR_HIT_RECTS
-            x, y = gpv.TOOLBAR_HIT_RECTS[a.split(":", 1)[1]].center
+            # The render loop drops and re-adds some ids every frame (ref3d_guide):
+            # wait until this thread sees it instead of racing the redraw.
+            name, rect = a.split(":", 1)[1], None
+            for _ in range(100):
+                rect = gpv.TOOLBAR_HIT_RECTS.get(name)
+                if rect is not None:
+                    break
+                time.sleep(0.1)
+            x, y = rect.center
             click(x, y, 1)
             time.sleep(3.0)
 

@@ -8,9 +8,18 @@ verification, distractor rejection, and occlusion recovery -- optionally also fu
 into the retrained online discriminator's feature vector. Integrates bidirectional
 keyframe infilling and Rauch-Tung-Striebel (RTS) zero-phase smoothing (Δϕ = 0).
 
+Where the learned network lives: the online discriminators, the fine-tuned backbones and the
+human-placed training samples are kept in a folder the user chooses
+(``--ai-models DIR``, ``$VAILA_AI_MODELS_HOME`` or ``~/.vaila/ai_models.json``; see
+``vaila.ai_tracker_store``), with versioned atomic saves. Without a choice the legacy folder
+``vaila/models/ai_tracker`` is used, as before. The official ImageNet weights are still found
+in the legacy folder. Each discriminator checkpoint is bound to its feature space (``classic``
+or ``<variant>-<sha8 of the backbone file>``) so a Deep checkpoint is never overwritten or
+loaded by a tracker with other features.
+
 Author: Prof. Dr. Paulo R. P. Santiago
-Update Date: 14 October 2026
-Version: 0.4.8
+Update Date: 24 November 2026
+Version: 0.4.19
 """
 
 from __future__ import annotations
@@ -25,6 +34,8 @@ from urllib.request import urlopen
 
 import cv2
 import numpy as np
+
+from vaila import ai_tracker_store as _store
 
 from .rts_smoother import RTSSmoother
 from .subspace_tracker import TrackingResult
@@ -80,6 +91,7 @@ _KF_FALLBACK_MAX_STREAK = 5  # only trust the prediction through this many conse
 _KF_FALLBACK_MAX_POS_VAR = 400.0  # trace(P_pos) bound (px^2) -- prediction too uncertain past this
 _FEATURE_DIM = 808  # extract_patch_feature() output length (768 color-grid + 40 region-stats)
 _CHECKPOINT_BLEND_MAX_N = 4000.0  # Cap prior-session weight so a fresh session can still adapt
+_MAX_SAMPLE_LOG = 5000  # human-placed training samples kept per tracker session (RAM bound)
 
 
 _BACKBONE_VARIANTS = ("resnet50", "resnet152", "mobilenet_v3_small", "efficientnet_b0")
@@ -137,19 +149,51 @@ def _torch_hub_checkpoints_dir() -> Path:
 
 
 def _ai_tracker_resnet_local_path(variant: str = "resnet50") -> Path:
-    """Canonical local checkpoint path for a backbone variant, under vaila/models/ai_tracker/.
+    """Canonical local path of the OFFICIAL ImageNet weights of a variant.
 
-    This is the ONLY local directory scanned for weights -- vaila/models/ai_tracker/ is
-    the sole canonical location (see instructions_ai_tracker.txt). A legacy fallback to
-    the general vaila/models/ directory used to exist here and has been removed.
+    The official ``<variant>_imagenet.pth`` files stay in the legacy folder
+    ``vaila/models/ai_tracker/`` (``ai_tracker_store.LEGACY_DIR``): they are re-downloadable,
+    so they are not part of the user's AI Track home and are never copied there. A legacy
+    fallback to the general vaila/models/ directory used to exist here and has been removed.
     """
     variant = _normalize_backbone_variant(variant)
-    return Path(__file__).resolve().parents[1] / "models" / "ai_tracker" / f"{variant}_imagenet.pth"
+    return Path(_store.LEGACY_DIR) / f"{variant}_imagenet.pth"
 
 
 def _default_checkpoint_dir() -> Path:
-    """Directory for persisted online-discriminator checkpoints (cross-session transfer learning)."""
-    return Path(__file__).resolve().parents[1] / "models" / "ai_tracker"
+    """Root of the AI Track home (``<home>/ai_tracker``), or the legacy folder
+    ``vaila/models/ai_tracker`` when the user has not chosen one (``resolve_home().root``)."""
+    return _store.resolve_home().root
+
+
+_LEGACY_MIGRATED: set[str] = set()
+
+
+def _resolve_root() -> Path:
+    """Root for checkpoints. In legacy mode the flat legacy discriminators are first copied
+    (once per process, never moved) into the sub-folders keyed by feature space."""
+    paths = _store.resolve_home()
+    if paths.source == "legacy" and str(paths.root) not in _LEGACY_MIGRATED:
+        _LEGACY_MIGRATED.add(str(paths.root))
+        try:
+            _store.migrate_legacy(paths.root)
+        except OSError as err:
+            print(f">> AI Track: could not prepare the legacy folder ({err})")
+    return paths.root
+
+
+def _weight_dirs() -> list[Path]:
+    """Folders searched for backbone weights: the home root, its ``backbones/`` and, while
+    the root is the resolved home, the legacy folder (official ImageNet weights)."""
+    root = _default_checkpoint_dir()
+    dirs = [root, root / "backbones"]
+    legacy = Path(_store.LEGACY_DIR)
+    try:
+        if legacy != root and root == _store.resolve_home().root:
+            dirs.append(legacy)
+    except ValueError:
+        pass
+    return dirs
 
 
 def _scan_weight_files(directory: Path, variant: str) -> list[Path]:
@@ -173,12 +217,20 @@ def _scan_weight_files(directory: Path, variant: str) -> list[Path]:
 
 
 def scan_all_ai_tracker_weights(directory: Path | str | None = None) -> list[Path]:
-    """Scan all valid .pth and .pt weight files found in directory (default: vaila/models/ai_tracker/).
+    """Scan all valid .pth and .pt weight files found in directory (default: the AI Track
+    home root, its backbones/ folder and the legacy vaila/models/ai_tracker/).
 
     Returns resolved Path objects with canonical primary weights (e.g. resnet50_imagenet.pth)
     listed first, followed by any other .pth/.pt files found in the directory.
     """
-    target_dir = Path(directory) if directory is not None else _default_checkpoint_dir()
+    if directory is None:
+        merged: list[Path] = []
+        for folder in _weight_dirs():
+            for cand in scan_all_ai_tracker_weights(folder):
+                if cand not in merged:
+                    merged.append(cand)
+        return merged
+    target_dir = Path(directory)
     found: list[Path] = []
     seen: set[str] = set()
     if not target_dir.is_dir():
@@ -217,7 +269,8 @@ def scan_all_ai_tracker_weights(directory: Path | str | None = None) -> list[Pat
 
 
 def get_available_resnet_checkpoints(variant: str = "resnet50") -> list[Path]:
-    """Scan backbone weight checkpoints under vaila/models/ai_tracker/ only.
+    """Scan backbone weight checkpoints in the AI Track home (root and ``backbones/``) and in
+    the legacy ``vaila/models/ai_tracker/`` (official ImageNet weights) only.
 
     `variant` is any of `_BACKBONE_VARIANTS`. Torch hub cache is intentionally NOT
     listed here — Ctrl+W / Cfg must advertise the scientist-visible directory only.
@@ -225,7 +278,12 @@ def get_available_resnet_checkpoints(variant: str = "resnet50") -> list[Path]:
     ``ai_tracker/``.
     """
     variant = _normalize_backbone_variant(variant)
-    return _scan_weight_files(_default_checkpoint_dir(), variant)
+    found: list[Path] = []
+    for folder in _weight_dirs():
+        for cand in _scan_weight_files(folder, variant):
+            if cand not in found:
+                found.append(cand)
+    return found
 
 
 def _hub_cache_checkpoints(variant: str = "resnet50") -> list[Path]:
@@ -244,7 +302,7 @@ def _ai_tracker_resnet50_local_path() -> Path:
 
 
 def download_backbone_weights(variant: str = "resnet50", dest: Path | None = None) -> Path:
-    """Download official clean ImageNet weights into ``vaila/models/ai_tracker/``.
+    """Download official clean ImageNet weights into the legacy ``vaila/models/ai_tracker/``.
 
     Never writes to ``~/.cache/torch/hub/checkpoints/``. Uses a temp file + atomic
     rename so a partial download cannot leave a corrupt canonical path.
@@ -304,14 +362,16 @@ def ensure_backbone_weights(
     prompt_fn: Callable[[str], str | None] | None = None,
     browse_fn: Callable[[], str | Path | None] | None = None,
 ) -> Path | None:
-    """Resolve backbone weights under ``vaila/models/ai_tracker/``, prompting if needed.
+    """Resolve backbone weights (AI Track home, then legacy ``vaila/models/ai_tracker/``),
+    prompting if needed.
 
     Resolution order:
       1. Explicit ``weights_path`` when valid
-      2. Canonical ``ai_tracker/{variant}_imagenet.pth``
-      3. Any other matching file already under ``ai_tracker/``
-      4. Torch hub cache hit → copy into ``ai_tracker/`` (one-time migration)
-      5. ``prompt_fn(variant)`` → ``"browse"`` | ``"download"`` | cancel/None
+      2. The active fine-tuned backbone of the variant (manifest of the AI Track home)
+      3. Canonical official ``vaila/models/ai_tracker/{variant}_imagenet.pth``
+      4. Any other matching file under the home root, ``backbones/`` or the legacy folder
+      5. Torch hub cache hit → copy into the legacy folder (one-time migration)
+      6. ``prompt_fn(variant)`` → ``"browse"`` | ``"download"`` | cancel/None
 
     Returns the absolute path to load, or ``None`` if the user cancelled / no file.
     """
@@ -321,6 +381,10 @@ def ensure_backbone_weights(
         explicit = Path(weights_path)
         if _is_valid_weight_file(explicit):
             return explicit.resolve()
+
+    active = _store.active_backbone(_default_checkpoint_dir(), variant)
+    if active is not None and _is_valid_weight_file(active):
+        return active.resolve()
 
     canonical = _ai_tracker_resnet_local_path(variant)
     if _is_valid_weight_file(canonical):
@@ -364,15 +428,16 @@ def ensure_backbone_weights(
     return None
 
 
-def default_checkpoint_path(name: str = "default") -> Path:
-    """Path to the on-disk discriminator checkpoint for the given tracker profile name.
+def default_checkpoint_path(name: str = "default", feature_key: str | None = None) -> Path:
+    """Path of the discriminator checkpoint of a profile and feature space.
 
-    Called by getpixelvideo.py on AI Track ON (load_checkpoint) and OFF (save_checkpoint)
-    so the online-learned appearance model persists and incrementally improves across
-    sessions instead of rebuilding from scratch every time the tool opens.
+    ``ai_tracker_store.discriminator_path(resolve_home().root, name, feature_key or
+    "classic")``, i.e. ``<home>/ai_tracker/discriminators/discriminator_<name>__<key>.npz``.
+    Pass ``tracker.checkpoint_key()`` as ``feature_key`` so a Deep tracker (``<variant>-<sha8>``)
+    and a classic one never share a file. Called by getpixelvideo.py to load the checkpoint
+    when AI Track starts, so the learned appearance model improves across sessions.
     """
-    safe_name = "".join(c if (c.isalnum() or c in "-_") else "_" for c in name) or "default"
-    return _default_checkpoint_dir() / f"discriminator_{safe_name}.npz"
+    return _store.discriminator_path(_resolve_root(), name, feature_key or "classic")
 
 
 @dataclass
@@ -724,7 +789,11 @@ class DeepFeatureExtractor:
                     return p.resolve()
                 except OSError:
                     pass
-        candidates: list[Path] = [
+        candidates: list[Path] = []
+        active = _store.active_backbone(_default_checkpoint_dir(), variant)
+        if active is not None:
+            candidates.append(active)
+        candidates += [
             _ai_tracker_resnet_local_path(variant),
             *get_available_resnet_checkpoints(variant),
         ]
@@ -849,6 +918,16 @@ class AITracker:
         # (session samples plus, once blended, the checkpoint's own prior count).
         # This is what gets persisted by save_checkpoint() for the next session.
         self._live_n_samples: float = 0.0
+
+        # Bank of HUMAN-placed samples (never tracker predictions): positive/negative patch
+        # plus a context crop each, kept for the offline retraining (see save_samples()).
+        # The host sets ``sample_context = {"video": stem, "marker": idx}``.
+        self.sample_context: dict[str, Any] = {}
+        self.sample_log: list[dict[str, Any]] = []
+        self._sample_keys: set[tuple[Any, ...]] = set()
+        self._sample_session: str = time.strftime("%Y%m%d_%H%M%S")
+        self._sample_cap_warned: bool = False
+        self._samples_saved: dict[str, int] = {}
 
         if self.params.use_deep_features:
             self.extractor = DeepFeatureExtractor.get_shared(
@@ -1047,8 +1126,15 @@ class AITracker:
         frame: np.ndarray,
         point: tuple[float, float],
         frame_idx: int = -1,
+        *,
+        record_sample: bool = True,
     ) -> None:
-        """Add a keyframe anchor point, extract positive & negative exemplar patches, and stage samples."""
+        """Add a keyframe anchor point, extract positive & negative exemplar patches, and stage samples.
+
+        Anchors are human-placed points (also reached through ``set_reference`` and
+        ``update_from_correction``). They are recorded in ``sample_log`` for offline retraining
+        unless ``record_sample`` is False; ``track_frame`` predictions never get here.
+        """
         bw, bh = self.params.block_window
         h_img, w_img = frame.shape[:2]
         shape_mode = getattr(self.params, "tracking_shape", "point").lower()
@@ -1068,6 +1154,7 @@ class AITracker:
         self.training_feats.append(pos_feat)
         self.training_labels.append(1.0)
         self.training_patches.append(pos_patch)
+        recorded: list[tuple[np.ndarray, tuple[float, float], int]] = [(pos_patch, point, 1)]
 
         # Sample 6 negative background patches around the anchor point
         cx, cy = point
@@ -1089,11 +1176,122 @@ class AITracker:
                     self.training_feats.append(neg_feat)
                     self.training_labels.append(-1.0)
                     self.training_patches.append(neg_patch)
+                    recorded.append((neg_patch, (nx, ny), -1))
+
+        if record_sample:
+            self._log_human_samples(frame, point, frame_idx, recorded)
 
         if len(self.training_feats) > _MAX_TRAINING_FEATS:
             self.training_feats = self.training_feats[-_MAX_TRAINING_FEATS:]
             self.training_labels = self.training_labels[-_MAX_TRAINING_FEATS:]
             self.training_patches = self.training_patches[-_MAX_TRAINING_FEATS:]
+
+    @staticmethod
+    def _as_bgr_u8(img: np.ndarray) -> np.ndarray:
+        arr = img if img.dtype == np.uint8 else np.clip(img, 0, 255).astype(np.uint8)
+        if arr.ndim == 2:
+            arr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+        elif arr.shape[2] == 4:
+            arr = cv2.cvtColor(arr, cv2.COLOR_BGRA2BGR)
+        return np.ascontiguousarray(arr)
+
+    def _log_human_samples(
+        self,
+        frame: np.ndarray,
+        point: tuple[float, float],
+        frame_idx: int,
+        recorded: list[tuple[np.ndarray, tuple[float, float], int]],
+    ) -> None:
+        """Append the positive/negative patches of one human anchor to ``sample_log``.
+
+        Each entry carries the patch (the array used for training), a context crop of twice the
+        block window centred on that patch (BGR uint8, edge-replicate padding at the borders),
+        the frame, label (+1 marker / -1 background), marker, video, tracking shape and block
+        size. The same click (video, marker, frame, point) is stored once even if re-added.
+        """
+        video = str(self.sample_context.get("video", "") or "")
+        marker = int(self.sample_context.get("marker", -1))
+        key = (video, marker, int(frame_idx), round(float(point[0]), 1), round(float(point[1]), 1))
+        if key in self._sample_keys:
+            return
+        self._sample_keys.add(key)
+        bw, bh = self.params.block_window
+        shape_mode = str(getattr(self.params, "tracking_shape", "point")).lower()
+        for patch, centre, label in recorded:
+            if len(self.sample_log) >= _MAX_SAMPLE_LOG:
+                if not self._sample_cap_warned:
+                    self._sample_cap_warned = True
+                    print(
+                        f">> AI Track: sample bank full ({_MAX_SAMPLE_LOG} samples); "
+                        "new human samples are no longer stored this session."
+                    )
+                return
+            context = self.extract_patch(frame, centre, (2 * bw, 2 * bh))
+            if context.size == 0 or patch.size == 0:
+                continue
+            self.sample_log.append(
+                {
+                    "patch": self._as_bgr_u8(patch).copy(),
+                    "context": self._as_bgr_u8(context).copy(),
+                    "label": int(label),
+                    "frame": int(frame_idx),
+                    "marker": marker,
+                    "video": video,
+                    "shape": shape_mode,
+                    "block_w": int(bw),
+                    "block_h": int(bh),
+                    "point": (float(centre[0]), float(centre[1])),
+                }
+            )
+
+    def save_samples(self, directory: str | Path, video_stem: str = "") -> Path | None:
+        """Write the sample bank to ``<directory>/<session start>_<video stem>.npz``.
+
+        One file per tracker session, rewritten with the cumulative log on every call (atomic,
+        previous version kept in history/), so repeated saves never duplicate samples. Returns
+        None when there is nothing to save. Entries tagged with another video are left out when
+        ``video_stem`` is given. Arrays (N samples; patches/contexts resized to the last
+        entry's size if the block window changed): ``patches`` (N,h,w,3), ``contexts``
+        (N,H,W,3) uint8, ``labels`` int8, ``frames``/``markers``/``block_w``/``block_h`` int32,
+        ``points`` (N,2) float32, ``videos``/``shapes`` strings and ``session``.
+        """
+        stem = str(video_stem or "")
+        entries = [e for e in self.sample_log if not stem or not e["video"] or e["video"] == stem]
+        if not entries:
+            return None
+        safe = "".join(c if (c.isalnum() or c in "-_") else "_" for c in stem) or "samples"
+        path = Path(directory) / f"{self._sample_session}_{safe}.npz"
+        if path.is_file() and self._samples_saved.get(str(path)) == len(entries):
+            return path  # nothing new since the last write of this file
+
+        def _stack(field: str) -> np.ndarray:
+            h, w = entries[-1][field].shape[:2]
+            return np.stack(
+                [
+                    e[field]
+                    if e[field].shape[:2] == (h, w)
+                    else cv2.resize(e[field], (w, h), interpolation=cv2.INTER_AREA)
+                    for e in entries
+                ]
+            ).astype(np.uint8)
+
+        _store.save_npz_atomic(
+            path,
+            compressed=True,
+            patches=_stack("patch"),
+            contexts=_stack("context"),
+            labels=np.array([e["label"] for e in entries], dtype=np.int8),
+            frames=np.array([e["frame"] for e in entries], dtype=np.int32),
+            markers=np.array([e["marker"] for e in entries], dtype=np.int32),
+            block_w=np.array([e["block_w"] for e in entries], dtype=np.int32),
+            block_h=np.array([e["block_h"] for e in entries], dtype=np.int32),
+            points=np.array([e["point"] for e in entries], dtype=np.float32),
+            videos=np.array([e["video"] for e in entries], dtype=str),
+            shapes=np.array([e["shape"] for e in entries], dtype=str),
+            session=np.array(self._sample_session),
+        )
+        self._samples_saved[str(path)] = len(entries)
+        return path
 
     def _rebuild_training_feats(self) -> None:
         """Re-extract every training feature from its stored patch with the current
@@ -1161,12 +1359,25 @@ class AITracker:
         elapsed_ms = (time.perf_counter() - t0) * 1000.0
         return elapsed_ms
 
+    def checkpoint_key(self) -> str:
+        """Feature space of this tracker's discriminator: ``"classic"`` when deep features are
+        off or the extractor is disabled, else ``"<variant>-<sha8 of the weights file the
+        extractor loaded>"`` (``ai_tracker_store.feature_key``). Checkpoints are saved and
+        loaded per key, so a retrained backbone never reuses an older discriminator."""
+        ex = self.extractor
+        if not (self.params.use_deep_features and ex is not None and ex.enabled):
+            return _store.CLASSIC_KEY
+        variant = str(getattr(ex, "variant", "") or self.params.resnet_variant or "resnet50")
+        return _store.feature_key(variant, getattr(ex, "weights_path", "") or None)
+
     def load_checkpoint(self, path: str | Path) -> bool:
         """Load a persisted discriminator checkpoint for transfer learning.
 
-        Returns True on success, False if the file is missing, unreadable, or has an
-        incompatible feature dimension (silently ignored — tracking still works from
-        scratch, just without the head start).
+        Returns True on success, False if the file is missing, unreadable, has an
+        incompatible feature dimension, or was saved for another feature space (its ``key``
+        differs from ``checkpoint_key()``, e.g. another backbone with the same width): silently
+        ignored — tracking still works from scratch, just without the head start. Files
+        written before the key existed are accepted on the shape check alone.
         """
         p = Path(path)
         if not p.is_file():
@@ -1175,6 +1386,8 @@ class AITracker:
             data = np.load(p, allow_pickle=False)
             w = np.asarray(data["w"], dtype=np.float32)
             if w.shape != (self.effective_feature_dim(),):
+                return False
+            if "key" in data.files and str(data["key"]) != self.checkpoint_key():
                 return False
             self._checkpoint_w = w
             self._checkpoint_b = float(data["b"])
@@ -1197,16 +1410,53 @@ class AITracker:
         try:
             p.parent.mkdir(parents=True, exist_ok=True)
             n_samples = self._live_n_samples if self._live_n_samples > 0 else 1.0
-            np.savez(
+            ex = self.extractor
+            deep = self.checkpoint_key() != _store.CLASSIC_KEY and ex is not None
+            _store.save_npz_atomic(
                 p,
                 w=self.discriminator_w.astype(np.float32),
                 b=np.float32(self.discriminator_b),
                 n_samples=np.float32(n_samples),
                 feat_dim=np.int32(self.effective_feature_dim()),
+                key=np.array(self.checkpoint_key()),
+                variant=np.array(str(getattr(ex, "variant", "")) if deep else ""),
             )
         except Exception:
             return False
         return True
+
+    def persist(self, profile: str = "default", root: str | Path | None = None) -> dict[str, Any]:
+        """Retrain, then save the discriminator checkpoint and the human samples.
+
+        ``root`` defaults to the resolved AI Track home. Writes
+        ``discriminators/discriminator_<profile>__<checkpoint_key()>.npz`` (previous version to
+        history/, manifest entry with n_samples/feat_dim/key) and the sample bank to ``samples/``
+        (named after ``sample_context["video"]``). Returns ``{"checkpoint": Path | None,
+        "samples": Path | None, "key": str, "root": Path}``; an entry is None when there was
+        nothing to write. Sample files are not listed in the manifest (it may be uploaded).
+        """
+        base = Path(root) if root is not None else _resolve_root()
+        self.retrain_online_model()
+        key = self.checkpoint_key()
+        target = _store.discriminator_path(base, profile, key)
+        checkpoint: Path | None = None
+        if self.save_checkpoint(target):
+            checkpoint = target
+            try:
+                _store.update_manifest_file(
+                    base,
+                    target,
+                    kind="discriminator",
+                    n_samples=float(self._live_n_samples),
+                    feat_dim=int(self.effective_feature_dim()),
+                    key=key,
+                )
+            except OSError as err:
+                print(f">> AI Track: manifest not updated ({err})")
+        samples = self.save_samples(
+            _store.samples_dir(base), str(self.sample_context.get("video", "") or "")
+        )
+        return {"checkpoint": checkpoint, "samples": samples, "key": key, "root": base}
 
     def score_patch_discriminator(self, patch: np.ndarray) -> float:
         """Score candidate patch with the online retrained discriminator in [0.0, 1.0]."""
@@ -1224,8 +1474,15 @@ class AITracker:
         get_frame: Callable[[int], np.ndarray | None],
         known_points: dict[int, tuple[float, float]],
         max_anchors: int = _MAX_GAP_SEED_ANCHORS,
+        *,
+        record_sample: bool = True,
     ) -> int:
-        """Seed online model from a subsample of known keyframes (batch gap init)."""
+        """Seed online model from a subsample of known keyframes (batch gap init).
+
+        ``record_sample`` False: the known points were not clicked by a person in this
+        session (existing coordinates, loaded CSVs, earlier tracker output), so they train
+        the in-memory discriminator but never enter ``sample_log``.
+        """
         if not known_points:
             return 0
         frames = sorted(known_points.keys())
@@ -1237,7 +1494,7 @@ class AITracker:
             frm = get_frame(f_idx)
             if frm is None:
                 continue
-            self.add_anchor(frm, known_points[f_idx], f_idx)
+            self.add_anchor(frm, known_points[f_idx], f_idx, record_sample=record_sample)
             count += 1
         if count > 0:
             self.retrain_online_model()
@@ -1250,6 +1507,7 @@ class AITracker:
         frame_idx: int = 0,
         *,
         reset_online: bool = True,
+        record_sample: bool = True,
     ) -> None:
         """Set reference template and deep feature embedding at the given keyframe point.
 
@@ -1259,6 +1517,11 @@ class AITracker:
             When True (default), clear the online appearance model and reseed from this
             point. When False, keep existing anchors/discriminator and only refresh the
             running template + embedding (manual corrections / soft re-anchor).
+        record_sample : bool
+            When True (default) the anchor is logged in ``sample_log`` for offline
+            retraining. Pass False for points that were not clicked by a person in this
+            session: seeded from existing coordinates, replayed frames, loaded CSVs. The
+            online discriminator is trained either way.
         """
         bw, bh = self.params.block_window
         self.template = self.extract_patch(frame, point, (bw, bh))
@@ -1303,7 +1566,7 @@ class AITracker:
             self.discriminator_w = None
             self.discriminator_b = 0.0
 
-        self.add_anchor(frame, point, frame_idx)
+        self.add_anchor(frame, point, frame_idx, record_sample=record_sample)
         self.retrain_online_model()
 
         # Handle deep feature extractor
@@ -1348,9 +1611,21 @@ class AITracker:
         frame: np.ndarray,
         point: tuple[float, float],
         frame_idx: int = -1,
+        *,
+        record_sample: bool = True,
     ) -> None:
-        """Apply a manual correction without wiping online learning."""
-        self.set_reference(frame, point, frame_idx=frame_idx, reset_online=False)
+        """Apply a manual correction without wiping online learning.
+
+        ``record_sample`` False: the point was not clicked by a person in this session
+        (see ``set_reference``); it still updates the online model but is not logged.
+        """
+        self.set_reference(
+            frame,
+            point,
+            frame_idx=frame_idx,
+            reset_online=False,
+            record_sample=record_sample,
+        )
 
     def _occlusion_fallback_location(
         self,
@@ -1885,12 +2160,15 @@ def infill_and_smooth(
         if frm is None:
             return None
         trk = AITracker(params)
-        trk.set_reference(frm, known_points[f_idx], frame_idx=f_idx, reset_online=True)
+        # known_points are existing coordinates of unknown origin, not session clicks.
+        trk.set_reference(
+            frm, known_points[f_idx], frame_idx=f_idx, reset_online=True, record_sample=False
+        )
         if seed_known:
             # Re-add other anchors without wiping primary template (reset already done)
             other = {k: v for k, v in seed_known.items() if k != f_idx}
             if other:
-                trk.seed_anchors_from_known(get_frame, other)
+                trk.seed_anchors_from_known(get_frame, other, record_sample=False)
         return trk
 
     # Determine gaps to fill

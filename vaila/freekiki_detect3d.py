@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.17
+Version: 0.4.19
 Created: 25 October 2026
-Update Date: 12 November 2026
+Update Date: 24 November 2026
 
 Description:
     Runs on the output of a finished ``detect`` run (or batch) and adds, per video:
@@ -33,8 +33,10 @@ Description:
        as one C3D file (see :mod:`vaila.freekiki_export`).
 
     The camera of every 3D output is the run's DLT3D, the same one SAM 3D Body used
-    for its focal, so the poses and the field share a camera per frame. The Vitruvian
-    camera only feeds its own diagnostics. The player filter runs on the finished
+    for its focal, so the poses and the field share a camera per frame, unless the caller
+    gives ``pose_cameras`` (the per-frame cameras of every frame, ``approximate`` ones left
+    out): then the poses, the ground tracks and the pitch gate use them, and the field
+    keypoints keep the DLT3D. The Vitruvian camera only feeds its own diagnostics. The player filter runs on the finished
     ``sam3dinov3`` output, so people are still processed on the GPU before being
     discarded.
 """
@@ -58,10 +60,12 @@ try:
     from .freekiki_auto_flight import (
         GOAL_HALF_M,
         GOAL_X_M,
+        as_dlt_cameras,
         auto_flight,
         auto_rows_and_record,
         camera_centre,
         pixel_ray,
+        read_feet,
     )
     from .freekiki_ball import (
         ball_candidates_net,
@@ -103,10 +107,12 @@ except ImportError:
     from freekiki_auto_flight import (  # ty: ignore[unresolved-import]
         GOAL_HALF_M,
         GOAL_X_M,
+        as_dlt_cameras,
         auto_flight,
         auto_rows_and_record,
         camera_centre,
         pixel_ray,
+        read_feet,
     )
     from freekiki_ball import (  # ty: ignore[unresolved-import]
         ball_candidates_net,
@@ -206,6 +212,22 @@ def _read_homographies(dlt2d: Path) -> dict[int, np.ndarray]:
     return out
 
 
+def homographies_from_cameras(cameras: dict[int, np.ndarray]) -> dict[int, np.ndarray]:
+    """Frame -> the 3x3 ground-plane (z = 0) homography world -> pixel of each camera.
+
+    The columns of the projection that act on ``x``, ``y`` and ``1`` (``H[2, 2] = 1``), the same
+    layout as :func:`homography_from_dlt2d`. A camera whose ground homography is degenerate is
+    left out.
+    """
+    out: dict[int, np.ndarray] = {}
+    for frame, L in as_dlt_cameras(cameras).items():
+        H = dlt_projection_matrix(L)[:, [0, 1, 3]]
+        if abs(H[2, 2]) < 1e-12 or not np.isfinite(H).all():
+            continue
+        out[int(frame)] = H / H[2, 2]
+    return out
+
+
 def _read_person_tracks(camera_csv: Path) -> dict[int, list[tuple[int, np.ndarray]]]:
     """``person_id -> [(frame, xyxy), ...]`` from the sam3dinov3 camera CSV."""
     tracks: dict[int, list[tuple[int, np.ndarray]]] = {}
@@ -229,10 +251,12 @@ def _read_person_tracks(camera_csv: Path) -> dict[int, list[tuple[int, np.ndarra
 
 def _write_person_verdicts(path: Path, verdicts: dict[int, dict]) -> Path:
     with path.open("w", newline="", encoding="utf-8") as fh:
-        writer = csv.DictWriter(fh, fieldnames=["person_id", "fraction", "on", "checked", "keep"])
+        writer = csv.DictWriter(
+            fh, fieldnames=["person_id", "fraction", "on", "checked", "keep", "reason"]
+        )
         writer.writeheader()
         for pid in sorted(verdicts):
-            writer.writerow({"person_id": pid, **verdicts[pid]})
+            writer.writerow({"reason": "", **verdicts[pid], "person_id": pid})
     return path
 
 
@@ -562,8 +586,8 @@ def _pose_rows(
     ground_rows: list[dict] = []
     for (frame, pid), people in sorted(groups.items()):
         track = tracks.get(pid, {})
-        # a frame without its own DLT3D (or ground point) has no camera to place the pose
-        # on the pitch; the smoothed track can still fill it, so it is skipped here
+        # a frame without a camera (or ground point) cannot place the pose on the pitch; the
+        # smoothed track can still fill it, so it is skipped here
         if frame not in track or frame not in raw_ground.get(pid, {}):
             continue
         L = cameras[frame]
@@ -591,7 +615,10 @@ def _pose_rows(
                 raw = gk_ground
                 smoothed_xy = gk_ground
         if pitch is None:
-            pitch = pose_to_pitch(names, xcam, L, box, ground_xy=smoothed_xy)
+            try:
+                pitch = pose_to_pitch(names, xcam, L, box, ground_xy=smoothed_xy)
+            except ValueError:  # a planar camera cannot be decomposed: no pose in this frame
+                pitch = None
         if pitch is None:
             continue
         ground_rows.append(
@@ -1169,11 +1196,28 @@ def write_field_3d(
     arrival_observation: dict | None = None,
     statures: tuple[dict[int, tuple[float, str]], float] | None = None,
     save: dict | None = None,
+    ball_cameras: dict[int, np.ndarray] | None = None,
+    feet_contact: bool = False,
+    kicker_sam: int | None = None,
+    pose_cameras: dict[int, np.ndarray] | None = None,
 ) -> dict:
     """Write the 3D markers in pitch metres and the C3D file. Returns a summary dict.
 
     ``contact_frame`` (0-based, optional) is a kick contact given by hand for the automatic flight
     (:func:`vaila.freekiki_auto_flight.find_contact`).
+
+    ``ball_cameras`` (optional): frame -> the 11 DLT coefficients or a 3x4 projection, the cameras
+    of the ball and of its flight in place of ``cameras`` (the poses and the field keep
+    ``cameras``). A per-frame track (:func:`vaila.freekiki_auto_flight.cameras_from_track`) gives a
+    camera to every frame of a panning broadcast; leave out the frames whose camera is only a copy
+    of a neighbour. ``pose_cameras`` (same form) are the cameras of the people: their poses, ground
+    tracks and statures use them in place of ``cameras`` (the field keypoints keep ``cameras``);
+    without it the poses use the FreeKiki DLT3D frames only, so a person has no pose in a frame
+    of a panning broadcast that FreeKiki did not calibrate. A frame absent from ``pose_cameras``
+    has no pose. ``feet_contact`` lets the automatic flight read a kick of a ball that is
+    dribbled or passed before it from the people's feet (SAM 3D Body 2D keypoints, the
+    ``*_predictions.json.gz`` next to ``camera_csv``), with ``kicker_sam`` the SAM id of the kicker
+    (roster; None looks at everybody). Both default to today's behaviour.
 
     ``statures`` (optional, :func:`vaila.freekiki_stature.resolve_statures`): the known statures
     by SAM id and the prior of everyone else; a person with a known stature is scaled as a whole
@@ -1202,7 +1246,10 @@ def write_field_3d(
             for pid, rows in _read_person_tracks(camera_csv).items()
             for frame, box in rows
         }
-        pose_rows, ground_rows = _pose_rows(keypoints_csv, cameras, boxes, kept, rate_hz, n_frames)
+        pose_cams = as_dlt_cameras(pose_cameras) if pose_cameras is not None else cameras
+        pose_rows, ground_rows = _pose_rows(
+            keypoints_csv, pose_cams, boxes, kept, rate_hz, n_frames
+        )
         write_table(out_dir / "ground_tracks.csv", GROUND_COLUMNS, ground_rows)
         by_person, prior_m = statures if statures is not None else ({}, None)
         if by_person:
@@ -1240,10 +1287,28 @@ def write_field_3d(
         pose_name = "poses_3d_on_field.csv" if kept is not None else "poses_3d.csv"
         write_table(out_dir / pose_name, POSE_COLUMNS, pose_rows)
 
-    ball_all = ball_3d(ball_rows, cameras)
+    ball_cams = as_dlt_cameras(ball_cameras) if ball_cameras is not None else cameras
+    ball_all = ball_3d(ball_rows, ball_cams)
     write_table(out_dir / "ball_3d.csv", BALL_3D_COLUMNS, ball_all)
     flight_summary: dict | None = None
     auto = None
+    feet_kwargs: dict = {}
+    if feet_contact:
+        predictions = (
+            _single(
+                sorted(Path(camera_csv).parent.glob("*_sam3dinov3_predictions.json.gz")),
+                "predictions",
+            )
+            if camera_csv is not None
+            else None
+        )
+        if predictions is None:
+            _log(
+                "contact from the feet: no *_sam3dinov3_predictions.json.gz next to the camera csv"
+            )
+        else:
+            feet, heights = read_feet(predictions)
+            feet_kwargs = {"feet": feet, "heights_px": heights, "kicker": kicker_sam}
     pixels_all = {
         int(r["frame"]): (float(r["cx"]), float(r["cy"])) for r in ball_rows if r["cx"] != ""
     }
@@ -1251,13 +1316,14 @@ def write_field_3d(
         auto = auto_flight(
             ball_all,
             pixels_all,
-            cameras,
+            ball_cams,
             pose_rows,
             rate_hz,
             n_frames,
             contact_frame=contact_frame,
             arrival_observation=arrival_observation,
             **_save_kwargs(save),
+            **feet_kwargs,
         )
     if auto is not None:
         if arrival_observation is not None and arrival_observation["type"] == "goal_entry":
@@ -1269,7 +1335,8 @@ def write_field_3d(
         flight_summary["peak_speed_mps"] = record["peak_speed_mps"]
         flight_summary["arrival"] = record["arrival"]["type"] if record["arrival"] else None
         flight_summary["contact"] = {
-            k: record.get(k) for k in ("contact_frame", "contact_source", "pre_contact")
+            k: record.get(k)
+            for k in ("contact_frame", "contact_source", "pre_contact", "contact_person")
         }
         _log(f"ball flight (monocular, automatic anchors): {flight_summary}")
         if record["quality"] != "ok":
@@ -1281,7 +1348,7 @@ def write_field_3d(
             anchors = anchors_from_points(ball_anchors)
         else:
             anchors = anchors_from_poses(ball_anchors, pose_rows, n_frames)
-        ball_on, record = flight_ball_rows(ball_rows, cameras, rate_hz, n_frames, anchors)
+        ball_on, record = flight_ball_rows(ball_rows, ball_cams, rate_hz, n_frames, anchors)
         record["anchor_spec"] = asdict(ball_anchors)
         record["anchor_points"] = _anchor_points_record(anchors)
         (out_dir / "ball_flight.json").write_text(json.dumps(record, indent=2), encoding="utf-8")
@@ -1292,7 +1359,7 @@ def write_field_3d(
             check = write_flight_check_video(
                 video,
                 out_dir / f"{Path(video).stem}_flight_check.mp4",
-                {f: dlt_projection_matrix(L) for f, L in cameras.items()},
+                {f: dlt_projection_matrix(L) for f, L in ball_cams.items()},
                 {int(r["frame"]): (r["x_m"], r["y_m"], r["z_m"]) for r in ball_on},
                 {
                     int(r["frame"]): (float(r["cx"]), float(r["cy"]))
@@ -1315,12 +1382,106 @@ def write_field_3d(
         markers += len(labels)
     return {
         "cameras": len(cameras),
+        "pose_cameras": len(pose_cameras) if pose_cameras is not None else None,
         "pose_rows": len(pose_rows),
         "ball_on_field": len(ball_on),
         "ball_flight": flight_summary,
         "c3d_files": len(groups),
         "markers": markers,
     }
+
+
+def _complete_sam_run(sam_out: Path, stem: str, n_frames: int) -> tuple[Path, Path | None] | None:
+    """``(camera csv, predictions)`` of a finished sam3dinov3 run of ``stem`` under ``sam_out``.
+
+    A run counts when its ``sam3dinov3_summary.json`` says ``complete`` for the same number of
+    frames and both outputs exist. ``None`` otherwise (the subprocess then runs or resumes).
+    """
+    for batch in sorted(sam_out.glob("processed_sam3dinov3_*"), reverse=True):
+        folder = batch / stem
+        try:
+            summary = json.loads((folder / "sam3dinov3_summary.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if summary.get("status") != "complete":
+            continue
+        if summary.get("n_frames") not in (None, n_frames):
+            continue
+        camera = _single(sorted(folder.glob("*_sam3dinov3_camera.csv")), "camera csv")
+        predictions = _single(
+            sorted(folder.glob("*_sam3dinov3_predictions.json.gz")), "predictions"
+        )
+        if camera is not None and predictions is not None:
+            return camera, predictions
+    return None
+
+
+def _sam_outputs(sam_out: Path) -> tuple[Path | None, Path | None]:
+    """``(camera csv, predictions)`` anywhere under the sam3dinov3 folder (``None`` when absent)."""
+    return (
+        _single(sorted(sam_out.rglob("*_sam3dinov3_camera.csv")), "camera csv"),
+        _single(sorted(sam_out.rglob("*_sam3dinov3_predictions.json.gz")), "predictions"),
+    )
+
+
+def sam_2d_run(
+    run_dir: Path,
+    video: Path,
+    work_dir: Path,
+    *,
+    device: str | None = None,
+    fresh_sam: bool = False,
+    text: str = "person",
+    weights_dir: Path | None = None,
+    python: str = sys.executable,
+) -> dict:
+    """The 2D work stage: the per-frame focal (``cam_int.npy``) and the sam3dinov3 run.
+
+    This is the part of :func:`detect_3d_run` that needs the GPU: SAM 3 finds and tracks the people
+    and SAM 3D Body lifts them. It writes ``work_dir/cam_int.npy`` and the sam3dinov3 output under
+    ``work_dir/sam3dinov3`` and returns ``{"focal": ..., "camera_csv": str, "predictions": str,
+    "reused": bool}``. A finished run of the same video (``sam3dinov3_summary.json`` complete, same
+    number of frames) is used as it is, with no subprocess and no GPU work, unless ``fresh_sam``.
+    The people's SAM ids are known after this stage, so the user can label them (see
+    :mod:`vaila.freekiki_roster`) before the 3D stage runs.
+    """
+    run_dir, video, work = Path(run_dir), Path(video), Path(work_dir)
+    work.mkdir(parents=True, exist_ok=True)
+    n_frames, width, height = _video_info(video)
+    dlt3d = _single(sorted(run_dir.glob("*.dlt3d")), "*.dlt3d")
+    if dlt3d is None:
+        focals = np.full(n_frames, np.nan)
+        _log(f"{video.name}: no .dlt3d in {run_dir.name}; default intrinsics for every frame")
+    else:
+        focals = focal_sequence(dlt3d, n_frames, float(width))
+    focal = focal_summary(focals)
+    npy = write_cam_int_npy(work / "cam_int.npy", cam_int_sequence(focals, width, height))
+    _log(f"{video.name}: focal from DLT3D on {focal['valid']}/{n_frames} frames")
+
+    sam_out = work / "sam3dinov3"
+    done = None if fresh_sam else _complete_sam_run(sam_out, video.stem, n_frames)
+    if done is not None:
+        _log(f"sam3dinov3: finished run found, not run again ({done[0].parent})")
+        return {"focal": focal, "camera_csv": str(done[0]), "predictions": str(done[1]),
+                "reused": True}  # fmt: skip
+    cmd = [python, str(SAM3DINOV3), "-i", str(video), "-o", str(sam_out), "-t", text,
+           "--cam-int-npy", str(npy)]  # fmt: skip
+    if fresh_sam:
+        cmd.append("--fresh")
+    if weights_dir is not None:
+        cmd += ["--weights-dir", str(weights_dir)]
+    if device:
+        cmd += ["--device", device]
+    _log("sam3dinov3: " + " ".join(cmd))
+    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
+    if proc.returncode != 0:
+        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-5:]
+        raise RuntimeError(f"sam3dinov3 failed (exit {proc.returncode}): " + " | ".join(tail))
+    camera_csv, predictions = _sam_outputs(sam_out)
+    if camera_csv is None:
+        raise RuntimeError(f"sam3dinov3 wrote no camera csv in {sam_out}")
+    return {"focal": focal, "camera_csv": str(camera_csv),
+            "predictions": str(predictions) if predictions else "", "reused": False}  # fmt: skip
 
 
 def detect_3d_run(
@@ -1343,6 +1504,12 @@ def detect_3d_run(
     fresh_sam: bool = False,
     statures: tuple[dict[int, tuple[float, str]], float] | None = None,
     save: dict | None = None,
+    skip_sam: bool = False,
+    drop_ids: set[int] | None = None,
+    ball_cameras: dict[int, np.ndarray] | None = None,
+    feet_contact: bool = False,
+    kicker_sam: int | None = None,
+    pose_cameras: dict[int, np.ndarray] | None = None,
 ) -> dict:
     """Run the 3D chain for one video of a finished detect run. Returns a summary dict.
 
@@ -1350,8 +1517,17 @@ def detect_3d_run(
     Body run instead of resuming a matching earlier one: needed when the camera (the focal of the
     corrected field keypoints) changed.
 
-    ``ball_csv`` is a corrected ball track in pixels (``frame,p0_x,p0_y``, as saved by
-    getpixelvideo): it replaces the detector, and the physical smoothing still applies.
+    ``skip_sam`` takes the sam3dinov3 output that :func:`sam_2d_run` already left in
+    ``work_dir/sam3dinov3`` (``RuntimeError`` when there is none) instead of running it: the 2D and
+    the 3D stage are then two calls, with the user's labels between them. ``drop_ids`` are SAM ids
+    the user marked as not used (roster ``OUT``): with ``players_on_field`` they leave the kept set,
+    and their row of ``players_on_field.csv`` says ``keep=False`` with the reason ``roster: OUT``.
+
+    ``ball_cameras``, ``feet_contact``, ``kicker_sam`` and ``pose_cameras`` go to
+    :func:`write_field_3d` (per-frame cameras for the ball flight; the kick contact read from the
+    feet of the kicker; per-frame cameras for the people's poses). ``pose_cameras`` also add to the
+    pitch gate (``players_on_field``) the ground homography of every frame the run's ``.dlt2d``
+    has no row for, so a person seen only in those frames is judged too.
 
     The results sit flat in ``out_dir``: the CSVs, the C3D files and the full overlay
     video ``<video>_3d_overlay.mp4``. The intermediate files (SAM 3D Body output, focal
@@ -1371,32 +1547,27 @@ def detect_3d_run(
     ball_mode = _ball_mode(ball)
 
     dlt3d = _single(sorted(run_dir.glob("*.dlt3d")), "*.dlt3d")
-    if dlt3d is None:
-        focals = np.full(n_frames, np.nan)
-        _log(f"{video.name}: no .dlt3d in {run_dir.name}; default intrinsics for every frame")
-    else:
-        focals = focal_sequence(dlt3d, n_frames, float(width))
-    summary["focal"] = focal_summary(focals)
-    npy = write_cam_int_npy(work / "cam_int.npy", cam_int_sequence(focals, width, height))
-    _log(f"{video.name}: focal from DLT3D on {summary['focal']['valid']}/{n_frames} frames")
-
     sam_out = work / "sam3dinov3"
-    cmd = [python, str(SAM3DINOV3), "-i", str(video), "-o", str(sam_out), "-t", text,
-           "--cam-int-npy", str(npy)]  # fmt: skip
-    if fresh_sam:
-        cmd.append("--fresh")
-    if weights_dir is not None:
-        cmd += ["--weights-dir", str(weights_dir)]
-    if device:
-        cmd += ["--device", device]
-    _log("sam3dinov3: " + " ".join(cmd))
-    proc = subprocess.run(cmd, check=False, capture_output=True, text=True)
-    if proc.returncode != 0:
-        tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-5:]
-        raise RuntimeError(f"sam3dinov3 failed (exit {proc.returncode}): " + " | ".join(tail))
-    camera_csv = _single(sorted(sam_out.rglob("*_sam3dinov3_camera.csv")), "camera csv")
-    if camera_csv is None:
-        raise RuntimeError(f"sam3dinov3 wrote no camera csv in {sam_out}")
+    if skip_sam:
+        found_csv, _ = _sam_outputs(sam_out)
+        if found_csv is None:
+            raise RuntimeError(
+                f"skip_sam: no sam3dinov3 output in {sam_out}; run the 2D stage (sam_2d_run) first"
+            )
+        camera_csv = found_csv
+        focals = (
+            np.full(n_frames, np.nan)
+            if dlt3d is None
+            else focal_sequence(dlt3d, n_frames, float(width))
+        )
+        summary["focal"] = focal_summary(focals)
+        _log(f"{video.name}: sam3dinov3 output of the 2D stage reused ({camera_csv.parent.name})")
+    else:
+        sam = sam_2d_run(run_dir, video, work, device=device, fresh_sam=fresh_sam, text=text,
+                         weights_dir=weights_dir, python=python)  # fmt: skip
+        camera_csv = Path(sam["camera_csv"])
+        summary["focal"] = sam["focal"]
+        summary["sam_reused"] = sam["reused"]
 
     refit = vitruvian_refit(run_dir, camera_csv, work)
     summary["vitruvian"] = refit
@@ -1408,13 +1579,23 @@ def detect_3d_run(
         if dlt2d is None:
             raise RuntimeError(f"No .dlt2d in {run_dir}: the pitch gate needs the 2D calibration")
         homographies = _read_homographies(dlt2d)
+        if pose_cameras is not None:
+            homographies = {**homographies_from_cameras(pose_cameras), **homographies}
         tracks = _read_person_tracks(camera_csv)
         verdicts = pitch_verdicts(tracks, homographies, min_frac=field_min_frac)
+        dropped = sorted(int(i) for i in (drop_ids or ()) if i in verdicts and verdicts[i]["keep"])
+        for pid in dropped:  # the user's labels: not a person of the play
+            verdicts[pid] = {**verdicts[pid], "keep": False, "reason": "roster: OUT"}
         kept = {pid for pid, v in verdicts.items() if v["keep"]}
         _write_person_verdicts(out_dir / "players_on_field.csv", verdicts)
         _filter_person_csv(camera_csv, work / "players_on_field_camera.csv", kept)
-        summary["players"] = {"tracks": len(verdicts), "kept": len(kept)}
+        players_summary: dict = {"tracks": len(verdicts), "kept": len(kept)}
+        if dropped:
+            players_summary["dropped_by_roster"] = dropped
+        summary["players"] = players_summary
         _log(f"{video.name}: players on pitch {len(kept)}/{len(verdicts)} tracks")
+        if dropped:
+            _log(f"{video.name}: roster OUT, not kept: SAM {', '.join(map(str, dropped))}")
 
     ball_rows: list[dict] = []
     if ball_csv is not None:
@@ -1459,6 +1640,10 @@ def detect_3d_run(
         arrival_observation=arrival_observation,
         statures=statures,
         save=save,
+        ball_cameras=ball_cameras,
+        feet_contact=feet_contact,
+        kicker_sam=kicker_sam,
+        pose_cameras=pose_cameras,
     )
     return summary
 
@@ -1483,11 +1668,17 @@ def write_ball_dependent_outputs(
     arrival_observation: dict | None = None,
     statures: tuple[dict[int, tuple[float, str]], float] | None = None,
     save: dict | None = None,
+    ball_cameras: dict[int, np.ndarray] | None = None,
+    feet_contact: bool = False,
+    kicker_sam: int | None = None,
+    pose_cameras: dict[int, np.ndarray] | None = None,
 ) -> dict:
     """Everything that depends on the ball, written into ``out_dir`` (shared by both paths).
 
     Used by :func:`detect_3d_run` after the sam3dinov3 run, and by :func:`rebuild_ball_3d`
     after a ball correction. The sam3dinov3 outputs and the detect run are only read.
+    ``ball_cameras``, ``feet_contact``, ``kicker_sam`` and ``pose_cameras`` are those of
+    :func:`write_field_3d`.
     """
     summary["field3d"] = write_field_3d(
         run_dir,
@@ -1506,6 +1697,10 @@ def write_ball_dependent_outputs(
         arrival_observation=arrival_observation,
         statures=statures,
         save=save,
+        ball_cameras=ball_cameras,
+        feet_contact=feet_contact,
+        kicker_sam=kicker_sam,
+        pose_cameras=pose_cameras,
     )
     _log(f"{video.name}: 3D markers in pitch metres {summary['field3d']}")
     summary["topview"] = write_topview(out_dir, video.stem, fps=fps, n_frames=n_frames)
@@ -1796,12 +1991,23 @@ def rebuild_ball_in_place(
     arrival_observation: dict | None = None,
     statures: tuple[dict[int, tuple[float, str]], float] | None = None,
     save: dict | None = None,
+    ball_cameras: dict[int, np.ndarray] | None = None,
+    feet_contact: bool = False,
+    kicker_sam: int | None = None,
+    pose_cameras: dict[int, np.ndarray] | None = None,
 ) -> dict:
     """Redo only the ball-dependent outputs of a 3D folder, in the same folder (no SAM 3D Body).
 
     For the kick analysis, whose 3D folder keeps its intermediates in ``work`` (the detect run, the
     SAM 3D Body output) outside it: a corrected ball or a new contact frame rewrites the ball, the
     flight, the C3D files, the top view and the overlay, and reads everything else as it is.
+
+    ``ball_cameras`` (frame -> 11 DLT coefficients or 3x4, without the ``approximate`` frames) are
+    the cameras of the ball and its flight instead of the FreeKiki DLT3Ds; ``feet_contact`` with
+    ``kicker_sam`` (SAM id) reads the kick contact of a dribbled or passed ball from the kicker's
+    feet. ``pose_cameras`` are the cameras of the people's poses (a rebuild rewrites them, so it
+    needs the same ones as the 3D stage). All off by default (today's behaviour). See
+    :func:`write_field_3d`.
     """
     out_dir, video, work, ball_csv = Path(out_dir), Path(video), Path(work), Path(ball_csv)
     run_dir = _detect_run_dir(work, video.stem)
@@ -1844,6 +2050,10 @@ def rebuild_ball_in_place(
         arrival_observation=arrival_observation,
         statures=statures,
         save=save,
+        ball_cameras=ball_cameras,
+        feet_contact=feet_contact,
+        kicker_sam=kicker_sam,
+        pose_cameras=pose_cameras,
     )
 
 

@@ -10,9 +10,9 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.14
+Version: 0.4.19
 Created: 28 October 2026
-Update Date: 28 October 2026
+Update Date: 24 November 2026
 
 Description:
     Who is who on the pitch, from the colour inside each person's box only (the grass is outside the
@@ -30,10 +30,15 @@ Description:
       the ball at the first frame: ``REF_MAIN``, ``REF_AUX1``, ``REF_AUX2``;
     * no more than 11 players per team (goalkeeper included) and 3 referees: the extra ones are
       ``unassigned``, with the reason;
-    * stature: the height of each paired person in metres, from the triangulated skeleton of
-      :mod:`freekiki_pose_binocular` (metric, by the DLT of both cameras, with no stature prior).
-      The top of the head is the nose plus ``NOSE_TO_TOP_M`` (an assumption); the feet are on the
-      ground (z = 0). Only upright frames count. A height outside ``STATURE_RANGE_M`` is not reported.
+    * stature: ``stature_from_chain``, posture-robust, from the 2D keypoints of one camera and the
+      calibrated camera of each frame (the 61 FreeKiki DLT3Ds, or the per-frame calibration of
+      :mod:`kick_measure` that covers every frame): the 2D chain ankle-knee-hip + hip-shoulder +
+      shoulder-nose, scaled by the ground-plane metres per pixel of the frame at the feet with the
+      camera foreshortening undone, divided by the chain/stature ratio of Winter (2009), 80th
+      percentile over the frames, spread reported. ``stature_from_keypoints`` (nose-to-heel vertical
+      span, only upright frames, 1.45-1.6 m for everybody in a broadcast clip) and
+      ``stature_by_player`` (the binocular 3D skeleton) remain. A height outside ``STATURE_RANGE_M``
+      is not reported.
 
     The labels ``ID <player> <role> <team> <height> m`` replace the SAM camera translation, which is
     not a height. ``render_labelled`` draws them on the SAM 3 + DINOv3 overlay of each camera.
@@ -300,6 +305,214 @@ def stature_from_keypoints(
     return {"height_m": round(value, 2), "frames": len(values), "reason": ""}
 
 
+# Chain model of the stature, from published anthropometry.  Segment lengths as fractions of the
+# stature H, from Winter DA (2009) "Biomechanics and Motor Control of Human Movement", 4th ed.,
+# Fig. 4.1 / Table 4.1 (after Drillis R, Contini R, 1966, "Body segment parameters", Technical
+# Report 1166-03, New York University): hip to knee 0.245 H, knee to ankle 0.246 H, hip (greater
+# trochanter, 0.530 H) to shoulder (0.818 H) 0.288 H.  The shoulder to nose term is not tabulated:
+# the vertex is 0.182 H above the shoulder line and the nose tip is about 0.08 H below the vertex
+# (head height 0.130 H, Winter Fig. 4.1; nose tip ~0.14 m below the vertex in adults), so the nose
+# is about 0.10 H above and 0.05 H in front of the shoulder line: 0.11 H of 3D distance (assumption,
+# +-0.02 H, the one soft term of the chain).  The chain is the sum: 0.245 + 0.246 + 0.288 + 0.11.
+CHAIN_RATIO = (
+    0.889  # (ankle->knee->hip) + (mid-hip->mid-shoulder) + (mid-shoulder->nose) = ratio * H
+)
+CHAIN_PERCENTILE = 80.0  # foreshortening only shortens a segment: a high percentile of the frames
+MIN_CHAIN_FRAMES = 5
+MIN_CHAIN_PX = 30.0  # a chain shorter than this on the image is a few pixels of noise
+MIN_BOX_PX = 40.0  # a SAM box shorter than this (a person this far) has noise-sized keypoints
+MAX_CHAIN_TO_BOX = 1.3  # the chain cannot be longer than the box diagonal: the keypoints are lost
+CHAIN_NAMES = (
+    "nose", "left-shoulder", "right-shoulder", "left-hip", "right-hip",
+    "left-knee", "right-knee", "left-ankle", "right-ankle",
+)  # fmt: skip
+
+
+def _projection(camera) -> np.ndarray | None:
+    """3x4 matrix from a 3x4 array or from the 11 DLT coefficients."""
+    try:
+        from .monocular_dlt_align import dlt_projection_matrix
+    except ImportError:
+        from monocular_dlt_align import dlt_projection_matrix  # ty: ignore[unresolved-import]
+
+    arr = np.asarray(camera, dtype=float)
+    if arr.shape == (3, 4):
+        P = arr
+    elif arr.size == 11:
+        P = dlt_projection_matrix(arr)
+    else:
+        return None
+    return P if np.isfinite(P).all() else None
+
+
+def _project(P: np.ndarray, X) -> np.ndarray:
+    h = P @ np.append(np.asarray(X, dtype=float), 1.0)
+    return h[:2] / h[2]
+
+
+def ground_scale(P: np.ndarray, foot_px) -> tuple[float, float] | None:
+    """``(metres per pixel, vertical factor)`` of a camera at the pixel of a foot on the ground.
+
+    The ground point under the pixel comes from the plane homography (z = 0).  Metres per pixel is
+    that of one horizontal metre perpendicular to the viewing ray (``1 / |projection|``): the scale
+    of the plane of the person, which faces the camera.  The vertical factor is the ratio between
+    the pixels of one vertical metre and those of the horizontal one: the cosine of the angle
+    between the vertical and the image plane, computed from ``P``, not assumed (a camera 16 m high
+    at 90 m looks 10 degrees down: 0.985).  ``None`` when the pixel does not hit the ground.
+    """
+    try:
+        g = np.linalg.solve(P[:, [0, 1, 3]], np.array([float(foot_px[0]), float(foot_px[1]), 1.0]))
+    except np.linalg.LinAlgError:
+        return None
+    if not np.isfinite(g).all() or abs(g[2]) < 1e-12:
+        return None
+    ground = np.array([g[0] / g[2], g[1] / g[2], 0.0])
+    try:
+        centre = -np.linalg.solve(P[:, :3], P[:, 3])
+    except np.linalg.LinAlgError:
+        return None
+    ray = ground - centre
+    flat = np.array([ray[0], ray[1], 0.0])
+    n = float(np.linalg.norm(flat))
+    if n < 1e-9:
+        return None
+    side = np.array([-flat[1], flat[0], 0.0]) / n  # horizontal, perpendicular to the ray
+    horizontal = np.linalg.norm(_project(P, ground + 0.5 * side) - _project(P, ground - 0.5 * side))
+    vertical = np.linalg.norm(_project(P, ground + [0, 0, 0.5]) - _project(P, ground - [0, 0, 0.5]))
+    if not (np.isfinite(horizontal) and np.isfinite(vertical)) or horizontal <= 0 or vertical <= 0:
+        return None
+    return 1.0 / float(horizontal), float(vertical / horizontal)
+
+
+def vertical_direction_px(P: np.ndarray, foot_px) -> np.ndarray | None:
+    """Unit image vector of the vertical (up the image, ``v`` decreasing) at the pixel of a foot."""
+    try:
+        g = np.linalg.solve(P[:, [0, 1, 3]], np.array([float(foot_px[0]), float(foot_px[1]), 1.0]))
+    except np.linalg.LinAlgError:
+        return None
+    if not np.isfinite(g).all() or abs(g[2]) < 1e-12:
+        return None
+    ground = np.array([g[0] / g[2], g[1] / g[2], 0.0])
+    d = _project(P, ground + [0, 0, 0.5]) - _project(P, ground)
+    n = float(np.linalg.norm(d))
+    return d / n if n > 0 and np.isfinite(n) else None
+
+
+def chain_length_px(
+    kp: np.ndarray, idx: dict[str, int], vertical: tuple[np.ndarray, float] | None = None
+) -> tuple[float, np.ndarray] | None:
+    """Length (px) of the 2D chain of one person and the mid-ankle pixel; ``None`` if incomplete.
+
+    ``ankle -> knee -> hip`` of the longer leg, plus ``mid-hip -> mid-shoulder`` and
+    ``mid-shoulder -> nose``.  The length is a sum of segments: it does not change with the knee
+    and trunk angles (running, crouch), only with the foreshortening of the segments.
+
+    ``vertical = (unit image vector of the vertical, vertical factor)`` (from the camera, see
+    :func:`ground_scale`) undoes the foreshortening of the camera: the person faces the camera, so
+    the component of each segment along the image vertical is divided by the factor and the
+    perpendicular component is kept (a horizontal segment is not foreshortened, a vertical one is).
+    """
+    if not all(n in idx for n in CHAIN_NAMES) or kp.shape[0] <= max(idx[n] for n in CHAIN_NAMES):
+        return None
+    p = {n: kp[idx[n]][:2] for n in CHAIN_NAMES}
+    if not all(np.isfinite(v).all() for v in p.values()):
+        return None
+
+    def seg(a: np.ndarray, b: np.ndarray) -> float:
+        d = b - a
+        if vertical is None:
+            return float(np.linalg.norm(d))
+        along = float(d @ vertical[0])
+        return math.hypot(along / vertical[1], float(np.linalg.norm(d - along * vertical[0])))
+
+    legs = [
+        seg(p[f"{s}-ankle"], p[f"{s}-knee"]) + seg(p[f"{s}-knee"], p[f"{s}-hip"])
+        for s in ("left", "right")
+    ]  # fmt: skip
+    shoulder = (p["left-shoulder"] + p["right-shoulder"]) / 2
+    hip = (p["left-hip"] + p["right-hip"]) / 2
+    total = max(legs) + seg(hip, shoulder) + seg(shoulder, p["nose"])
+    return float(total), (p["left-ankle"] + p["right-ankle"]) / 2
+
+
+def stature_from_chain(
+    cameras: dict[int, np.ndarray],
+    frames: dict[int, list[dict]],
+    sam_id: int,
+    names: list[str],
+    *,
+    percentile: float = CHAIN_PERCENTILE,
+) -> dict:
+    """Stature (m) of one track from the 2D chain of its SAM keypoints, posture-robust, one camera.
+
+    ``cameras``: ``frame -> 3x4 matrix`` or ``frame -> 11 DLT coefficients``; only the frames that
+    have a camera count (the caller leaves out the ``approximate`` ones), and the boxes shorter than
+    ``MIN_BOX_PX`` or too small for their chain (keypoints lost) are skipped.  Per frame the chain
+    (:func:`chain_length_px`) is measured with the foreshortening of the camera undone (the
+    component of each segment along the image vertical is divided by the vertical factor of the
+    camera at the mid-ankle pixel, :func:`ground_scale`), multiplied by the metres per pixel there,
+    and divided by ``CHAIN_RATIO`` (the proportional model of Winter 2009 / Drillis and Contini 1966,
+    see above): one stature estimate per frame.  The result is the ``percentile`` (80) of the
+    estimates, because any posture
+    or view only shortens the chain on the image; the spread is the interquartile range.
+
+    A walking, running or crouched person gives the same chain; the nose-to-heel vertical span used by
+    :func:`stature_from_keypoints` does not.  It does not need the goal posts: the scale is the one
+    of the calibrated ground plane, so a camera whose vertical scale cannot be checked still gives a
+    height; the caller keeps that check as a flag.  Limits: the person is taken to face the camera
+    (the foreshortening is undone on the image vertical), exact for a camera looking down up to ~15
+    degrees (the broadcast one here is ~10), +3 % at 20 and +8 % at 35 degrees for a running person
+    (synthetic, tests/test_freekiki_stature_chain.py); the keypoints must be the model's own, a lost
+    track (box too small for its chain) is dropped.  Returns ``{"height_m", "frames", "iqr_m",
+    "method": "chain-p80", "reason"}``; ``height_m`` is ``None`` with too few frames or a value
+    outside ``STATURE_RANGE_M``.
+    """
+    base = {"height_m": None, "frames": 0, "iqr_m": None, "method": "chain-p80", "reason": ""}
+    idx = {name: i for i, name in enumerate(names)}
+    if not all(n in idx for n in CHAIN_NAMES):
+        return {**base, "reason": "keypoints missing in this model"}
+    values: list[float] = []
+    for f, instances in frames.items():
+        camera = cameras.get(f)
+        P = None if camera is None else _projection(camera)
+        if P is None:
+            continue
+        for inst in instances:
+            if int(inst["sam_obj_id"]) != sam_id:
+                continue
+            kp = np.asarray(inst.get("keypoints_2d_px") or [], dtype=float)
+            if kp.ndim != 2:
+                continue
+            chain = chain_length_px(kp, idx)
+            if chain is None or chain[0] < MIN_CHAIN_PX:
+                continue
+            box = inst.get("bbox_xyxy")
+            if box is not None:
+                bw, bh = float(box[2]) - float(box[0]), float(box[3]) - float(box[1])
+                if bh < MIN_BOX_PX or chain[0] > MAX_CHAIN_TO_BOX * math.hypot(bw, bh):
+                    continue  # tiny person or keypoints that do not fit the box
+            scale = ground_scale(P, chain[1])
+            up = vertical_direction_px(P, chain[1])
+            if scale is None or up is None:
+                continue
+            mpp, factor = scale
+            if not 0.5 <= factor <= 1.2:
+                continue  # a camera looking almost along the ground or straight down
+            corrected = chain_length_px(kp, idx, (up, factor))
+            if corrected is None:
+                continue
+            values.append(corrected[0] * mpp / CHAIN_RATIO)
+    if len(values) < MIN_CHAIN_FRAMES:
+        return {**base, "frames": len(values), "reason": "too few frames with a camera"}
+    arr = np.asarray(values)
+    value = float(np.percentile(arr, percentile))
+    iqr = float(np.percentile(arr, 75) - np.percentile(arr, 25))
+    out = {**base, "frames": len(values), "iqr_m": round(iqr, 2)}
+    if not STATURE_RANGE_M[0] <= value <= STATURE_RANGE_M[1]:
+        return {**out, "reason": f"{value:.2f} m is outside {STATURE_RANGE_M} (not reported)"}
+    return {**out, "height_m": round(value, 2)}
+
+
 def _ball_rest(ball_csv: Path | str) -> tuple[float, float] | None:
     with Path(ball_csv).open(newline="", encoding="utf-8") as fh:
         for row in csv.DictReader(fh):
@@ -407,8 +620,11 @@ def assign(
     return rows
 
 
-def label_text(pid: str, role: str, team: str, height: float | None) -> str:
-    """``ID 0 GK TEAM_B 1.84 m`` (the role and the team are left out when unknown)."""
+def label_text(pid: str, role: str, team: str, height: float | None, name: str = "") -> str:
+    """``ID 0 GK TEAM_B 1.84 m`` (the role and the team are left out when unknown).
+
+    ``name`` (the roster's free text, e.g. ``Rossi``) is appended last when given.
+    """
     parts = [f"ID {pid}"]
     if role in ROLE_TAG:
         parts.append(ROLE_TAG[role])
@@ -418,6 +634,8 @@ def label_text(pid: str, role: str, team: str, height: float | None) -> str:
         parts.append(REF_TEAM)
     if height is not None:
         parts.append(f"{height:.2f} m")
+    if name:
+        parts.append(name)
     return " ".join(parts)
 
 

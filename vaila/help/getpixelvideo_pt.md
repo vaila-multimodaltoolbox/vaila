@@ -6,7 +6,7 @@ A ferramenta Pixel Coordinate Tool (getpixelvideo.py) é uma ferramenta abrangen
 
 **Versão:** 0.4.19  
 **Data:** 28 de Maio de 2026  
-**Atualizado:** 18 de Novembro de 2026  
+**Atualizado:** 24 de Novembro de 2026  
 **Autores:** Prof. Dr. Paulo R. P. Santiago, Rafael L. M. Monteiro  
 **Projeto:** *vailá* - Multimodal Toolbox
 
@@ -265,11 +265,11 @@ Rastreamento semi-automático de alta performance baseado em Correlação Cruzad
 
 1. **Treinamento Online JIT (Just-In-Time) e Checkpoints Persistentes:**
    - **Como aprende:** Ao marcar um ponto manualmente ou ajustar uma âncora, o modelo executa `update_from_correction()` e `retrain_online_model()` instantaneamente em tempo de execução.
-   - **Onde é salvo:** O modelo online é persistido em formato comprimido NumPy (`.npz`) em:
+   - **Onde é salvo:** O modelo online é persistido em formato comprimido NumPy (`.npz`) na pasta de modelos do AI Track que você escolhe, um arquivo por espaço de features (veja **Rede do AI Track (Net)** abaixo):
      ```text
-     vaila/models/ai_tracker/discriminator_<perfil>.npz
+     <pasta>/ai_tracker/discriminators/discriminator_<perfil>__<chave>.npz
      ```
-     (Padrão: `vaila/models/ai_tracker/discriminator_default.npz`).
+     (`<chave>` é `classic`, ou `<backbone>-<sha8>` com Deep. Sem pasta escolhida, usa-se a antiga `vaila/models/ai_tracker/`.)
    - **Transfer Learning (Entre Sessões):** Ao ativar o AI Track, o checkpoint anterior é carregado automaticamente. O retreinamento online calcula uma média ponderada pelo número cumulativo de amostras (`_live_n_samples`), acumulando o aprendizado entre vídeos e sessões sem esquecimento catastrófico.
    - **Diretório Ignorado no Git:** A pasta `vaila/models/ai_tracker/` está configurada no `.gitignore` para que redes pessoais e pesos pesados nunca sejam comitados ao repositório público.
    - **Rede Neural Profunda (ResNet50 e variantes):** O botão `Track AI Deep NN` ativa embeddings semânticos. Os pesos ficam em `vaila/models/ai_tracker/` (`resnet50_imagenet.pth`, etc.). Se faltar, a GUI pergunta: **1 = buscar** arquivo `.pth`/`.pt` ou **2 = baixar** pesos oficiais limpos nessa pasta (não usa `~/.cache/torch` como destino permanente).
@@ -279,6 +279,59 @@ Rastreamento semi-automático de alta performance baseado em Correlação Cruzad
    - **Shift+Clique (ou Shift+T):** Rastreamento bidirecional completo em lote com suavização RTS entre quadros-chave manuais.
    - **Clique Direito (ou Ctrl+T):** Abre a caixa de configuração TOML do Track AI (janelas de busca, taxa de aprendizado, limiares).
    - **Preservação do Ground Truth:** Quadros já marcados manualmente nunca são sobrescritos pelo rastreador automático; ao passar por eles, o sistema usa as coordenadas como âncora de verdade de solo e retreina o modelo.
+
+### Rede do AI Track (Net) — v0.4.19
+
+A rede do AI Track é o que o rastreador aprende com os seus cliques: pequenos discriminadores (`.npz`) e, depois de um retreino, um backbone ajustado (`.pth`). Ela fica numa pasta que você escolhe, fora do *vailá*, então reinstalar o *vailá* não a perde. O guia completo, com todos os comandos, está em [ai_tracker_models](ai_tracker_models.md) (em inglês).
+
+- **Pasta.** `--ai-models PASTA`; senão a variável `VAILA_AI_MODELS_HOME`; senão `~/.vaila/ai_models.json`; senão a antiga `vaila/models/ai_tracker/` (sem cópia fora do *vailá*). Na primeira vez que o AI Track grava e não há pasta escolhida, uma janela pergunta uma vez (sugestão `~/vaila_ai_models`). Cancelar mantém o lugar antigo e a pergunta volta na próxima sessão. Dentro dela: `ai_tracker/discriminators/`, `backbones/`, `samples/`, `history/` (até 10 versões anteriores de cada arquivo), `logs/` e `manifest.json`. Os checkpoints antigos são copiados para lá, nunca movidos.
+- **Uma rede por espaço de features.** Deep desligado (`classic`, 808 valores) e Deep ligado (`<backbone>-<sha8>`) têm arquivos próprios. Antes desta mudança, uma sessão com Deep desligado podia sobrescrever o checkpoint do Deep.
+- **Quando é salva.** Ao desligar o AI Track, ao salvar (`Ctrl+S`), ao fechar a janela ou trocar de vídeo, e antes de abrir a janela do Net, mesmo com o AI Track ainda ligado. Uma sessão em que você não marcou nenhum ponto à mão não grava nada.
+- **Amostras.** Só os pontos que você clica com o AI Track ligado são guardados (um recorte e um recorte de contexto ao redor de cada um) para o retreino. São recortes de pessoas do seu vídeo: ficam na sua pasta e nunca são enviados.
+- **Botão Net** (barra de ferramentas, logo depois de **AI Track** e **Deep**). Abre a janela *AI Track network* (`uv run --no-sync python -m vaila.ai_tracker_hub gui`). Botões: **Change folder...** (trocar pasta), **Open folder** (abrir pasta), **Download from Hugging Face** (baixar), **Use a local folder...** (usar uma pasta local), **Retrain (GPU)** (retreinar), **Send to Hugging Face...** (enviar), **Restore previous version...** (restaurar versão anterior) e **Refresh** (atualizar). Cada ação imprime no terminal o comando equivalente (`>>`).
+- **Retreino.** Ajusta o último estágio do backbone com as suas amostras e refaz os discriminadores com as features do rastreador ao vivo (`python -m vaila.ai_tracker_train --from-samples <pasta>/ai_tracker --mode both --device auto`). Vídeos separados para validação decidem: o novo backbone só é ativado se a AUC nesses vídeos não cair. A GPU só é usada com pelo menos 3 GiB livres. Veja [ai_tracker_train](ai_tracker_train.md).
+- **Hugging Face.** Baixar não exige login (repositório público, padrão `paulosantiago/vaila-ai-tracker`, ou `--repo` / `VAILA_AI_MODELS_REPO`); cada arquivo é conferido por sha256 antes de ser instalado, e o arquivo que ele substitui vai para `history/`. Enviar exige `uv run --no-sync hf auth login` (ou `HF_TOKEN`), lista os arquivos e pede confirmação. Só vão `manifest.json`, um cartão do modelo, os discriminadores e os backbones ajustados ativos; nunca `samples/`, `history/`, `logs/` nem os pesos oficiais do ImageNet. Os arquivos são substituídos no lugar, e o histórico do Hugging Face guarda as versões antigas (`--revision`). O envio real ainda não foi testado.
+
+### Medidas na imagem (tecla Q) e Kick Measure
+
+A tecla **Q** (botão **QMeas**) liga as medidas na imagem do `quickmeasure` (veja [quickmeasure.md](quickmeasure.md)): calibre primeiro, depois as teclas **1** distância, **2** área, **3** ângulo, **4** velocidade, **5** aceleração e **6** nível. **S** salva a sessão em `processed_quickmeasure_<data_hora>/` com os CSVs e um relatório HTML.
+
+**Calibração quadro a quadro (`*_frames.dlt3d` / `*_frames.dlt2d`).** A pasta de saída do SAM 3 da câmera (`processed_sam3dinov3_*/<stem>/`) guarda `<stem>_frames.dlt3d` (a câmera de **todos** os quadros, `frame,L1..L11`), `<stem>_frames.dlt2d` (a homografia do plano do campo de cada quadro, `frame,L1..L8`), `<stem>_frames_cameras.csv` (`frame,source,...`, origem = `dlt3d` / `solved` / `tracked` / `approximate`) e um resumo `.json`. Carregado no getpixelvideo, o vídeo fica calibrado em metros do campo em **qualquer** quadro (teclas **1**-**6**, alturas com **7**), então dá para medir à mão também.
+
+- **Automático** (só quando a sessão ainda não tem calibração; mensagem no terminal + o comando que repete): `--kick-run`; **Load Tracking CSV** de um arquivo da pasta do SAM 3; abrir um vídeo quando existe `<pasta do vídeo>/kick_analysis_*/work/<stem>/sam3dinov3/processed_sam3dinov3_*/<stem>/<stem>_frames.dlt3d` (rodada mais nova primeiro) ou o arquivo está ao lado do vídeo.
+- **Manual**: **CALIB** (Shift+Q), resposta **L**, escolha o `*_frames.dlt3d` (camera3d) ou `*_frames.dlt2d`; ou `uv run --no-sync vaila/getpixelvideo.py -f VIDEO --calib-frames ARQUIVO`. O `.dlt3d` precisa ter uma linha por quadro do vídeo; senão a carga para com um erro claro.
+- Uma linha no canto inferior esquerdo diz o arquivo; nos quadros com câmera `approximate` (copiada de outro quadro) vira um aviso laranja (EN/PT): meça com cautela ali.
+
+**Kick Measure: abrir uma pasta `kick_analysis` e medir em metros.** Abra uma pasta `kick_analysis_*` do FreeKiki e meça no vídeo dela, em **qualquer** quadro, em metros do campo, com o resultado na hora. Abra com **Tpl:** e a resposta **K**, com o botão **Measure kick** do FreeKiki, ou pelo terminal:
+
+```bash
+uv run --no-sync vaila/getpixelvideo.py --kick-run PASTA -f VIDEO      # -f é opcional
+uv run --no-sync vaila/freekiki.py kick-measure PASTA [--camera reference|other]
+```
+
+A câmera de cada quadro (o DLT3D do pipeline, ou uma câmera resolvida com centro óptico fixo, ou uma *rastreada* pelo movimento da imagem, ou uma cópia *aproximada* do quadro mais próximo) vira uma calibração `camera3d`, então as teclas **1**-**6** já dão metros reais. O mouse mostra `Real: (x, y) m` (`[approx. camera]` em quadro aproximado).
+
+**As medidas acompanham o gramado quando a câmera se move.** Com essa calibração `camera3d`, os pontos de uma medida são desenhados onde aquele lugar do campo está no quadro que você está vendo, e não no pixel em que você clicou: um ponto inicial clicado no quadro 0 continua no mesmo lugar do gramado no quadro 92, e a linha acompanha o campo. Um lugar que saiu da imagem ganha um marcador na borda, com uma pequena seta apontando para ele e o rótulo `P1 · q0` (número do ponto e quadro do clique, a partir de 0 como no CSV; o `Frame: 1/93` da tela conta a partir de 1). Vale para distância, área, ângulo, velocidade, aceleração, arco e altura; `level` (nível), plano da linha, linha de altura, evento e giro ficam no pixel clicado. Os valores e os CSVs não mudam (cada ponto já usava a câmera do seu próprio quadro), e as outras calibrações (linha, plano, REF3D, DLT2D) desenham como antes. Veja o [Quick Measure](quickmeasure.md#measures-anchored-on-the-pitch-moving-camera).
+
+**O carregamento mostra só a calibração**: as linhas do campo reprojetadas no vídeo, verdes num quadro com DLT3D, amarelas num quadro resolvido, ciano num quadro rastreado, laranja num quadro aproximado. O resto se liga no **painel por passos** encaixado à direita (recolha com ▶, reabra pela aba na borda direita; **Kick SAM** abre uma pasta com o vídeo já aberto):
+
+1. **Calib**: quadros por fonte de calibração, a fonte deste quadro, **Linhas do campo** ligado/desligado.
+2. **Camad.**: **Caixas**, **Pose 2D**, **Bola**, **Rótulos**; filtros por papel (todos / batedor / goleiro / time A / time B / árbitro / marcados); a lista de pessoas com caixas de seleção (um clique num jogador no vídeo o seleciona). **Bola → marcador p0 (editar / AI Track)** põe a trilha da bola no p0 só quando você aperta.
+3. **Métr.**: escolha uma pessoa e uma métrica (velocidade no campo, distância até a bola ou até outra pessoa, altura de um ponto do corpo, altura do salto, velocidade de um ponto do corpo), **+ Adicionar métrica**; o valor agora / máx aparece no painel e acima do jogador. **Medir à mão** inicia os modos do Quick Measure abaixo.
+4. **Export**: C3D para o mkvis3d, BVH + script do Blender, CSV de métricas ou tudo, em `<kick_analysis>/processed_kickmeasure_<data_hora>/`; o terminal imprime o comando equivalente `python -m vaila.kick_measure ... --export-scene ...`.
+
+Teclas, no MEASURE (`Q`):
+
+| Tecla | Medida |
+|-------|--------|
+| **7** | Altura: 2 cliques no mesmo quadro, base no gramado e depois o topo |
+| **8** | Plano da linha: 2 cliques no gramado (chute, chegada) e depois um clique por posição da bola: distância ao longo da linha `s`, altura `z`, velocidade e aceleração |
+| **9** | Evento: 2 cliques, cada um no seu quadro: duração, velocidade média, taxa de quadros |
+| **0** | Giro: clique a mesma marca da bola em cada quadro em que ela aparece: voltas, rps, rpm |
+| **,** | Arco / curva: 3 ou mais cliques: comprimento, raio, ângulo, flecha |
+| **.** | Linha de altura: 1 clique no plano do **8**: uma guia naquela altura sobre o vídeo |
+
+Uma câmera vê a bola ao longo de um raio, então cada altura pressupõe um plano (o plano vertical pela base no **7**, o plano da linha no **8**) e mostra o seu ± (2 m de erro lateral no **8**). Descrição completa do painel por passos, das métricas, da exportação, dos limites e dos arquivos gravados: [kick_measure_pt.md](kick_measure_pt.md) ([English](kick_measure.md)).
 
 ## Comandos do Teclado
 
@@ -334,6 +387,7 @@ A velocidade atual é exibida no canto superior direito da janela. Ela volta a 1
 | **C**           | Alternar modo "1 Line"                                     |
 | **O** ou **S**  | Alternar modo Sequencial (apenas no modo Normal)          |
 | **P**           | Alternar modo Persistência                                |
+| **7** / **8** / **9** / **0** / **,** / **.** | No MEASURE com uma pasta Kick Measure (`--kick-run`): altura / plano da linha / evento / giro / arco / linha de altura (veja [kick_measure_pt.md](kick_measure_pt.md)) |
 | **L**           | Alternar modo Labeling (Bounding Boxes)                    |
 | **G**           | Alternar Guia (overlay visual do template; `V` alterna mapa FIFA) |
 | **FIFA** / **K** | Carregar/criar **TOML FIFA** ao lado do vídeo (`n_keypoints`, `start`, `base`) |
@@ -587,6 +641,12 @@ Sistema de backup integrado para segurança dos dados:
 - **Repositório do Projeto:** https://github.com/paulopreto/vaila-multimodaltoolbox
 
 ## Histórico de Versões
+
+### Versão 0.4.19 (23 de Novembro de 2026) — Kick Measure
+
+- `--kick-run PASTA`, **Tpl: → K** e **Kick SAM** abrem uma pasta `kick_analysis_*` do FreeKiki: uma calibração `camera3d` por quadro, e só as linhas do campo são desenhadas; um painel por passos (Calib, Camadas, Métricas, Export) liga caixas, pose, bola e rótulos, mede por pessoa e exporta para o mkvis3d e o Blender. Mouse com `Real: (x, y) m`.
+- Teclas do MEASURE **7** altura, **8** plano da linha (com `s`, `z`, velocidade e aceleração na barra de baixo), **9** tempo de evento, **0** giro da bola, **,** arco / curva, **.** linha de altura. Veja [kick_measure_pt.md](kick_measure_pt.md).
+- A ajuda **H** lista as teclas novas em inglês e português.
 
 ### Versão 0.4.19 (16 de Novembro de 2026) — Template REF3D `[videos]` e padrões mais claros
 

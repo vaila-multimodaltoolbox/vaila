@@ -2,7 +2,7 @@
 
 **App version (GUI/CLI banner):** 0.4.19 (see `vaila.py`). **Package version:** 0.4.19 (`[project].version` in `pyproject.toml`). **Python:** 3.12.x (pinned in-repo for `uv`).
 
-**Last updated:** 2026-11-19
+**Last updated:** 2026-11-24
 
 <p align="center">
   <img src="docs/images/vaila.png" alt="vailá Logo" width="300"/>
@@ -281,6 +281,60 @@ has no wall but the ball that came in. **Open run and correct...** (CLI `kick-co
 finished `kick_analysis_<time>` folder to correct the ball or the field keypoints in getpixelvideo;
 `kick-analysis --resume <run>` then runs only what changed (a new ball does not redo detection nor
 SAM 3D Body). See the [FreeKiki help](vaila/help/freekiki.md).
+
+GetPixelVideo **Measure kick** (`--kick-run DIR`, **Tpl: K**, the FreeKiki button **Measure kick** or
+`freekiki.py kick-measure DIR`) opens a `kick_analysis_<time>` folder and measures on its video in metres
+of the pitch, in any frame, not only in the frames the pipeline calibrated: a frame without a DLT3D gets a
+camera solved with a fixed optical centre from the raw field keypoints, and a frame with too few points is
+tracked from the image motion (only a frame the tracker cannot follow is flagged approximate). In MEASURE (`Q`) the keys `1`-`6` give real metres, and the new keys are `7` height
+(base and top), `8` plane of the line (distance along the line, height, speed and acceleration of each ball
+click), `9` event time, `0` ball spin (rps and rpm), `,` arc / curve and `.` height line. One camera sees the
+ball along a ray, so each height names its plane and shows its uncertainty. See the
+[Kick Measure help](vaila/help/kick_measure.md).
+
+Loading now shows only the calibration (the pitch lines on the video); a **step panel** docked on the right
+(Calib, Layers, Metrics, Export) switches on boxes, 2D pose, ball and labels, picks the people, adds metrics
+per person (speed, distance to the ball or to another person, height or speed of a body point, jump height)
+and exports the scene: a C3D for **mkvis3d**, a BVH per person plus a `bpy` script for **Blender**, and a
+metrics CSV, into `processed_kickmeasure_<time>/` of the run. Português: [kick_measure_pt](vaila/help/kick_measure_pt.md).
+
+FreeKiki **Label people before 3D** (roster): the automatic team split by torso colour fails with red-black
+against white kits, yellow referees or a keeper in a team colour. Keep the box ticked in *Kick analysis* (or
+`freekiki.py kick-analysis --videos DIR --stop-after sam`): the run stops after SAM and writes
+`roster/<video>/roster_ids.png` with the crops of every SAM id. Label them with `freekiki.py kick-roster <run> --gui`
+(or **Open run and correct... > Label people (roster)**, or by editing `roster.csv`: teams `A`, `B`, `REF`, `OUT`;
+roles `player`, `keeper`, `kicker`, `referee_main`, `referee_aux`), then `kick-analysis --resume <run>`: the people
+kept on the pitch, the kicker and keeper ids, the `team_A` / `team_B` / referees folders and the getpixelvideo Kick
+panel filters follow your labels, and nobody you leave blank is given a team by colour. Only the reference camera's
+roster is applied. See the [FreeKiki help](vaila/help/freekiki.md#label-the-people-before-the-3d-stage-roster).
+
+FreeKiki **per-frame cameras** (stage `cameras:<video>`, right after SAM; also with `--stop-after sam`, or
+`freekiki.py kick-cameras <run>` and the button **Calibration per frame**): every video frame gets its camera,
+the FreeKiki DLT3D where it exists, a fixed-centre solve, or a new frame-to-frame tracking of the crowd and
+boards (`tracked`), and the files `<video>_frames.dlt3d`, `.dlt2d`, `_frames_cameras.csv` and `.json` are always
+written next to the SAM 3 outputs, so getpixelvideo opens the video already calibrated (HUD *Calibrated per
+frame*). Hold-out on Fla x CAP: median 4.5 px on the field points at 10 frames from a known camera (reference
+noise about 3.7 px), 0.21 m on the ground. The ball flight and the 3D poses use these cameras, the contact of
+a ball that was not at rest is read from the feet (source `feet`), the attacked goal follows the flight, and
+the statures come from a posture-robust 2D chain instead of the vertical span (Rossi 1.98 m, was 1.49 m). See
+the [Kick Measure help](vaila/help/kick_measure.md) and the [FreeKiki help](vaila/help/freekiki.md#calibration-of-every-frame-cameras-stage-kick-cameras).
+
+GetPixelVideo **AI Track network** (button **Net**, right after **Deep**): what AI Track learns from your
+clicks now lives in a folder you choose (`--ai-models DIR`, `VAILA_AI_MODELS_HOME` or a one-time dialog;
+suggestion `~/vaila_ai_models`), outside the install, with one discriminator per feature space (Deep on or
+off no longer overwrite each other), the points you click while AI Track is on kept as samples, and up to
+10 previous versions of every file. The Net window changes the folder, retrains the backbone from your
+samples (`python -m vaila.ai_tracker_train --from-samples`; the new backbone is activated only if the
+held-out AUC does not drop), restores a version, and downloads from or sends to a public Hugging Face
+repository (`python -m vaila.ai_tracker_hub`; `push` needs `hf auth login`, asks to confirm and never sends the
+samples, which are crops of people). The real upload has not been tried yet. See the
+[AI Track models guide](vaila/help/ai_tracker_models.md) and the [Train AI Tracker help](vaila/help/ai_tracker_train.md).
+
+Quick Measure on a moving camera: with a per-frame `camera3d` calibration (`--kick-run`, `*_frames.dlt3d`) the
+points of a distance, area, angle, velocity, acceleration, arc or height are now drawn where that spot of the pitch
+is in the current frame (a point clicked on frame 0 follows the grass), clipped to the image, with a border arrow
+`P1 · q0` for a spot that left the image. Values and CSVs are unchanged; other calibrations draw as before.
+See [Quick Measure help](vaila/help/quickmeasure.md#measures-anchored-on-the-pitch-moving-camera).
 
 Syncvid **Manual cuts side by side (M)** opens independent camera previews. Click a pane,
 set inclusive **Start/End** with **I/O** or the row fields, and toggle frame removals with **D**.

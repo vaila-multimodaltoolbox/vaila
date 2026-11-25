@@ -10,16 +10,23 @@ Please see AUTHORS for contributors.
 
 Author: Paulo Roberto Pereira Santiago
 Email: paulosantiago@usp.br
-Version: 0.4.17
+Version: 0.4.19
 Created: 28 October 2026
-Update Date: 12 November 2026
+Update Date: 24 November 2026
 
 Description:
     ``freekiki.py kick-analysis`` (and the One-click button of section 5) turns two cut videos of
     one kick, with their corrected ball tracks, into one new folder with the whole analysis:
 
     * E1 per camera: the field keypoints screened (the camera must be one the network was trained
-      for), the DLT3D of every frame, SAM 3 + DINOv3 (SAM 3D Body) with the corrected ball;
+      for), the DLT3D of every frame, SAM 3 + DINOv3 (SAM 3D Body) with the corrected ball. The 2D
+      work (detect + ``sam:<camera>``) and the 3D stage are separate: ``stop_after="sam"`` stops
+      between them so the user can label the people (:mod:`freekiki_roster`: teams, keeper, kicker,
+      referees, who to drop) and ``roster=`` makes the 3D stage and the analyses use those labels;
+      Right after SAM, the stage ``cameras:<camera>`` writes the per-frame calibration of EVERY frame
+      next to the SAM 3 outputs (``<camera>_frames.dlt3d`` / ``.dlt2d`` / ``_cameras.csv`` /
+      ``_cameras.json``, see :func:`vaila.kick_measure.write_frame_calibration`): getpixelvideo opens
+      the video already calibrated, and the ball flight and the statures use those cameras;
     * E2 the people paired between the cameras (``players-link``): one ``player_id`` per person;
     * E3 the ball in metres from the two cameras (``rec3d-binocular``);
     * E4 the keypoints of the paired people triangulated with the DLT3D of each frame (the Vitruvian
@@ -44,6 +51,7 @@ import shutil
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 
@@ -74,6 +82,9 @@ KICKER_MODEL = "contact-fit-v2"  # v2: a panning camera reads the marker contact
 # the only people a penalty reads: ID0 (the goalkeeper) and ID1 (the kicker), as in player_map.csv
 PENALTY_PLAYERS = ("keeper", "kicker")
 FPS_TOLERANCE = 0.01  # the two cameras must share a frame rate (the clocks are frame / fps)
+# the per-frame cameras stage: a change of the method here reruns it (kick_measure's tracking)
+CAMERAS_MODEL = "frames-cameras-v1"
+STOP_AFTER_CHOICES = ("sam",)  # a run may stop after its 2D work stage, to label the people
 
 
 class KickInputError(ValueError):
@@ -319,6 +330,10 @@ class _State:
         _log(f"{key}: running")
         try:
             result = _jsonable(fn())
+            if result.get("unchanged"):
+                # the stage only recorded work already on disk (an old run's SAM output): it is
+                # not a change, so the stages built on it are not redone
+                self.runs -= 1
         except Exception as exc:  # the stage name must reach the user
             self.data["stages"][key] = {"status": "failed", "inputs": _jsonable(inputs),
                                         "error": f"{type(exc).__name__}: {exc}"}  # fmt: skip
@@ -407,6 +422,164 @@ def _kicker_id(player_map: Path) -> int:
             if row["role"] == "kicker":
                 return int(row["player_id"])
     raise KickStageError(f"no kicker in {player_map}: the players link found no kicker")
+
+
+def _roster_roles(roster) -> dict[str, int]:
+    """The SAM ids of the keeper and the kicker the roster names, for the players stage.
+
+    The keeper of the play is the one of the team opposite to the kicker's. A keeper labelled in the
+    kicker's own team is not the goalkeeper of this play and is left to the heuristic (logged). Without
+    a kicker, a single labelled keeper is taken.
+    """
+    roles: dict[str, int] = {}
+    kicker = roster.kicker()
+    if kicker is not None:
+        roles["kicker"] = kicker
+    keepers = [e for e in roster.entries.values() if e.role == "keeper"]
+    if kicker is not None and roster.team_of(kicker) in ("A", "B"):
+        other = "B" if roster.team_of(kicker) == "A" else "A"
+        keeper = roster.keeper(other)
+        if keeper is not None:
+            roles["keeper"] = keeper
+        elif keepers:
+            _log("roster: the keeper labelled is in the kicker's team, not the one of the play; "
+                 "the goalkeeper is chosen by the heuristic")  # fmt: skip
+    elif len(keepers) == 1:
+        roles["keeper"] = keepers[0].sam_id
+    return roles
+
+
+def _resolve_roster(out: Path, stem: str, given, previous) -> tuple[Any | None, Path | None]:
+    """``(roster, path)``: the roster to apply to the reference camera, and where it was read.
+
+    ``given`` (an explicit file) wins, then the file the earlier call of this folder used
+    (``previous``), then ``roster/<stem>/roster.csv`` of the run. A roster with no team is ignored
+    (logged): the colour split stays. A file that breaks a rule raises :class:`KickInputError`.
+    """
+    ro = _module("freekiki_roster")
+    path: Path | None = None
+    if given:
+        path = Path(given).expanduser().resolve()
+        if not path.is_file():
+            raise KickInputError(f"--roster {path} does not exist")
+    elif previous and Path(previous).is_file():
+        path = Path(previous)
+    else:
+        path = ro.find_roster(out, stem)
+    if path is None:
+        return None, None
+    try:
+        roster = ro.read_roster(path)
+    except (ro.RosterError, OSError) as exc:
+        raise KickInputError(f"roster {path}: {exc}") from exc
+    if not roster.filled:
+        _log(f"roster {path} has no team yet: ignored, the teams come from the shirt colour")
+        return None, path
+    return roster, path
+
+
+def _roster_inputs(roster) -> dict:
+    """The roster as a stage input: editing a label reruns the stage (``{}`` without a roster)."""
+    return {"roster": roster.key()} if roster is not None else {}
+
+
+def frame_cameras_inputs(predict: Path, video_key: dict) -> dict:
+    """The inputs of the ``cameras:<stem>`` stage: the detect run's quality, raw field points and
+    DLT3D, the video and the method version. A new detection, new field points or a new tracking
+    model write the per-frame cameras again (a SAM rerun does not: the cameras are made from the
+    field, not from the people)."""
+    inputs: dict = {"video": video_key, "model": CAMERAS_MODEL}
+    tracking = getattr(_module("kick_measure"), "TRACKING_MODEL_VERSION", None)
+    if tracking:  # a new tracker writes the cameras again
+        inputs["tracking"] = tracking
+    for name, path in (
+        ("quality", Path(predict) / "quality.json"),
+        ("field_kps_raw", Path(predict) / "field_kps_raw.csv"),
+        ("dlt3d", next(iter(sorted(Path(predict).glob("*.dlt3d"))), None)),
+    ):
+        if path is not None and Path(path).is_file():
+            inputs[name] = _file_key(Path(path))
+    return inputs
+
+
+def _track_gaps(km, run):
+    """The camera track of ``run`` with its ``approximate`` frames followed through the video.
+
+    A frame no pitch keypoint could fit copied its neighbour while the broadcast camera moved on:
+    :func:`vaila.kick_measure.track_approximate_frames` follows the static scene (not the SAM people,
+    not the ball) across the gap. Nothing to do when no frame is approximate, when the opened run
+    already tracked them, or when the video cannot be followed (the frames then stay
+    ``approximate``, said in the cameras csv and the README, never hidden).
+    """
+    track = run.cameras
+    if not track.approximate_frames() or any(
+        track.info(f).source == "tracked" for f in range(int(track.n_frames))
+    ):
+        return track
+    follow = getattr(km, "track_approximate_frames", None)
+    if follow is None:
+        return track
+    boxes = {f: [person.bbox for person in people] for f, people in run.people.items()}
+    try:
+        return follow(track, run.video, boxes=boxes, ball_uv=run.ball_uv)
+    except (ValueError, OSError, RuntimeError) as exc:
+        _log(f"cameras: the approximate frames could not be followed in {run.video.name} ({exc})")
+        return track
+
+
+def write_frame_cameras(kick_dir, camera: str = "reference") -> dict:
+    """Build the per-frame cameras of one camera of a kick run and write them in the SAM 3 folder.
+
+    The track (:meth:`vaila.kick_measure.CameraTrack.from_calibration`, through
+    :func:`vaila.kick_measure.load_kick_measure_run`) is made from the detect run (its DLT3D and raw
+    field keypoints), never from an earlier ``<stem>_frames.dlt3d``: the earlier files are moved to
+    ``*.previous`` while it is built and come back when the build fails. Written into
+    ``work/<stem>/sam3dinov3/processed_sam3dinov3_*/<stem>/``: ``<stem>_frames.dlt3d``, ``.dlt2d``,
+    ``_frames_cameras.csv``, ``_frames_cameras.json`` (one row per video frame, all finite).
+    Returns ``{"stem", "dir", "files": {kind: path}, "counts", "n_frames"}``; raises
+    ``ValueError`` when there is no detect run or no SAM 3 folder.
+    """
+    km = _module("kick_measure")
+    cam = _module("freekiki").kick_run_camera(kick_dir, camera)
+    stem = str(cam["stem"])
+    sam_dir = km.sam_output_dir(cam["run"], stem)
+    if sam_dir is None:
+        raise ValueError(
+            f"no SAM 3 output folder for {stem} in {cam['run']} (run the 2D stage first)"
+        )
+    names = [f"{stem}_frames.dlt3d", f"{stem}_frames.dlt2d",
+             f"{stem}_frames_cameras.csv", f"{stem}_frames_cameras.json"]  # fmt: skip
+    aside: list[tuple[Path, Path]] = []
+    for name in names:
+        old = sam_dir / name
+        if old.is_file():
+            kept = old.with_name(name + ".previous")
+            old.replace(kept)
+            aside.append((kept, old))
+    try:
+        run = km.load_kick_measure_run(kick_dir, camera)
+        track = _track_gaps(km, run)
+        files = km.write_frame_calibration(track, sam_dir, run.stem, video=run.video,
+                                           fps=run.fps, width=run.width, height=run.height)  # fmt: skip
+    except Exception:
+        for kept, old in aside:
+            kept.replace(old)
+        raise
+    for kept, _ in aside:
+        kept.unlink(missing_ok=True)
+    counts: dict[str, int] = {}
+    for frame in range(int(track.n_frames)):
+        source = track.info(frame).source
+        counts[source] = counts.get(source, 0) + 1
+    return {"stem": run.stem, "dir": str(sam_dir), "files": {k: str(v) for k, v in files.items()},
+            "counts": counts, "n_frames": int(track.n_frames)}  # fmt: skip
+
+
+def frame_cameras_for_ball(dlt3d_path) -> dict:
+    """``{frame: 11 DLT coefficients}`` of the trusted frames of a ``<stem>_frames.dlt3d`` (the
+    ``approximate`` frames, copies of a neighbour, are left out), for the ball and its flight."""
+    km = _module("kick_measure")
+    return _module("freekiki_auto_flight").cameras_from_track(km.read_frame_calibration(dlt3d_path))
 
 
 def _penalty_topview(cam3d: Path, video: Path) -> None:
@@ -577,14 +750,19 @@ def _teams_binocular(
     *,
     team_a: str,
     fps: float,
+    roster=None,
 ) -> dict:
-    """E4c: the teams of the binocular analysis (both cameras, the team folders and their data)."""
+    """E4c: the teams of the binocular analysis (both cameras, the team folders and their data).
+
+    ``roster`` holds the labels of the reference camera's SAM ids (the other camera follows the
+    pairing of ``player_map.csv``)."""
     analysis = _module("freekiki_team_analysis")
     ref_view = _camera_view(ref3d)
     sources = [analysis.Source("ref", ref3d, ref_video, ref_work, dlt=ref_view.dlt),
                analysis.Source("other", other3d, other_video, other_work)]  # fmt: skip
     return analysis.run_team_analysis(sources, bino_dir, poses_csv=poses_csv, ball_csv=ball_csv,
-                                      kind="binocular", rate_hz=fps, team_a_colour=team_a)  # fmt: skip
+                                      kind="binocular", rate_hz=fps, team_a_colour=team_a,
+                                      **({"roster": roster} if roster is not None else {}))  # fmt: skip
 
 
 def _teams_mono(
@@ -597,6 +775,7 @@ def _teams_mono(
     team_a: str,
     fps: float,
     sync: tuple[int, int] | None = None,
+    roster=None,
 ) -> dict:
     """E4c: the teams of one camera alone (the monocular analysis of that camera)."""
     analysis = _module("freekiki_team_analysis")
@@ -604,7 +783,8 @@ def _teams_mono(
     source = analysis.Source("ref" if is_ref else "other", cam3d, video, work, dlt=view.dlt)
     return analysis.run_team_analysis([source], cam3d, poses_csv=cam3d / "poses_3d_on_field_players.csv",
                                       ball_csv=cam3d / "ball.csv", kind=key, rate_hz=fps,
-                                      team_a_colour=team_a)  # fmt: skip
+                                      team_a_colour=team_a,
+                                      **({"roster": roster} if roster is not None else {}))  # fmt: skip
 
 
 def _c3d_binocular(
@@ -686,7 +866,7 @@ def _kicker(
     # a ball not at rest (open play) or a contact given by hand: the reference flight decided it
     decided = _module("freekiki_auto_flight").flight_contact(ref3d)
     incoming = None
-    if decided is not None and decided.get("source") in ("manual", "kink", "first_frame"):
+    if decided is not None and decided.get("source") in ("manual", "feet", "kink", "first_frame"):
         contact_override, override_source = int(decided["frame"]), str(decided["source"])
         incoming = decided.get("incoming")
     else:
@@ -930,7 +1110,7 @@ def _penalty(
 
 def _mono_analysis(
     key, cam3d, video, work, is_ref, *, kick_foot, team_a, runner, sync=None, penalty=False,
-    goal_x=None, report=True, defer_report=False,
+    goal_x=None, report=True, defer_report=False, roster=None,
 ):  # fmt: skip
     """One camera alone: its teams, its kicker and its report. Returns the entry and the kicker values.
 
@@ -952,13 +1132,16 @@ def _mono_analysis(
             _penalty_topview(cam3d, video)
             _penalty_overlay(cam3d, video, work)
         else:
-            teams = runner(f"teams:{key}", {"player_map": cam3d.name, "sync": sync},
+            teams = runner(f"teams:{key}", {"player_map": cam3d.name, "sync": sync,
+                                            **_roster_inputs(roster)},
                            [cam3d / "data" / "team_map.csv"],
                            lambda: _teams_mono(cam3d, video, work, is_ref=is_ref, key=key, team_a=team_a,
-                                               fps=fps, sync=sync))  # fmt: skip
+                                               fps=fps, sync=sync,
+                                               **({"roster": roster} if roster is not None else {})))  # fmt: skip
             entry["counts"] = teams["counts"]
         kick = runner(f"kicker:{key}", {"poses": "poses_3d_on_field_players.csv", "kick_foot": kick_foot,
-                                        "goal_x": goal_x, "model": KICKER_MODEL},
+                                        "goal_x": goal_x, "model": KICKER_MODEL,
+                                        **_roster_inputs(roster)},
                       [cam3d / "data" / "kicker_metrics.csv"],
                       lambda: _kicker(cam3d, cam3d, cam3d / "poses_3d_on_field_players.csv",
                                       _layout().data_dir(cam3d), video, kick_foot=kick_foot,
@@ -1064,6 +1247,7 @@ def _analyses(
     setpiece: dict | None = None,
     ref_sync: tuple[int, int] | None = None,
     penalty_opts: dict | None = None,
+    roster=None,
 ) -> dict:
     """The analyses of the run: one monocular per camera and the binocular (two cameras).
 
@@ -1075,6 +1259,8 @@ def _analyses(
     raises. ``analysis`` is the one the README marks as the result (binocular with two cameras).
     ``setpiece`` (``freekiki_setpiece.classify_run``) is written to each analysis's ``data/``; a penalty
     gets the pynalty metrics and report in the chosen analysis instead of the freekiki ball report.
+    ``roster`` (the user's labels of the reference camera) decides the teams of the reference
+    camera's analyses; ``mono-other`` keeps the colour split, as that camera has no labels.
     """
     two = other3d is not None
     available = ["binocular", "mono-ref", "mono-other"] if two else ["mono-ref"]
@@ -1108,7 +1294,8 @@ def _analyses(
                                        team_a=team_a, runner=runner,
                                        sync=ref_sync if is_ref else None, penalty=penalty,
                                        goal_x=goal_x, report=flight_report,
-                                       defer_report=key == defer)  # fmt: skip
+                                       defer_report=key == defer,
+                                       roster=roster if is_ref else None)  # fmt: skip
         if setpiece is not None:
             _module("freekiki_setpiece").write(_layout().data_dir(cam3d), setpiece)
         results[key] = entry
@@ -1137,12 +1324,15 @@ def _analyses(
         ):  # no team or referee split: a penalty reads the keeper (ID0) and the kicker (ID1)
             _penalty_others(ref3d / "player_map.csv", poses, "player_id", bdata)
         else:
-            teams = runner("teams:binocular", {"poses": poses.name}, [bdata / "team_map.csv"],
+            teams = runner("teams:binocular", {"poses": poses.name, **_roster_inputs(roster)},
+                           [bdata / "team_map.csv"],
                            lambda: _teams_binocular(ref3d, other3d, ref_video, other_video, ref_work, other_work,
-                                                    bino_dir, poses, ball_csv, team_a=team_a, fps=fps))  # fmt: skip
+                                                    bino_dir, poses, ball_csv, team_a=team_a, fps=fps,
+                                                    **({"roster": roster} if roster is not None else {})))  # fmt: skip
             entry["counts"] = teams["counts"]
         kick = runner("kicker:binocular", {"poses": poses.name, "kick_foot": kick_foot,
-                                           "goal_x": goal_x, "model": KICKER_MODEL},
+                                           "goal_x": goal_x, "model": KICKER_MODEL,
+                                           **_roster_inputs(roster)},
                       [bdata / "kicker_metrics.csv", bdata / "kicker_curves_pt.png"],
                       lambda: _kicker(ref3d, fit, poses, bdata, ref_video, kick_foot=kick_foot,
                                       other3d=other3d, ref_work=ref_work, other_work=other_work,
@@ -1294,6 +1484,7 @@ def _contact_lines(contact: dict | None) -> list[str]:
         return []
     how = {
         "rest": "the still ball leaves its rest pixel",
+        "feet": "the last frame with the ball at the kicker's foot, then it moves away (SAM 3D Body feet)",
         "kink": "break of the rolling ball's ground track (open play)",
         "first_frame": "the ball already flies in the first frame (the kick is at or before it)",
         "manual": "given by hand (--contact-frame)",
@@ -1305,6 +1496,47 @@ def _contact_lines(contact: dict | None) -> list[str]:
             f", turned {incoming['turn_deg']} deg" if incoming.get("turn_deg") is not None else ""
         )
     return [line]
+
+
+def _cameras_lines(cameras: dict | None) -> list[str]:
+    """The per-frame calibration files of each camera (stage ``cameras:<stem>``) and what they are made of."""
+    lines: list[str] = []
+    for stem, rec in (cameras or {}).items():
+        files = rec.get("files") or {}
+        if not files:
+            lines.append(f"per-frame cameras of {stem}: NOT written ({rec.get('error', 'unknown reason')})"
+                         "; freekiki.py kick-cameras KICK_DIR tries again")  # fmt: skip
+            continue
+        counts = rec.get("counts") or {}
+        made = ", ".join(f"{n} {kind}" for kind, n in sorted(counts.items()))
+        lines.append(
+            f"per-frame cameras of {stem}: {rec.get('n_frames')} frames ({made}) in {rec.get('dir')}"
+        )
+        lines.append(f"  {Path(files['dlt3d']).name}, {Path(files['dlt2d']).name} (open the video in "
+                     "getpixelvideo: freekiki.py kick-measure) and the source of each frame in "
+                     f"{Path(files['cameras']).name}")  # fmt: skip
+        if counts.get("approximate"):
+            lines.append(f"  {counts['approximate']} frames are only a copy of the nearest camera "
+                         "(approximate): measure on them with care; the ball flight leaves them out")  # fmt: skip
+    return lines
+
+
+def _roster_lines(roster: dict | None) -> list[str]:
+    if not roster:
+        return []
+    lines = [
+        f"roster: {roster['path']}  ({roster['labelled']} people labelled, "
+        f"{len(roster['out'])} marked OUT: not kept)",
+        f"  teams, keeper, kicker and referees of the reference camera come from the roster "
+        f"(kicker: {roster.get('kicker_source')}, keeper: {roster.get('keeper_source')}); the shirt "
+        "colour is only reported.",
+    ]
+    if roster.get("other_camera"):
+        lines.append(
+            f"  only the reference camera is labelled: {roster['other_camera']} follows the "
+            "pairing of player_map.csv."
+        )
+    return lines
 
 
 def _correction_lines(inputs: dict | None) -> list[str]:
@@ -1332,6 +1564,8 @@ def _readme(out: Path, summary: dict) -> Path:
         f"fps: {summary['fps']}  |  kicker id: {summary.get('kicker_id', '')}",
         f"set piece: {setpiece.get('kind', 'unknown')} ({setpiece.get('reason', '')})",
         *_contact_lines(summary.get("contact")),
+        *_cameras_lines(summary.get("cameras")),
+        *_roster_lines(summary.get("roster")),
         *_correction_lines(summary.get("inputs")),
         "",
         "Analyses (each one has its own folder; the chosen one is the result):",
@@ -1470,6 +1704,43 @@ def _backup_derived(out: Path, folder: Path) -> None:
         _log(f"earlier derived results copied to {dest}")
 
 
+def _stop_after_sam(out: Path, state: _State, twos: list[dict]) -> dict:
+    """``stop_after="sam"``: write the sheet of each camera, say what to do next, return."""
+    ro = _module("freekiki_roster")
+    sheets: dict[str, dict] = {}
+    for two in twos:
+        cam, predictions = two["cam"], two["sam"].get("predictions")
+        if not predictions or not Path(predictions).is_file():
+            raise KickStageError(
+                f"sam:{cam.stem} left no predictions file ({predictions!r}): no sheet to label"
+            )
+        sheets[cam.stem] = _jsonable(
+            ro.write_roster_sheet(predictions, cam.video, ro.roster_dir(out, cam.stem))
+        )
+        _log(f"{cam.stem}: sheet {sheets[cam.stem]['sheet']} | labels {sheets[cam.stem]['csv']}")
+    state.data["stopped_after"] = "sam"
+    state.save()
+    cameras = {two["cam"].stem: (two.get("cameras") or {}) for two in twos}
+    for stem, rec in cameras.items():
+        files = rec.get("files") or {}
+        if files:
+            _log(f"{stem}: per-frame cameras {files['dlt3d']} ({rec.get('n_frames')} frames, "
+                 f"{rec.get('counts')}); measure with freekiki.py kick-measure {out}")  # fmt: skip
+        else:
+            _log(f"{stem}: per-frame cameras NOT written ({rec.get('error', 'unknown')})")
+    ref_csv = sheets[twos[0]["cam"].stem]["csv"]
+    _log("stopped after the 2D stage (SAM). Look at the sheet, then label each SAM id "
+         "(team A / B / REF / OUT, keeper, kicker, referee_main):")  # fmt: skip
+    _log(f"  1. label the people: edit {ref_csv} or open the window "
+         f"(freekiki.py kick-roster {out} --gui)")  # fmt: skip
+    _log(f"  2. run the 3D stage with the labels: freekiki.py kick-analysis --resume {out} "
+         f"--roster {ref_csv}")  # fmt: skip
+    if len(twos) == 2:
+        _log("only the reference camera's roster is used; the other camera follows the pairing")
+    return {"out": str(out), "stopped_after": "sam", "roster": sheets, "cameras": cameras,
+            "status_file": str(state.path)}  # fmt: skip
+
+
 def resume_options(kick_dir: Path | str) -> dict:
     """The options of a finished or interrupted kick run, to run it again in the same folder.
 
@@ -1527,6 +1798,8 @@ def run_kick_analysis(
     gk_mass: float | None = None,
     gk_onset_frame: int | None = None,
     save_sigma_along: float | None = None,
+    stop_after: str | None = None,
+    roster: str | Path | None = None,
 ) -> dict:
     """The one-click kick analysis. ``videos``: a folder with one or two cut videos, or the files.
 
@@ -1548,6 +1821,17 @@ def run_kick_analysis(
     by eye) and ``save_sigma_along`` (the hands' uncertainty along the camera ray, m) go to the
     penalty metrics and the keeper module (``data/keeper_metrics.json``).
 
+    ``stop_after="sam"`` stops after the detection and the 2D work stage (SAM 3 + SAM 3D Body) of
+    every camera and writes, per camera, the sheet that shows each SAM id (``roster/<stem>/``:
+    ``roster_ids.png``, ``roster_context_*.png`` and the template ``roster.csv``). The user labels the
+    people (team A / B / REF / OUT, keeper, kicker, referees); ``--resume`` then runs the 3D stage with
+    those labels. ``roster`` is that ``roster.csv`` (default: ``roster/<reference stem>/roster.csv`` of
+    the run, when it has at least one team). With a roster the teams, the keeper, the kicker and the
+    referees of the reference camera come from the labels, not from the shirt colour or the
+    heuristics, and the people labelled OUT are not kept. Only the reference camera is labelled: the
+    other camera follows the pairing of the players stage. The roster is stored in the run's
+    options, so ``--resume`` repeats it, and editing a label reruns exactly the stages that read it.
+
     Two videos give three analyses (the monocular of each camera and the binocular); one video gives
     the monocular analysis of that camera. ``analysis`` marks the result in the README. ``out_dir``
     default: ``kick_analysis_<time>/`` next to the first video. Give an existing folder to continue an
@@ -1555,6 +1839,8 @@ def run_kick_analysis(
     """
     if kick_foot not in KICK_FOOT_CHOICES:
         raise KickInputError(f"--kick-foot must be one of {', '.join(KICK_FOOT_CHOICES)}")
+    if stop_after not in (None, *STOP_AFTER_CHOICES):
+        raise KickInputError(f"--stop-after must be one of {', '.join(STOP_AFTER_CHOICES)}")
     set_piece_choices = _module("freekiki_setpiece").SET_PIECE_CHOICES
     if set_piece not in set_piece_choices:
         raise KickInputError(f"--set-piece must be one of {', '.join(set_piece_choices)}")
@@ -1595,6 +1881,13 @@ def run_kick_analysis(
     ):
         arrivals.save_observation(observation_path, observation)
     state = _State(out, datetime.now().strftime("%Y%m%d_%H%M%S"))
+    previous = (state.data.get("options") or {}).get("roster")
+    roster_obj, roster_path = _resolve_roster(out, ref.stem, roster, previous)
+    if roster_obj is not None:
+        _log(f"roster {roster_path}: {len(roster_obj.labelled_ids())} people labelled, "
+             f"{len(roster_obj.out_ids())} out; the teams and roles of {ref.video.name} come "
+             "from it" + (f"; {other.video.name} follows the pairing (it has no labels)"
+                          if other is not None else ""))  # fmt: skip
     # the sync given for a clip whose name has none: a figures rewrite needs it again
     state.data["sync"] = list(sync) if sync is not None else None
     # what this run was asked for: kick-analysis --resume repeats it on the same folder
@@ -1616,7 +1909,9 @@ def run_kick_analysis(
         "model": model,
         "min_camera_ok": min_camera_ok,
         "sync": list(sync) if sync is not None else None,
+        "roster": str(roster_path) if roster_path is not None else None,
     }
+    state.data.pop("stopped_after", None)
     state.save()
     ts = state.ts
     work = out / "work"
@@ -1625,9 +1920,10 @@ def run_kick_analysis(
     _log(f"reference {ref.video.name} | other {other.video.name if other else 'none'} | fps {ref.fps:.3f} "
          f"| out {out}")  # fmt: skip
 
-    def camera_stages(
-        cam: CameraInput, contact: int | None, arrival=None
-    ) -> tuple[Path, Path, dict]:
+    d3 = _module("freekiki_detect3d")
+
+    def camera_2d(cam: CameraInput, arrival=None) -> dict:
+        """The detection and the 2D work stage (SAM 3 + SAM 3D Body) of one camera."""
         runs_before = state.runs
         detect_key = f"detect:{cam.stem}"
         inputs = {"video": _file_key(cam.video), "model": model}
@@ -1639,7 +1935,7 @@ def run_kick_analysis(
 
         def refit(predict):
             if arrivals.calibration_key(arrival) is not None:
-                _, width, height = _module("freekiki_detect3d")._video_info(cam.video)
+                _, width, height = d3._video_info(cam.video)
                 arrivals.refit_goal_calibration(Path(predict), arrival, width, height)
             return Path(predict)
 
@@ -1667,27 +1963,107 @@ def run_kick_analysis(
                             detect, reuse=reuse, legacy=("markers",))  # fmt: skip
         predict = Path(found["predict"])
         detect_ran = state.runs != runs_before
+
+        # the 2D work stage: the focal sequence and SAM 3 + SAM 3D Body. A finished sam3dinov3 run of
+        # this video (an older run of this folder has no `sam:` record) is recorded, not run again.
+        sam_before = state.runs
+
+        def sam() -> dict:
+            result = d3.sam_2d_run(predict, cam.video, cam_work, device=sam_device,
+                                   fresh_sam=detect_ran)  # fmt: skip
+            return {**result, "unchanged": bool(result.get("reused")) and not detect_ran}
+
+        state.stage(f"sam:{cam.stem}", {"predict": str(predict), **inputs, "sam_device": sam_device},
+                    lambda r: [cam_work / "cam_int.npy", Path(r["camera_csv"])], sam,
+                    reuse=reuse and not detect_ran)  # fmt: skip
+        sam_found = state.data["stages"][f"sam:{cam.stem}"]["result"]
+        # the 3D stage follows the detection and SAM; the per-frame cameras below are one of its
+        # inputs too (the poses and the ground tracks use them), so a new camera file redoes the
+        # 3D stage, which reads the SAM 3D Body output of the 2D stage and never runs SAM again
+        redone = detect_ran or state.runs != sam_before
+
+        # the per-frame DLT3D / DLT2D of every frame, next to the SAM 3 outputs (getpixelvideo opens
+        # the video calibrated with them; the ball flight and the statures read them)
+        camera_name = "reference" if cam is ref else "other"
+
+        def cameras() -> dict:
+            try:
+                return write_frame_cameras(out, camera_name)
+            except Exception as exc:  # noqa: BLE001 - the analysis goes on without the file, said loudly
+                _log(f"cameras:{cam.stem}: NOT written ({type(exc).__name__}: {exc}); the ball "
+                     "flight uses the FreeKiki DLT3D frames only, getpixelvideo has no "
+                     f"per-frame calibration (retry: freekiki.py kick-cameras {out})")  # fmt: skip
+                return {"stem": cam.stem, "files": {}, "error": f"{type(exc).__name__}: {exc}"}
+
+        state.stage(f"cameras:{cam.stem}",
+                    frame_cameras_inputs(predict, inputs["video"]),
+                    # a failed build lists a file that never exists: the next call tries again
+                    lambda r: [Path(v) for v in (r.get("files") or {}).values()]
+                    or [out / f"cameras_{cam.stem}_not_written"],
+                    cameras, reuse=reuse and not detect_ran)  # fmt: skip
+        cameras_found = state.data["stages"][f"cameras:{cam.stem}"]["result"]
+        return {"cam": cam, "predict": predict, "inputs": inputs, "cam_work": cam_work,
+                "redone": redone, "sam": sam_found, "cameras": cameras_found}  # fmt: skip
+
+    ball_options: dict[str, dict] = {}  # stem -> the cameras / feet options of its ball stage
+    ball_option_inputs: dict[str, dict] = {}  # stem -> the same, as stage inputs (file keys)
+
+    def camera_3d(
+        two_d: dict, contact: int | None, arrival=None, cam_roster=None
+    ) -> tuple[Path, Path, dict]:
+        """The 3D stage and the ball of one camera, from its finished 2D work stage."""
+        cam, predict, inputs = two_d["cam"], two_d["predict"], two_d["inputs"]
+        cam_work, redone = two_d["cam_work"], two_d["redone"]
         threed_key = f"3d:{cam.stem}"
         threed_dir = out / f"{cam.stem}_3d_{ts}"
         ball_inputs = _jsonable({"markers": _file_key(cam.markers), "contact_frame": contact,
                                  "flight_model": _module("freekiki_physics").FLIGHT_MODEL})  # fmt: skip
         if arrival is not None:
             ball_inputs["arrival_observation"] = arrival
-        d3 = _module("freekiki_detect3d")
+        # the per-frame cameras of the ball flight, and the contact read from the feet: both are
+        # inputs of the ball, so a new camera file or a new kicker redoes it. A contact given by hand
+        # wins: the feet are then not read. Without the cameras file the FreeKiki DLT3D frames serve.
+        ball_kwargs: dict = {}
+        cams_dlt = ((two_d.get("cameras") or {}).get("files") or {}).get("dlt3d")
+        threed_extra: dict = {}
+        if cams_dlt and Path(cams_dlt).is_file():
+            frame_cams = frame_cameras_for_ball(cams_dlt)
+            ball_kwargs["ball_cameras"] = frame_cams
+            # the same cameras place the people (poses, ground tracks, the pitch gate); a rebuild
+            # of the ball rewrites the poses, so `ball_kwargs` carries them to every rebuild
+            ball_kwargs["pose_cameras"] = frame_cams
+            ball_inputs["cameras"] = _file_key(Path(cams_dlt))
+            threed_extra["cameras"] = ball_inputs["cameras"]
+        if contact is None:
+            kicker_sam = _roster_roles(cam_roster).get("kicker") if cam_roster is not None else None
+            ball_kwargs["feet_contact"] = True
+            ball_kwargs["kicker_sam"] = kicker_sam
+            ball_inputs["feet_contact"] = True
+            ball_inputs["kicker_sam"] = kicker_sam
+        ball_options[cam.stem] = ball_kwargs
+        ball_option_inputs[cam.stem] = {
+            k: ball_inputs[k] for k in ("cameras", "feet_contact", "kicker_sam") if k in ball_inputs
+        }
+        drop = sorted(cam_roster.out_ids()) if cam_roster is not None else []
 
         def threed() -> dict:
             _backup_derived(out, threed_dir)
             result = d3.detect_3d_run(predict, cam.video, threed_dir, work_dir=cam_work,
                                       device=sam_device, ball_csv=cam.markers, players_on_field=True,
-                                      contact_frame=contact, fresh_sam=detect_ran,
+                                      contact_frame=contact, skip_sam=True, drop_ids=set(drop),
+                                      **ball_kwargs,
                                       **({"arrival_observation": arrival} if arrival is not None else {}))  # fmt: skip
             result["ball_inputs"] = ball_inputs  # the ball this 3D run already wrote
             return result
 
         runs_3d = state.runs
-        res = state.stage(threed_key, {"predict": str(predict), **inputs, "sam_device": sam_device, "players_on_field": True},
+        # the people the roster marks OUT are an input of the 3D stage; the rest of the roster is
+        # read by the later stages (their inputs). `sam_device` moved to the `sam:` stage.
+        res = state.stage(threed_key, {"predict": str(predict), **inputs, "players_on_field": True,
+                                       **threed_extra, **({"roster_out": drop} if drop else {})},
                           [threed_dir / "poses_3d_on_field.csv", threed_dir / "ball.csv"], threed,
-                          reuse=reuse and not detect_ran, legacy=("markers", "flight_model"))  # fmt: skip
+                          reuse=reuse and not redone,
+                          legacy=("markers", "flight_model", "sam_device"))  # fmt: skip
         threed_ran = state.runs != runs_3d
 
         def ball() -> dict:
@@ -1695,7 +2071,7 @@ def run_kick_analysis(
                 return {"from": "3d"}  # the 3D stage has just written this very ball
             _backup_derived(out, threed_dir)
             summary = d3.rebuild_ball_in_place(threed_dir, cam.video, cam_work, cam.markers,
-                                               contact_frame=contact,
+                                               contact_frame=contact, **ball_kwargs,
                                                **({"arrival_observation": arrival} if arrival is not None else {}))  # fmt: skip
             return {
                 "from": "ball",
@@ -1708,23 +2084,35 @@ def run_kick_analysis(
         return threed_dir, cam_work, res
 
     runs_at_start = state.runs
-    ref3d, ref_work, _ = camera_stages(ref, contact_frame, observation)  # reference frame
+    ref_2d = camera_2d(ref, observation)  # reference frame
+    other_2d = camera_2d(other) if other is not None else None
+    if stop_after == "sam":
+        return _stop_after_sam(out, state, [ref_2d, *([other_2d] if other_2d else [])])
+    ref3d, ref_work, _ = camera_3d(ref_2d, contact_frame, observation, roster_obj)
     other3d, other_work = None, None
-    if other is not None:
-        other3d, other_work, _ = camera_stages(other, None)
+    if other_2d is not None:
+        other3d, other_work, _ = camera_3d(other_2d, None)
     if reuse and state.runs != runs_at_start:
         # The later stages only name the 3D folders, not their content: a camera stage that ran
         # again (a new fit, new ball marks, a new video) makes every stage built from it stale.
         _log("a camera stage ran again: the stages built from the cameras run again too")
         reuse = False
 
+    roster_roles = _roster_roles(roster_obj) if roster_obj is not None else {}
+
     def players() -> dict:
         folders = [ref3d] if other3d is None else [ref3d, other3d]
-        return _module("freekiki_player_ids").run_player_ids(folders)
+        run_ids = _module("freekiki_player_ids").run_player_ids
+        return run_ids(folders, roles=roster_roles) if roster_roles else run_ids(folders)
 
     player_outputs = [ref3d / "player_map.csv"] + ([other3d / "player_map.csv"] if other3d else [])
-    state.stage("players", {"ref": ref3d.name, "other": other3d.name if other3d else None},
+    runs_before = state.runs
+    state.stage("players", {"ref": ref3d.name, "other": other3d.name if other3d else None,
+                            **({"roster_roles": roster_roles} if roster_roles else {}),
+                            **_roster_inputs(roster_obj)},
                 player_outputs, players, reuse=reuse)  # fmt: skip
+    if state.runs != runs_before:
+        reuse = False  # new ids or roles: every later stage reads them
     if stature_spec or save_frame is not None:
         # the known statures and the save need the roles (keeper, kicker): the reference ball is
         # rebuilt with them, then the players' tables follow the rescaled poses
@@ -1744,6 +2132,7 @@ def run_kick_analysis(
             summary = _module("freekiki_detect3d").rebuild_ball_in_place(
                 ref3d, ref.video, ref_work, ref.markers, contact_frame=contact_frame,
                 statures=(by_person, prior) if stature_spec else None, save=save,
+                **ball_options.get(ref.stem, {}),
                 **({"arrival_observation": observation} if observation is not None else {}),
             )  # fmt: skip
             players()
@@ -1771,6 +2160,11 @@ def run_kick_analysis(
                     "markers": _file_key(ref.markers) if ref.markers else None,
                     "flight_model": _module("freekiki_physics").FLIGHT_MODEL,
                     "pose_model": "gk-plane-v1",
+                    **(
+                        {"ball_options": ball_option_inputs[ref.stem]}
+                        if ball_option_inputs.get(ref.stem)
+                        else {}
+                    ),
                 }
             ),  # fmt: skip
             [ref3d / "ball_flight.json", ref3d / "stature_by_person.csv"],
@@ -1786,6 +2180,7 @@ def run_kick_analysis(
             "ref": ref3d.name,
             "penalty_tolerance_m": _module("freekiki_setpiece").PENALTY_TOLERANCE_M,
             "set_piece": set_piece,  # a new choice classifies again
+            **_roster_inputs(roster_obj),  # the wall is named by player id
         },
         [_layout().data_dir(ref3d) / "setpiece.json"],
         lambda: _chosen_setpiece(ref3d, set_piece),
@@ -1817,7 +2212,7 @@ def run_kick_analysis(
         out, ref3d=ref3d, other3d=other3d, ref_work=ref_work, other_work=other_work,
         ref_video=ref.video, other_video=other.video if other else None, bino_dir=bino_dir,
         kick_foot=kick_foot, team_a=team_a, analysis=analysis, runner=runner, setpiece=setpiece,
-        ref_sync=sync if other is None else None,
+        ref_sync=sync if other is None else None, roster=roster_obj,
         penalty_opts={"save_frame": save_frame, "shot_outcome": shot_outcome,
                       "statures": stature_spec, "gk_arm_span": gk_arm_span, "gk_mass": gk_mass,
                       "gk_onset_frame": gk_onset_frame, "save_sigma_along": sigma_along,
@@ -1834,7 +2229,24 @@ def run_kick_analysis(
     )
     run["kicker_id"] = _kicker_id(ref3d / "player_map.csv")
     run["setpiece"] = setpiece
+    if roster_obj is not None:
+        reference = (state.data["stages"].get("players", {}).get("result") or {}).get(
+            "reference", {}
+        )
+        run["roster"] = {
+            "path": str(roster_path),
+            "labelled": len(roster_obj.labelled_ids()),
+            "out": sorted(roster_obj.out_ids()),
+            "kicker_source": reference.get("kicker_source"),
+            "keeper_source": reference.get("keeper_source"),
+            "other_camera": other.video.name if other is not None else None,
+        }
     run["contact"] = _module("freekiki_auto_flight").flight_contact(ref3d)
+    run["cameras"] = {
+        key.split(":", 1)[1]: {k: v for k, v in (rec.get("result") or {}).items() if k != "stem"}
+        for key, rec in state.data["stages"].items()
+        if key.startswith("cameras:")
+    }
     run["inputs"] = {
         "ball": str(ref.markers),
         "field": str(ref.keypoints) if ref.keypoints else None,
